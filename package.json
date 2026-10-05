@@ -12,7 +12,7 @@
     "build": "next build",
     "start": "next start",
     "db:reset": "rm -rf data",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "content:check": "node scripts/validate-content.ts",
     "content:verify": "node scripts/validate-content.ts --verify",
     "playtest": "node scripts/playtest.mjs"
