@@ -6,7 +6,7 @@ import { sfx } from "@/lib/sfx";
 export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
-      const saved = localStorage.getItem("bf:palette") as PaletteId | null;
+      const saved = localStorage.getItem("bwq:palette") as PaletteId | null;
       if (saved && saved in PALETTES) applyPalette(saved);
     } catch {}
     // Browsers only allow audio after a user gesture.

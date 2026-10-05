@@ -3,6 +3,8 @@ import { db } from "./db";
 import type { Beat, EnemyKind, ExamDef, ExamLevel, ExamQuestion, Theme, TopicDef } from "./content/types";
 import { isQuestion } from "./content/types";
 import { levelFromXp, levelProgress, starsFor, today } from "./game-rules";
+import { localized } from "./i18n/messages";
+import type { Localized, Text } from "./i18n/text";
 
 export const PLAYER_ID = 1; // single local profile for now; accounts can come later
 
@@ -20,7 +22,7 @@ export interface PlayerView {
 
 export interface LessonSummary {
   slug: string;
-  title: string;
+  title: Text;
   mode: "lesson" | "boss";
   stars: number;
   completed: boolean;
@@ -31,8 +33,8 @@ export interface LessonSummary {
 
 export interface RegionView {
   slug: string;
-  name: string;
-  subtitle: string;
+  name: Text;
+  subtitle: Text;
   theme: Theme;
   status: "active" | "soon";
   unlocked: boolean;
@@ -43,7 +45,7 @@ export interface RegionView {
 export interface LanguageView {
   slug: string;
   name: string;
-  tagline: string;
+  tagline: Text;
   color: string;
   status: "active" | "soon";
 }
@@ -59,15 +61,15 @@ export interface WorldView {
 export interface LessonPlay {
   id: number;
   slug: string;
-  title: string;
+  title: Text;
   mode: "lesson" | "boss" | "review" | "exam";
   /** Present in exam mode. */
   exam?: { slug: string; level: ExamLevel; passPct: number };
   xp: number;
   enemy: EnemyKind;
-  enemyName: string;
+  enemyName: Text;
   theme: Theme;
-  regionName: string;
+  regionName: Text;
   languageSlug: string;
   beats: PlayBeat[];
 }
@@ -80,6 +82,17 @@ export interface PlayBeat {
 }
 
 type Row = Record<string, unknown>;
+
+/** Text columns hold JSON (a Localized object or a plain string). */
+function txt(v: unknown): Text {
+  const raw = String(v ?? "");
+  try {
+    const parsed = JSON.parse(raw);
+    return typeof parsed === "string" || (parsed && typeof parsed === "object") ? (parsed as Text) : raw;
+  } catch {
+    return raw;
+  }
+}
 const plain = <T>(v: unknown): T => JSON.parse(JSON.stringify(v)) as T;
 
 // ─── reads ──────────────────────────────────────────────────────────────────
@@ -100,8 +113,12 @@ export function getPlayer(): PlayerView {
 }
 
 export function getLanguages(): LanguageView[] {
-  const rows = db().prepare("SELECT slug, name, tagline, color, status FROM languages ORDER BY sort").all();
-  return plain<LanguageView[]>(rows);
+  const rows = db().prepare("SELECT slug, name, tagline, color, status FROM languages ORDER BY sort").all() as Row[];
+  return rows.map((r) => langView(r));
+}
+
+function langView(r: Row): LanguageView {
+  return { slug: String(r.slug), name: String(r.name), tagline: txt(r.tagline), color: String(r.color), status: r.status as "active" | "soon" };
 }
 
 function getLanguageRow(slug: string) {
@@ -135,7 +152,7 @@ export function getWorld(langSlug: string): WorldView | null {
         const completed = l.completed_at != null;
         const view: LessonSummary = {
           slug: String(l.slug),
-          title: String(l.title),
+          title: txt(l.title),
           mode: l.mode as "lesson" | "boss",
           stars: Number(l.stars ?? 0),
           completed,
@@ -150,8 +167,8 @@ export function getWorld(langSlug: string): WorldView | null {
     previousRegionDone = completed;
     return {
       slug: String(r.slug),
-      name: String(r.name),
-      subtitle: String(r.subtitle),
+      name: txt(r.name),
+      subtitle: txt(r.subtitle),
       theme: r.theme as Theme,
       status,
       unlocked,
@@ -172,7 +189,7 @@ export function getWorld(langSlug: string): WorldView | null {
   const examTaken = d.prepare("SELECT 1 FROM exam_results WHERE player_id = ? AND language_id = ?").get(PLAYER_ID, lang.id as number);
 
   return {
-    language: plain<LanguageView>({ slug: lang.slug, name: lang.name, tagline: lang.tagline, color: lang.color, status: lang.status }),
+    language: langView(lang),
     regions: regionViews,
     player: getPlayer(),
     reviewDue: Number(due.n),
@@ -193,13 +210,13 @@ export function getLessonPlay(langSlug: string, lessonSlug: string): LessonPlay 
   return {
     id: Number(row.id),
     slug: String(row.slug),
-    title: String(row.title),
+    title: txt(row.title),
     mode: row.mode as "lesson" | "boss",
     xp: Number(row.xp),
     enemy: row.enemy as EnemyKind,
-    enemyName: String(row.enemy_name),
+    enemyName: txt(row.enemy_name),
     theme: row.theme as Theme,
-    regionName: String(row.region_name),
+    regionName: txt(row.region_name),
     languageSlug: String(row.lang_slug),
     beats: beats.map((beat, index) => ({ lessonId: Number(row.id), index, beat })),
   };
@@ -230,13 +247,13 @@ export function getReviewPlay(langSlug: string, limit = 8): LessonPlay | null {
   return {
     id: 0,
     slug: "review",
-    title: "BUGS ERRANTES",
+    title: localized("review.title"),
     mode: "review",
     xp: 0,
     enemy: "ghost",
-    enemyName: "BUG ERRANTE",
+    enemyName: localized("review.enemy"),
     theme: "forest",
-    regionName: "Repaso",
+    regionName: localized("review.region"),
     languageSlug: langSlug,
     beats,
   };
@@ -374,8 +391,8 @@ export function saveAttempts(langSlug: string, lessonSlug: string, attempts: Att
 export interface ExamSummary {
   slug: string;
   level: ExamLevel;
-  title: string;
-  description: string;
+  title: Text;
+  description: Text;
   count: number;
   passPct: number;
   secondsPerQuestion: number;
@@ -385,13 +402,13 @@ export interface ExamSummary {
 }
 
 export interface ExamReport {
-  exam: { slug: string; title: string; level: ExamLevel; passPct: number };
+  exam: { slug: string; title: Text; level: ExamLevel; passPct: number };
   correct: number;
   total: number;
   pct: number;
   passed: boolean;
-  topics: { id: string; name: string; correct: number; total: number; region: string | null; regionName: string | null }[];
-  skippedRegions: string[];
+  topics: { id: string; name: Text; correct: number; total: number; region: string | null; regionName: Text | null }[];
+  skippedRegions: Text[];
   player: PlayerView;
   xpGained: number;
 }
@@ -413,7 +430,7 @@ export function getExams(langSlug: string): { language: LanguageView; exams: Exa
   ).all(PLAYER_ID, lang.id as number) as Row[];
   const byExam = new Map(stats.map((s) => [String(s.exam), s]));
   return {
-    language: plain<LanguageView>({ slug: lang.slug, name: lang.name, tagline: lang.tagline, color: lang.color, status: lang.status }),
+    language: langView(lang),
     exams: exams.map((e) => {
       const s = byExam.get(e.slug);
       return {
@@ -446,23 +463,24 @@ export function getExamPlay(langSlug: string, examSlug: string): LessonPlay | nu
   if (!lang) return null;
   const exam = langExams(lang).exams.find((e) => e.slug === examSlug);
   if (!exam || exam.questions.length === 0) return null;
+  const title = exam.title as Localized;
   const intro: Beat = {
     kind: "dialog",
     speaker: "master",
-    text: `${exam.title}: ${exam.count} preguntas, ${exam.secondsPerQuestion} s cada una. Apruebas con ${exam.passPct}%. ¡Como en una entrevista real!`,
+    text: localized("exam.introDialog", (l) => ({ title: typeof title === "string" ? title : title[l], count: exam.count, secs: exam.secondsPerQuestion, pct: exam.passPct })),
   };
   const ids = sampleQuestions(exam.questions, exam.count);
   return {
     id: 0,
     slug: exam.slug,
-    title: `PRUEBA ${exam.level.toUpperCase()}`,
+    title: localized("exam.playTitle", (l) => ({ level: localized(`exam.${exam.level}`)[l] })),
     mode: "exam",
     exam: { slug: exam.slug, level: exam.level, passPct: exam.passPct },
     xp: 0,
     enemy: exam.level === "senior" ? "dragon" : exam.level === "mid" ? "golem" : "slime",
-    enemyName: "ENTREVISTADOR",
+    enemyName: localized("exam.interviewer"),
     theme: exam.level === "senior" ? "tower" : "village",
-    regionName: "Prueba de ingreso",
+    regionName: localized("exam.region"),
     languageSlug: langSlug,
     beats: [
       { lessonId: 0, index: -1, beat: intro },
@@ -496,12 +514,12 @@ export function completeExam(langSlug: string, examSlug: string, answers: { inde
   const passed = pct >= exam.passPct;
 
   const regions = d.prepare("SELECT id, slug, name FROM regions WHERE language_id = ? AND status = 'active' ORDER BY sort").all(lang.id as number) as Row[];
-  const regionName = new Map(regions.map((r) => [String(r.slug), String(r.name)]));
+  const regionName = new Map(regions.map((r) => [String(r.slug), txt(r.name)]));
   const skip = d.prepare(
     `INSERT INTO progress (player_id, lesson_id, stars, skipped, completed_at) VALUES (?, ?, 0, 1, ?)
      ON CONFLICT(player_id, lesson_id) DO NOTHING`,
   );
-  const skippedRegions: string[] = [];
+  const skippedRegions: Text[] = [];
   const xpGained = correct * 6 + (passed ? 40 : 0);
 
   d.exec("BEGIN");
@@ -512,7 +530,7 @@ export function completeExam(langSlug: string, examSlug: string, answers: { inde
       for (const [id, t] of tally) if (topics[id]?.region === r.slug) { c += t.correct; n += t.total; }
       if (n < 2 || c / n < 0.8) break;
       for (const l of d.prepare("SELECT id FROM lessons WHERE region_id = ?").all(r.id as number) as Row[]) skip.run(PLAYER_ID, l.id as number, new Date().toISOString());
-      skippedRegions.push(String(r.name));
+      skippedRegions.push(txt(r.name));
     }
     const topicRows = [...tally].map(([id, t]) => ({ id, ...t }));
     d.prepare(

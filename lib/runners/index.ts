@@ -7,6 +7,6 @@ const RUNNERS: Record<string, LanguageRunner> = {
 };
 
 export function getRunner(id: string | null | undefined): LanguageRunner | null {
-  if (process.env.BITFORGE_RUNNER === "off" || !id) return null;
+  if (process.env.BITWISE_RUNNER === "off" || !id) return null;
   return RUNNERS[id] ?? null;
 }

@@ -10,9 +10,9 @@
   --white: #fff8ea;
   --good: #a8ec4f;
   --px: 4px;
-  --font-pixel: var(--font-press), monospace;
+  --font-pixel: var(--font-press), var(--font-dot), monospace;
   --font-body: var(--font-dot), var(--font-press), monospace;
-  --font-code: var(--font-vt), monospace;
+  --font-code: var(--font-vt), var(--font-dot), monospace;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -162,3 +162,10 @@ body::after {
 .game-frame.landscape .beat-split { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 0 20px; align-items: start; }
 .game-frame.landscape .beat-split > .beat-prompt { grid-column: 1 / -1; }
 .game-frame.landscape .beat-split > .beat-side { margin-top: 4px !important; }
+
+/* Japanese: the 8x8 pixel font has no kana, so text falls back to DotGothic16, whose glyphs are much
+   smaller at the same px size. Scale pixel-font text up (once, not compounding when nested). */
+html[lang="ja"] .pixel { letter-spacing: 0; line-height: 1.45; zoom: 1.35; }
+html[lang="ja"] .pixel .pixel { zoom: 1; }
+html[lang="ja"] .btn { font-size: 14px; letter-spacing: 0; }
+html[lang="ja"] .btn.small { font-size: 11px; }

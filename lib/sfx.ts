@@ -9,8 +9,8 @@ let musicOn = true;
 
 function load() {
   try {
-    sfxOn = localStorage.getItem("bf:sfx") !== "0";
-    musicOn = localStorage.getItem("bf:music") !== "0";
+    sfxOn = localStorage.getItem("bwq:sfx") !== "0";
+    musicOn = localStorage.getItem("bwq:music") !== "0";
   } catch {}
 }
 if (typeof window !== "undefined") load();
@@ -142,10 +142,10 @@ export const music = {
 export const audioPrefs = {
   get sfx() { return sfxOn; },
   get music() { return musicOn; },
-  setSfx(v: boolean) { sfxOn = v; try { localStorage.setItem("bf:sfx", v ? "1" : "0"); } catch {} },
+  setSfx(v: boolean) { sfxOn = v; try { localStorage.setItem("bwq:sfx", v ? "1" : "0"); } catch {} },
   setMusic(v: boolean) {
     musicOn = v;
-    try { localStorage.setItem("bf:music", v ? "1" : "0"); } catch {}
+    try { localStorage.setItem("bwq:music", v ? "1" : "0"); } catch {}
     if (musicGain) musicGain.gain.value = v ? 0.35 : 0;
   },
 };

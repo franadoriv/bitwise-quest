@@ -7,18 +7,25 @@ import gsap from "gsap";
 import { Sprite } from "@/components/pixel/Sprite";
 import { Settings } from "@/components/ui/Settings";
 import { useOrientation } from "@/components/ui/GameFrame";
+import { useI18n } from "@/components/ui/I18n";
+
+function WorldLoading() {
+  const { t } = useI18n();
+  return <div className="pixel blink" style={{ display: "grid", placeItems: "center", height: "100%", fontSize: 12 }}>{t("world.loading")}</div>;
+}
 import type { WorldView } from "@/lib/repo";
 import { fx } from "@/lib/fx";
 import { music, sfx } from "@/lib/sfx";
 
 const WorldMap3D = dynamic(() => import("./WorldMap3D").then((m) => m.WorldMap3D), {
   ssr: false,
-  loading: () => <div className="pixel blink" style={{ display: "grid", placeItems: "center", height: "100%", fontSize: 12 }}>CARGANDO MUNDO...</div>,
+  loading: () => <WorldLoading />,
 });
 
 export function WorldClient({ world }: { world: WorldView }) {
   const router = useRouter();
   const portrait = useOrientation() === "portrait";
+  const { t, tx } = useI18n();
   const { regions, player, language } = world;
   const lastUnlocked = Math.max(0, regions.reduce((acc, r, i) => (r.unlocked ? i : acc), 0));
   const [selected, setSelected] = useState(lastUnlocked);
@@ -27,8 +34,8 @@ export function WorldClient({ world }: { world: WorldView }) {
   const nextRef = useRef<HTMLButtonElement>(null);
   const region = regions[selected];
   const mapRegions = useMemo(
-    () => regions.map((r) => ({ name: r.name, theme: r.theme, unlocked: r.unlocked, completed: r.completed, soon: r.status === "soon" })),
-    [regions],
+    () => regions.map((r) => ({ name: tx(r.name), theme: r.theme, unlocked: r.unlocked, completed: r.completed, soon: r.status === "soon" })),
+    [regions, tx],
   );
   const nextLesson = region.lessons.find((l) => l.unlocked && !l.completed);
 
@@ -68,20 +75,20 @@ export function WorldClient({ world }: { world: WorldView }) {
       <header style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 16px", flexWrap: "wrap", zIndex: 2 }}>
         <Link href="/" className="btn small" onClick={() => sfx.select()}>◀ {language.name}</Link>
         <div className="pixel" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 10 }}>
-          <span style={{ color: "var(--gold)" }}>NV {player.level}</span>
+          <span style={{ color: "var(--gold)" }}>{t("common.level")} {player.level}</span>
           <div style={{ width: 90, height: 8, background: "var(--p1)", boxShadow: "0 0 0 2px var(--p3)" }} title={`${player.levelCurrent}/${player.levelNeeded} XP`}>
             <div style={{ width: `${pct}%`, height: "100%", background: "var(--good)" }} />
           </div>
         </div>
         <span className="pixel" style={{ fontSize: 10, display: "flex", alignItems: "center", gap: 4 }}><Sprite name="coin" size={16} /> {player.coins}</span>
-        <span className="pixel" style={{ fontSize: 10, display: "flex", alignItems: "center", gap: 4, color: player.streak ? "var(--gold)" : "var(--p2)" }} title="Racha de días">
-          <Sprite name="flame" size={16} /> {player.streak} {player.streak === 1 ? "DÍA" : "DÍAS"}
+        <span className="pixel" style={{ fontSize: 10, display: "flex", alignItems: "center", gap: 4, color: player.streak ? "var(--gold)" : "var(--p2)" }} title={t("world.streak")}>
+          <Sprite name="flame" size={16} /> {t(player.streak === 1 ? "world.day" : "world.days", { n: player.streak })}
         </span>
         <div style={{ flex: 1 }} />
-        <Link href={`/play/${language.slug}/exam`} className="btn small" onClick={() => sfx.select()}>PRUEBA DE INGRESO</Link>
+        <Link href={`/play/${language.slug}/exam`} className="btn small" onClick={() => sfx.select()}>{t("world.exam")}</Link>
         {world.reviewDue > 0 && (
           <Link href={`/play/${language.slug}/review`} className="btn danger small blink-soft" onClick={() => sfx.select()}>
-            ⚔ BUGS ERRANTES ({world.reviewDue})
+            {t("world.review", { n: world.reviewDue })}
           </Link>
         )}
         <Settings />
@@ -91,27 +98,27 @@ export function WorldClient({ world }: { world: WorldView }) {
       <div style={{ flex: 1, minHeight: 0, position: "relative", margin: "0 16px" }} className="box">
         <WorldMap3D regions={mapRegions} selected={selected} onSelect={select} />
         <div style={{ position: "absolute", left: 8, bottom: 8, display: "flex", gap: 4 }}>
-          <button className="btn small" onClick={() => select(Math.max(0, selected - 1))} aria-label="Región anterior">◀</button>
-          <button className="btn small" onClick={() => select(Math.min(regions.length - 1, selected + 1))} aria-label="Región siguiente">▶</button>
+          <button className="btn small" onClick={() => select(Math.max(0, selected - 1))} aria-label={t("world.prevRegion")}>◀</button>
+          <button className="btn small" onClick={() => select(Math.min(regions.length - 1, selected + 1))} aria-label={t("world.nextRegion")}>▶</button>
         </div>
       </div>
 
       {/* REGION PANEL */}
       <main ref={panel} className="scroll" style={{ padding: "14px 16px 18px", width: "100%", flex: "0 0 auto", maxHeight: portrait ? "48%" : "40%" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
-          <h1 className="pixel" style={{ fontSize: 18, color: "var(--gold)" }}>{region.name.toUpperCase()}</h1>
-          <span style={{ fontSize: 18, color: "var(--p2)" }}>{region.subtitle}</span>
+          <h1 className="pixel" style={{ fontSize: 18, color: "var(--gold)" }}>{tx(region.name).toUpperCase()}</h1>
+          <span style={{ fontSize: 18, color: "var(--p2)" }}>{tx(region.subtitle)}</span>
         </div>
 
         {region.status === "soon" ? (
           <div className="box dark" style={{ padding: 20, display: "flex", gap: 16, alignItems: "center" }}>
             <Sprite name="lock" size={40} />
-            <p style={{ fontSize: 19 }}>Esta región está en construcción. Ferro está forjando nuevos retos. ¡Vuelve pronto!</p>
+            <p style={{ fontSize: 19 }}>{t("world.soonRegion")}</p>
           </div>
         ) : !region.unlocked ? (
           <div className="box dark" style={{ padding: 20, display: "flex", gap: 16, alignItems: "center" }}>
             <Sprite name="lock" size={40} />
-            <p style={{ fontSize: 19 }}>Derrota al jefe de la región anterior para abrir el camino.</p>
+            <p style={{ fontSize: 19 }}>{t("world.lockedRegion")}</p>
           </div>
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: `repeat(${portrait ? 2 : 4}, 1fr)`, gap: 10 }}>
@@ -128,14 +135,14 @@ export function WorldClient({ world }: { world: WorldView }) {
                   style={{ textAlign: "left", display: "flex", flexDirection: "column", gap: 8, padding: 14, minHeight: 96 }}
                 >
                   <span style={{ display: "flex", justifyContent: "space-between", width: "100%", fontSize: 9, opacity: 0.8 }}>
-                    <span>{l.mode === "boss" ? "☠ JEFE" : `${selected + 1}-${i + 1}`}</span>
+                    <span>{l.mode === "boss" ? t("world.boss") : `${selected + 1}-${i + 1}`}</span>
                     {!l.unlocked && <Sprite name="lock" size={14} />}
-                    {isNext && <span>▶ JUGAR</span>}
+                    {isNext && <span>{t("world.playNext")}</span>}
                   </span>
-                  <span style={{ fontSize: 11, lineHeight: 1.5 }}>{l.title}</span>
+                  <span style={{ fontSize: 11, lineHeight: 1.5 }}>{tx(l.title)}</span>
                   <span style={{ display: "flex", gap: 2, alignItems: "center" }}>
                     {l.skipped ? (
-                      <span style={{ fontSize: 8 }}>SALTADA</span>
+                      <span style={{ fontSize: 8 }}>{t("world.skipped")}</span>
                     ) : (
                       [0, 1, 2].map((s) => <Sprite key={s} name={s < l.stars ? "star" : "starEmpty"} size={14} />)
                     )}
@@ -154,14 +161,14 @@ export function WorldClient({ world }: { world: WorldView }) {
             <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
               <Sprite name="master" size={72} />
               <div>
-                <div className="pixel" style={{ fontSize: 11, color: "var(--gold)", marginBottom: 6 }}>FERRO</div>
-                <p style={{ fontSize: 19 }}>¡Bienvenido al reino de {language.name}! ¿Es tu primera vez con este lenguaje?</p>
+                <div className="pixel" style={{ fontSize: 11, color: "var(--gold)", marginBottom: 6 }}>{tx({ en: "FERRO", es: "FERRO", ja: "フェロ" })}</div>
+                <p style={{ fontSize: 19 }}>{t("world.welcome", { lang: language.name })}</p>
               </div>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <button className="btn primary" onClick={() => { setShowIntro(false); start(regions[0].lessons[0].slug); }}>SOY NOVATO · ENSÉÑAME DESDE CERO</button>
-              <button className="btn" onClick={() => { sfx.start(); router.push(`/play/${language.slug}/exam`); }}>YA SÉ ALGO · PRUEBA DE INGRESO</button>
-              <button className="btn small" onClick={() => { sfx.select(); setShowIntro(false); }}>SOLO QUIERO MIRAR EL MAPA</button>
+              <button className="btn primary" onClick={() => { setShowIntro(false); start(regions[0].lessons[0].slug); }}>{t("world.newbie")}</button>
+              <button className="btn" onClick={() => { sfx.start(); router.push(`/play/${language.slug}/exam`); }}>{t("world.knowSome")}</button>
+              <button className="btn small" onClick={() => { sfx.select(); setShowIntro(false); }}>{t("world.justLook")}</button>
             </div>
           </div>
         </div>

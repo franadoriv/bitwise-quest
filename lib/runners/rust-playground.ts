@@ -1,7 +1,7 @@
 import type { LanguageRunner, RunResult } from "./types";
 
 // Uses the public Rust Playground. Only the player's practice snippet is sent.
-// Set BITFORGE_RUNNER=off to disable network execution (beats fall back to offline checks).
+// Set BITWISE_RUNNER=off to disable network execution (beats fall back to offline checks).
 export const rustPlayground: LanguageRunner = {
   id: "rust-playground",
   async run(code: string): Promise<RunResult> {

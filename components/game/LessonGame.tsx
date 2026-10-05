@@ -5,10 +5,12 @@ import gsap from "gsap";
 import { Sprite } from "@/components/pixel/Sprite";
 import { Settings } from "@/components/ui/Settings";
 import { useOrientation } from "@/components/ui/GameFrame";
-import { isQuestion, type Beat } from "@/lib/content/types";
+import { isQuestion, type Beat, type Text } from "@/lib/content/types";
 import { fx, wait } from "@/lib/fx";
 import type { ExamReport, LessonPlay, PlayBeat, RewardView } from "@/lib/repo";
 import { ExamReportView } from "@/components/exam/ExamReportView";
+import { useI18n } from "@/components/ui/I18n";
+import type { MessageKey } from "@/lib/i18n/messages";
 import { music, sfx } from "@/lib/sfx";
 import { Stage, type StageHandle } from "./Stage";
 import { ResultScreen } from "./ResultScreen";
@@ -23,7 +25,7 @@ import type { BeatCtx } from "./beats/types";
 type QueueItem = PlayBeat & { retry: number; key: string };
 type Phase = "intro" | "play" | "anim" | "finishing" | "result" | "gameover";
 
-const CHEERS = ["¡Tú puedes!", "Piensa...", "¡Vamos!", "¿Mmm?", "¡Ánimo!"];
+const CHEERS: MessageKey[] = ["lesson.cheer1", "lesson.cheer2", "lesson.cheer3", "lesson.cheer4", "lesson.cheer5"];
 
 export function LessonGame({ play }: { play: LessonPlay }) {
   const boss = play.mode === "boss";
@@ -31,6 +33,9 @@ export function LessonGame({ play }: { play: LessonPlay }) {
   const review = play.mode === "review";
   const maxHearts = boss ? 3 : placement ? 99 : 5;
   const portrait = useOrientation() === "portrait";
+  const { t, tx } = useI18n();
+  const tRef = useRef(t);
+  tRef.current = t;
 
   const initialQueue = useMemo<QueueItem[]>(() => play.beats.map((b, i) => ({ ...b, retry: 0, key: `b${i}` })), [play]);
   const questionCount = initialQueue.filter((q) => isQuestion(q.beat)).length;
@@ -41,7 +46,7 @@ export function LessonGame({ play }: { play: LessonPlay }) {
   const [hearts, setHearts] = useState(maxHearts);
   const [score, setScore] = useState(0);
   const [combo, setCombo] = useState(0);
-  const [explain, setExplain] = useState<string | null>(null);
+  const [explain, setExplain] = useState<Text | null>(null);
   const [terminal, setTerminal] = useState<string[]>([]);
   const [timeLeft, setTimeLeft] = useState(1);
   const [reward, setReward] = useState<RewardView | null>(null);
@@ -81,13 +86,13 @@ export function LessonGame({ play }: { play: LessonPlay }) {
     let alive = true;
     (async () => {
       await wait(250);
-      await fx.banner(play.title.toUpperCase(), { size: 26, hold: 0.6, color: "var(--white)" });
+      await fx.banner(tx(play.title).toUpperCase(), { size: 26, hold: 0.6, color: "var(--white)" });
       if (!alive) return;
       if (questionCount > 0) {
         stage.current?.setEnemyHp(questionCount, questionCount);
         sfx.whoosh();
         await wait(400);
-        void fx.banner(boss ? `¡${play.enemyName}!` : "¡UN BUG SALVAJE!", { size: 22, hold: 0.3, color: boss ? "var(--red)" : "var(--gold)" });
+        void fx.banner(boss ? t("lesson.bossAppears", { name: tx(play.enemyName) }) : t("lesson.wildBug"), { size: 22, hold: 0.3, color: boss ? "var(--red)" : "var(--gold)" });
         await wait(700);
       }
       if (alive) setPhase("play");
@@ -135,7 +140,7 @@ export function LessonGame({ play }: { play: LessonPlay }) {
       if (phaseRef.current !== "play" || !beat || !isQuestion(beat)) return;
       if (Date.now() - lastInput.current > 9000) {
         lastInput.current = Date.now();
-        stage.current?.heroSay(CHEERS[Math.floor(Math.random() * CHEERS.length)]);
+        stage.current?.heroSay(tRef.current(CHEERS[Math.floor(Math.random() * CHEERS.length)]));
         stage.current?.heroCheer();
       }
     }, 1000);
@@ -147,7 +152,7 @@ export function LessonGame({ play }: { play: LessonPlay }) {
   const finish = async () => {
     setPhase("finishing");
     if (questionCount > 0) await stage.current?.enemyDefeated();
-    await fx.banner(placement ? "¡TIEMPO!" : boss ? "¡JEFE DERROTADO!" : "¡STAGE CLEAR!", { size: 28, hold: 0.7 });
+    await fx.banner(placement ? t("lesson.time") : boss ? t("lesson.bossDefeated") : t("lesson.clear"), { size: 28, hold: 0.7 });
     const s = stats.current;
     try {
       if (placement) {
@@ -196,21 +201,22 @@ export function LessonGame({ play }: { play: LessonPlay }) {
       if (placement) { sfx.correct(0); fx.burst(at ?? null); await wait(350); await next(); return; }
       const newCombo = combo + 1;
       const speed = limit ? Math.max(0, 1 - (Date.now() - beatStart.current) / limit) : 0;
-      const tier = speed > 0.66 ? "PERFECT!" : speed > 0.33 ? "GREAT!" : "NICE!";
+      const tierKey: MessageKey = speed > 0.66 ? "lesson.perfect" : speed > 0.33 ? "lesson.great" : "lesson.nice";
+      const tier = t(tierKey);
       const points = Math.round((100 + Math.round(speed * 60)) * (1 + Math.min(newCombo - 1, 10) * 0.1));
       setCombo(newCombo);
       stats.current.maxCombo = Math.max(stats.current.maxCombo, newCombo);
       stats.current.correct++;
       setScore((s) => s + points);
-      if (tier === "PERFECT!") sfx.perfect(); else sfx.correct(newCombo);
+      if (tierKey === "lesson.perfect") sfx.perfect(); else sfx.correct(newCombo);
       fx.burst(at ?? null, { count: 16 + newCombo * 2 });
       fx.float(at ?? null, `+${points}`, "var(--gold)", 18);
-      fx.float(comboRef.current ?? null, tier, tier === "PERFECT!" ? "var(--good)" : "var(--white)", 14);
+      fx.float(comboRef.current ?? null, tier, tierKey === "lesson.perfect" ? "var(--good)" : "var(--white)", 14);
       requestAnimationFrame(() => fx.pop(comboRef.current, 1.6));
-      if (newCombo >= 3 && newCombo % (newCombo >= 10 ? 5 : 3) === 0) void fx.banner(newCombo >= 9 ? `ON FIRE x${newCombo}!` : `COMBO x${newCombo}!`, { size: 26, hold: 0.2, color: "var(--good)" });
+      if (newCombo >= 3 && newCombo % (newCombo >= 10 ? 5 : 3) === 0) void fx.banner(newCombo >= 9 ? t("lesson.onFire", { n: newCombo }) : t("lesson.comboBanner", { n: newCombo }), { size: 26, hold: 0.2, color: "var(--good)" });
     } else {
       sfx.correct(0);
-      fx.float(at ?? null, "¡BIEN!", "var(--white)", 14);
+      fx.float(at ?? null, t("lesson.okAfterMiss"), "var(--white)", 14);
     }
     await stage.current?.run(beat.win);
     if (questionCount > 0) await stage.current?.attackEnemy();
@@ -283,16 +289,16 @@ export function LessonGame({ play }: { play: LessonPlay }) {
     <div className="screen">
       {/* ── HUD ── */}
       <header style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", flexWrap: "wrap" }}>
-        <Link href={`/play/${play.languageSlug}`} className="btn small" onClick={() => sfx.select()} aria-label="Volver al mapa">✕</Link>
-        <div ref={heartsRef} style={{ display: "flex", gap: 2 }} aria-label={`${hearts} vidas`}>
+        <Link href={`/play/${play.languageSlug}`} className="btn small" onClick={() => sfx.select()} aria-label={t("lesson.back")}>✕</Link>
+        <div ref={heartsRef} style={{ display: "flex", gap: 2 }} aria-label={t("lesson.lives", { n: hearts })}>
           {!placement && Array.from({ length: maxHearts }).map((_, i) => (
             <span key={i} data-heart><Sprite name={i < hearts ? "heart" : "heartEmpty"} size={22} /></span>
           ))}
         </div>
         <div style={{ flex: 1, minWidth: 120 }}>
           <div className="pixel" style={{ fontSize: 9, color: "var(--p2)", marginBottom: 4 }}>
-            {play.regionName.toUpperCase()} · {play.title.toUpperCase()}
-            {placement && questionCount > 0 && <span style={{ color: "var(--gold)" }}> · PREGUNTA {Math.min(doneQuestions + 1, questionCount)}/{questionCount}</span>}
+            {tx(play.regionName).toUpperCase()} · {tx(play.title).toUpperCase()}
+            {placement && questionCount > 0 && <span style={{ color: "var(--gold)" }}> · {t("lesson.question", { n: Math.min(doneQuestions + 1, questionCount), total: questionCount })}</span>}
           </div>
           <div style={{ display: "flex", gap: 3 }}>
             {Array.from({ length: Math.max(1, questionCount) }).map((_, i) => (
@@ -301,11 +307,11 @@ export function LessonGame({ play }: { play: LessonPlay }) {
           </div>
         </div>
         <div style={{ textAlign: "right" }}>
-          <div className="pixel" style={{ fontSize: 9, color: "var(--p2)" }}>SCORE</div>
+          <div className="pixel" style={{ fontSize: 9, color: "var(--p2)" }}>{t("common.score")}</div>
           <span ref={scoreRef} className="pixel" style={{ fontSize: 14, color: "var(--gold)" }}>000000</span>
         </div>
         <div ref={comboRef} className="pixel" style={{ fontSize: 12, minWidth: 74, textAlign: "center", color: comboColor, display: "flex", alignItems: "center", gap: 4 }}>
-          {combo >= 2 ? <><Sprite name="flame" size={16} />x{combo}</> : <span style={{ color: "var(--p1)" }}>COMBO</span>}
+          {combo >= 2 ? <><Sprite name="flame" size={16} />x{combo}</> : <span style={{ color: "var(--p1)" }}>{t("common.combo")}</span>}
         </div>
         <Settings />
       </header>
@@ -332,16 +338,16 @@ export function LessonGame({ play }: { play: LessonPlay }) {
           <div ref={explainRef} className="box" style={{ display: "flex", gap: 12, padding: 10, marginBottom: 14, background: "var(--white)", alignItems: "center" }}>
             <Sprite name="master" size={40} />
             <div>
-              <div className="pixel" style={{ fontSize: 9, color: "var(--red)" }}>FERRO: ¡CASI!</div>
-              <div style={{ fontSize: 18, color: "var(--p0)" }}>{explain}</div>
-              {!placement && isQuestion(beat!) && current.retry < 2 && <div className="pixel" style={{ fontSize: 8, color: "var(--p1)", marginTop: 4 }}>EL BUG VOLVERÁ AL FINAL · ¡INTÉNTALO DE NUEVO!</div>}
+              <div className="pixel" style={{ fontSize: 9, color: "var(--red)" }}>{t("lesson.almost")}</div>
+              <div style={{ fontSize: 18, color: "var(--p0)" }}>{tx(explain)}</div>
+              {!placement && isQuestion(beat!) && current.retry < 2 && <div className="pixel" style={{ fontSize: 8, color: "var(--p1)", marginTop: 4 }}>{t("lesson.bugReturns")}</div>}
             </div>
           </div>
         )}
         <div ref={panelRef} key={current?.key}>
           {phase !== "intro" && beat && phase !== "result" && phase !== "gameover" && (
             <>
-              {current.retry > 0 && <div className="pixel blink" style={{ fontSize: 10, color: "var(--red)", marginBottom: 8 }}>¡EL BUG HA VUELTO!</div>}
+              {current.retry > 0 && <div className="pixel blink" style={{ fontSize: 10, color: "var(--red)", marginBottom: 8 }}>{t("lesson.bugBack")}</div>}
               {beat.kind === "dialog" && <DialogBeatView beat={beat} ctx={ctx} enemy={play.enemy} enemyName={play.enemyName} />}
               {beat.kind === "act" && <ActBeatView beat={beat} ctx={ctx} />}
               {(beat.kind === "pick" || beat.kind === "predict") && <ChoiceBeatView beat={beat} ctx={ctx} seed={seed} />}
@@ -366,11 +372,11 @@ export function LessonGame({ play }: { play: LessonPlay }) {
       {phase === "gameover" && (
         <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.75)", display: "grid", placeItems: "center", zIndex: 600, padding: 16 }}>
           <div className="box dark" style={{ padding: 28, textAlign: "center", maxWidth: 420 }}>
-            <div className="pixel" style={{ fontSize: 28, color: "var(--red)", marginBottom: 16 }}>GAME OVER</div>
-            <p style={{ fontSize: 18, marginBottom: 20 }}>Los bugs ganaron esta vez. Lo que fallaste volverá como repaso: ¡así se aprende!</p>
+            <div className="pixel" style={{ fontSize: 28, color: "var(--red)", marginBottom: 16 }}>{t("lesson.gameOver")}</div>
+            <p style={{ fontSize: 18, marginBottom: 20 }}>{t("lesson.gameOverText")}</p>
             <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
-              <button className="btn primary" onClick={restart}>REINTENTAR</button>
-              <Link className="btn" href={`/play/${play.languageSlug}`}>MAPA</Link>
+              <button className="btn primary" onClick={restart}>{t("common.retry")}</button>
+              <Link className="btn" href={`/play/${play.languageSlug}`}>{t("common.map")}</Link>
             </div>
           </div>
         </div>

@@ -5,6 +5,7 @@ import gsap from "gsap";
 import { SPRITES } from "@/components/pixel/sprites";
 import { PALETTES, currentPalette, type Palette } from "@/lib/palette";
 import type { Theme } from "@/lib/content/types";
+import { useI18n } from "@/components/ui/I18n";
 
 export interface MapRegion {
   name: string;
@@ -98,6 +99,7 @@ function buildIsland(r: MapRegion): THREE.Group {
 }
 
 export function WorldMap3D({ regions, selected, onSelect }: Props) {
+  const { t } = useI18n();
   const host = useRef<HTMLDivElement>(null);
   const labels = useRef<(HTMLDivElement | null)[]>([]);
   const api = useRef<{ focus(i: number, jump: boolean): void } | null>(null);
@@ -177,7 +179,7 @@ export function WorldMap3D({ regions, selected, onSelect }: Props) {
       heroMat.needsUpdate = true;
     };
     applyPal();
-    window.addEventListener("bf:palette", applyPal);
+    window.addEventListener("bwq:palette", applyPal);
 
     const resize = () => {
       const w = el.clientWidth, h = el.clientHeight;
@@ -268,7 +270,7 @@ export function WorldMap3D({ regions, selected, onSelect }: Props) {
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
-      window.removeEventListener("bf:palette", applyPal);
+      window.removeEventListener("bwq:palette", applyPal);
       el.removeEventListener("pointermove", onMove);
       el.removeEventListener("pointerup", onClick);
       scene.traverse((o) => {
@@ -309,7 +311,7 @@ export function WorldMap3D({ regions, selected, onSelect }: Props) {
             boxShadow: "0 0 0 2px var(--p0)",
           }}
         >
-          {r.soon ? "🔒 PRONTO" : !r.unlocked ? "🔒 " + r.name : (r.completed ? "★ " : "") + r.name}
+          {r.soon ? t("world.soonLabel") : !r.unlocked ? t("world.lockedLabel", { name: r.name }) : (r.completed ? "★ " : "") + r.name}
         </div>
       ))}
     </div>

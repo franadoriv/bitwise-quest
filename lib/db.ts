@@ -5,11 +5,11 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { LANGUAGE_PACKS } from "@/content/index.ts";
 
-const DB_PATH = process.env.BITFORGE_DB ?? path.join(process.cwd(), "data", "bitforge.db");
+const DB_PATH = process.env.BITWISE_DB ?? path.join(process.cwd(), "data", "bitwise.db");
 
 declare global {
   // eslint-disable-next-line no-var
-  var __bitforgeDb: DatabaseSync | undefined;
+  var __bitwiseDb: DatabaseSync | undefined;
 }
 
 const SCHEMA = `
@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS lessons (
 
 CREATE TABLE IF NOT EXISTS players (
   id INTEGER PRIMARY KEY,
-  name TEXT NOT NULL DEFAULT 'HÉROE',
+  name TEXT NOT NULL DEFAULT 'HERO',
   xp INTEGER NOT NULL DEFAULT 0,
   coins INTEGER NOT NULL DEFAULT 0,
   streak INTEGER NOT NULL DEFAULT 0,
@@ -145,14 +145,15 @@ function seed(d: DatabaseSync) {
   d.exec("BEGIN");
   try {
     LANGUAGE_PACKS.forEach((pack, li) => {
-      const { id: langId } = upLang.get(pack.slug, pack.name, pack.tagline, pack.color, pack.status, pack.runner ?? null, JSON.stringify(pack.topics), JSON.stringify(pack.exams), li) as { id: number };
+      const { id: langId } = upLang.get(pack.slug, pack.name, JSON.stringify(pack.tagline), pack.color, pack.status, pack.runner ?? null, JSON.stringify(pack.topics), JSON.stringify(pack.exams), li) as { id: number };
       pack.regions.forEach((region, ri) => {
-        const { id: regionId } = upRegion.get(langId, region.slug, region.name, region.subtitle, region.theme, region.status ?? "active", ri) as { id: number };
+        const { id: regionId } = upRegion.get(langId, region.slug, JSON.stringify(region.name), JSON.stringify(region.subtitle), region.theme, region.status ?? "active", ri) as { id: number };
         region.lessons.forEach((lesson, si) => {
-          upLesson.run(regionId, langId, lesson.slug, lesson.title, lesson.concept, lesson.mode, lesson.xp, lesson.enemy, lesson.enemyName, JSON.stringify(lesson.beats), si);
+          upLesson.run(regionId, langId, lesson.slug, JSON.stringify(lesson.title), lesson.concept, lesson.mode, lesson.xp, lesson.enemy, JSON.stringify(lesson.enemyName), JSON.stringify(lesson.beats), si);
         });
       });
     });
+    pruneRemoved(d);
     d.prepare("INSERT INTO meta (key, value) VALUES ('content_hash', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(hash);
     d.exec("COMMIT");
   } catch (e) {
@@ -168,22 +169,39 @@ function migrate(d: DatabaseSync) {
   if (!cols.includes("exams")) d.exec("ALTER TABLE languages ADD COLUMN exams TEXT NOT NULL DEFAULT '[]'");
 }
 
+/** Deletes lessons/regions that no longer exist in the packs (e.g. renamed slugs), with their player rows. */
+function pruneRemoved(d: DatabaseSync) {
+  for (const pack of LANGUAGE_PACKS) {
+    const lang = d.prepare("SELECT id FROM languages WHERE slug = ?").get(pack.slug) as { id: number } | undefined;
+    if (!lang) continue;
+    const lessonSlugs = new Set(pack.regions.flatMap((r) => r.lessons.map((l) => l.slug)));
+    const regionSlugs = new Set(pack.regions.map((r) => r.slug));
+    const lessons = d.prepare("SELECT id, slug FROM lessons WHERE language_id = ?").all(lang.id) as { id: number; slug: string }[];
+    for (const l of lessons.filter((l) => !lessonSlugs.has(l.slug))) {
+      for (const t of ["progress", "attempts", "reviews"]) d.prepare(`DELETE FROM ${t} WHERE lesson_id = ?`).run(l.id);
+      d.prepare("DELETE FROM lessons WHERE id = ?").run(l.id);
+    }
+    const regions = d.prepare("SELECT id, slug FROM regions WHERE language_id = ?").all(lang.id) as { id: number; slug: string }[];
+    for (const r of regions.filter((r) => !regionSlugs.has(r.slug))) d.prepare("DELETE FROM regions WHERE id = ?").run(r.id);
+  }
+}
+
 let seededThisModule = false;
 
 export function db(): DatabaseSync {
-  if (!globalThis.__bitforgeDb) {
+  if (!globalThis.__bitwiseDb) {
     fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
     const d = new DatabaseSync(DB_PATH);
     d.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
     d.exec(SCHEMA);
     migrate(d);
     d.prepare("INSERT OR IGNORE INTO players (id) VALUES (1)").run();
-    globalThis.__bitforgeDb = d;
+    globalThis.__bitwiseDb = d;
   }
   // Re-check content on every module (re)load so edits to content/ show up in dev.
   if (!seededThisModule) {
-    seed(globalThis.__bitforgeDb);
+    seed(globalThis.__bitwiseDb);
     seededThisModule = true;
   }
-  return globalThis.__bitforgeDb;
+  return globalThis.__bitwiseDb;
 }

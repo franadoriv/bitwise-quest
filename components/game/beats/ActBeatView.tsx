@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
-import type { ActBeat } from "@/lib/content/types";
+import type { ActBeat, Text } from "@/lib/content/types";
+import { useI18n } from "@/components/ui/I18n";
 import { fx, wait } from "@/lib/fx";
 import { sfx } from "@/lib/sfx";
 import { Highlight } from "../CodeBlock";
@@ -13,7 +14,8 @@ export function ActBeatView({ beat, ctx }: { beat: ActBeat; ctx: BeatCtx }) {
   const [lines, setLines] = useState<string[]>([]);
   const [typing, setTyping] = useState("");
   const [running, setRunning] = useState(false);
-  const [error, setError] = useState<{ compiler: string; plain: string } | null>(null);
+  const { t, tx } = useI18n();
+  const [error, setError] = useState<{ compiler: string; plain: Text } | null>(null);
   const errRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const finished = step >= beat.steps.length;
@@ -56,7 +58,7 @@ export function ActBeatView({ beat, ctx }: { beat: ActBeat; ctx: BeatCtx }) {
 
   return (
     <div className="beat-split">
-      <p className="pixel beat-prompt" style={{ fontSize: 12, margin: "4px 4px 12px", color: "var(--p3)" }}>▶ {beat.prompt}</p>
+      <p className="pixel beat-prompt" style={{ fontSize: 12, margin: "4px 4px 12px", color: "var(--p3)" }}>▶ {tx(beat.prompt)}</p>
       <pre className="codeblock box dark" style={{ minHeight: 70 }}>
         {lines.map((l, i) => (
           <div key={i}><Highlight code={l} lang={ctx.lang} /></div>
@@ -70,7 +72,7 @@ export function ActBeatView({ beat, ctx }: { beat: ActBeat; ctx: BeatCtx }) {
       {error && (
         <div ref={errRef} className="box" style={{ background: "var(--red)", color: "var(--white)", padding: 12, marginTop: 12 }}>
           <div className="code" style={{ fontSize: 19, lineHeight: 1.1, wordBreak: "break-word" }}>{error.compiler}</div>
-          <div style={{ fontSize: 18, marginTop: 6 }}>¡OJO! {error.plain}</div>
+          <div style={{ fontSize: 18, marginTop: 6 }}>{t("act.watch")} {tx(error.plain)}</div>
         </div>
       )}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14, alignItems: "center" }}>
@@ -82,12 +84,12 @@ export function ActBeatView({ beat, ctx }: { beat: ActBeat; ctx: BeatCtx }) {
             disabled={i !== step || running}
             onClick={press}
           >
-            {i < step ? "✓ " : ""}{s.label}
+            {i < step ? "✓ " : ""}{tx(s.label)}
           </button>
         ))}
         {finished && (
           <button ref={btnRef} className="btn good" onClick={() => { if (!ctx.busy) { sfx.select(); ctx.solved(); } }}>
-            ¡ENTENDIDO! ▶
+            {t("act.understood")}
           </button>
         )}
       </div>

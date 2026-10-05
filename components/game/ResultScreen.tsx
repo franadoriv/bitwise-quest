@@ -7,12 +7,14 @@ import { levelProgress } from "@/lib/game-rules";
 import { fx, wait } from "@/lib/fx";
 import type { LessonPlay, RewardView } from "@/lib/repo";
 import { music, sfx } from "@/lib/sfx";
+import { useI18n } from "@/components/ui/I18n";
 
 /** Staggered reward reveal: stars → stats → XP bar → coins → level up. */
 export function ResultScreen({ play, score, maxCombo, mistakes, reward }: {
   play: LessonPlay; score: number; maxCombo: number; mistakes: number; reward: RewardView | null;
 }) {
   const router = useRouter();
+  const { t } = useI18n();
   const box = useRef<HTMLDivElement>(null);
   const starEls = useRef<(HTMLSpanElement | null)[]>([]);
   const xpBar = useRef<HTMLDivElement>(null);
@@ -64,7 +66,7 @@ export function ResultScreen({ play, score, maxCombo, mistakes, reward }: {
           sfx.levelUp();
           fx.flash("var(--gold)", 0.4);
           fx.burst(null, { count: 40, spread: 220 });
-          void fx.banner(`¡NIVEL ${to.level}!`, { size: 34, hold: 0.8, color: "var(--good)" });
+          void fx.banner(t("result.levelUp", { n: to.level }), { size: 34, hold: 0.8, color: "var(--good)" });
           gsap.fromTo(xpBar.current, { width: "0%" }, { width: `${to.ratio * 100}%`, duration: 0.6, delay: 0.3 });
         }
       }
@@ -82,7 +84,7 @@ export function ResultScreen({ play, score, maxCombo, mistakes, reward }: {
         {(
           <>
             <div className="pixel" style={{ fontSize: 18, color: "var(--gold)", marginBottom: 18 }}>
-              {play.mode === "review" ? "¡REPASO HECHO!" : play.mode === "boss" ? "¡VICTORIA!" : "¡STAGE CLEAR!"}
+              {play.mode === "review" ? t("result.review") : play.mode === "boss" ? t("result.victory") : t("result.clear")}
             </div>
             <div style={{ display: "flex", justifyContent: "center", gap: 10, marginBottom: 20 }}>
               {[0, 1, 2].map((i) => (
@@ -92,14 +94,14 @@ export function ResultScreen({ play, score, maxCombo, mistakes, reward }: {
               ))}
             </div>
             <div className="pixel" style={{ fontSize: 10, display: "grid", gridTemplateColumns: "1fr auto", gap: "10px 16px", textAlign: "left", marginBottom: 18 }}>
-              <span style={{ color: "var(--p2)" }}>SCORE</span><span>{score}</span>
-              <span style={{ color: "var(--p2)" }}>MAX COMBO</span><span>x{maxCombo}</span>
-              <span style={{ color: "var(--p2)" }}>ERRORES</span><span style={{ color: mistakes ? "var(--red)" : "var(--good)" }}>{mistakes}</span>
+              <span style={{ color: "var(--p2)" }}>{t("common.score")}</span><span>{score}</span>
+              <span style={{ color: "var(--p2)" }}>{t("common.maxCombo")}</span><span>x{maxCombo}</span>
+              <span style={{ color: "var(--p2)" }}>{t("common.mistakes")}</span><span style={{ color: mistakes ? "var(--red)" : "var(--good)" }}>{mistakes}</span>
             </div>
             {reward && (
               <div style={{ marginBottom: 20 }}>
                 <div className="pixel" style={{ fontSize: 10, display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <span>NV {reward.player.level} {levelUp && <span style={{ color: "var(--good)" }}>▲</span>}</span>
+                  <span>{t("common.level")} {reward.player.level} {levelUp && <span style={{ color: "var(--good)" }}>▲</span>}</span>
                   <span style={{ color: "var(--good)" }}>XP <span ref={xpText}>+0</span></span>
                   <span style={{ color: "var(--gold)" }}><Sprite name="coin" size={14} /> <span ref={coinText}>+0</span></span>
                 </div>
@@ -112,11 +114,11 @@ export function ResultScreen({ play, score, maxCombo, mistakes, reward }: {
         )}
         <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap", opacity: ready ? 1 : 0.3, pointerEvents: ready ? "auto" : "none" }}>
           {reward?.nextLesson && play.mode !== "review" && (
-            <button className="btn primary" onClick={() => go(`${map}/lesson/${reward.nextLesson}`)}>SIGUIENTE ▶</button>
+            <button className="btn primary" onClick={() => go(`${map}/lesson/${reward.nextLesson}`)}>{t("common.next")}</button>
           )}
-          <button className="btn" onClick={() => go(map)}>MAPA</button>
+          <button className="btn" onClick={() => go(map)}>{t("common.map")}</button>
           {play.mode !== "review" && (
-            <button className="btn small" onClick={() => window.location.reload()}>REPETIR</button>
+            <button className="btn small" onClick={() => window.location.reload()}>{t("common.repeat")}</button>
           )}
         </div>
       </div>

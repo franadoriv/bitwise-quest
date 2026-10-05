@@ -6,6 +6,7 @@ import { SpriteG } from "@/components/pixel/Sprite";
 import type { ActorId, Effect, EnemyKind, ItemKind, Theme } from "@/lib/content/types";
 import { fx, wait } from "@/lib/fx";
 import { sfx } from "@/lib/sfx";
+import { useI18n } from "@/components/ui/I18n";
 
 export interface StageHandle {
   run(effects: Effect[] | undefined): Promise<void>;
@@ -37,6 +38,7 @@ const EXT = 600; // how far the backdrop extends beyond the viewBox
 interface TagState { text: string; value?: string; dead?: boolean }
 
 export const Stage = forwardRef<StageHandle, Props>(function Stage({ theme, enemy, boss, onPrint }, ref) {
+  const { tx } = useI18n();
   const wrap = useRef<HTMLDivElement>(null);
   const actor = { hero: useRef<SVGGElement>(null), ally: useRef<SVGGElement>(null), enemy: useRef<SVGGElement>(null) };
   const body = { hero: useRef<SVGGElement>(null), ally: useRef<SVGGElement>(null), enemy: useRef<SVGGElement>(null) };
@@ -229,7 +231,7 @@ export const Stage = forwardRef<StageHandle, Props>(function Stage({ theme, enem
         sfx.blip(10);
         return wait(150);
       case "say":
-        say(e.actor, e.text);
+        say(e.actor, tx(e.text));
         return wait(600);
       case "print":
         onPrint(e.text);
@@ -240,7 +242,7 @@ export const Stage = forwardRef<StageHandle, Props>(function Stage({ theme, enem
         sfx.hurt();
         return wait(300);
       case "banner":
-        await fx.banner(e.text, { size: 28, hold: 0.25 });
+        await fx.banner(tx(e.text), { size: 28, hold: 0.25 });
         return;
       case "wait":
         return wait(e.ms);

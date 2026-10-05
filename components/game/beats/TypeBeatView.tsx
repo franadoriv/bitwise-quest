@@ -5,9 +5,11 @@ import { fx } from "@/lib/fx";
 import { sfx } from "@/lib/sfx";
 import { CodeBlock } from "../CodeBlock";
 import type { BeatCtx } from "./types";
+import { useI18n } from "@/components/ui/I18n";
 
 /** Type the token. Every correct character gives instant feedback. */
 export function TypeBeatView({ beat, ctx }: { beat: TypeBeat; ctx: BeatCtx }) {
+  const { t, tx } = useI18n();
   const [value, setValue] = useState("");
   const [done, setDone] = useState(false);
   const input = useRef<HTMLInputElement>(null);
@@ -51,7 +53,7 @@ export function TypeBeatView({ beat, ctx }: { beat: TypeBeat; ctx: BeatCtx }) {
       spellCheck={false}
       autoCapitalize="off"
       autoComplete="off"
-      aria-label="Escribe el código que falta"
+      aria-label={t("type.aria")}
       placeholder={"_".repeat(beat.answer.length)}
       className={`slot ${done ? "ok" : value && !prefixOk ? "bad" : ""}`}
       style={{ width, font: "inherit", border: 0, outline: "none", borderBottom: "3px solid var(--gold)" }}
@@ -60,12 +62,12 @@ export function TypeBeatView({ beat, ctx }: { beat: TypeBeat; ctx: BeatCtx }) {
 
   return (
     <div className="beat-split">
-      <p className="pixel beat-prompt" style={{ fontSize: 12, margin: "4px 4px 12px" }}>▶ {beat.prompt}</p>
+      <p className="pixel beat-prompt" style={{ fontSize: 12, margin: "4px 4px 12px" }}>▶ {tx(beat.prompt)}</p>
       <CodeBlock code={beat.code} lang={ctx.lang} slot={slot} />
       <div className="beat-side" style={{ display: "flex", gap: 8, marginTop: 14, alignItems: "center", flexWrap: "wrap" }}>
-        <button className="btn primary" onClick={check} disabled={done}>COMPROBAR ⏎</button>
+        <button className="btn primary" onClick={check} disabled={done}>{t("type.check")}</button>
         <span className="pixel" style={{ fontSize: 10, color: "var(--p2)" }}>
-          {beat.answer.length} CARACTERES · {value.length}/{beat.answer.length}
+          {t("type.chars", { n: beat.answer.length, typed: value.length })}
         </span>
       </div>
     </div>

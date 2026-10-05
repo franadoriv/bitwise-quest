@@ -5,6 +5,8 @@ import gsap from "gsap";
 import { Sprite } from "@/components/pixel/Sprite";
 import { Settings } from "@/components/ui/Settings";
 import { useOrientation } from "@/components/ui/GameFrame";
+import { useI18n } from "@/components/ui/I18n";
+import { BRAND } from "@/lib/brand";
 import type { LanguageView, PlayerView } from "@/lib/repo";
 import { fx } from "@/lib/fx";
 import { music, sfx } from "@/lib/sfx";
@@ -12,6 +14,7 @@ import { music, sfx } from "@/lib/sfx";
 export function TitleScreen({ languages, player }: { languages: LanguageView[]; player: PlayerView }) {
   const router = useRouter();
   const portrait = useOrientation() === "portrait";
+  const { t, tx } = useI18n();
   const [stage, setStage] = useState<"title" | "select">("title");
   const [cursor, setCursor] = useState(0);
   const logo = useRef<HTMLHeadingElement>(null);
@@ -52,7 +55,7 @@ export function TitleScreen({ languages, player }: { languages: LanguageView[]; 
     if (l.status !== "active") {
       sfx.wrong();
       fx.shake(el, 8);
-      fx.float(el, "¡PRONTO!", "var(--red)");
+      fx.float(el, t("title.soonFloat"), "var(--red)");
       return;
     }
     sfx.start();
@@ -87,13 +90,13 @@ export function TitleScreen({ languages, player }: { languages: LanguageView[]; 
       </div>
 
       <div style={{ textAlign: "center", position: "relative", zIndex: 1 }}>
-        <h1 ref={logo} className="pixel" aria-label="Bit Forge" style={{ fontSize: portrait ? 46 : 84, color: "var(--gold)", textShadow: "6px 6px 0 var(--red), 12px 12px 0 var(--p1)", lineHeight: 1.2 }}>
-          {"BIT FORGE".split("").map((c, i) => (
+        <h1 ref={logo} className="pixel" aria-label={BRAND.name} style={{ fontSize: portrait ? 46 : 84, color: "var(--gold)", textShadow: "6px 6px 0 var(--red), 12px 12px 0 var(--p1)", lineHeight: 1.2 }}>
+          {BRAND.logo.split("").map((c, i) => (
             <span key={i} className="logo-ch" style={{ display: "inline-block", minWidth: c === " " ? "0.5em" : undefined }}>{c}</span>
           ))}
         </h1>
         <p className="pixel logo-sub" style={{ fontSize: portrait ? 10 : 13, color: "var(--p3)", marginTop: 16 }}>
-          APRENDE LENGUAJES · JUGANDO
+          {tx(BRAND.tagline).toUpperCase()}
         </p>
       </div>
 
@@ -104,12 +107,12 @@ export function TitleScreen({ languages, player }: { languages: LanguageView[]; 
 
       {stage === "title" ? (
         <button className="pixel blink" style={{ fontSize: portrait ? 14 : 18, color: "var(--white)", position: "relative", zIndex: 1, padding: 12 }} onClick={press}>
-          ▶ PRESS START
+          {t("title.pressStart")}
         </button>
       ) : (
         <div style={{ position: "relative", zIndex: 1, width: "min(900px, 100%)" }}>
           <p className="pixel" style={{ fontSize: 11, textAlign: "center", marginBottom: 14, color: "var(--p2)" }}>
-            ELIGE UN CARTUCHO {player.xp > 0 && <span style={{ color: "var(--gold)" }}>· NV {player.level} · {player.coins} ORO</span>}
+            {t("title.chooseCartridge")} {player.xp > 0 && <span style={{ color: "var(--gold)" }}>· {t("common.level")} {player.level} · {player.coins} {t("common.coins")}</span>}
           </p>
           <div ref={carts} style={{ display: "grid", gridTemplateColumns: `repeat(${portrait ? 2 : 4}, 1fr)`, gap: 14 }}>
             {languages.map((l, i) => (
@@ -126,9 +129,9 @@ export function TitleScreen({ languages, player }: { languages: LanguageView[]; 
                     {l.name}
                     {l.status !== "active" && <Sprite name="lock" size={18} />}
                   </div>
-                  <p style={{ fontSize: 16, marginTop: 8, minHeight: 44, lineHeight: 1.3 }}>{l.tagline}</p>
+                  <p style={{ fontSize: 16, marginTop: 8, minHeight: 44, lineHeight: 1.3 }}>{tx(l.tagline)}</p>
                   <div className="pixel" style={{ fontSize: 9, marginTop: 8, color: l.status === "active" ? "var(--red)" : "var(--p1)" }}>
-                    {l.status === "active" ? (cursor === i ? "▶ JUGAR" : "JUGAR") : "PRONTO"}
+                    {l.status === "active" ? (cursor === i ? "▶ " + t("common.play") : t("common.play")) : t("common.soon")}
                   </div>
                 </div>
               </button>

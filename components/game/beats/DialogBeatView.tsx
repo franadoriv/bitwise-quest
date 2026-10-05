@@ -5,14 +5,18 @@ import { Sprite } from "@/components/pixel/Sprite";
 import type { SpriteName } from "@/components/pixel/sprites";
 import type { DialogBeat, EnemyKind } from "@/lib/content/types";
 import { sfx } from "@/lib/sfx";
+import { useI18n } from "@/components/ui/I18n";
+import type { Text } from "@/lib/i18n/text";
 import { CodeBlock } from "../CodeBlock";
 import type { BeatCtx } from "./types";
 
-const NAMES = { master: "FERRO", hero: "TÚ", ally: "LUMA" } as const;
+const NAMES = { master: { en: "FERRO", es: "FERRO", ja: "フェロ" }, ally: { en: "LUMA", es: "LUMA", ja: "ルマ" } } as const;
 
-export function DialogBeatView({ beat, ctx, enemy, enemyName }: { beat: DialogBeat; ctx: BeatCtx; enemy: EnemyKind; enemyName: string }) {
+export function DialogBeatView({ beat, ctx, enemy, enemyName }: { beat: DialogBeat; ctx: BeatCtx; enemy: EnemyKind; enemyName: Text }) {
+  const { t, tx } = useI18n();
+  const text = tx(beat.text);
   const [shown, setShown] = useState(0);
-  const done = shown >= beat.text.length;
+  const done = shown >= text.length;
   const portrait = useRef<HTMLDivElement>(null);
   const finished = useRef(false);
 
@@ -22,13 +26,13 @@ export function DialogBeatView({ beat, ctx, enemy, enemyName }: { beat: DialogBe
     gsap.fromTo(portrait.current, { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.25, ease: "back.out(2)" });
     const id = setInterval(() => {
       setShown((n) => {
-        if (n >= beat.text.length) { clearInterval(id); return n; }
+        if (n >= text.length) { clearInterval(id); return n; }
         if (n % 2 === 0) sfx.text();
         return n + 1;
       });
     }, 22);
     return () => clearInterval(id);
-  }, [beat]);
+  }, [beat, text]);
 
   // the speaker hops while talking
   useEffect(() => {
@@ -40,7 +44,7 @@ export function DialogBeatView({ beat, ctx, enemy, enemyName }: { beat: DialogBe
 
   const advance = () => {
     if (ctx.busy) return;
-    if (!done) { setShown(beat.text.length); return; }
+    if (!done) { setShown(text.length); return; }
     if (finished.current) return;
     finished.current = true;
     sfx.select();
@@ -54,19 +58,19 @@ export function DialogBeatView({ beat, ctx, enemy, enemyName }: { beat: DialogBe
   });
 
   const sprite: SpriteName = beat.speaker === "enemy" ? enemy : beat.speaker;
-  const name = beat.speaker === "enemy" ? enemyName : NAMES[beat.speaker];
+  const name = beat.speaker === "enemy" ? tx(enemyName) : beat.speaker === "hero" ? t("dialog.you") : tx(NAMES[beat.speaker]);
 
   return (
-    <button onClick={advance} className="box dark" style={{ display: "flex", gap: 16, alignItems: "flex-start", padding: 16, textAlign: "left", width: "calc(100% - 8px)", minHeight: 140 }} aria-label="Continuar diálogo">
+    <button onClick={advance} className="box dark" style={{ display: "flex", gap: 16, alignItems: "flex-start", padding: 16, textAlign: "left", width: "calc(100% - 8px)", minHeight: 140 }} aria-label={t("dialog.continue")}>
       <div ref={portrait} style={{ flexShrink: 0, background: "var(--p1)", padding: 6, boxShadow: "0 0 0 4px var(--p3)" }}>
         <Sprite name={sprite} size={72} flip={beat.speaker === "enemy"} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="pixel" style={{ fontSize: 11, color: "var(--gold)", marginBottom: 8 }}>{name}</div>
-        <p style={{ fontSize: 20, lineHeight: 1.45, color: "var(--white)", minHeight: "2.9em" }}>{beat.text.slice(0, shown)}</p>
+        <p style={{ fontSize: 20, lineHeight: 1.45, color: "var(--white)", minHeight: "2.9em" }}>{text.slice(0, shown)}</p>
         {beat.code && done && <CodeBlock code={beat.code} lang={ctx.lang} style={{ marginTop: 12 }} />}
         <div className="pixel" style={{ fontSize: 10, textAlign: "right", color: "var(--gold)", marginTop: 6, visibility: done ? "visible" : "hidden" }}>
-          <span className="blink">▼</span> TOCA PARA SEGUIR
+          <span className="blink">▼</span> {t("dialog.tap")}
         </div>
       </div>
     </button>

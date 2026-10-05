@@ -6,6 +6,7 @@ import { fx } from "@/lib/fx";
 import { sfx } from "@/lib/sfx";
 import { Highlight } from "../CodeBlock";
 import type { BeatCtx } from "./types";
+import { useI18n } from "@/components/ui/I18n";
 
 const offlinePass = (fallback: string | string[] | undefined, code: string) =>
   (Array.isArray(fallback) ? fallback : fallback ? [fallback] : []).some((re) => new RegExp(re).test(code));
@@ -14,6 +15,7 @@ type Result = { kind: "ok" | "compile" | "output" | "offline-ok" | "offline-bad"
 
 /** Real code, real compiler. Highlighted textarea overlay + a lively "compiling" bar. */
 export function RunBeatView({ beat, ctx }: { beat: RunBeat; ctx: BeatCtx }) {
+  const { t, tx } = useI18n();
   const [code, setCode] = useState(beat.starter);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
@@ -29,7 +31,7 @@ export function RunBeatView({ beat, ctx }: { beat: RunBeat; ctx: BeatCtx }) {
     setRunning(true);
     setResult(null);
     sfx.select();
-    ctx.stage?.heroSay("¡Compilando!");
+    ctx.stage?.heroSay(t("run.compilingSay"));
     const tween = gsap.fromTo(bar.current, { width: "0%" }, { width: "92%", duration: 4, ease: "power2.out" });
     const beep = setInterval(() => sfx.blip(Math.floor(Math.random() * 8)), 260);
     let res: Result;
@@ -78,7 +80,7 @@ export function RunBeatView({ beat, ctx }: { beat: RunBeat; ctx: BeatCtx }) {
 
   return (
     <div className="beat-split">
-      <p className="pixel beat-prompt" style={{ fontSize: 12, margin: "4px 4px 12px" }}>▶ {beat.prompt}</p>
+      <p className="pixel beat-prompt" style={{ fontSize: 12, margin: "4px 4px 12px" }}>▶ {tx(beat.prompt)}</p>
       <div className="box dark" style={{ position: "relative" }}>
         <pre ref={pre} aria-hidden className="codeblock" style={{ margin: 0, minHeight: 160, pointerEvents: "none" }}>
           <Highlight code={code + "\n"} lang={ctx.lang} />
@@ -90,7 +92,7 @@ export function RunBeatView({ beat, ctx }: { beat: RunBeat; ctx: BeatCtx }) {
           onScroll={(e) => { if (pre.current) { pre.current.scrollTop = e.currentTarget.scrollTop; pre.current.scrollLeft = e.currentTarget.scrollLeft; } }}
           spellCheck={false}
           autoCapitalize="off"
-          aria-label="Editor de código"
+          aria-label={t("run.editor")}
           className="codeblock"
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", background: "transparent", color: "transparent", caretColor: "var(--gold)", border: 0, outline: "none", resize: "none" }}
         />
@@ -100,18 +102,18 @@ export function RunBeatView({ beat, ctx }: { beat: RunBeat; ctx: BeatCtx }) {
         <div ref={bar} style={{ height: "100%", width: 0, background: good ? "var(--good)" : result ? "var(--red)" : "var(--gold)" }} />
       </div>
       <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
-        <button className="btn primary" onClick={run} disabled={running || solvedRef.current}>{running ? "COMPILANDO..." : "▶ EJECUTAR"}</button>
-        <button className="btn small" onClick={() => { setCode(beat.starter); setResult(null); sfx.select(); }} disabled={running}>REINICIAR</button>
-        <span className="pixel" style={{ fontSize: 9, color: "var(--p2)" }}>CTRL+⏎ EJECUTA</span>
+        <button className="btn primary" onClick={run} disabled={running || solvedRef.current}>{running ? t("run.compiling") : t("run.run")}</button>
+        <button className="btn small" onClick={() => { setCode(beat.starter); setResult(null); sfx.select(); }} disabled={running}>{t("run.reset")}</button>
+        <span className="pixel" style={{ fontSize: 9, color: "var(--p2)" }}>{t("run.shortcut")}</span>
       </div>
       {result && (
         <div ref={resultRef} className="box dark" style={{ padding: 12, marginTop: 12, boxShadow: `0 0 0 4px ${good ? "var(--good)" : "var(--red)"}` }}>
           <div className="pixel" style={{ fontSize: 11, color: good ? "var(--good)" : "var(--red)", marginBottom: 6 }}>
-            {result.kind === "ok" && "✓ ¡COMPILA Y FUNCIONA!"}
-            {result.kind === "offline-ok" && "✓ CORRECTO (compilador offline: validación local)"}
-            {result.kind === "offline-bad" && "✗ Aún no (compilador offline: validación local)"}
-            {result.kind === "compile" && "✗ EL COMPILADOR SE QUEJA"}
-            {result.kind === "output" && `✗ COMPILA, PERO SE ESPERABA: ${beat.expect}`}
+            {result.kind === "ok" && t("run.ok")}
+            {result.kind === "offline-ok" && t("run.offlineOk")}
+            {result.kind === "offline-bad" && t("run.offlineBad")}
+            {result.kind === "compile" && t("run.compileError")}
+            {result.kind === "output" && t("run.wrongOutput", { expect: beat.expect })}
           </div>
           {(result.stderr || result.stdout) && (
             <pre className="code" style={{ fontSize: 18, lineHeight: 1.1, whiteSpace: "pre-wrap", maxHeight: 180, overflow: "auto", color: result.stderr ? "#ffb4a8" : "var(--white)" }}>

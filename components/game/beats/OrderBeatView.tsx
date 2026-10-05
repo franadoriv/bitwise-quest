@@ -5,8 +5,10 @@ import { fx } from "@/lib/fx";
 import { sfx } from "@/lib/sfx";
 import { Highlight } from "../CodeBlock";
 import { shuffle, type BeatCtx } from "./types";
+import { useI18n } from "@/components/ui/I18n";
 
 export function OrderBeatView({ beat, ctx, seed }: { beat: OrderBeat; ctx: BeatCtx; seed: number }) {
+  const { tx } = useI18n();
   const pool = useMemo(() => {
     let s = shuffle(beat.lines, seed);
     if (s.every((x, i) => x.i === i)) s = [...s.slice(1), s[0]];
@@ -37,7 +39,7 @@ export function OrderBeatView({ beat, ctx, seed }: { beat: OrderBeat; ctx: BeatC
 
   return (
     <div className="beat-split">
-      <p className="pixel beat-prompt" style={{ fontSize: 12, margin: "4px 4px 12px" }}>▶ {beat.prompt}</p>
+      <p className="pixel beat-prompt" style={{ fontSize: 12, margin: "4px 4px 12px" }}>▶ {tx(beat.prompt)}</p>
       <div className="codeblock box dark">
         {beat.lines.map((_, i) => (
           <div key={i} ref={(el) => { rows.current[i] = el; }} style={{ minHeight: "1.15em", opacity: i < placed.length ? 1 : 0.35 }}>

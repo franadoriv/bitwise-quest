@@ -1,5 +1,11 @@
 // Language-agnostic content model. A language pack is pure data:
 // adding a new language means writing a new pack, not touching the engine.
+//
+// i18n: every field typed `Text` that is prose (dialog, prompts, explanations, labels,
+// titles) must be a Localized object { en, es, ja }. Plain strings are for code and
+// identifiers only. `npm run content:check` enforces it.
+import type { Text } from "../i18n/text.ts";
+export type { Locale, Localized, Text } from "../i18n/text.ts";
 
 export type ActorId = "hero" | "ally" | "enemy";
 export type ItemKind = "sword" | "potion" | "gem" | "shield" | "scroll" | "key";
@@ -22,10 +28,10 @@ export type Effect =
   | { t: "drop" } // value destroyed
   | { t: "attack"; from: ActorId; to: ActorId; dmg?: number }
   | { t: "hp"; actor: ActorId; value: number }
-  | { t: "say"; actor: ActorId; text: string }
+  | { t: "say"; actor: ActorId; text: Text }
   | { t: "print"; text: string }
   | { t: "shake" }
-  | { t: "banner"; text: string }
+  | { t: "banner"; text: Text }
   | { t: "wait"; ms: number };
 
 /**
@@ -54,7 +60,7 @@ export interface BeatBase {
   setup?: Effect[];
   /** Effects played when the player gets it right. */
   win?: Effect[];
-  hint?: string;
+  hint?: Text;
   /** Seconds for the speed bonus (and the timeout in boss fights). */
   time?: number;
 }
@@ -62,67 +68,69 @@ export interface BeatBase {
 export interface DialogBeat extends BeatBase {
   kind: "dialog";
   speaker: "master" | "hero" | "ally" | "enemy";
-  text: string;
+  text: Text;
   code?: string;
 }
 
 export interface ActStep {
-  label: string;
+  label: Text;
   line?: string;
   effects?: Effect[];
   output?: string;
-  error?: { compiler: string; plain: string };
+  error?: { compiler: string; plain: Text };
 }
 
 /** The player presses buttons; each one writes a line of code and the world reacts. */
 export interface ActBeat extends BeatBase {
   kind: "act";
-  prompt: string;
+  prompt: Text;
   steps: ActStep[];
 }
 
 /** Fill the single `___` slot by choosing a token. */
 export interface PickBeat extends BeatBase {
   kind: "pick";
-  prompt: string;
+  prompt: Text;
   code: string;
-  options: string[];
+  /** Plain strings for code tokens, Localized for prose answers. */
+  options: Text[];
   answer: number;
-  explain: string;
+  explain: Text;
 }
 
 /** Read code and predict the result. */
 export interface PredictBeat extends BeatBase {
   kind: "predict";
-  prompt: string;
+  prompt: Text;
   code: string;
-  options: string[];
+  /** Plain strings for code tokens, Localized for prose answers. */
+  options: Text[];
   answer: number;
-  explain: string;
+  explain: Text;
   output?: string;
 }
 
 /** Tap lines in the right order. `lines` is the correct order. */
 export interface OrderBeat extends BeatBase {
   kind: "order";
-  prompt: string;
+  prompt: Text;
   lines: string[];
-  explain: string;
+  explain: Text;
 }
 
 /** Type the missing token in the `___` slot. Validated char by char. */
 export interface TypeBeat extends BeatBase {
   kind: "type";
-  prompt: string;
+  prompt: Text;
   code: string;
   answer: string;
-  explain: string;
+  explain: Text;
 }
 
 /** Edit and run real code through the language runner. */
 export interface RunBeat extends BeatBase {
   kind: "run";
-  prompt: string;
+  prompt: Text;
   starter: string;
   /** Substring expected in stdout. */
   expect: string;
@@ -131,7 +139,7 @@ export interface RunBeat extends BeatBase {
   fallback?: string | string[];
   /** A correct program. The validator runs it and expects `expect` in stdout. */
   solution?: string;
-  explain: string;
+  explain: Text;
 }
 
 export type Beat = DialogBeat | ActBeat | PickBeat | PredictBeat | OrderBeat | TypeBeat | RunBeat;
@@ -143,19 +151,19 @@ export function isQuestion(b: Beat): b is QuestionBeat {
 
 export interface LessonDef {
   slug: string;
-  title: string;
+  title: Text;
   concept: string;
   mode: "lesson" | "boss";
   xp: number;
   enemy: EnemyKind;
-  enemyName: string;
+  enemyName: Text;
   beats: Beat[];
 }
 
 export interface RegionDef {
   slug: string;
-  name: string;
-  subtitle: string;
+  name: Text;
+  subtitle: Text;
   theme: Theme;
   status?: "active" | "soon";
   lessons: LessonDef[];
@@ -170,9 +178,9 @@ export type ExamQuestion = (PickBeat | PredictBeat | TypeBeat | OrderBeat) & { t
 export interface ExamDef {
   slug: string;
   level: ExamLevel;
-  title: string;
-  /** Who this exam simulates, e.g. "Pantalla técnica para Rust Developer Junior". */
-  description: string;
+  title: Text;
+  /** Who this exam simulates, e.g. "Initial technical screen for a Junior Rust Developer". */
+  description: Text;
   /** Questions drawn per attempt (balanced across topics). The bank can be larger. */
   count: number;
   /** Percentage needed to pass. */
@@ -182,7 +190,7 @@ export interface ExamDef {
 }
 
 export interface TopicDef {
-  name: string;
+  name: Text;
   /** Region that teaches this topic. Passing all of a region's topics in an exam skips it. */
   region?: string;
 }
@@ -190,7 +198,7 @@ export interface TopicDef {
 export interface LanguagePack {
   slug: string;
   name: string;
-  tagline: string;
+  tagline: Text;
   color: string;
   status: "active" | "soon";
   runner?: string;

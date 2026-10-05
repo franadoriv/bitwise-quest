@@ -5,9 +5,11 @@ import { fx, wait } from "@/lib/fx";
 import { sfx } from "@/lib/sfx";
 import { CodeBlock } from "../CodeBlock";
 import { shuffle, type BeatCtx } from "./types";
+import { useI18n } from "@/components/ui/I18n";
 
 /** Handles both "pick" (fill the slot) and "predict" (choose the outcome). */
 export function ChoiceBeatView({ beat, ctx, seed }: { beat: PickBeat | PredictBeat; ctx: BeatCtx; seed: number }) {
+  const { tx } = useI18n();
   const options = useMemo(() => shuffle(beat.options, seed + beat.options.length), [beat, seed]);
   const [disabled, setDisabled] = useState<number[]>([]);
   const [slot, setSlot] = useState<{ text: string; state: "empty" | "filled" | "ok" | "bad" }>({ text: "", state: "empty" });
@@ -23,8 +25,8 @@ export function ChoiceBeatView({ beat, ctx, seed }: { beat: PickBeat | PredictBe
     const btn = btns.current[pos];
     const correct = orig === beat.answer;
     if (beat.kind === "pick") {
-      await fx.fly(btn, slotRef.current, beat.options[orig]);
-      setSlot({ text: beat.options[orig], state: correct ? "ok" : "bad" });
+      await fx.fly(btn, slotRef.current, tx(beat.options[orig]));
+      setSlot({ text: tx(beat.options[orig]), state: correct ? "ok" : "bad" });
       await wait(20);
       fx.pop(slotRef.current, 1.4);
     }
@@ -52,9 +54,9 @@ export function ChoiceBeatView({ beat, ctx, seed }: { beat: PickBeat | PredictBe
 
   return (
     <div className="beat-split">
-      <p className="pixel beat-prompt" style={{ fontSize: 12, margin: "4px 4px 12px" }}>▶ {beat.prompt}</p>
+      <p className="pixel beat-prompt" style={{ fontSize: 12, margin: "4px 4px 12px" }}>▶ {tx(beat.prompt)}</p>
       <CodeBlock code={beat.code} lang={ctx.lang} slot={beat.kind === "pick" ? slotEl : undefined} />
-      <div className="beat-side" style={{ display: "grid", gridTemplateColumns: `repeat(${options.length > 3 || options.some((o) => o.v.length > 18) ? 2 : options.length}, 1fr)`, gap: 6, marginTop: 14 }}>
+      <div className="beat-side" style={{ display: "grid", gridTemplateColumns: `repeat(${options.length > 3 || options.some((o) => tx(o.v).length > 18) ? 2 : options.length}, 1fr)`, gap: 6, marginTop: 14 }}>
         {options.map(({ v, i }, pos) => {
           const isOk = okIdx === i;
           const isBad = disabled.includes(i);
@@ -68,7 +70,7 @@ export function ChoiceBeatView({ beat, ctx, seed }: { beat: PickBeat | PredictBe
               disabled={isBad}
               onClick={() => choose(i, pos)}
             >
-              {isBad ? "✗ " : isOk ? "✓ " : ""}{v}
+              {isBad ? "✗ " : isOk ? "✓ " : ""}{tx(v)}
             </button>
           );
         })}
