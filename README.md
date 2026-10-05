@@ -9,6 +9,7 @@ NES/Game Boy pixel art, constant feedback and a world that reacts to your code.
 First cartridge: **Rust**.
 
 [![CI](https://github.com/franadoriv/bitwise-quest/actions/workflows/ci.yml/badge.svg)](https://github.com/franadoriv/bitwise-quest/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 ![Next.js](https://img.shields.io/badge/Next.js-16-000?logo=nextdotjs)
 ![Three.js](https://img.shields.io/badge/Three.js-low%20poly-049EF4?logo=threedotjs)
 ![GSAP](https://img.shields.io/badge/GSAP-SVG%20motion-88CE02?logo=greensock&logoColor=white)
@@ -156,3 +157,7 @@ AI agents have instructions in [`AGENTS.md`](AGENTS.md) and step-by-step playboo
 ## Contributing
 
 Read [`CONTRIBUTING.md`](CONTRIBUTING.md). Every content contribution must pass `npm run content:verify` and include all three languages.
+
+## License
+
+[MIT](LICENSE) © 2026 Francisco Rivero
