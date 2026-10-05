@@ -2,7 +2,7 @@
   "name": "coding-lab",
   "version": "0.1.0",
   "private": true,
-  "description": "Bit Forge: arcade retro para aprender lenguajes de programaci\u00f3n jugando. Primer cartucho: Rust.",
+  "description": "Bitwise Quest: a retro arcade game for learning programming languages by playing. First cartridge: Rust. English, Español, 日本語.",
   "type": "module",
   "engines": {
     "node": ">=22.18"
