@@ -44,7 +44,7 @@ export function MemoryCard({ planets }: { planets: PlanetBadge[] }) {
   const refresh = useCallback(async () => setSlots(await listSlots()), []);
   useEffect(() => {
     void refresh();
-    music.play("map");
+    music.play("card");
     const onChange = () => void refresh();
     window.addEventListener("bwq:slots", onChange);
     return () => { window.removeEventListener("bwq:slots", onChange); music.stop(); };

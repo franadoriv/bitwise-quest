@@ -1,5 +1,9 @@
 "use client";
 // Tiny chiptune synth on WebAudio: no audio assets, everything is square/triangle/noise.
+// Sound effects live here; music is tracker data in lib/music/songs.ts played by lib/music/synth.ts.
+import { compileSong, type CompiledSong } from "./music/dsl.ts";
+import { SongPlayer } from "./music/synth.ts";
+import { SONGS, resolveSong } from "./music/songs.ts";
 
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
@@ -30,8 +34,10 @@ function ac(): AudioContext | null {
     master.gain.value = 0.25;
     master.connect(ctx.destination);
     musicGain = ctx.createGain();
-    musicGain.gain.value = musicOn ? 0.35 : 0;
+    musicGain.gain.value = musicOn ? MUSIC_VOL : 0;
     musicGain.connect(master);
+    // a screen may have asked for music before the first click unlocked audio
+    if (wanted) setTimeout(() => startWanted(), 0);
   }
   if (ctx.state === "suspended") void ctx.resume();
   return ctx;
@@ -98,45 +104,93 @@ export const sfx = {
   gameOver: () => [7, 3, 0, -5].forEach((s, i) => tone(N(s), 0.25, { vol: 0.2, delay: i * 0.22, type: "triangle" })),
 };
 
-// ─── music: a very small step sequencer ───────────────────────────────────
-type Song = { bpm: number; lead: (number | null)[]; bass: (number | null)[] };
-const SONGS: Record<string, Song> = {
-  map: {
-    bpm: 120,
-    lead: [12, null, 16, 19, 17, null, 16, 14, 12, null, 14, 16, 14, null, 7, null, 9, null, 12, 14, 16, null, 14, 12, 11, null, 12, 14, 12, null, null, null],
-    bass: [0, null, 0, null, -3, null, -3, null, -7, null, -7, null, -5, null, -5, null],
-  },
-  battle: {
-    bpm: 150,
-    lead: [12, 12, 15, 12, 17, 15, 12, 10, 12, 12, 15, 17, 19, 17, 15, 17, 12, 12, 15, 12, 17, 15, 12, 10, 8, 10, 12, 15, 12, null, null, null],
-    bass: [-12, -12, 0, -12, -12, -12, 0, -12, -16, -16, -4, -16, -14, -14, -2, -14],
-  },
+// ─── music: tracker songs (lib/music) on a lookahead scheduler ─────────────
+const MUSIC_VOL = 0.35;
+const LOOKAHEAD = 0.12; // seconds scheduled ahead of the audio clock
+const TICK_MS = 25;
+const compiled = new Map<string, CompiledSong>();
+const songFor = (id: string) => {
+  let c = compiled.get(id);
+  if (!c) compiled.set(id, (c = compileSong(id, SONGS[id])));
+  return c;
 };
+
+let wanted: string | null = null; // name the screen asked for ("lesson", "map:rust"...)
+let player: SongPlayer | null = null;
+let playerSong: string | null = null; // resolved song id of `player`
 let timer: ReturnType<typeof setInterval> | null = null;
-let current: string | null = null;
+
+function tick() {
+  if (!ctx || !player) return;
+  player.scheduleUntil(ctx.currentTime + LOOKAHEAD);
+  if (player.done) stopTimer(); // one-shot jingle finished
+}
+function startTimer() {
+  if (timer || typeof document === "undefined" || document.hidden) return;
+  timer = setInterval(tick, TICK_MS);
+  tick();
+}
+function stopTimer() {
+  if (timer) clearInterval(timer);
+  timer = null;
+}
+function fadeAway(p: SongPlayer, dur: number) {
+  p.fadeOut(dur);
+  setTimeout(() => p.dispose(), dur * 1000 + 200);
+}
+
+/** Starts (or cross-fades to) the song for `wanted`, when audio is allowed. */
+function startWanted(fade = 0.35) {
+  if (!wanted || !musicOn) return;
+  const c = ac();
+  if (!c || !musicGain) return;
+  const id = resolveSong(wanted);
+  if (!id) return;
+  if (player && playerSong === id && !player.done) return startTimer();
+  const old = player;
+  if (old) fadeAway(old, fade);
+  player = new SongPlayer(c, musicGain, songFor(id), c.currentTime + (old ? 0.08 : 0.05), old ? 0.25 : 0.05);
+  playerSong = id;
+  stopTimer();
+  startTimer();
+}
+
+function haltPlayer(fade: number) {
+  stopTimer();
+  if (player) fadeAway(player, fade);
+  player = null;
+  playerSong = null;
+}
+
+if (typeof document !== "undefined") {
+  // Hidden tabs throttle timers; pause scheduling and pick up cleanly when visible again.
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) { stopTimer(); return; }
+    if (ctx && player && !player.done) { player.resync(ctx.currentTime); startTimer(); }
+  });
+}
 
 export const music = {
-  play(name: keyof typeof SONGS) {
-    if (current === name && timer) return;
-    music.stop();
-    current = name;
-    const song = SONGS[name];
-    let step = 0;
-    const stepDur = 60 / song.bpm / 2;
-    timer = setInterval(() => {
-      if (!ctx || !musicOn) { step++; return; }
-      const l = song.lead[step % song.lead.length];
-      const b = song.bass[step % song.bass.length];
-      if (l != null) tone(N(l), stepDur * 0.9, { vol: 0.12, type: "square", out: musicGain });
-      if (b != null) tone(N(b - 12), stepDur * 0.95, { vol: 0.2, type: "triangle", out: musicGain });
-      step++;
-    }, stepDur * 1000);
+  /**
+   * Play a track by name: "title", "card", "galaxy", "map:<slug>" (falls back to "map:default"),
+   * "lesson" (random variant), "boss", "exam", "result", or a one-shot "jingle:clear" / "jingle:gameover".
+   * Calling it again with the same name keeps the song going.
+   */
+  play(name: string) {
+    if (wanted === name && player && !player.done) return;
+    wanted = name;
+    startWanted();
+  },
+  /** World map theme for a planet or moon (unknown slugs get the default overworld). */
+  playMap(slug: string) {
+    music.play(`map:${slug}`);
   },
   stop() {
-    if (timer) clearInterval(timer);
-    timer = null;
-    current = null;
+    wanted = null;
+    haltPlayer(0.25);
   },
+  /** Song names available, for debugging. */
+  get tracks() { return Object.keys(SONGS); },
 };
 
 export const audioPrefs = {
@@ -146,6 +200,8 @@ export const audioPrefs = {
   setMusic(v: boolean) {
     musicOn = v;
     try { localStorage.setItem("bwq:music", v ? "1" : "0"); } catch {}
-    if (musicGain) musicGain.gain.value = v ? 0.35 : 0;
+    if (musicGain) musicGain.gain.value = v ? MUSIC_VOL : 0;
+    if (v) startWanted(0.1);
+    else haltPlayer(0.15);
   },
 };

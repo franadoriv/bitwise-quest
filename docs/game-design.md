@@ -61,7 +61,30 @@ Progress is saved like on a retro console: a **memory card with 15 slots** (`/sa
 
 ## Aesthetics
 
-8-bit pixel art with the Orange (default), Game Boy and NES palettes. Fonts: Press Start 2P (UI), DotGothic16 (dialogs) and VT323 (code). Press Start 2P and VT323 have no Japanese glyphs, so they fall back to DotGothic16, which covers kana and kanji (`app/layout.tsx`, `app/globals.css`). Chiptune music and effects are synthesized in `lib/sfx.ts`. The map is low poly in Three.js, rendered at low resolution with crisp pixels.
+8-bit pixel art with the Orange (default), Game Boy and NES palettes. Fonts: Press Start 2P (UI), DotGothic16 (dialogs) and VT323 (code). Press Start 2P and VT323 have no Japanese glyphs, so they fall back to DotGothic16, which covers kana and kanji (`app/layout.tsx`, `app/globals.css`). Chiptune music and effects are synthesized at runtime (see [Music](#music)). The map is low poly in Three.js, rendered at low resolution with crisp pixels.
+
+## Music
+
+Everything is synthesized with WebAudio; there are no audio files.
+
+- **Engine.** Sound effects live in `lib/sfx.ts`. Songs are tracker data in `lib/music/songs.ts` (format and helpers in `lib/music/dsl.ts`), played by `lib/music/synth.ts` with a lookahead scheduler (a 25 ms timer schedules notes ~0.12 s ahead on the audio clock). Four NES-style channels: a pulse lead (12.5/25/50% duty, vibrato, slides), a quieter pulse harmony (arpeggios, broken chords, or the lead harmonized a third below `~3` or echoed `~echo`), a triangle bass and a noise drum kit (kick, snare, hats, crash, toms, metal clank). Each song has an `order` of sections (intro, A, B, breakdown...) with per-section transposition and a `loop` point, so the intro plays once. Switching songs cross-fades; scheduling pauses while the tab is hidden; the music toggle in settings is respected.
+- **API.** `music.play(name)`, `music.playMap(slug)`, `music.stop()`. Calling `play` with the song already playing keeps it going. `map:<slug>` falls back to `map:default` (moons too); `lesson` picks a random variant.
+
+| Track | Where | Loop | Mood |
+| --- | --- | --- | --- |
+| `title` | Title screen | 64 s | Hero theme, C major, lifts to D major |
+| `card` | Memory card, exam hub | 84 s | Cozy, F major, music-box bridge |
+| `galaxy` | Planet select | 91 s | Spacey D lydian with sparkling arpeggios |
+| `map:default` | World map fallback | 75 s | Adventurous overworld, G major |
+| `map:rust` | Oxide world map | 80 s | Industrial forge, D minor with a hopeful F major middle |
+| `map:typescript` | TypeScript world map | 69 s | Bright and techy, A major, lifts to C |
+| `lesson:a`, `lesson:b` | Lessons and reviews (random) | 57 s / 67 s | Light battle grooves (E minor, A dorian) |
+| `boss` | Boss lessons | 57 s | Intense and driving, C minor |
+| `exam` | Entry exams | 69 s | Tense, steady clock pulse, D minor |
+| `result` | Lesson results, exam report | 32 s | Calm victory, D major |
+| `jingle:clear`, `jingle:gameover` | One-shots | 3 s / 7 s | Do not loop |
+
+**Adding a planet theme.** Add a `Song` to `lib/music/songs.ts` and register it in `SONGS` as `"map:<language slug>"`; the world map picks it up automatically. Write the melody with `line("E5*2 G5*2 C6*4 | ...")` (16 steps per bar, `*n` = length in 16ths, `-` rest, `/E5` slide), build harmony and bass from chords with `chords("Am F C G", template)` and `bass(...)`, reuse the drum kit, and aim for a 45-120 s loop made of several sections. Songs must be original. `npm test` (`tests/music.test.ts`) checks that patterns exist, channels align, the loop is long enough, notes stay in range and no lead melody is shared between songs.
 
 ## Voice
 

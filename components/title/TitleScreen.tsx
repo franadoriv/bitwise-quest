@@ -8,7 +8,7 @@ import { useOrientation } from "@/components/ui/GameFrame";
 import { useI18n } from "@/components/ui/I18n";
 import { BRAND } from "@/lib/brand";
 import { fx } from "@/lib/fx";
-import { sfx } from "@/lib/sfx";
+import { music, sfx } from "@/lib/sfx";
 
 export function TitleScreen({ guides }: { guides: string[] }) {
   const router = useRouter();
@@ -16,6 +16,8 @@ export function TitleScreen({ guides }: { guides: string[] }) {
   const { t, tx } = useI18n();
   const logo = useRef<HTMLHeadingElement>(null);
   const started = useRef(false);
+
+  useEffect(() => { music.play("title"); return () => music.stop(); }, []);
 
   useEffect(() => {
     const ctx = gsap.context(() => {

@@ -27,7 +27,7 @@ export function ResultScreen({ play, score, maxCombo, mistakes, reward }: {
   const map = `/play/${play.languageSlug}`;
 
   useEffect(() => {
-    music.play("map");
+    music.play("result");
     let alive = true;
     (async () => {
       gsap.fromTo(box.current, { scale: 0.6, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.35, ease: "back.out(2)" });
