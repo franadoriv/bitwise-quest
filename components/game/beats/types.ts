@@ -1,7 +1,12 @@
 import type { StageHandle } from "../Stage";
 
 export interface BeatCtx {
+  /** Code language for highlighting ("rust" | "ts" | "tsx"). */
   lang: string;
+  /** Language pack slug (for server runners). */
+  pack: string;
+  /** Runner id of the pack, or null when the pack cannot run code. */
+  runner: string | null;
   /** Wrong answer. Only the first one per beat costs a heart. */
   wrong(at?: Element | null): void;
   /** Beat solved; the game takes over (rewards, animations, next beat). */

@@ -170,6 +170,8 @@ const en = {
   "world.toGalaxy": "◀ GALAXY",
   "world.landing": "Welcome to {planet}, {player}! I am {guide}. Is this your first time with {lang}?",
   "run.busy": "✋ Too many runs right now. Try again in {secs}s.",
+  "run.runtimeError": "✗ IT CRASHED WHILE RUNNING",
+  "galaxy.moons": "MOONS",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -343,6 +345,8 @@ const es: Messages = {
   "world.toGalaxy": "◀ GALAXIA",
   "world.landing": "¡Bienvenido a {planet}, {player}! Soy {guide}. ¿Es tu primera vez con {lang}?",
   "run.busy": "✋ Demasiadas ejecuciones ahora. Reintenta en {secs}s.",
+  "run.runtimeError": "✗ FALLÓ AL EJECUTARSE",
+  "galaxy.moons": "LUNAS",
 };
 
 const ja: Messages = {
@@ -513,6 +517,8 @@ const ja: Messages = {
   "world.toGalaxy": "◀ 銀河",
   "world.landing": "{planet}へようこそ、{player}！わしは{guide}。{lang}ははじめてかな？",
   "run.busy": "✋ 実行が混み合っています。{secs}秒後にもう一度。",
+  "run.runtimeError": "✗ 実行中にエラーが起きた",
+  "galaxy.moons": "衛星",
 };
 
 export const MESSAGES: Record<Locale, Messages> = { en, es, ja };

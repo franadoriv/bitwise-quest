@@ -58,9 +58,9 @@ function World({ content, save }: { content: Content; save: SaveData }) {
   const nextLesson = region.lessons.find((l) => l.unlocked && !l.completed);
 
   useEffect(() => {
-    music.play("map");
+    music.play(`map:${language.slug}`);
     return () => music.stop();
-  }, []);
+  }, [language.slug]);
 
   useEffect(() => {
     gsap.fromTo(panel.current, { y: 30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3, ease: "back.out(2)" });

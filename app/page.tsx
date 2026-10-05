@@ -4,5 +4,5 @@ import { getLanguages } from "@/lib/repo";
 
 export default async function Home() {
   await connection();
-  return <TitleScreen guides={getLanguages().map((l) => l.planet.guide.sprite)} />;
+  return <TitleScreen guides={getLanguages().filter((l) => !l.parent).map((l) => l.planet.guide.sprite)} />;
 }

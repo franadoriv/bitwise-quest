@@ -1,6 +1,7 @@
 import "server-only";
 import { LANGUAGE_PACKS } from "@/content/index.ts";
-import type { Beat, EnemyKind, ExamDef, ExamLevel, ExamQuestion, LanguagePack, LessonDef, PlanetDef, RegionDef, Theme } from "./content/types";
+import type { Beat, CodeLang, EnemyKind, ExamDef, ExamLevel, ExamQuestion, LanguagePack, LessonDef, PlanetDef, RegionDef, Theme } from "./content/types";
+import { BROWSER_RUNNER_IDS } from "./runners/ids";
 import { isQuestion } from "./content/types";
 import { localized } from "./i18n/messages";
 import type { Localized, Text } from "./i18n/text";
@@ -24,6 +25,8 @@ for (const pack of LANGUAGE_PACKS) {
 // ─── view models ────────────────────────────────────────────────────────────
 export interface LanguageView {
   slug: string;
+  /** Set for moons: the slug of the planet they orbit. */
+  parent: string | null;
   name: string;
   tagline: Text;
   color: string;
@@ -51,6 +54,9 @@ export interface LessonPlay {
   theme: Theme;
   regionName: Text;
   languageSlug: string;
+  /** Runner id (server "rust-playground" or browser "js-browser") and the code language. */
+  runner: string | null;
+  codeLang: CodeLang;
   guide: Guide;
   beats: PlayBeat[];
   /** Present in exam mode: what the client needs to grade the attempt. */
@@ -68,7 +74,9 @@ export interface ExamSummary {
   bankSize: number;
 }
 
-const langView = (p: LanguagePack): LanguageView => ({ slug: p.slug, name: p.name, tagline: p.tagline, color: p.color, status: p.status, planet: p.planet });
+const langView = (p: LanguagePack): LanguageView => ({ slug: p.slug, parent: p.parent ?? null, name: p.name, tagline: p.tagline, color: p.color, status: p.status, planet: p.planet });
+const codeLangOf = (p: LanguagePack): CodeLang => p.codeLang ?? (p.slug === "rust" ? "rust" : "ts");
+const runInfo = (p: LanguagePack) => ({ runner: p.runner ?? null, codeLang: codeLangOf(p) });
 const guideOf = (p: LanguagePack): Guide => ({ name: p.planet.guide.name, sprite: p.planet.guide.sprite });
 
 // ─── queries ────────────────────────────────────────────────────────────────
@@ -81,10 +89,11 @@ export function getLanguage(slug: string): LanguageView | null {
   return p ? langView(p) : null;
 }
 
-/** Active languages that can compile code (used to validate /api/run). */
+/** Server-side runner of an active language (used to validate /api/run). Browser runners never reach the server. */
 export function getRunner(slug: string): string | null {
   const p = PACKS.get(slug);
-  return p?.status === "active" ? p.runner ?? null : null;
+  if (p?.status !== "active" || !p.runner || BROWSER_RUNNER_IDS.has(p.runner)) return null;
+  return p.runner;
 }
 
 export function getWorldContent(langSlug: string): (WorldContent & { language: LanguageView }) | null {
@@ -120,6 +129,7 @@ export function getLessonPlay(langSlug: string, lessonSlug: string): LessonPlay 
     theme: region.theme,
     regionName: region.name,
     languageSlug: langSlug,
+    ...runInfo(pack),
     guide: guideOf(pack),
     beats: lesson.beats.map((beat, index) => ({ lessonId: id, index, beat, lesson: lesson.slug })),
   };
@@ -148,6 +158,7 @@ export function getReviewPlay(langSlug: string, keys: string[]): LessonPlay | nu
     theme: "forest",
     regionName: localized("review.region"),
     languageSlug: langSlug,
+    ...runInfo(pack),
     guide: guideOf(pack),
     beats,
   };
@@ -204,6 +215,7 @@ export function getExamPlay(langSlug: string, examSlug: string): LessonPlay | nu
     theme: exam.level === "senior" ? "tower" : "village",
     regionName: localized("exam.region"),
     languageSlug: langSlug,
+    ...runInfo(pack),
     guide: guideOf(pack),
     beats: [
       { lessonId: 0, index: -1, lesson: "", beat: intro },

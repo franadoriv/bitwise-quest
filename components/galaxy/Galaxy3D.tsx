@@ -3,7 +3,14 @@ import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import gsap from "gsap";
 
-export interface PlanetMesh { slug: string; label: string; surface: string; accent: string; ring?: string; moons?: number; locked: boolean }
+export interface PlanetMesh {
+  slug: string; label: string; surface: string; accent: string; ring?: string;
+  /** Decorative moons. */
+  moons?: number;
+  /** Framework moons (playable): bigger, colored, orbit first. */
+  frameworkMoons?: { color: string; locked: boolean }[];
+  locked: boolean;
+}
 
 const SPACING = 9;
 const posOf = (i: number) => new THREE.Vector3(i * SPACING, Math.sin(i * 1.7) * 1.2, Math.cos(i * 1.3) * 2);
@@ -30,9 +37,18 @@ function planetGroup(p: PlanetMesh): THREE.Group {
     ring.rotation.x = Math.PI / 2.4;
     g.add(ring);
   }
+  const fw = p.frameworkMoons ?? [];
+  fw.forEach((fm, m) => {
+    const c = new THREE.Color(fm.color);
+    if (fm.locked) c.multiplyScalar(0.4);
+    const moon = new THREE.Mesh(new THREE.IcosahedronGeometry(0.62, 1), new THREE.MeshLambertMaterial({ color: c, flatShading: true }));
+    moon.userData.orbit = { r: 3.6 + m * 1.1, speed: 0.45 - m * 0.08, phase: m * 2.4 };
+    moon.name = "moon";
+    g.add(moon);
+  });
   for (let m = 0; m < (p.moons ?? 0); m++) {
     const moon = new THREE.Mesh(new THREE.IcosahedronGeometry(0.35 + m * 0.1, 0), new THREE.MeshLambertMaterial({ color: p.locked ? 0x444444 : 0xdddddd, flatShading: true }));
-    moon.userData.orbit = { r: 3.4 + m * 0.9, speed: 0.6 - m * 0.15, phase: m * 2.1 };
+    moon.userData.orbit = { r: 3.6 + (fw.length + m) * 1.0, speed: 0.6 - m * 0.15, phase: m * 2.1 + 1 };
     moon.name = "moon";
     g.add(moon);
   }

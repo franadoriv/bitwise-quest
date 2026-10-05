@@ -7,11 +7,12 @@ import { sfx } from "@/lib/sfx";
 import { Highlight } from "../CodeBlock";
 import type { BeatCtx } from "./types";
 import { useI18n } from "@/components/ui/I18n";
+import { BROWSER_RUNNERS, runInBrowser } from "@/lib/runners/browser";
 
 const offlinePass = (fallback: string | string[] | undefined, code: string) =>
   (Array.isArray(fallback) ? fallback : fallback ? [fallback] : []).some((re) => new RegExp(re).test(code));
 
-type Result = { kind: "ok" | "compile" | "output" | "offline-ok" | "offline-bad" | "busy"; stdout: string; stderr: string; retry?: number };
+type Result = { kind: "ok" | "compile" | "runtime" | "output" | "offline-ok" | "offline-bad" | "busy"; stdout: string; stderr: string; retry?: number };
 
 /** Real code, real compiler. Highlighted textarea overlay + a lively "compiling" bar. */
 export function RunBeatView({ beat, ctx }: { beat: RunBeat; ctx: BeatCtx }) {
@@ -36,16 +37,22 @@ export function RunBeatView({ beat, ctx }: { beat: RunBeat; ctx: BeatCtx }) {
     const beep = setInterval(() => sfx.blip(Math.floor(Math.random() * 8)), 260);
     let res: Result;
     try {
-      const r = await fetch("/api/run", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ language: ctx.lang, code }) });
-      if (r.status === 429 || r.status === 503) {
-        // Quota hit: not the player's fault, so no penalty — just ask them to wait.
-        res = { kind: "busy", stdout: "", stderr: "", retry: Number(r.headers.get("retry-after") ?? "5") || 5 };
-        throw res;
+      let data: { ok: boolean; stdout: string; stderr: string; available: boolean };
+      if (ctx.runner && BROWSER_RUNNERS.has(ctx.runner)) {
+        // JS/TS runs in a Web Worker in the player's own browser: no server involved.
+        data = await runInBrowser(code, { jsx: ctx.lang === "tsx" });
+      } else {
+        const r = await fetch("/api/run", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ language: ctx.pack, code }) });
+        if (r.status === 429 || r.status === 503) {
+          // Quota hit: not the player's fault, so no penalty — just ask them to wait.
+          res = { kind: "busy", stdout: "", stderr: "", retry: Number(r.headers.get("retry-after") ?? "5") || 5 };
+          throw res;
+        }
+        data = (await r.json()) as typeof data;
       }
-      const data = (await r.json()) as { ok: boolean; stdout: string; stderr: string; available: boolean };
       if (!data.available) {
         res = { kind: offlinePass(beat.fallback, code) ? "offline-ok" : "offline-bad", stdout: "", stderr: "" };
-      } else if (!data.ok) res = { kind: "compile", stdout: data.stdout, stderr: data.stderr };
+      } else if (!data.ok) res = { kind: ctx.runner === "rust-playground" || /^SyntaxError/.test(data.stderr) ? "compile" : "runtime", stdout: data.stdout, stderr: data.stderr };
       else res = { kind: data.stdout.includes(beat.expect) ? "ok" : "output", stdout: data.stdout, stderr: "" };
     } catch (e) {
       res = (e as Result)?.kind === "busy" ? (e as Result) : { kind: offlinePass(beat.fallback, code) ? "offline-ok" : "offline-bad", stdout: "", stderr: "" };
@@ -121,6 +128,7 @@ export function RunBeatView({ beat, ctx }: { beat: RunBeat; ctx: BeatCtx }) {
             {result.kind === "offline-ok" && t("run.offlineOk")}
             {result.kind === "offline-bad" && t("run.offlineBad")}
             {result.kind === "compile" && t("run.compileError")}
+            {result.kind === "runtime" && t("run.runtimeError")}
             {result.kind === "output" && t("run.wrongOutput", { expect: beat.expect })}
           </div>
           {(result.stderr || result.stdout) && (

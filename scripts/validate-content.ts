@@ -5,6 +5,9 @@ import { LANGUAGE_PACKS } from "../content/index.ts";
 import type { Beat, Effect, LanguagePack, SnippetCheck } from "../lib/content/types.ts";
 import { LOCALES, isLocalized, tx, type Text } from "../lib/i18n/text.ts";
 import { PACK_SPRITES } from "../content/sprites.ts";
+import type { CodeLang } from "../lib/content/types.ts";
+import { executeJs } from "../lib/runners/js-core.ts";
+import { typecheck } from "./ts-check.ts";
 
 const VERIFY = process.argv.includes("--verify");
 const ONLY = process.argv.find((a) => a.startsWith("--lang="))?.slice(7);
@@ -60,7 +63,10 @@ function option(where: string, o: Text) {
   else prose(where, "option", o);
 }
 
-interface Job { where: string; program: string; compiles: boolean; stdout?: string; contains?: string }
+interface Job { where: string; program: string; compiles: boolean; stdout?: string; contains?: string; throws?: string; lang: CodeLang }
+
+const codeLangOf = (p: LanguagePack): CodeLang => p.codeLang ?? (p.slug === "rust" ? "rust" : "ts");
+let LANG: CodeLang = "rust"; // code language of the pack being checked
 const jobs: Job[] = [];
 
 function checkEffects(where: string, effects: Effect[] | undefined) {
@@ -79,6 +85,7 @@ const slots = (code: string) => code.split("___").length - 1;
 function buildProgram(code: string, check: SnippetCheck, fill?: string) {
   if (check.program) return check.program;
   const body = fill != null ? code.replace("___", fill) : code;
+  if (LANG !== "rust") return body; // TS/JS snippets run as module bodies
   if (/\bfn\s+main\s*\(/.test(body)) return `#![allow(unused)]\n${body}`;
   return `#![allow(unused)]\nfn main() {\n${body.split("\n").map((l) => "    " + l).join("\n")}\n}\n`;
 }
@@ -110,9 +117,9 @@ function checkBeat(where: string, b: Beat, pack: LanguagePack) {
       if (new Set(b.options.map((o) => tx(o, "en"))).size !== b.options.length) err(where, "duplicate options");
       if (b.answer < 0 || b.answer >= b.options.length) err(where, `answer ${b.answer} out of range`);
       if (b.check) {
-        jobs.push({ where, program: buildProgram(b.code, b.check, b.kind === "pick" ? tx(b.options[b.answer], "en") : undefined), compiles: b.check.compiles, stdout: b.check.stdout });
+        jobs.push({ lang: LANG, where, program: buildProgram(b.code, b.check, b.kind === "pick" ? tx(b.options[b.answer], "en") : undefined), compiles: b.check.compiles, stdout: b.check.stdout, throws: b.check.throws });
         if (b.kind === "pick" && b.check.wrongFail && !b.check.program) {
-          b.options.forEach((o, i) => { if (i !== b.answer) jobs.push({ where: `${where} (wrong option "${tx(o, "en")}")`, program: buildProgram(b.code, b.check!, tx(o, "en")), compiles: false }); });
+          b.options.forEach((o, i) => { if (i !== b.answer) jobs.push({ lang: LANG, where: `${where} (wrong option "${tx(o, "en")}")`, program: buildProgram(b.code, b.check!, tx(o, "en")), compiles: false }); });
         }
       } else if (pack.runner && /compil|print|imprime/i.test(tx(b.prompt, "en") + tx(b.prompt, "es"))) warn(where, "claims compiler behavior but has no `check`");
       break;
@@ -122,7 +129,7 @@ function checkBeat(where: string, b: Beat, pack: LanguagePack) {
       prose(where, "explain", b.explain, 160);
       if (slots(b.code) !== 1) err(where, `type needs exactly one ___ (found ${slots(b.code)})`);
       if (b.answer !== b.answer.trim() || !b.answer) err(where, "answer must be non-empty and trimmed");
-      if (b.check) jobs.push({ where, program: buildProgram(b.code, b.check, b.answer), compiles: b.check.compiles, stdout: b.check.stdout });
+      if (b.check) jobs.push({ lang: LANG, where, program: buildProgram(b.code, b.check, b.answer), compiles: b.check.compiles, stdout: b.check.stdout, throws: b.check.throws });
       break;
     case "order": {
       prose(where, "prompt", b.prompt, 60);
@@ -130,7 +137,7 @@ function checkBeat(where: string, b: Beat, pack: LanguagePack) {
       if (b.lines.length < 2) err(where, "order needs at least 2 lines");
       const trimmed = b.lines.map((l) => l.trim());
       if (new Set(trimmed).size !== trimmed.length) err(where, "order lines must be unique (after trim)");
-      if (b.check) jobs.push({ where, program: buildProgram(b.lines.join("\n"), b.check), compiles: b.check.compiles, stdout: b.check.stdout });
+      if (b.check) jobs.push({ lang: LANG, where, program: buildProgram(b.lines.join("\n"), b.check), compiles: b.check.compiles, stdout: b.check.stdout, throws: b.check.throws });
       break;
     }
     case "run":
@@ -148,15 +155,23 @@ function checkBeat(where: string, b: Beat, pack: LanguagePack) {
           err(where, `invalid fallback regex: ${String(e)}`);
         }
       }
-      if (b.solution) jobs.push({ where: `${where} (solution)`, program: b.solution, compiles: true, contains: b.expect });
-      jobs.push({ where: `${where} (starter)`, program: b.starter, compiles: true, contains: `\u0000NOT:${b.expect}` });
+      if (b.solution) jobs.push({ lang: LANG, where: `${where} (solution)`, program: b.solution, compiles: true, contains: b.expect });
+      jobs.push({ lang: LANG, where: `${where} (starter)`, program: b.starter, compiles: true, contains: `\u0000NOT:${b.expect}` });
       break;
   }
 }
 
 checkSprites();
+const slugs = new Set(LANGUAGE_PACKS.map((p) => p.slug));
 for (const pack of LANGUAGE_PACKS) {
   if (ONLY && pack.slug !== ONLY) continue;
+  LANG = codeLangOf(pack);
+  if (pack.parent) {
+    const parent = LANGUAGE_PACKS.find((p) => p.slug === pack.parent);
+    if (!parent) err(pack.slug, `moon of unknown planet "${pack.parent}"`);
+    else if (parent.parent) err(pack.slug, "moons cannot orbit other moons");
+  }
+  if (slugs.size !== LANGUAGE_PACKS.length) err(pack.slug, "duplicate pack slugs");
   const lessonSlugs = new Set<string>();
   const regionSlugs = new Set(pack.regions.map((r) => r.slug));
   if (regionSlugs.size !== pack.regions.length) err(pack.slug, "duplicate region slugs");
@@ -216,7 +231,45 @@ async function runRust(code: string) {
   return (await res.json()) as { success: boolean; stdout: string; stderr: string };
 }
 
+async function verifyTs(tsJobs: Job[]) {
+  if (!tsJobs.length) return;
+  console.log(`Type-checking ${tsJobs.length} TypeScript snippets (tsc --strict) and running them...`);
+  const React = await import("react");
+  const ReactDOMServer = await import("react-dom/server");
+  const modules = { react: React, "react-dom/server": ReactDOMServer };
+  const diags = typecheck(tsJobs.map((j, i) => ({ id: `s${i}`, code: j.program, tsx: j.lang === "tsx" })));
+  for (const [i, job] of tsJobs.entries()) {
+    const d = diags.get(`s${i}`) ?? [];
+    const typeOk = d.length === 0;
+    const notMode = job.contains?.startsWith("\u0000NOT:");
+    if (notMode) {
+      if (!typeOk) continue; // a starter that does not even type-check is fine
+      const r = await executeJs(job.program, { jsx: job.lang === "tsx", modules });
+      if (r.ok && r.stdout.includes(job.contains!.slice(5))) err(job.where, "starter already produces the expected output");
+      continue;
+    }
+    if (typeOk !== job.compiles) {
+      err(job.where, job.compiles ? `expected to type-check but failed: ${d[0]}` : "expected a type error but it type-checks");
+      continue;
+    }
+    if (!typeOk || (job.stdout == null && job.contains == null && job.throws == null)) continue;
+    const r = await executeJs(job.program, { jsx: job.lang === "tsx", modules });
+    if (job.throws != null) {
+      if (r.ok || !r.stderr.includes(job.throws)) err(job.where, `expected a runtime error containing ${JSON.stringify(job.throws)}, got ${r.ok ? "no error" : JSON.stringify(r.stderr)}`);
+    } else if (!r.ok) {
+      err(job.where, `runtime error: ${r.stderr.split("\n")[0]}`);
+    } else if (job.stdout != null && r.stdout.trim() !== job.stdout.trim()) {
+      err(job.where, `stdout ${JSON.stringify(r.stdout.trim())} ≠ expected ${JSON.stringify(job.stdout)}`);
+    } else if (job.contains && !r.stdout.includes(job.contains)) {
+      err(job.where, `stdout ${JSON.stringify(r.stdout.trim())} does not contain ${JSON.stringify(job.contains)}`);
+    }
+  }
+}
+
 async function verify() {
+  await verifyTs(jobs.filter((j) => j.lang !== "rust"));
+  const rustJobs = jobs.filter((j) => j.lang === "rust");
+  jobs.splice(0, jobs.length, ...rustJobs);
   console.log(`Verifying ${jobs.length} snippets with the Rust Playground...`);
   let i = 0;
   const worker = async () => {
