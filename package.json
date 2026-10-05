@@ -1,0 +1,36 @@
+{
+  "name": "coding-lab",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bit Forge: arcade retro para aprender lenguajes de programaci\u00f3n jugando. Primer cartucho: Rust.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "db:reset": "rm -rf data",
+    "typecheck": "tsc --noEmit",
+    "content:check": "node scripts/validate-content.ts",
+    "content:verify": "node scripts/validate-content.ts --verify",
+    "playtest": "node scripts/playtest.mjs"
+  },
+  "dependencies": {
+    "gsap": "^3.15.0",
+    "next": "16.3.8",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "server-only": "^0.0.1",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/three": "^0.186.0",
+    "playwright-core": "^1.63.0",
+    "typescript": "^5"
+  }
+}
