@@ -50,6 +50,8 @@ export interface SnippetCheck {
   compiles: boolean;
   /** Expected stdout (trimmed) when it compiles. */
   stdout?: string;
+  /** JS/TS packs: the program type-checks but must throw at runtime; text the error must contain (e.g. "TypeError"). */
+  throws?: string;
   /** pick only: also prove that every wrong option fails to compile (no ambiguous distractors).
    *  Leave it off when a distractor compiles but is semantically wrong, and say why in `explain`. */
   wrongFail?: boolean;
@@ -219,8 +221,14 @@ export interface PlanetDef {
   bugs: SpriteId[];
 }
 
+/** Language of the code in a pack: drives highlighting, JSX and how the validator checks snippets. */
+export type CodeLang = "rust" | "ts" | "tsx";
+
 export interface LanguagePack {
   slug: string;
+  /** Moons are frameworks of a language: a moon pack names its planet here (e.g. React → "typescript"). */
+  parent?: string;
+  codeLang?: CodeLang;
   name: string;
   tagline: Text;
   color: string;

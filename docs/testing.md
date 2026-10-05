@@ -3,10 +3,10 @@
 | Command | What it checks | When |
 | --- | --- | --- |
 | `npm run content:check` | Structure: `___` slots, answer indices, unique options, valid effects and actors, `fallback` regexes, exam topics, **every prose field localized in en/es/ja**, text budgets | Whenever you edit `content/` |
-| `npm run content:verify` | All of the above, plus compiles every `check`, every `solution` and every `starter` against the real compiler | Before accepting new content, especially LLM-generated content |
+| `npm run content:verify` | All of the above, plus compiles every `check`, every `solution` and every `starter` against the real compiler (Rust Playground for Rust; `tsc --strict` plus the JS runner core for TS/TSX) | Before accepting new content, especially LLM-generated content |
 | `npm run typecheck` | TypeScript types, including that every UI dictionary has every message key | After code changes |
 | `npm run shots` | Regenerates the README screenshots in `docs/screenshots/` | After visible UI changes |
-| `npm test` | Unit tests of the save system (`tests/save.test.ts`) and of the abuse-protection guards (`tests/security.test.ts`), with `node:test` | After any change to `lib/save/`, game rules, `lib/security/`, API routes or `proxy.ts` |
+| `npm test` | Unit tests with `node:test`: save system (`tests/save.test.ts`), abuse-protection guards (`tests/security.test.ts`), JS/TS runner (`tests/js-runner.test.ts`) and music (`tests/music.test.ts`) | After any change to `lib/save/`, game rules, `lib/security/`, API routes, `proxy.ts`, `lib/runners/` or `lib/music/` |
 | `npm run playtest -- <path>` | A bot plays the lesson, exam or review in headless Chrome, saves screenshots to `.playtest/` and checks the result was saved | After visual or content changes |
 | `npm run e2e` | End-to-end memory card flow in headless Chrome | After changes to the save system, memory card, galaxy or landing |
 | `npm run build` | Production build | Before delivering |
@@ -25,6 +25,20 @@ CI (`.github/workflows/ci.yml`) runs `content:check`, `npm test`, `typecheck` an
 - **Progress rules:** lessons unlock in order, rewards accumulate, a missed beat becomes a due review and moves up a Leitner box; an exam skips mastered regions in order and unlocks the next one.
 
 When the save format changes, add a fixture test here (see [save-system.md](save-system.md#changing-the-save-format)).
+
+`tests/js-runner.test.ts` covers the JS/TS runner core (`lib/runners/js-core.ts`) that both the browser worker and the content validator use:
+
+- **Formatting like Node:** arrays, objects with quoted keys, `Map`, `Set`, `undefined`, `-0`, bigint and class instances print as Node's `console.log` would.
+- **TypeScript execution:** types are stripped and console output captured.
+- **Event loop order:** synchronous code, then microtasks, then timers.
+- **Async:** `async`/`await` and top-level `await`.
+- **Errors:** runtime errors and syntax errors are returned as `ok: false` with `stderr`, never thrown.
+- **React:** a TSX component renders to static markup with `renderToStaticMarkup`.
+- **Timeouts:** a pending `setInterval` makes the run time out.
+
+The Web Worker wrapper and the 3 s hard timeout (`lib/runners/js-worker.ts`, `browser.ts`) need a browser: check them by playtesting a TS/TSX `run` beat. Add a test here for any change to `js-core.ts`.
+
+`tests/music.test.ts` checks the tracker songs structurally (we cannot listen in CI): every song validates, every channel of every section has the section length, looping songs are long enough, jingles are short one-shots, notes stay in a sensible range, no two songs share a lead pattern, and the track names screens use resolve (with fallbacks).
 
 `tests/security.test.ts` covers the primitives and guards in `lib/security/`:
 
@@ -46,13 +60,27 @@ After touching an API route, `proxy.ts`, `next.config.ts` or `lib/security/`, ru
 | Flag | Effect |
 | --- | --- |
 | `--verify` | Also runs every snippet on the language runner (this is what `content:verify` adds) |
-| `--lang=<slug>` | Only validates that language pack, e.g. `--lang=rust` |
+| `--lang=<slug>` | Only validates that pack, planet or moon, e.g. `--lang=rust`, `--lang=typescript`, `--lang=react` |
 | `--only=<substring>` | Only reports and verifies items whose location contains the substring: a region slug (`--only=ownership-forest`), a lesson slug, or `exam:` for all exams (`--only=exam:senior` for one) |
 
 ```bash
 npm run content:check -- --only=let-village
 npm run content:verify -- --lang=rust --only=exam:
+npm run content:verify -- --lang=typescript --only=closure-forest
+npm run content:verify -- --lang=react
 ```
+
+### How TS/TSX packs are verified
+
+For packs with `codeLang: "ts"` or `"tsx"`, `--verify` runs locally (no network):
+
+1. Every snippet (module body, `___` filled with the answer) is type-checked in **one batch** with the real TypeScript compiler in strict mode (`scripts/ts-check.ts`). Snippets are virtual files in `.snippets/` (nothing is written; the folder is gitignored). Diagnostics are reported as `TS<code> (line N): <message>`.
+2. `check.compiles` must match whether it type-checks. Snippets that type-check and carry `stdout`, `throws` or a `run` `expect` are then executed with `executeJs` from `lib/runners/js-core.ts` (the same core as the game's worker, with `react` and `react-dom/server` available).
+3. `check.stdout` must equal the trimmed output; `check.throws` must appear in the runtime error; any other runtime error is an error. A `run` `solution` must print `expect`; a `starter` that type-checks must not.
+
+Typical errors: `expected to type-check but failed: TS2322 (line 2): ...`, `expected a type error but it type-checks`, `stdout "..." ≠ expected "..."`, `expected a runtime error containing "TypeError", got no error`, `runtime error: ReferenceError: React is not defined` (a TSX snippet without `import React from "react"`).
+
+Verification runs in Node, the game in a browser worker: Node globals such as `process` exist in one and not the other. See [content-model.md](content-model.md#writing-snippets-for-the-js-runner) for what to avoid.
 
 Errors (exit code 1) include missing or partial translations (`text must be localized { en, es, ja }, got a plain string ...`, `prompt.ja is empty`). Warnings include text over budget (`text.ja is 98 chars (budget 91)`), a `run` without `solution`, and a prompt that mentions compiling/printing without a `check`. If the runner can't be reached, each snippet becomes a warning instead of an error.
 
@@ -105,7 +133,8 @@ Uses the same `BASE_URL` and `CHROME_PATH` as the playtest, in English. Steps, w
 - [ ] `npm run content:check` with 0 errors.
 - [ ] `npm run content:verify` with 0 errors for touched content.
 - [ ] `npm run typecheck` passes.
-- [ ] `npm test` passes; for save or memory card changes, also `npm run e2e`.
+- [ ] `npm test` passes (save, security, JS runner and music); for save or memory card changes, also `npm run e2e`.
+- [ ] For `lib/runners/` changes, a case in `tests/js-runner.test.ts` and a playtest of a TS/TSX `run` beat.
 - [ ] For API, `proxy.ts` or `lib/security/` changes, the manual probes in [security.md](security.md#manual-probes) give the expected statuses.
 - [ ] Playtest of an affected lesson; for layout changes, also `--locale=ja` and a portrait `--size`.
 - [ ] `npm run build` for engine/UI changes.

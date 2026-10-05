@@ -169,5 +169,7 @@ body::after {
    smaller at the same px size. Scale pixel-font text up (once, not compounding when nested). */
 html[lang="ja"] .pixel { letter-spacing: 0; line-height: 1.45; zoom: 1.35; }
 html[lang="ja"] .pixel .pixel { zoom: 1; }
+/* Latin-only pixel text (the logo, numbers) keeps its designed size in every language. */
+html[lang="ja"] .pixel.latin { zoom: 1; letter-spacing: 0.5px; line-height: 1.2; }
 html[lang="ja"] .btn { font-size: 14px; letter-spacing: 0; }
 html[lang="ja"] .btn.small { font-size: 11px; }

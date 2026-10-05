@@ -11,7 +11,7 @@ Bitwise Quest content is pure data; the engine needs no changes for new lessons.
 1. `docs/authoring-lessons.md` (pedagogy, pacing, budgets, checklist) and `docs/content-model.md` (beat kinds, effects, `check`, `Text`).
 2. `docs/i18n.md` (translation guidelines and terminology).
 3. `lib/content/types.ts` (source of truth for the schema).
-4. One existing region file of the same language as a style reference, e.g. `content/rust/regions/ownership-forest.ts`.
+4. One existing region file of the same language as a style reference, e.g. `content/rust/regions/ownership-forest.ts`. For TS/TSX packs (`content/typescript`, `content/react`), also `docs/research/typescript-react-curriculum.md` and the "TS and TSX packs" and "Writing snippets for the JS runner" sections of `docs/content-model.md`.
 5. `content/<lang>/index.ts` and `content/<lang>/topics.ts`.
 
 ## Steps
@@ -20,9 +20,10 @@ Bitwise Quest content is pure data; the engine needs no changes for new lessons.
 3. Localize as you write: every prose field is `L(en, es, ja)` (dialog text, prompts, step labels, `error.plain`, `explain`, `hint`, `say`/`banner`, lesson `title`/`enemyName`, region `name`/`subtitle`). Write English first, then neutral Latin American Spanish, then natural beginner-friendly Japanese. Options are plain strings for code tokens and `L(...)` for prose. Code uses English identifiers for every locale; `error.compiler` is the real rustc message, untranslated.
 4. Slugs are English kebab-case and unique within the language. New region: file `content/<lang>/regions/<slug>.ts` exporting a `RegionDef` (3 lessons + final `mode: "boss"` lesson), imported with a `.ts` extension in `content/<lang>/index.ts` in learning order (replace any `status: "soon"` placeholder). Link it from `topics.ts` (`region: "<slug>"`) if it teaches an exam topic.
 5. Every pick/predict/type whose answer depends on the compiler gets `check: { compiles, stdout? }` (or `check.program` with a full program; `wrongFail: true` on picks whose distractors must not compile).
+   For TS/TSX packs: snippets are module bodies (no `main`); `compiles` means "type-checks under `tsc --strict`"; `stdout` is the exact output of the game's runner (Node-like formatting); use `throws: "TypeError"` (etc.) when the answer is a runtime crash. TSX snippets start with `import React from "react"` and render with `renderToStaticMarkup` from `react-dom/server`. Do not rely on `process`/`process.nextTick`, `document`/`window`, effects or event handlers running, top-level `this` or sloppy-mode behavior.
 6. Respect budgets (en/es; Japanese ~65%): dialog 140, question prompt 60, act/run prompt 70, explain 160, error.plain 120, label 16, `say`/`banner` 22.
 7. Do not rename existing slugs unless asked: saves are keyed by slug, so renaming makes players lose that lesson's progress.
 8. `enemy` is a sprite id: prefer the planet's own bugs (`planet.bugs`, e.g. `"rust/mite"`).
 
 ## Verify (do not skip)
-Use the `verify-content` playbook: `npm run content:check -- --only=<region-slug>`, `npm run content:verify -- --lang=<lang> --only=<region-slug>`, `npm run typecheck`, and a playtest of at least one new lesson (also with `--locale=ja`). Fix until 0 errors and no warnings in your files. Report what each lesson teaches.
+Use the `verify-content` playbook: `npm run content:check -- --only=<region-slug>`, `npm run content:verify -- --lang=<lang> --only=<region-slug>` (for TS/TSX this type-checks with `tsc --strict` and runs every claim locally, e.g. `npm run content:verify -- --lang=react --only=state-forest`), `npm run typecheck`, and a playtest of at least one new lesson (also with `--locale=ja`). Fix until 0 errors and no warnings in your files. Report what each lesson teaches.

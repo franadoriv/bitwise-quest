@@ -1,12 +1,12 @@
 # Contributing to Bitwise Quest
 
-Thanks for wanting to help! The most common contribution is content: lessons, regions, exam questions or new programming languages (each one a planet with its own guide and bugs). Content is pure data, so you almost never need to touch the engine.
+Thanks for wanting to help! The most common contribution is content: lessons, regions, exam questions, new programming languages (each one a planet with its own guide and bugs) or frameworks of a language (each one a moon of its planet, like React for TypeScript/JavaScript). Content is pure data, so you almost never need to touch the engine.
 
 ## Before you start
 
 1. Read [`docs/README.md`](docs/README.md) and the guide for your task:
    - Lessons and regions: [`docs/authoring-lessons.md`](docs/authoring-lessons.md)
-   - New programming languages: [`docs/adding-a-language.md`](docs/adding-a-language.md)
+   - New programming languages (planets) and frameworks (moons): [`docs/adding-a-language.md`](docs/adding-a-language.md)
    - The save system (memory card): [`docs/save-system.md`](docs/save-system.md)
    - Exam questions: [`docs/exams.md`](docs/exams.md)
    - Translations and UI languages: [`docs/i18n.md`](docs/i18n.md)
@@ -29,8 +29,9 @@ There is no `main` branch.
    ```bash
    npm run content:check
    npm run content:verify -- --lang=rust      # compiles every claim against the real compiler
+   npm run content:verify -- --lang=react     # TS/TSX packs: tsc --strict + the JS runner, offline
    npm run typecheck
-   npm test                                   # save system and security unit tests
+   npm test                                   # save, security, JS runner and music unit tests
    npm run playtest -- /play/rust/lesson/<slug> --locale=en   # with npm run dev running
    ```
 3. Write commits with [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `content:`, `docs:`, `refactor:`, `chore:`.
@@ -41,6 +42,7 @@ There is no `main` branch.
 
 - Never ask about something the game has not taught yet.
 - Every claim about the compiler has a `check`, and every `run` beat has a `solution`.
+- TS/TSX content must type-check under `tsc --strict` where it claims to, and its output must come from the game's runner (`npm run content:verify`). Avoid Node-only globals, the DOM at runtime and anything that depends on effects running in a static React render.
 - **Every piece of prose is localized** with `L(en, es, ja)`. English is the primary language; write it first, then Spanish and Japanese. Code, compiler output and program output are never translated. See [`docs/i18n.md`](docs/i18n.md).
 - Keep text short: dialogs under 140 characters, `say`/`banner` bubbles at most 22 (Japanese gets about 65% of each budget). `npm run content:check` reports anything over budget.
 - UI strings go in `lib/i18n/messages.ts`, never hard-coded in components.
@@ -56,6 +58,7 @@ There is no `main` branch.
 - Every API endpoint uses the guards in `lib/security/`: origin check, per-client rate limit, `readJson` with a byte cap, strict validation with `onlyKeys`, and `errorResponse` with stable error codes. See [`docs/security.md`](docs/security.md#adding-an-endpoint).
 - Quotas live only in `LIMITS` (`lib/security/policies.ts`); update the table in `docs/security.md` when you change one.
 - Never log player code, IP addresses or request bodies, and never return internal error details.
+- Never execute player code on the server. Use an external sandbox behind `/api/run` or a browser runner in a Web Worker (see [`docs/security.md`](docs/security.md#player-code-execution)).
 
 ## Checklist for a pull request
 

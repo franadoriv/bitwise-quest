@@ -32,7 +32,7 @@ function Hub({ language, exams, save }: { language: LanguageView; exams: ExamSum
   const rec = (slug: string) => save.langs[language.slug]?.exams[slug];
 
   useEffect(() => {
-    music.play("map");
+    music.play("card");
     gsap.fromTo(".exam-card", { y: 60, opacity: 0 }, { y: 0, opacity: 1, stagger: 0.1, duration: 0.4, ease: "back.out(2)" });
     return () => music.stop();
   }, []);

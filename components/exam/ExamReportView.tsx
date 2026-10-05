@@ -18,7 +18,7 @@ export function ExamReportView({ report, lang }: { report: ExamReport | null; la
   const stamp = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    music.play("map");
+    music.play("result");
     gsap.fromTo(box.current, { scale: 0.7, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.35, ease: "back.out(2)" });
     if (!report) return;
     let alive = true;

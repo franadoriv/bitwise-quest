@@ -88,7 +88,7 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
 
   // ── intro ──
   useEffect(() => {
-    music.play("battle");
+    music.play(boss ? "boss" : placement ? "exam" : "lesson");
     let alive = true;
     (async () => {
       await wait(250);
@@ -158,6 +158,7 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
   const finish = async () => {
     setPhase("finishing");
     if (questionCount > 0) await stage.current?.enemyDefeated();
+    if (!placement) music.play("jingle:clear");
     await fx.banner(placement ? t("lesson.time") : boss ? t("lesson.bossDefeated") : t("lesson.clear"), { size: 28, hold: 0.7 });
     const s = stats.current;
     const current = saveRef.current;
@@ -268,7 +269,7 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
       setTimeout(() => stage.current?.healEnemy(), 500);
     }
     if (h <= 0) {
-      setTimeout(() => { sfx.gameOver(); music.stop(); setPhase("gameover"); }, 900);
+      setTimeout(() => { music.play("jingle:gameover"); setPhase("gameover"); }, 900);
       if (!review && saveRef.current) {
         void commit(recordFailedRun(saveRef.current, play.languageSlug, play.slug, stats.current.attempts.map((a) => ({ beat: a.beat, correct: a.correct }))));
       }
@@ -276,7 +277,9 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
   }
 
   const ctx: BeatCtx = {
-    lang: play.languageSlug,
+    lang: play.codeLang,
+    pack: play.languageSlug,
+    runner: play.runner,
     wrong: onWrong,
     solved: (at) => void onSolved(at),
     tick: (at) => { sfx.coin(); if (at) fx.burst(at, { count: 6, spread: 30 }); setScore((s) => s + 5); },
