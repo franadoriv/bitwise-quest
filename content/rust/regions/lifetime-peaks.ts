@@ -1,0 +1,548 @@
+import type { LessonDef, RegionDef } from "../../../lib/content/types.ts";
+import { enemySays, L, say } from "../helpers.ts";
+
+// REGION 3 · LIFETIME PEAKS  (scope, dangling references, 'a, structs with references, 'static)
+
+const LONGEST = "fn longest<'a>(x: &'a str, y: &'a str) -> &'a str {\n    if x.len() > y.len() { x } else { y }\n}\n";
+
+const YES = L("Yes", "Sí", "はい");
+const NO = L("No", "No", "いいえ");
+
+const dangling: LessonDef = {
+  slug: "scope-and-dangling",
+  title: L("Loans with a due date", "Préstamos con fecha", "期限つきの借用"),
+  concept: "lifetimes",
+  mode: "lesson",
+  xp: 70,
+  enemy: "ghost",
+  enemyName: L("DANGLING BUG", "BUG COLGANTE", "ダングリングバグ"),
+  beats: [
+    say(L(
+      "Welcome to Lifetime Peaks. Here every borrow has a return date.",
+      "Bienvenido al Monte Lifetimes. Aquí todo préstamo tiene fecha de devolución.",
+      "ライフタイム山へようこそ。ここでは、どの借用にも返す期限があるんだ。",
+    )),
+    say(L(
+      "Rule: a reference can NEVER outlive its owner. Otherwise it would point to nothing.",
+      "Regla: una referencia NUNCA puede vivir más que su dueño. Si no, apuntaría a la nada.",
+      "ルール：参照は持ち主より長く生きられない。そうでないと、何もない場所を指してしまうよ。",
+    )),
+    {
+      kind: "act",
+      prompt: L("Press in order and watch the reference r", "Pulsa en orden y vigila la referencia r", "順番に押して、参照 r を見てみよう"),
+      setup: [],
+      steps: [
+        { label: L("DECLARE r", "DECLARAR r", "r を宣言"), line: "let r;", effects: [{ t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: "r" }] },
+        { label: L("OPEN BLOCK", "ABRIR BLOQUE", "ブロック開始"), line: "{" },
+        { label: L("FORGE", "FORJAR", "作る"), line: '    let x = String::from("gem");', effects: [{ t: "item", kind: "gem", holder: "hero" }, { t: "tag", actor: "hero", text: "x" }] },
+        { label: L("LEND", "PRESTAR", "貸す"), line: "    r = &x;", effects: [{ t: "tag", actor: "ally", text: "r = &x" }, { t: "lend", to: "ally" }] },
+        { label: L("CLOSE", "CERRAR", "閉じる"), line: "} // x dies here", effects: [{ t: "drop" }, { t: "untag", actor: "hero" }, { t: "dead", actor: "ally" }, { t: "banner", text: L("GHOST!", "¡FANTASMA!", "おばけだ！") }] },
+        {
+          label: L("USE r", "USAR r", "r を使う"),
+          line: 'println!("{}", r);',
+          effects: [{ t: "shake" }, { t: "say", actor: "ally", text: L("I point to nothing!", "¡Apunto a la nada!", "何も指してない！") }],
+          error: {
+            compiler: "error[E0597]: `x` does not live long enough",
+            plain: L(
+              "x died at the closing }, but r was still borrowing it: a DANGLING reference.",
+              "x murió al cerrar }, pero r seguía prestándola: referencia COLGANTE.",
+              "x は } で消えたのに、r はまだ借りていた。ダングリング参照だ。",
+            ),
+          },
+        },
+      ],
+    },
+    say(L(
+      "A dangling reference is a ghost. Rust catches it at COMPILE time, not in production.",
+      "Una referencia colgante es un fantasma. Rust la caza al COMPILAR, no en producción.",
+      "ダングリング参照はおばけみたいなもの。Rust は本番ではなく、コンパイル時に見つけてくれるよ。",
+    )),
+    {
+      kind: "predict",
+      prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"),
+      code: "let r;\n{\n    let x = 5;\n    r = &x;\n}\nprintln!(\"{}\", r);",
+      options: [L("Yes: prints 5", "Sí: imprime 5", "はい：5 と表示"), L("No: x does not live long enough", "No: x no vive lo suficiente", "いいえ：x の寿命が足りない")],
+      answer: 1,
+      explain: L("x dies at }. r would use it afterwards: error E0597.", "x muere en }. r la usaría después: error E0597.", "x は } で消える。そのあと r が使おうとするので E0597 エラー。"),
+      check: { compiles: false },
+      setup: [{ t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: "r = &x" }, { t: "tag", actor: "hero", text: "x", value: "5" }],
+      win: [{ t: "untag", actor: "hero" }, { t: "dead", actor: "ally" }, { t: "say", actor: "enemy", text: L("Boo! You got me", "¡Bu! Me atrapaste", "ばあ！見つかった") }],
+    },
+    {
+      kind: "pick",
+      prompt: L("Make the gold survive the block", "Que el oro sobreviva al bloque", "金をブロックの外まで残そう"),
+      code: 'let r;\n{\n    let x = String::from("gold");\n    r = ___;\n}\nprintln!("{}", r);',
+      options: ["x", "&x", "&mut x"],
+      answer: 0,
+      explain: L(
+        "If r receives OWNERSHIP (move), the gold no longer dies at }.",
+        "Si r recibe la PROPIEDAD (move), el oro ya no muere en }.",
+        "r が所有権を受け取れば（move）、金は } で消えなくなるよ。",
+      ),
+      check: { compiles: true, stdout: "gold", wrongFail: true },
+      setup: [{ t: "item", kind: "potion", holder: "hero" }, { t: "tag", actor: "hero", text: "x" }, { t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: "r" }],
+      win: [{ t: "give", to: "ally" }, { t: "dead", actor: "hero" }, { t: "print", text: "gold" }],
+    },
+    {
+      kind: "predict",
+      prompt: L(
+        "The reference dies BEFORE the owner. What does it print?",
+        "La referencia muere ANTES que el dueño. ¿Qué imprime?",
+        "参照が持ち主より先に消える。何が表示される？",
+      ),
+      code: 'let x = String::from("bread");\n{\n    let r = &x;\n    println!("{}", r);\n} // r dies here\nprintln!("{}", x);',
+      options: [L("bread twice (two lines)", "bread dos veces (dos líneas)", "bread が2回（2行）"), L("Error: dangling r", "Error: r colgante", "エラー：r がダングリング")],
+      answer: 0,
+      output: "bread\nbread",
+      explain: L(
+        "The other way around is fine: the borrow ends and the owner is still alive.",
+        "Al revés no hay problema: el préstamo termina y el dueño sigue vivo.",
+        "逆なら問題なし。借用が先に終わり、持ち主はまだ生きているよ。",
+      ),
+      check: { compiles: true, stdout: "bread\nbread" },
+    },
+    say(L(
+      "Same in functions: you can't return a reference to something local. It dies on the way out.",
+      "En funciones igual: no puedes devolver una referencia a algo local. Muere al salir.",
+      "関数でも同じ。ローカルな値への参照は返せない。関数を出るときに消えるからね。",
+    )),
+    {
+      kind: "act",
+      prompt: L("Try to return a borrow of something local", "Intenta devolver un préstamo de algo local", "ローカルな値の借用を返してみよう"),
+      setup: [],
+      steps: [
+        { label: L("SIGNATURE", "FIRMA", "シグネチャ"), line: "fn create() -> &String {" },
+        { label: L("FORGE", "FORJAR", "作る"), line: '    let s = String::from("map");', effects: [{ t: "item", kind: "scroll", holder: "hero" }, { t: "tag", actor: "hero", text: "s" }] },
+        { label: L("RETURN &s", "DEVOLVER &s", "&s を返す"), line: "    &s", effects: [{ t: "enter", actor: "ally" }, { t: "lend", to: "ally" }] },
+        {
+          label: L("CLOSE", "CERRAR", "閉じる"),
+          line: "}",
+          effects: [{ t: "drop" }, { t: "dead", actor: "ally" }, { t: "shake" }],
+          error: {
+            compiler: "error[E0106]: missing lifetime specifier",
+            plain: L(
+              "s dies at the closing }. There's nobody left to borrow from.",
+              "s muere al cerrar }. No hay nadie de quien pedir prestado.",
+              "s は } で消える。借りる相手がもういないんだ。",
+            ),
+          },
+        },
+        { label: L("BETTER", "MEJOR ASÍ", "こうしよう"), line: 'fn create() -> String { String::from("map") }', effects: [{ t: "item", kind: "scroll", holder: "hero" }, { t: "give", to: "ally" }, { t: "banner", text: L("MOVE, NOT BORROW!", "¡MOVE, NO PRÉSTAMO!", "借用でなくmove！") }] },
+      ],
+    },
+    {
+      kind: "predict",
+      prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"),
+      code: 'fn create() -> &String {\n    let s = String::from("map");\n    &s\n}',
+      options: [YES, L("No: the reference would dangle", "No: la referencia saldría colgando", "いいえ：参照がダングリングになる")],
+      answer: 1,
+      explain: L(
+        "s dies when create returns: Rust refuses to return &s.",
+        "s muere al salir de create: Rust rechaza devolver &s.",
+        "s は create を抜けると消える。だから Rust は &s を返すのを拒否するよ。",
+      ),
+      check: { compiles: false },
+    },
+    {
+      kind: "pick",
+      prompt: L("Return the map without leaving anything dangling", "Devuelve el mapa sin colgar nada", "ダングリングなしで地図を返そう"),
+      code: 'fn create() -> ___ {\n    let s = String::from("map");\n    s\n}\n\nprintln!("{}", create());',
+      options: ["String", "&String", "&str"],
+      answer: 0,
+      explain: L(
+        "Return the whole String: ownership leaves the function.",
+        "Devuelve el String entero: la propiedad sale de la función.",
+        "String をまるごと返そう。所有権が関数の外へ出ていくよ。",
+      ),
+      check: { compiles: true, stdout: "map", wrongFail: true },
+      win: [{ t: "item", kind: "scroll", holder: "hero" }, { t: "print", text: "map" }],
+    },
+    {
+      kind: "order",
+      prompt: L("Order it: the owner is born before the borrow", "Ordena: el dueño nace antes que el préstamo", "並べよう：持ち主は借用より先に生まれる"),
+      lines: ['let x = String::from("light");', "let r = &x;", 'println!("{}", r);'],
+      explain: L(
+        "First the owner, then the borrow, and you use it while x is alive.",
+        "Primero el dueño, luego el préstamo, y lo usas mientras x vive.",
+        "まず持ち主、次に借用。そして x が生きている間に使おう。",
+      ),
+      check: { compiles: true, stdout: "light" },
+      win: [{ t: "print", text: "light" }],
+    },
+    {
+      kind: "run",
+      prompt: L("Fix it: it must print Found: crown", "Arréglalo: debe imprimir Found: crown", "直そう：Found: crown と表示させてね"),
+      starter: 'fn main() {\n    let r;\n    {\n        let treasure = String::from("crown");\n        r = &treasure;\n    }\n    println!("Found: {}", r);\n}\n',
+      expect: "Found: crown",
+      solution: 'fn main() {\n    let treasure = String::from("crown");\n    let r;\n    {\n        r = &treasure;\n    }\n    println!("Found: {}", r);\n}\n',
+      fallback: [
+        String.raw`r\s*=\s*treasure\s*;`,
+        String.raw`r\s*=\s*treasure\s*\.\s*(clone|to_string|to_owned)\s*\(\s*\)`,
+        String.raw`let\s+treasure[^;]*;\s*let\s+r\b`,
+        String.raw`r\s*=\s*&\s*treasure\s*;\s*println!\s*\(\s*"Found: \{\}"\s*,\s*r\s*\)`,
+      ],
+      explain: L(
+        "Move treasure out of the block so it lives as long as r (or move it: r = treasure).",
+        "Saca treasure del bloque para que viva tanto como r (o muévelo: r = treasure).",
+        "treasure をブロックの外に出して、r と同じだけ生きるようにしよう（または r = treasure で move）。",
+      ),
+    },
+  ],
+};
+
+const annotations: LessonDef = {
+  slug: "lifetime-annotations",
+  title: L("The 'a contract", "El contrato 'a", "契約 'a"),
+  concept: "lifetimes",
+  mode: "lesson",
+  xp: 70,
+  enemy: "golem",
+  enemyName: L("AMBIGUOUS BUG", "BUG AMBIGUO", "あいまいバグ"),
+  beats: [
+    say(L(
+      "If a function takes TWO references and returns one, Rust asks: which one is it borrowed from?",
+      "Si una función recibe DOS referencias y devuelve una, Rust pregunta: ¿de cuál es el préstamo?",
+      "参照を2つ受け取って1つ返す関数だと、Rust は「どっちからの借用？」と聞いてくるよ。",
+    )),
+    {
+      kind: "act",
+      prompt: L("Write the function and sign the contract", "Escribe la función y firma el contrato", "関数を書いて、契約にサインしよう"),
+      setup: [],
+      steps: [
+        {
+          label: L("NO LABEL", "SIN ETIQUETA", "ラベルなし"),
+          line: "fn longest(x: &str, y: &str) -> &str {",
+          effects: [{ t: "tag", actor: "hero", text: "x" }, { t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: "y" }, { t: "shake" }, { t: "say", actor: "enemy", text: L("From x or from y?", "¿De x o de y?", "x？それとも y？") }],
+          error: {
+            compiler: "error[E0106]: missing lifetime specifier",
+            plain: L(
+              "Rust doesn't know whether the result is borrowed from x or from y.",
+              "Rust no sabe si el resultado se presta de x o de y.",
+              "結果が x から借りたのか y から借りたのか、Rust にはわからない。",
+            ),
+          },
+        },
+        {
+          label: L("SIGN 'a", "FIRMAR 'a", "'a にサイン"),
+          line: "fn longest<'a>(x: &'a str, y: &'a str) -> &'a str {",
+          effects: [{ t: "tag", actor: "hero", text: "x: &'a str" }, { t: "tag", actor: "ally", text: "y: &'a str" }, { t: "banner", text: L("CONTRACT 'a", "CONTRATO 'a", "契約 'a") }],
+        },
+        { label: L("BODY", "CUERPO", "本体"), line: "    if x.len() > y.len() { x } else { y }", effects: [{ t: "say", actor: "hero", text: L("Longest one wins!", "¡Gana el más largo!", "長いほうの勝ち！") }] },
+        { label: L("CLOSE", "CERRAR", "閉じる"), line: "}", effects: [{ t: "banner", text: L("IT COMPILES!", "¡COMPILA!", "コンパイル成功！") }] },
+      ],
+    },
+    say(L(
+      "'a doesn't extend any life. It's a contract: the result is valid while x and y are alive.",
+      "'a no alarga ninguna vida. Es un contrato: el resultado vale mientras x e y sigan vivas.",
+      "'a は寿命を延ばすわけじゃない。「x と y が生きている間だけ結果は有効」という契約なんだ。",
+    )),
+    {
+      kind: "pick",
+      prompt: L("Declare the generic lifetime", "Declara el lifetime genérico", "ジェネリックなライフタイムを宣言しよう"),
+      code: "fn longest<___>(x: &'a str, y: &'a str) -> &'a str {\n    if x.len() > y.len() { x } else { y }\n}\n\nprintln!(\"{}\", longest(\"axe\", \"sword\"));",
+      options: ["'a", "a", "&a", "<a>"],
+      answer: 0,
+      explain: L(
+        "Lifetimes are declared like generics: <'a>, with an apostrophe.",
+        "Los lifetimes se declaran como genéricos: <'a>, con apóstrofo.",
+        "ライフタイムはジェネリクスのように宣言する。アポストロフィつきで <'a> だよ。",
+      ),
+      check: { compiles: true, stdout: "sword", wrongFail: true },
+      win: [{ t: "banner", text: L("CONTRACT 'a", "CONTRATO 'a", "契約 'a") }, { t: "print", text: "sword" }],
+    },
+    {
+      kind: "type",
+      prompt: L("The output follows the same contract", "La salida cumple el mismo contrato", "戻り値も同じ契約に従う"),
+      code: "fn longest<'a>(x: &'a str, y: &'a str) -> ___ str {\n    if x.len() > y.len() { x } else { y }\n}",
+      answer: "&'a",
+      explain: L(
+        "-> &'a str: the result lives as long as the 'a contract.",
+        "-> &'a str: el resultado vive lo que el contrato 'a.",
+        "-> &'a str：結果は契約 'a の間だけ生きる。",
+      ),
+      check: { compiles: true },
+    },
+    {
+      kind: "predict",
+      prompt: L("b dies first. Does it compile?", "b muere antes. ¿Compila?", "b が先に消える。コンパイルできる？"),
+      code: `${LONGEST}\nlet a = String::from("long sword");\nlet res;\n{\n    let b = String::from("dagger");\n    res = longest(&a, &b);\n}\nprintln!("{}", res);`,
+      options: [L("Yes: prints long sword", "Sí: imprime long sword", "はい：long sword と表示"), L("No: b does not live long enough", "No: b no vive lo suficiente", "いいえ：b の寿命が足りない")],
+      answer: 1,
+      explain: L(
+        "With 'a, res is valid only while BOTH are alive. b dies at }: error E0597.",
+        "Con 'a, res vale solo mientras vivan AMBAS. b muere en }: error E0597.",
+        "'a があると、res は両方が生きている間だけ有効。b は } で消えるので E0597 エラー。",
+      ),
+      check: { compiles: false },
+      setup: [{ t: "tag", actor: "hero", text: "a" }, { t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: "b" }],
+      win: [{ t: "dead", actor: "ally" }, { t: "say", actor: "enemy", text: L("Contract broken!", "¡Contrato roto!", "契約が破れた！") }],
+    },
+    say(L(
+      "Good news: you rarely write 'a. Rust infers it on its own with ELISION rules.",
+      "Buena noticia: casi nunca escribes 'a. Rust la deduce solo con reglas de ELISIÓN.",
+      "いい知らせ：'a を書くことはめったにない。Rust が省略（エリジョン）ルールで推論してくれるよ。",
+    )),
+    {
+      kind: "act",
+      prompt: L("See what Rust infers for you", "Mira lo que Rust deduce por ti", "Rust が推論してくれる内容を見よう"),
+      setup: [],
+      steps: [
+        { label: L("ONE INPUT", "UNA ENTRADA", "入力は1つ"), line: "fn first(s: &str) -> &str {", effects: [{ t: "tag", actor: "hero", text: "s" }] },
+        { label: L("BODY", "CUERPO", "本体"), line: "    &s[..1]", effects: [{ t: "enter", actor: "ally" }, { t: "lend", to: "ally" }, { t: "say", actor: "ally", text: L("I come from s", "Vengo de s", "s から来たよ") }] },
+        { label: L("CLOSE", "CERRAR", "閉じる"), line: "}", effects: [{ t: "banner", text: L("IT COMPILES!", "¡COMPILA!", "コンパイル成功！") }] },
+        { label: L("WHAT RUST SEES", "LO QUE VE RUST", "Rust の見方"), line: "// fn first<'a>(s: &'a str) -> &'a str", effects: [{ t: "banner", text: L("ELISION", "ELISIÓN", "省略ルール") }] },
+      ],
+    },
+    say(L(
+      "Rule 1: a single input reference → the output takes its lifetime. Rule 2: in &self methods, it takes self's.",
+      "Regla 1: una sola referencia de entrada → la salida toma su lifetime. Regla 2: en métodos con &self, toma el de self.",
+      "ルール1：入力の参照が1つなら、出力はそのライフタイムになる。ルール2：&self のメソッドなら self のものになる。",
+    )),
+    {
+      kind: "predict",
+      prompt: L("A single input. Does it compile?", "Una sola entrada. ¿Compila?", "入力は1つ。コンパイルできる？"),
+      code: 'fn first(s: &str) -> &str {\n    &s[..1]\n}\n\nprintln!("{}", first("rust"));',
+      options: [L("Yes: prints r", "Sí: imprime r", "はい：r と表示"), L("No: 'a is missing", "No: falta 'a", "いいえ：'a がない")],
+      answer: 0,
+      output: "r",
+      explain: L(
+        "One input, one output: Rust infers the lifetime on its own.",
+        "Una entrada, una salida: Rust deduce el lifetime solo.",
+        "入力1つ、出力1つ。Rust がライフタイムを自動で推論するよ。",
+      ),
+      check: { compiles: true, stdout: "r" },
+    },
+    {
+      kind: "predict",
+      prompt: L("Two inputs, no 'a. Does it compile?", "Dos entradas, sin 'a. ¿Compila?", "入力2つで 'a なし。コンパイルできる？"),
+      code: "fn choose(x: &str, y: &str) -> &str {\n    x\n}",
+      options: [YES, L("No: 'a is missing", "No: falta 'a", "いいえ：'a がない")],
+      answer: 1,
+      explain: L(
+        "With two input references, elision can't guess: E0106.",
+        "Con dos referencias de entrada la elisión no adivina: E0106.",
+        "入力の参照が2つあると、省略ルールでは決められない。E0106 だよ。",
+      ),
+      check: { compiles: false },
+    },
+    {
+      kind: "predict",
+      prompt: L("A &self method, no 'a. Does it compile?", "Método con &self, sin 'a. ¿Compila?", "&self のメソッドで 'a なし。通る？"),
+      code: 'struct Hero { name: String }\n\nimpl Hero {\n    fn name(&self) -> &str { &self.name }\n}\n\nlet h = Hero { name: String::from("Ferro") };\nprintln!("{}", h.name());',
+      options: [L("Yes: prints Ferro", "Sí: imprime Ferro", "はい：Ferro と表示"), L("No: 'a is missing", "No: falta 'a", "いいえ：'a がない")],
+      answer: 0,
+      output: "Ferro",
+      explain: L(
+        "With &self, the output takes the lifetime of self. No annotation needed.",
+        "Con &self, la salida toma el lifetime de self. Sin anotar nada.",
+        "&self があると、出力は self のライフタイムになる。注釈は不要だよ。",
+      ),
+      check: { compiles: true, stdout: "Ferro" },
+    },
+    {
+      kind: "run",
+      prompt: L("Fix it: it must print Winner: hammer", "Arréglalo: debe imprimir Winner: hammer", "直そう：Winner: hammer と表示させてね"),
+      starter: 'fn longest(x: &str, y: &str) -> &str {\n    if x.len() > y.len() { x } else { y }\n}\n\nfn main() {\n    let a = String::from("hammer");\n    let b = String::from("pick");\n    println!("Winner: {}", longest(&a, &b));\n}\n',
+      expect: "Winner: hammer",
+      solution: `${LONGEST}\nfn main() {\n    let a = String::from("hammer");\n    let b = String::from("pick");\n    println!("Winner: {}", longest(&a, &b));\n}\n`,
+      fallback: [
+        String.raw`fn\s+longest\s*<\s*'(\w+)\s*>\s*\(\s*x\s*:\s*&\s*'\1\s+str\s*,\s*y\s*:\s*&\s*'\1\s+str\s*\)\s*->\s*&\s*'\1\s+str`,
+        String.raw`fn\s+longest\s*\([^)]*\)\s*->\s*String\b`,
+      ],
+      explain: L(
+        "Declare <'a> and put it on x, y and the output.",
+        "Declara <'a> y ponlo en x, y y en la salida.",
+        "<'a> を宣言して、x と y と戻り値につけよう。",
+      ),
+    },
+  ],
+};
+
+const structsStatic: LessonDef = {
+  slug: "structs-and-static",
+  title: L("Structs and 'static", "Structs y 'static", "構造体と 'static"),
+  concept: "lifetimes",
+  mode: "lesson",
+  xp: 70,
+  enemy: "slime",
+  enemyName: L("ETERNAL BUG", "BUG ETERNO", "永遠バグ"),
+  beats: [
+    say(L(
+      "A struct can hold a reference too. Then it carries a lifetime: it can't outlive what it borrows.",
+      "Un struct también puede guardar una referencia. Entonces lleva un lifetime: no puede vivir más que lo prestado.",
+      "構造体も参照を持てる。そのときはライフタイムがつき、借りたものより長くは生きられないよ。",
+    )),
+    {
+      kind: "act",
+      prompt: L("Store a borrow inside a struct", "Guarda un préstamo dentro de un struct", "構造体の中に借用をしまおう"),
+      setup: [],
+      steps: [
+        { label: L("DEFINE", "DEFINIR", "定義する"), line: "struct Excerpt<'a> { part: &'a str }", effects: [{ t: "banner", text: L("Excerpt<'a>", "Excerpt<'a>", "Excerpt<'a>") }] },
+        { label: L("BOOK", "LIBRO", "本"), line: 'let book = String::from("Rust is great");', effects: [{ t: "item", kind: "scroll", holder: "hero" }, { t: "tag", actor: "hero", text: "book" }] },
+        { label: L("EXTRACT", "EXTRAER", "抜き出す"), line: "let e = Excerpt { part: &book[..4] };", effects: [{ t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: "e.part" }, { t: "lend", to: "ally" }] },
+        { label: L("READ", "LEER", "読む"), line: 'println!("{}", e.part);', effects: [{ t: "say", actor: "ally", text: L("Rust!", "¡Rust!", "Rust！") }], output: "Rust" },
+      ],
+    },
+    say(L(
+      "The contract: e can't outlive book. If book dies first, the borrow checker stops you.",
+      "El contrato: e no puede sobrevivir a book. Si book muere antes, el borrow checker te frena.",
+      "契約：e は book より長く生きられない。book が先に消えると、借用チェッカーが止めてくれるよ。",
+    )),
+    {
+      kind: "pick",
+      prompt: L("Complete the borrowed field", "Completa el campo prestado", "借用フィールドを完成させよう"),
+      code: 'struct Excerpt<\'a> { part: ___ str }\n\nlet book = String::from("Rust is great");\nlet e = Excerpt { part: &book[..4] };\nprintln!("{}", e.part);',
+      options: ["&'a", "&", "'a", "&mut"],
+      answer: 0,
+      explain: L(
+        "The field is a reference with the struct's contract: &'a str.",
+        "El campo es una referencia con el contrato del struct: &'a str.",
+        "このフィールドは構造体の契約つきの参照、つまり &'a str だよ。",
+      ),
+      check: { compiles: true, stdout: "Rust", wrongFail: true },
+      setup: [{ t: "item", kind: "scroll", holder: "hero" }, { t: "tag", actor: "hero", text: "book" }, { t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: "e.part" }],
+      win: [{ t: "lend", to: "ally" }, { t: "print", text: "Rust" }],
+    },
+    {
+      kind: "predict",
+      prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"),
+      code: "struct Excerpt { part: &str }",
+      options: [YES, L("No: the lifetime is missing", "No: falta el lifetime", "いいえ：ライフタイムがない")],
+      answer: 1,
+      explain: L(
+        "A reference field needs a lifetime: Excerpt<'a> and &'a str (E0106).",
+        "Un campo referencia necesita lifetime: Excerpt<'a> y &'a str (E0106).",
+        "参照のフィールドにはライフタイムが必要。Excerpt<'a> と &'a str だよ（E0106）。",
+      ),
+      check: { compiles: false },
+    },
+    {
+      kind: "predict",
+      prompt: L("book dies before e. Does it compile?", "book muere antes que e. ¿Compila?", "book が e より先に消える。通る？"),
+      code: "struct Excerpt<'a> { part: &'a str }\n\nlet e;\n{\n    let book = String::from(\"Rust is great\");\n    e = Excerpt { part: &book[..4] };\n}\nprintln!(\"{}\", e.part);",
+      options: [L("Yes: prints Rust", "Sí: imprime Rust", "はい：Rust と表示"), L("No: book does not live long enough", "No: book no vive lo suficiente", "いいえ：book の寿命が足りない")],
+      answer: 1,
+      explain: L(
+        "e holds a borrow of book, and book dies at }: E0597.",
+        "e guarda un préstamo de book, y book muere en }: E0597.",
+        "e は book を借りているのに、book は } で消える。E0597 だよ。",
+      ),
+      check: { compiles: false },
+      setup: [{ t: "item", kind: "scroll", holder: "hero" }, { t: "tag", actor: "hero", text: "book" }, { t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: "e.part" }],
+      win: [{ t: "drop" }, { t: "untag", actor: "hero" }, { t: "dead", actor: "ally" }],
+    },
+    say(L(
+      "'static is the longest lifetime: it lives for the WHOLE program. \"text\" literals are &'static str.",
+      "'static es el lifetime más largo: vive TODO el programa. Los literales \"texto\" son &'static str.",
+      "'static は一番長いライフタイムで、プログラム全体の間生きる。\"text\" のような文字列リテラルは &'static str だよ。",
+    )),
+    {
+      kind: "act",
+      prompt: L("A literal doesn't die when the block closes", "Un literal no muere al cerrar el bloque", "リテラルはブロックが閉じても消えない"),
+      setup: [],
+      steps: [
+        { label: L("DECLARE r", "DECLARAR r", "r を宣言"), line: "let r;", effects: [{ t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: "r" }] },
+        { label: L("OPEN BLOCK", "ABRIR BLOQUE", "ブロック開始"), line: "{" },
+        { label: L("LITERAL", "LITERAL", "リテラル"), line: '    let s: &\'static str = "eternal";', effects: [{ t: "item", kind: "key", holder: "hero" }, { t: "tag", actor: "hero", text: "s: 'static" }] },
+        { label: L("LEND", "PRESTAR", "貸す"), line: "    r = s;", effects: [{ t: "tag", actor: "ally", text: "r = s" }, { t: "lend", to: "ally" }] },
+        { label: L("CLOSE", "CERRAR", "閉じる"), line: "}", effects: [{ t: "untag", actor: "hero" }, { t: "say", actor: "ally", text: L("Still alive!", "¡Sigo vivo!", "まだ生きてる！") }, { t: "banner", text: L("'STATIC", "'STATIC", "'STATIC") }] },
+        { label: L("USE r", "USAR r", "r を使う"), line: 'println!("{}", r);', output: "eternal" },
+      ],
+    },
+    {
+      kind: "predict",
+      prompt: L("What does it print?", "¿Qué imprime?", "何が表示される？"),
+      code: 'fn greeting() -> &\'static str {\n    "hello, apprentice"\n}\n\nprintln!("{}", greeting());',
+      options: ["hello, apprentice", L("Error: dangling reference", "Error: referencia colgante", "エラー：ダングリング参照")],
+      answer: 0,
+      output: "hello, apprentice",
+      explain: L(
+        "The literal lives for the whole program: returning it is safe.",
+        "El literal vive en el programa entero: devolverlo es seguro.",
+        "リテラルはプログラム全体の間生きる。だから返しても安全だよ。",
+      ),
+      check: { compiles: true, stdout: "hello, apprentice" },
+    },
+    {
+      kind: "type",
+      prompt: L("Write the lifetime of literals", "Escribe el lifetime de los literales", "リテラルのライフタイムを書こう"),
+      code: 'fn title() -> &___ str {\n    "Peak"\n}',
+      answer: "'static",
+      explain: L("A literal is &'static str.", "Un literal es &'static str.", "リテラルは &'static str だよ。"),
+      check: { compiles: true },
+    },
+    say(L(
+      "Careful: don't add 'static just to silence the compiler. Returning a String is almost always enough.",
+      "Ojo: no pongas 'static solo para callar al compilador. Casi siempre basta devolver un String.",
+      "注意：コンパイラを黙らせるためだけに 'static をつけないこと。たいていは String を返せば十分だよ。",
+    )),
+    {
+      kind: "pick",
+      prompt: L("format! creates NEW text. What do you return?", "format! crea un texto NUEVO. ¿Qué devuelves?", "format! は新しい文字列を作る。何を返す？"),
+      code: 'fn name(id: u32) -> ___ {\n    format!("hero-{}", id)\n}\n\nprintln!("{}", name(7));',
+      options: ["String", "&'static str", "&str"],
+      answer: 0,
+      explain: L(
+        "format! creates a String: return it with its ownership. &'static str wouldn't compile.",
+        "format! crea un String: devuélvelo con su propiedad. &'static str no compilaría.",
+        "format! は String を作る。所有権ごと返そう。&'static str ではコンパイルできないよ。",
+      ),
+      check: { compiles: true, stdout: "hero-7", wrongFail: true },
+    },
+    {
+      kind: "run",
+      prompt: L("Fix it: it must print Reading: Fire rune", "Arréglalo: debe imprimir Reading: Fire rune", "直そう：Reading: Fire rune と表示させてね"),
+      starter: 'struct Scroll {\n    text: &str,\n}\n\nfn main() {\n    let ink = String::from("Fire rune");\n    let p = Scroll { text: &ink };\n    println!("Reading: {}", p.text);\n}\n',
+      expect: "Reading: Fire rune",
+      solution: 'struct Scroll<\'a> {\n    text: &\'a str,\n}\n\nfn main() {\n    let ink = String::from("Fire rune");\n    let p = Scroll { text: &ink };\n    println!("Reading: {}", p.text);\n}\n',
+      fallback: [
+        String.raw`struct\s+Scroll\s*<\s*'(\w+)\s*>[\s\S]*text\s*:\s*&\s*'\1\s+str`,
+        String.raw`text\s*:\s*String\b[\s\S]*Scroll\s*\{\s*text\s*:\s*[^&\s]`,
+      ],
+      explain: L(
+        "Scroll<'a> and text: &'a str. (No 'static: ink is not a literal.)",
+        "Scroll<'a> y text: &'a str. (Sin 'static: ink no es un literal.)",
+        "Scroll<'a> と text: &'a str にしよう（'static は不要。ink はリテラルじゃないからね）。",
+      ),
+    },
+  ],
+};
+
+const boss3: LessonDef = {
+  slug: "boss-lifetimes",
+  title: L("BOSS: Eternal Golem", "JEFE: Gólem Eterno", "ボス：永遠のゴーレム"),
+  concept: "lifetimes",
+  mode: "boss",
+  xp: 170,
+  enemy: "golem",
+  enemyName: L("ETERNAL GOLEM", "GÓLEM ETERNO", "永遠のゴーレム"),
+  beats: [
+    enemySays(L(
+      "I AM THE GUARDIAN OF THE PEAKS. No dangling reference gets past me. Prove yourself!",
+      "SOY EL GUARDIÁN DEL MONTE. Ninguna referencia colgante cruza mi paso. ¡Demuéstralo!",
+      "我は山の番人なり。ダングリング参照は一つも通さぬ。力を見せてみよ！",
+    )),
+    { kind: "predict", time: 12, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: "let r;\n{\n    let x = 1;\n    r = &x;\n}\nprintln!(\"{}\", r);", options: [YES, NO], answer: 1, explain: L("x dies before r.", "x muere antes que r.", "x は r より先に消える。"), check: { compiles: false } },
+    { kind: "pick", time: 12, prompt: L("Declare the lifetime", "Declara el lifetime", "ライフタイムを宣言しよう"), code: "fn f<___>(x: &'a str) -> &'a str { x }", options: ["'a", "a", "&a"], answer: 0, explain: L("<'a>", "<'a>", "<'a>"), check: { compiles: true, wrongFail: true } },
+    { kind: "predict", time: 12, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: "fn f(x: &str, y: &str) -> &str { y }", options: [YES, NO], answer: 1, explain: L("Two inputs: 'a is missing.", "Dos entradas: falta 'a.", "入力が2つ。'a が必要だよ。"), check: { compiles: false } },
+    { kind: "type", time: 12, prompt: L("Lifetime of a literal", "Lifetime de un literal", "リテラルのライフタイム"), code: 'let s: &___ str = "rock";', answer: "'static", explain: L("&'static str", "&'static str", "&'static str"), check: { compiles: true } },
+    { kind: "pick", time: 12, prompt: L("Return something created inside", "Devuelve algo creado dentro", "中で作った値を返そう"), code: 'fn create() -> ___ { String::from("x") }', options: ["String", "&String", "&'static String"], answer: 0, explain: L("Return ownership.", "Devuelve la propiedad.", "所有権を返そう。"), check: { compiles: true, wrongFail: true } },
+    { kind: "predict", time: 12, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: "struct S { r: &str }", options: [YES, NO], answer: 1, explain: L("S<'a> and &'a str are missing.", "Falta S<'a> y &'a str.", "S<'a> と &'a str が必要だよ。"), check: { compiles: false } },
+    { kind: "predict", time: 12, prompt: L("What does it print?", "¿Qué imprime?", "何が表示される？"), code: `${LONGEST}\nprintln!("{}", longest("peak", "summit"));`, options: ["summit", "peak", L("Error", "Error", "エラー")], answer: 0, explain: L("summit is longer.", "summit es más largo.", "summit のほうが長い。"), check: { compiles: true, stdout: "summit" } },
+    { kind: "predict", time: 15, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: `${LONGEST}\nlet a = String::from("aaaa");\nlet res;\n{\n    let b = String::from("b");\n    res = longest(&a, &b);\n}\nprintln!("{}", res);`, options: [YES, NO], answer: 1, explain: L("b dies before res is used.", "b muere antes de usar res.", "res を使う前に b が消える。"), check: { compiles: false } },
+    { kind: "type", time: 15, prompt: L("Borrowed field of the struct", "Campo prestado del struct", "構造体の借用フィールド"), code: "struct Excerpt<'a> { part: ___ str }", answer: "&'a", explain: L("part: &'a str", "part: &'a str", "part: &'a str"), check: { compiles: true } },
+    enemySays(L(
+      "Grrr... your borrows always make it home. Climb on, Rustacean: the summit is yours.",
+      "Grrr... tus préstamos siempre vuelven a casa. Sube, rustáceo: la cumbre es tuya.",
+      "ぐぬぬ…おぬしの借用は必ず持ち主に帰る。登るがよい、Rustacean よ。頂上はおぬしのものだ。",
+    )),
+  ],
+};
+
+export const lifetimePeaks: RegionDef = {
+  slug: "lifetime-peaks",
+  name: L("Lifetime Peaks", "Monte Lifetimes", "ライフタイム山"),
+  subtitle: L("'a · references that live", "'a · referencias que viven", "'a · 生きている参照"),
+  theme: "mountain",
+  lessons: [dangling, annotations, structsStatic, boss3],
+};

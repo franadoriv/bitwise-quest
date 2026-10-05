@@ -1,9 +1,10 @@
 import type { LanguagePack } from "../../lib/content/types.ts";
-import { aldeaLet } from "./regions/aldea-let.ts";
-import { bosqueOwnership } from "./regions/bosque-ownership.ts";
-import { monteLifetimes } from "./regions/monte-lifetimes.ts";
-import { castilloTraits } from "./regions/castillo-traits.ts";
-import { torreFearless } from "./regions/torre-fearless.ts";
+import { L } from "../../lib/i18n/text.ts";
+import { letVillage } from "./regions/let-village.ts";
+import { ownershipForest } from "./regions/ownership-forest.ts";
+import { lifetimePeaks } from "./regions/lifetime-peaks.ts";
+import { traitCastle } from "./regions/trait-castle.ts";
+import { fearlessTower } from "./regions/fearless-tower.ts";
 import { exams } from "./exams.ts";
 import { topics } from "./topics.ts";
 
@@ -11,16 +12,16 @@ import { topics } from "./topics.ts";
 export const rust: LanguagePack = {
   slug: "rust",
   name: "RUST",
-  tagline: "Seguridad de memoria sin recolector de basura",
+  tagline: L("Memory safety without a garbage collector", "Seguridad de memoria sin recolector de basura", "ガベージコレクタなしのメモリ安全性"),
   color: "#e43b44",
   status: "active",
   runner: "rust-playground",
   regions: [
-    aldeaLet,
-    bosqueOwnership,
-    monteLifetimes,
-    castilloTraits,
-    torreFearless,
+    letVillage,
+    ownershipForest,
+    lifetimePeaks,
+    traitCastle,
+    fearlessTower,
   ],
   topics,
   exams,
