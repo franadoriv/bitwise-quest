@@ -1,8 +1,8 @@
 # Rust hiring assessments: what companies test, by level
 
-Research behind the "Prueba de ingreso" exams of Bit Forge (`content/rust/exams.ts`).
+Research behind the entry exams of Bitwise Quest (`content/rust/exams.ts`).
 Goal: simulate the technical screening a company runs when hiring Rust developers at
-junior, mid (semi-senior) and senior level, in an arcade format (short, timed, multiple choice).
+junior, mid-level and senior level, in an arcade format (short, timed, multiple choice).
 
 Researched October 2026. The sources are public question collections, assessment vendors'
 test descriptions, real job postings and the official Rust documentation. Interview processes
@@ -20,7 +20,7 @@ vary a lot between companies: treat this as a synthesis, not a standard.
 
 ## 2. Topics per level
 
-| Area | Junior | Mid / Semi-senior | Senior |
+| Area | Junior | Mid-level | Senior |
 |---|---|---|---|
 | Syntax, mutability, shadowing, primitive types | Core | Assumed | Assumed |
 | Ownership, move vs `Copy`, `clone` | Core | Second nature | Assumed |
@@ -55,14 +55,14 @@ judgment the compiler agrees with:
 
 ## 3. Question formats that fit the arcade
 
-| Format in the sources | Bit Forge beat | Example in the bank |
+| Format in the sources | Bitwise Quest beat | Example in the bank |
 |---|---|---|
-| "Does this compile?" | `predict` with Sí/No + `check.compiles` | Moving a `String` and then using it |
+| "Does this compile?" | `predict` with Yes/No + `check.compiles` | Moving a `String` and then using it |
 | Output prediction (rust-quiz style) | `predict` with output options + `check.stdout` | Drop order, iterator evaluation order |
 | Pick the right signature or trait bound | `pick` (one `___`) | `FnMut()` vs `Fn()` vs `FnOnce()`; `&'a str` return |
 | Fill in the blank | `type` (exact token) | `Sized`, `Pin`, `From`, `unsafe` |
 | Reorder statements | `order` | Arc + Mutex + spawn + join |
-| Spot the bug | `predict` "¿Compila?" on buggy code; the `explain` names the fix | Elision ties the output to `&self` |
+| Spot the bug | `predict` "Does it compile?" on buggy code; the `explain` names the fix | Elision ties the output to `&self` |
 
 Long-form coding tasks and design discussions don't fit a 30-50 s arcade question. The bank
 approximates them with "which fix is right" picks.
@@ -71,18 +71,21 @@ approximates them with "which fix is right" picks.
 
 | Exam | Draws / bank | Pass | s/question | Topics in the bank (count) | Kinds |
 |---|---|---|---|---|---|
-| `junior`, Rust Developer Junior | 12 / 25 | 70% | 30 | variables 3, types 4, ownership 4, borrowing 4, patterns 3, errors 4, collections 3 | predict 17, pick 5, type 2, order 1 |
-| `mid`, Rust Developer Semi-Senior | 14 / 26 | 70% | 40 | lifetimes 5, traits 6, errors 3, iterators 4, closures 2, smart_pointers 2, concurrency 3, patterns 1 | predict 16, pick 8, type 1, order 1 |
-| `senior`, Rust Developer Senior | 15 / 30 | 75% | 50 | concurrency 5, smart_pointers 4, traits 3, closures 1, lifetimes 4, iterators 2, memory 4, async 3, unsafe_ffi 3, errors 1 | predict 24, pick 3, type 3 |
+| `junior`, Junior Rust Developer | 12 / 25 | 70% | 30 | variables 3, types 4, ownership 4, borrowing 4, patterns 3, errors 4, collections 3 | predict 12, pick 8, type 3, order 2 |
+| `mid`, Mid-level Rust Developer | 14 / 26 | 70% | 40 | lifetimes 5, traits 6, errors 3, iterators 4, closures 2, smart_pointers 2, concurrency 3, patterns 1 | predict 11, pick 10, type 3, order 2 |
+| `senior`, Senior Rust Developer | 15 / 30 | 75% | 50 | concurrency 5, smart_pointers 4, traits 3, closures 1, lifetimes 4, iterators 2, memory 4, async 3, unsafe_ffi 3, errors 1 | predict 17, pick 7, type 5, order 1 |
+
+Counts as of the English-first rewrite of `content/rust/exams.ts`; the file is the source of truth.
 
 Notes:
 
 - The engine draws round-robin across topics (`lib/repo.ts`), so each attempt is balanced and different.
-- Topic ids that link to a teaching region (`variables`, `types` → aldea-let; `ownership`, `borrowing` →
-  bosque-ownership; `lifetimes` → monte-lifetimes; `traits` → castillo-traits; `concurrency` →
-  torre-fearless) let a strong result skip those regions. Junior covers the first two regions, mid adds
+- Topic ids that link to a teaching region (`variables`, `types` → `let-village`; `ownership`, `borrowing` →
+  `ownership-forest`; `lifetimes` → `lifetime-peaks`; `traits` → `trait-castle`; `concurrency` →
+  `fearless-tower`) let a strong result skip those regions. Junior covers the first two regions, mid adds
   lifetimes/traits, senior adds concurrency.
-- New topic ids (no region yet): `closures`, `iterators`, `memory`, `async`.
+- Topic ids without a teaching region yet: `errors`, `collections`, `patterns`, `smart_pointers`, `unsafe_ffi`, `closures`, `iterators`, `memory`, `async`.
+- Every question is localized (`L(en, es, ja)`); code and expected output are identical in every locale.
 - Every question whose answer depends on the compiler or runtime has a `check` that is verified on the
   Rust Playground (`npm run content:verify -- --lang=rust`). Runtime-panic questions (`None.unwrap()`,
   double `borrow_mut`) use a `check.program` that wraps the code in `catch_unwind` and prints `true`, so

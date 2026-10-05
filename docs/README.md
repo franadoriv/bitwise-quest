@@ -1,38 +1,42 @@
-# Documentación de Bit Forge
+# Bitwise Quest documentation
 
-Bit Forge es un arcade retro (pixel art NES/Game Boy) para **aprender** lenguajes de programación jugando. Esta carpeta explica cómo funciona y cómo extenderlo. Está escrita para personas y para LLMs: cada documento es autocontenido, usa rutas reales del repo y termina con una lista de verificación.
+Bitwise Quest is a retro arcade game (NES/Game Boy pixel art) for **learning** programming languages by playing. This folder explains how it works and how to extend it. It is written for humans and for LLMs: every document is self-contained, uses real repo paths and ends with a checklist where useful.
 
-## Mapa de documentos
+The game and all its content are localized in **English** (primary), **Spanish** and **Japanese**.
 
-| Documento | Léelo cuando quieras... |
+## Document map
+
+| Document | Read it when you want to... |
 | --- | --- |
-| [architecture.md](architecture.md) | Entender cómo encajan Next.js, SQLite, el escenario SVG y el mapa 3D |
-| [content-model.md](content-model.md) | Conocer cada tipo de beat y cada efecto visual, con ejemplos |
-| [authoring-lessons.md](authoring-lessons.md) | Añadir lecciones o regiones a un lenguaje existente |
-| [adding-a-language.md](adding-a-language.md) | Añadir un lenguaje nuevo (Go, Zig, ...) |
-| [exams.md](exams.md) | Entender o ampliar la prueba de ingreso (junior, semi senior, senior) |
-| [game-design.md](game-design.md) | Conocer los principios "dopagaki", la puntuación y la progresión |
-| [testing.md](testing.md) | Validar contenido, jugar en headless y comprobar el build |
-| [research/](research/) | Investigación de soporte, como lo que evalúan las empresas en Rust |
+| [architecture.md](architecture.md) | Understand how Next.js, SQLite, the SVG stage and the 3D map fit together |
+| [content-model.md](content-model.md) | Learn every beat kind and every visual effect, with examples |
+| [authoring-lessons.md](authoring-lessons.md) | Add lessons or regions to an existing language |
+| [adding-a-language.md](adding-a-language.md) | Add a new programming language (Go, Zig, ...) |
+| [exams.md](exams.md) | Understand or extend the entry exam (junior, mid, senior) |
+| [i18n.md](i18n.md) | Understand localization, translate content or add a UI locale |
+| [game-design.md](game-design.md) | Learn the "dopagaki" principles, scoring and progression |
+| [testing.md](testing.md) | Validate content, play headless and check the build |
+| [research/](research/) | Supporting research, such as what companies assess in Rust |
 
-## Ideas clave en 30 segundos
+## Key ideas in 30 seconds
 
-1. **El contenido es datos.** Todo lo que el jugador ve está en `content/<lenguaje>/`. El motor no sabe nada de Rust.
-2. **El motor es genérico.** Siete tipos de beat y un vocabulario de efectos visuales cubren cualquier lenguaje.
-3. **Todo es verificable.** Cada afirmación sobre el compilador lleva un `check` que `npm run content:verify` compila de verdad.
-4. **SQLite se sincroniza solo.** Al arrancar, el contenido se copia a la base de datos sin tocar el progreso del jugador.
+1. **Content is data.** Everything the player sees lives in `content/<language>/`. The engine knows nothing about Rust.
+2. **The engine is generic.** Seven beat kinds and a vocabulary of visual effects cover any language.
+3. **Everything is verifiable.** Every compiler claim carries a `check` that `npm run content:verify` actually compiles.
+4. **Every prose string is localized.** Content uses `L(en, es, ja)`; UI strings live in `lib/i18n/messages.ts`. The validator rejects missing translations.
+5. **SQLite syncs itself.** On startup, content is copied into the database without touching player progress (except for lessons whose slug was removed).
 
-## Comandos
+## Commands
 
 ```bash
-npm run dev              # servidor de desarrollo
-npm run content:check    # valida la estructura del contenido
-npm run content:verify   # además compila cada check contra el compilador real
-npm run playtest -- /play/rust/lesson/hola-let   # un bot juega la lección en Chrome headless
+npm run dev              # development server
+npm run content:check    # validates content structure and translations
+npm run content:verify   # also compiles every check against the real compiler
+npm run playtest -- /play/rust/lesson/hello-let --locale=en   # a bot plays the lesson in headless Chrome
 npm run typecheck && npm run build
-npm run db:reset         # borra el progreso local
+npm run db:reset         # deletes local progress
 ```
 
-## Para agentes de IA
+## For AI agents
 
-Lee primero `AGENTS.md` en la raíz. Hay playbooks listos en [`playbooks/`](playbooks/) para las tareas habituales: añadir lecciones, añadir un lenguaje, ampliar exámenes y verificar contenido.
+Read `AGENTS.md` at the repo root first. Ready-made playbooks for the usual tasks are in [`playbooks/`](playbooks/): add lessons, add a language, extend exams and verify content.

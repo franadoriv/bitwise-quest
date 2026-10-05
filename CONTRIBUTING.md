@@ -1,30 +1,41 @@
-# Contribuir a Bit Forge
+# Contributing to Bitwise Quest
 
-¡Gracias por querer ayudar! La forma más común de contribuir es añadir contenido: lecciones, regiones, preguntas de examen o lenguajes nuevos. El contenido es solo datos, así que casi nunca hace falta tocar el motor.
+Thanks for wanting to help! The most common contribution is content: lessons, regions, exam questions or new programming languages. Content is pure data, so you almost never need to touch the engine.
 
-## Antes de empezar
+## Before you start
 
-1. Lee [`docs/README.md`](docs/README.md) y el documento de tu tarea:
-   - Lecciones y regiones: [`docs/authoring-lessons.md`](docs/authoring-lessons.md)
-   - Lenguajes nuevos: [`docs/adding-a-language.md`](docs/adding-a-language.md)
-   - Preguntas de examen: [`docs/exams.md`](docs/exams.md)
-2. Usa Node 22.18 o superior (`nvm use`).
+1. Read [`docs/README.md`](docs/README.md) and the guide for your task:
+   - Lessons and regions: [`docs/authoring-lessons.md`](docs/authoring-lessons.md)
+   - New programming languages: [`docs/adding-a-language.md`](docs/adding-a-language.md)
+   - Exam questions: [`docs/exams.md`](docs/exams.md)
+   - Translations and UI languages: [`docs/i18n.md`](docs/i18n.md)
+2. Use Node 22.18 or newer (`nvm use`).
 
-## Flujo de trabajo
+## Workflow
 
-1. Crea una rama desde `main`: `feat/<tema>`, `fix/<tema>` o `content/<tema>`.
-2. Haz tus cambios y verifica:
+1. Create a branch from `main`: `feat/<topic>`, `fix/<topic>` or `content/<topic>`.
+2. Make your changes and verify:
    ```bash
    npm run content:check
-   npm run content:verify -- --lang=rust   # compila cada afirmación contra el compilador real
+   npm run content:verify -- --lang=rust      # compiles every claim against the real compiler
    npm run typecheck
-   npm run playtest -- /play/rust/lesson/<slug>   # con npm run dev en marcha
+   npm run playtest -- /play/rust/lesson/<slug> --locale=en   # with npm run dev running
    ```
-3. Escribe commits con [Conventional Commits](https://www.conventionalcommits.org/es/): `feat:`, `fix:`, `content:`, `docs:`, `refactor:`, `chore:`.
-4. Abre un pull request explicando qué enseña o arregla el cambio, con capturas si afecta a la interfaz.
+3. Write commits with [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `content:`, `docs:`, `refactor:`, `chore:`.
+4. Open a pull request explaining what the change teaches or fixes, with screenshots if it affects the UI.
 
-## Reglas de contenido
+## Content rules
 
-- Nunca preguntes algo que el juego no haya enseñado antes.
-- Cada afirmación sobre el compilador lleva `check`, y cada reto `run` lleva `solution`.
-- Textos breves: diálogos de menos de 140 caracteres y globos de 22 como máximo.
+- Never ask about something the game has not taught yet.
+- Every claim about the compiler has a `check`, and every `run` beat has a `solution`.
+- **Every piece of prose is localized** with `L(en, es, ja)`. English is the primary language; write it first, then Spanish and Japanese. Code, compiler output and program output are never translated. See [`docs/i18n.md`](docs/i18n.md).
+- Keep text short: dialogs under 140 characters, `say`/`banner` bubbles at most 22 (Japanese gets about 65% of each budget). `npm run content:check` reports anything over budget.
+- UI strings go in `lib/i18n/messages.ts`, never hard-coded in components.
+
+## Checklist for a pull request
+
+- [ ] `npm run content:check` reports 0 errors and no warnings in files you touched.
+- [ ] `npm run content:verify -- --lang=<lang>` reports 0 errors (content changes).
+- [ ] `npm run typecheck` passes (and `npm run build` for engine/UI changes).
+- [ ] New text exists in English, Spanish and Japanese.
+- [ ] Playtested at least one affected lesson or exam, ideally in more than one locale.

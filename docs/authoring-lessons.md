@@ -1,46 +1,85 @@
-# Cómo escribir lecciones y regiones
+# Authoring lessons and regions
 
-## Principio pedagógico
+## Teaching principle
 
-El jugador puede no saber nada del lenguaje. **Nunca pidas algo que el juego no haya mostrado antes.** Cada lección sigue este arco:
+The player may know nothing about the language. **Never ask for something the game has not shown before.** Every lesson follows this arc:
 
-1. **Gancho** (`dialog`, 1–2 frases). Qué problema resuelve el concepto.
-2. **Demostración jugable** (`act`). El jugador pulsa botones, el código aparece línea a línea y el mundo muestra la idea con efectos. Si hay un error típico, muéstralo aquí con `error`.
-3. **Práctica guiada** (`pick`, `predict`). Variaciones pequeñas del mismo patrón, con `setup` y `win` que dibujen lo que pasa.
-4. **Producción** (`type`, `order`). El jugador recuerda y escribe.
-5. **Código real** (`run`). Un programa corto con un bug que arreglar.
+1. **Hook** (`dialog`, 1–2 sentences). What problem the concept solves.
+2. **Playable demonstration** (`act`). The player presses buttons, the code appears line by line and the world shows the idea with effects. If there is a typical error, show it here with `error`.
+3. **Guided practice** (`pick`, `predict`). Small variations of the same pattern, with `setup` and `win` that draw what happens.
+4. **Production** (`type`, `order`). The player recalls and writes.
+5. **Real code** (`run`). A short program with a bug to fix.
 
-Reparte los diálogos entre las preguntas, no los acumules al principio. Una idea nueva por diálogo.
+Spread dialogs between questions instead of stacking them at the start. One new idea per dialog.
 
-## Ritmo "dopagaki"
+## "Dopagaki" pacing
 
-- Diálogos de menos de 140 caracteres. Globos `say` de 22 como máximo.
-- Ninguna pantalla de más de 10–20 segundos sin feedback.
-- Código de 1–6 líneas en preguntas y como mucho 12 en `run`.
-- `explain` enseña el porqué en una o dos frases. Es lo que lee quien falla.
-- Usa `setup` y `win` para que cada respuesta tenga consecuencia visible.
+- Dialogs under 140 characters. `say` bubbles 22 at most.
+- No screen longer than 10–20 seconds without feedback.
+- Code of 1–6 lines in questions and at most 12 in `run`.
+- `explain` teaches the *why* in one or two sentences. It is what the player reads after a mistake.
+- Use `setup` and `win` so every answer has a visible consequence.
 
-## Añadir una lección a una región existente
+## Writing in three languages
 
-1. Abre `content/<lang>/regions/<region>.ts`.
-2. Declara `const miLeccion: LessonDef = { ... }` siguiendo el estilo del archivo.
-3. Añádela al array `lessons` de la región, antes del jefe.
-4. Ejecuta la verificación (abajo).
+Every prose string is written as `L(en, es, ja)`. Write the English version first (it is the primary language), then Spanish and Japanese. Code and identifiers stay in English for every locale. Budgets are checked per locale; Japanese gets about 65% of each budget.
 
-## Añadir una región nueva
+| Field | Budget (en/es) | Budget (ja) |
+| --- | --- | --- |
+| Dialog `text` | 140 | 91 |
+| `explain` | 160 | 104 |
+| `error.plain` | 120 | 78 |
+| `act` / `run` `prompt` | 70 | 46 |
+| Question `prompt` | 60 | 39 |
+| Lesson `title` | 28 | 19 |
+| `enemyName` | 20 | 13 |
+| Step `label` | 16 | 11 |
+| `say` / `banner` | 22 | 15 |
 
-1. Crea `content/<lang>/regions/<slug>.ts` y exporta un `RegionDef` con `theme` (`village`, `forest`, `mountain`, `castle` o `tower`), 3 lecciones y un jefe al final.
-2. Impórtalo en `content/<lang>/index.ts` con extensión `.ts` y colócalo en el orden de aprendizaje. Si había un marcador `status: "soon"`, reemplázalo.
-3. Si la región enseña un tema de examen, pon su slug en `topics.<tema>.region` (`content/<lang>/topics.ts`).
+Tone and terminology rules are in [i18n.md](i18n.md#translation-guidelines).
 
-## Escribir con un LLM
+```ts
+import type { LessonDef } from "../../../lib/content/types.ts";
+import { L, say } from "../helpers.ts";
 
-Pide contenido citando este documento, `docs/content-model.md` y un archivo de región existente como ejemplo de estilo. Exige `check` en cada pregunta que dependa del compilador y `solution` en cada `run`. Después, corre la verificación y corrige hasta que no haya errores. El playbook `docs/playbooks/add-lessons` automatiza este flujo.
+const myLesson: LessonDef = {
+  slug: "my-lesson",
+  title: L("One owner only", "Un solo dueño", "持ち主はひとり"),
+  concept: "ownership",
+  mode: "lesson",
+  xp: 60,
+  enemy: "slime",
+  enemyName: L("THIEF BUG", "BUG LADRÓN", "ドロボウバグ"),
+  beats: [
+    say(L("Every value has ONE owner.", "Cada valor tiene UN dueño.", "値の持ち主はひとりだけ。")),
+    // act, pick, predict, type, order, run ...
+  ],
+};
+```
 
-## Lista de verificación
+## Adding a lesson to an existing region
 
-- [ ] `npm run content:check` sin errores ni avisos en tus archivos.
-- [ ] `npm run content:verify -- --lang=<lang>` sin errores. Todas las afirmaciones están compiladas.
-- [ ] `npm run typecheck` pasa.
-- [ ] `npm run playtest -- /play/<lang>/lesson/<slug>` termina. Revisa las capturas en `.playtest/`.
-- [ ] Ninguna pregunta usa un concepto no presentado antes en la región.
+1. Open `content/<lang>/regions/<region-slug>.ts` (for Rust: `let-village`, `ownership-forest`, `lifetime-peaks`, `trait-castle`, `fearless-tower`).
+2. Declare `const myLesson: LessonDef = { ... }` following the file's style. Use an English kebab-case `slug` that is unique within the language.
+3. Add it to the region's `lessons` array, before the boss.
+4. Run the verification below.
+
+## Adding a new region
+
+1. Create `content/<lang>/regions/<slug>.ts` (English kebab-case slug) exporting a `RegionDef` with a `theme` (`village`, `forest`, `mountain`, `castle` or `tower`), localized `name`/`subtitle`, 3 lessons and a boss at the end.
+2. Import it in `content/<lang>/index.ts` with a `.ts` extension and place it in learning order. If there was a `status: "soon"` placeholder, replace it.
+3. If the region teaches an exam topic, set its slug in `topics.<topic>.region` (`content/<lang>/topics.ts`).
+
+> Renaming or removing a lesson or region slug deletes the matching rows (and that lesson's player progress) on the next server start. See `pruneRemoved` in `lib/db.ts`.
+
+## Writing with an LLM
+
+Ask for content citing this document, `docs/content-model.md`, `docs/i18n.md` and an existing region file as a style reference. Require `check` on every compiler-dependent question, `solution` on every `run` and `L(en, es, ja)` on every prose field. Then run the verification and fix until there are no errors. The `docs/playbooks/add-lessons` playbook automates this flow.
+
+## Checklist
+
+- [ ] `npm run content:check` with no errors and no warnings in your files (missing translations are errors; over-budget text is a warning).
+- [ ] `npm run content:verify -- --lang=<lang> --only=<region-slug>` with no errors. Every claim is compiled.
+- [ ] `npm run typecheck` passes.
+- [ ] `npm run playtest -- /play/<lang>/lesson/<slug>` finishes. Check the screenshots in `.playtest/`; repeat with `--locale=ja` to catch overflow.
+- [ ] No question uses a concept not introduced earlier in the region.

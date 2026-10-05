@@ -1,67 +1,97 @@
-# Arquitectura
+# Architecture
 
-## Vista general
+## Overview
 
 ```
-content/<lang>/        Paquetes de lenguaje: regiones, lecciones, temas, exámenes (datos puros)
-        │  importados por
+content/<lang>/        Language packs: regions, lessons, topics, exams (pure data, localized with L(en, es, ja))
+        │  imported by
         ▼
-lib/db.ts              Esquema SQLite + seed idempotente (hash del contenido) + migraciones aditivas
-lib/repo.ts            Lecturas y escrituras: mundo, lecciones, progreso, repaso, exámenes
-        │  usados por
+lib/db.ts              SQLite schema + idempotent seed (content hash) + pruning + additive migrations
+lib/repo.ts            Reads and writes: world, lessons, progress, review, exams
+        │  used by
         ▼
-app/                   Rutas Next.js (App Router). Páginas server que leen SQLite y pasan datos a clientes
+app/                   Next.js routes (App Router). Server pages read SQLite and pass data to client components
+app/layout.tsx         Fonts, locale negotiation (cookie / Accept-Language), I18nProvider, GameFrame
 app/api/*              Endpoints: complete, attempts, review, exam, run
         │
         ▼
-components/game/       Motor de lección: Stage (SVG+GSAP), beats, LessonGame (orquestador), ResultScreen
-components/exam/       Hub de exámenes y reporte por tema
-components/world/      Mapa del mundo en Three.js (low poly) y su HUD
-components/title/      Pantalla de título y selección de cartucho
-components/ui/         GameFrame (escala 16:9), Settings (paleta y sonido), Providers
-components/pixel/      Sprites pixel art definidos como cuadrículas de texto
-lib/                   fx (partículas y banners), sfx (chiptune WebAudio), syntax (resaltado), palette, game-rules
-lib/runners/           Adaptadores de ejecución de código por lenguaje
-scripts/               validate-content.ts y playtest.mjs
+components/game/       Lesson engine: Stage (SVG+GSAP), beats, LessonGame (orchestrator), ResultScreen
+components/exam/       Exam hub and per-topic report
+components/world/      Three.js world map (low poly) and its HUD
+components/title/      Title screen and cartridge selection
+components/ui/         GameFrame (16:9 scaling), Settings (language, palette, sound), I18n, Providers
+components/pixel/      Pixel art sprites defined as text grids
+lib/brand.ts           Game name, logo text and localized tagline (single source of truth)
+lib/i18n/              text.ts (locales, Text, L, tx, negotiateLocale) and messages.ts (UI dictionaries)
+lib/                   fx (particles, banners), sfx (WebAudio chiptune), syntax (highlighting), palette, game-rules
+lib/runners/           Per-language code execution adapters
+scripts/               validate-content.ts and playtest.mjs
 ```
 
-## Flujo de una lección
+## Lesson flow
 
-1. `app/play/[lang]/lesson/[slug]/page.tsx` comprueba que la lección está desbloqueada y carga `LessonPlay` desde SQLite.
-2. `LessonClient` monta `LessonGame` solo en el cliente, porque usa audio, GSAP y barajado aleatorio.
-3. `LessonGame` recorre la cola de beats. Por cada beat ejecuta `setup` en el escenario, muestra el componente del beat y espera `solved` o `wrong`.
-4. Un acierto suma puntos, combo y bonus de velocidad, ejecuta los efectos `win` y golpea al bug. Un fallo quita un corazón, muestra `explain` y añade el beat al final de la cola.
-5. Al terminar, `POST /api/complete` guarda progreso, intentos y repasos, y devuelve XP, monedas y la siguiente lección.
+1. `app/play/[lang]/lesson/[slug]/page.tsx` checks the lesson is unlocked and loads `LessonPlay` from SQLite.
+2. `LessonClient` mounts `LessonGame` on the client only, because it uses audio, GSAP and random shuffling.
+3. `LessonGame` walks the beat queue. For each beat it runs `setup` on the stage, shows the beat component and waits for `solved` or `wrong`.
+4. A correct answer adds points, combo and speed bonus, plays the `win` effects and hits the bug. A wrong answer costs a heart, shows `explain` and pushes the beat to the end of the queue.
+5. At the end, `POST /api/complete` stores progress, attempts and reviews and returns XP, gold and the next lesson.
 
-## Escenario y efectos
+All content arrives at the client with every locale (`Text` values). Components resolve it at render time with `useI18n().tx(text)`, so switching language never needs a reload. See [i18n.md](i18n.md).
 
-`components/game/Stage.tsx` dibuja un SVG con `viewBox 240×96`. El fondo se extiende más allá del viewBox, así que llena cualquier proporción sin recortar. Los actores son `hero`, `ally` y `enemy`. Hay un objeto principal y un "fantasma" para clones y préstamos. El contenido no anima nada directamente: describe efectos (`give`, `lend`, `drop`...) y el escenario decide cómo se ven. Así, el mismo contenido funciona aunque cambie el arte.
+## Stage and effects
 
-## Marco 16:9
+`components/game/Stage.tsx` draws an SVG with `viewBox 240×96`. The background extends beyond the viewBox, so it fills any aspect ratio without cropping. The actors are `hero`, `ally` and `enemy`. There is one main item and a "ghost" for clones and borrows. Content never animates anything directly: it describes effects (`give`, `lend`, `drop`...) and the stage decides how they look. The same content keeps working when the art changes.
 
-`components/ui/GameFrame.tsx` dibuja la interfaz sobre un lienzo lógico de 1280×720 y lo escala con CSS `zoom` para llenar la ventana. En vertical usa un lienzo de 480 px de ancho y una sola columna. Los componentes usan `useOrientation()` para elegir su disposición. Todos los tamaños en px se refieren al lienzo lógico.
+## 16:9 frame
 
-## Base de datos
+`components/ui/GameFrame.tsx` draws the UI on a logical 1280×720 canvas and scales it with CSS `zoom` to fill the window. In portrait it uses a 480 px wide canvas and a single column. Components use `useOrientation()` to pick their layout. Every px size refers to the logical canvas.
 
-SQLite nativo de Node (`node:sqlite`), archivo en `data/bitforge.db`. Se puede cambiar con `BITFORGE_DB`.
+## Localization
 
-| Tabla | Contenido |
+| Piece | Path | Role |
+| --- | --- | --- |
+| Locale core | `lib/i18n/text.ts` | `LOCALES`, `DEFAULT_LOCALE = "en"`, `Text`, `Localized`, `L()`, `tx()`, `negotiateLocale()` |
+| UI dictionaries | `lib/i18n/messages.ts` | `MESSAGES[locale][key]`, `format()`, `localized()` |
+| React context | `components/ui/I18n.tsx` | `I18nProvider`, `useI18n()` |
+| Initial locale | `app/layout.tsx` | `locale` cookie, else `Accept-Language` |
+| Switcher | `components/ui/Settings.tsx` | Cycles EN → ES → 日本 |
+
+Full details in [i18n.md](i18n.md).
+
+## Database
+
+Node's built-in SQLite (`node:sqlite`), file `data/bitwise.db`. Override the path with `BITWISE_DB`.
+
+| Table | Contents |
 | --- | --- |
-| `languages`, `regions`, `lessons` | Copia del contenido. Se reescribe cuando cambia el hash de `content/` |
-| `players` | Perfil local único (id 1): XP, monedas, racha |
-| `progress` | Estrellas, mejor puntuación, completada o saltada por lección |
-| `attempts` | Cada respuesta, para calcular el dominio por lección |
-| `reviews` | Cajas de Leitner para el repaso ("bugs errantes") |
-| `exam_results` | Intentos de prueba de ingreso con desglose por tema |
+| `meta` | `content_hash` of the last seeded content |
+| `languages`, `regions`, `lessons` | Copy of the content. Rewritten when the hash of `content/` changes |
+| `players` | Single local profile (id 1): XP, gold, streak |
+| `progress` | Stars, best score, completed or skipped, per lesson |
+| `attempts` | Every answer, used to compute per-lesson mastery |
+| `reviews` | Leitner boxes for review ("wandering bugs") |
+| `exam_results` | Entry exam attempts with the per-topic breakdown |
 
-Las migraciones son aditivas y viven en `migrate()` de `lib/db.ts`. Nunca borres columnas: añade nuevas.
+Notes:
 
-## Reglas de desbloqueo
+- **Localized columns are JSON.** Every `Text` field (`tagline`, region `name`/`subtitle`, lesson `title`/`enemy_name`, and the `beats`, `topics` and `exams` blobs) is stored with `JSON.stringify` and parsed back in `lib/repo.ts`.
+- **Seeding.** `db()` computes a SHA-1 of `LANGUAGE_PACKS`. If it differs from `meta.content_hash`, `seed()` upserts every language, region and lesson by slug in one transaction.
+- **Pruning.** In the same transaction, `pruneRemoved()` deletes lessons and regions whose slug no longer exists in the content, together with that lesson's `progress`, `attempts` and `reviews` rows. Renaming a slug therefore resets player progress for that lesson.
+- **Migrations** are additive and live in `migrate()` in `lib/db.ts`. Never drop columns; add new ones.
 
-- Una región se desbloquea cuando todas las lecciones de la anterior están completadas o saltadas.
-- Una lección se desbloquea cuando la anterior de su región está completada.
-- Una prueba de ingreso salta regiones en orden mientras el jugador acierte al menos el 80% de las preguntas de sus temas, con un mínimo de 2.
+## Unlock rules
 
-## Ejecución de código
+- A region unlocks when every lesson of the previous region is completed or skipped.
+- A lesson unlocks when the previous lesson in its region is completed.
+- An entry exam skips regions in order while the player answers at least 80% of the questions on that region's topics correctly, with a minimum of 2 questions.
 
-Los beats `run` llaman a `POST /api/run`, que elige el runner del lenguaje (`lib/runners/`). El de Rust envía el fragmento del jugador al Rust Playground público. Con `BITFORGE_RUNNER=off` no se hace ninguna llamada externa y se valida con la regex `fallback` del beat.
+## Code execution
+
+`run` beats call `POST /api/run`, which picks the language's runner (`lib/runners/index.ts`). The Rust runner (`lib/runners/rust-playground.ts`) sends the player's snippet to the public Rust Playground. With `BITWISE_RUNNER=off` no external call is made and the beat is validated with its `fallback` regex.
+
+## Checklist when changing the architecture
+
+- [ ] Engine stays language-agnostic: nothing Rust-specific in `components/` or `lib/` (except `lib/runners/` and grammars in `lib/syntax.ts`).
+- [ ] New UI strings added to all dictionaries in `lib/i18n/messages.ts`.
+- [ ] Schema changes are additive in `migrate()`.
+- [ ] `npm run typecheck && npm run build` pass.

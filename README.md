@@ -1,94 +1,102 @@
 <div align="center">
 
-<img src="docs/screenshots/lesson-act.png" alt="Bit Forge: el código controla el mundo" width="100%" />
+<img src="docs/screenshots/lesson-act.png" alt="Bitwise Quest: your code controls the world" width="100%" />
 
-# BIT FORGE
+# BITWISE QUEST
 
-**Arcade retro para aprender lenguajes de programación jugando.**
-Pixel art NES/Game Boy, feedback constante y un mundo que reacciona a tu código.
-Primer cartucho: **Rust**.
+**A retro arcade game for learning programming languages by playing.**
+NES/Game Boy pixel art, constant feedback and a world that reacts to your code.
+First cartridge: **Rust**.
 
 [![CI](https://github.com/franadoriv/coding-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/franadoriv/coding-lab/actions/workflows/ci.yml)
 ![Next.js](https://img.shields.io/badge/Next.js-16-000?logo=nextdotjs)
 ![Three.js](https://img.shields.io/badge/Three.js-low%20poly-049EF4?logo=threedotjs)
 ![GSAP](https://img.shields.io/badge/GSAP-SVG%20motion-88CE02?logo=greensock&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-node%3Asqlite-003B57?logo=sqlite)
-![Rust](https://img.shields.io/badge/cartucho-Rust-CE422B?logo=rust)
+![Rust](https://img.shields.io/badge/cartridge-Rust-CE422B?logo=rust)
+![Languages](https://img.shields.io/badge/i18n-EN%20%C2%B7%20ES%20%C2%B7%20JA-6b5bd2)
 
 </div>
 
 ---
 
-## ¿Qué es?
+## What is it?
 
-Bit Forge enseña conceptos difíciles, como ownership, lifetimes o concurrencia, a quien **nunca** ha visto el lenguaje. Primero los muestra con metáforas jugables y después pide código. Una variable es una etiqueta sobre un personaje. Un *move* hace volar la espada a otro dueño. Un préstamo `&` es una copia fantasma que va y vuelve.
+Bitwise Quest teaches hard concepts such as ownership, lifetimes and concurrency to people who have **never** seen the language. It shows each idea first as a playable metaphor and only then asks for code. A variable is a label above a character. A *move* sends the sword flying to a new owner. A `&` borrow is a ghost copy that goes and comes back.
 
-Cada acierto golpea al bug de la lección con partículas, combos y sonido chiptune. Cada error trae una explicación del sensei Ferro, y esa pregunta vuelve al final. Quien ya sabe el lenguaje puede saltar directo a la **prueba de ingreso**, que simula la evaluación técnica de empresas reales.
+Every correct answer hits the lesson's bug with particles, combos and chiptune sound. Every mistake comes with an explanation from sensei Ferro, and that question comes back at the end. Players who already know the language can jump straight to the **entry exam**, which simulates the technical screening real companies run.
 
-## Capturas
+## Languages
 
-| Título y cartuchos | Mapa del mundo |
+The whole game, UI and every piece of content, is available in **English**, **Español** and **日本語**. The language is auto-detected from the browser (`Accept-Language`) on the first visit and can be switched at any time with the language button (EN / ES / 日本) in the settings bar. Code in the exercises always uses English identifiers. See [`docs/i18n.md`](docs/i18n.md).
+
+## Screenshots
+
+| Title and cartridges | World map |
 | --- | --- |
-| ![Pantalla de título](docs/screenshots/title.png) | ![Mapa low poly](docs/screenshots/map.png) |
-| **El error enseña** | **Compilador real** |
-| ![Feedback de error](docs/screenshots/lesson-feedback.png) | ![Reto de código real](docs/screenshots/lesson-run.png) |
-| **Jefe de región** | **Prueba de ingreso** |
-| ![Jefe](docs/screenshots/boss.png) | ![Reporte del examen](docs/screenshots/exam-report.png) |
-| **Paleta Game Boy** | **Paleta NES** |
-| ![Paleta Game Boy](docs/screenshots/palette-gb.png) | ![Paleta NES](docs/screenshots/palette-nes.png) |
+| ![Title screen](docs/screenshots/title.png) | ![Low poly map](docs/screenshots/map.png) |
+| **Mistakes teach** | **Real compiler** |
+| ![Error feedback](docs/screenshots/lesson-feedback.png) | ![Real code challenge](docs/screenshots/lesson-run.png) |
+| **Region boss** | **Entry exam** |
+| ![Boss](docs/screenshots/boss.png) | ![Exam report](docs/screenshots/exam-report.png) |
+| **Game Boy palette** | **NES palette** |
+| ![Game Boy palette](docs/screenshots/palette-gb.png) | ![NES palette](docs/screenshots/palette-nes.png) |
+| **日本語** | **Español** |
+| ![Japanese UI](docs/screenshots/locale-ja.png) | ![Spanish UI](docs/screenshots/locale-es.png) |
 
-<p align="center"><img src="docs/screenshots/mobile.png" alt="Vista móvil" width="280" /></p>
+<p align="center"><img src="docs/screenshots/mobile.png" alt="Mobile view" width="280" /></p>
 
-## Cómo se aprende
+## How you learn
 
-Cada lección son retos de pocos segundos que siguen el arco **ver → practicar → producir**:
+Each lesson is a series of challenges that take a few seconds each and follow the arc **see → practice → produce**:
 
-| Reto | Qué hace el jugador |
+| Challenge | What the player does |
 | --- | --- |
-| Diálogo | El sensei presenta una idea en una o dos frases |
-| Acción | Pulsa botones: cada uno escribe una línea de código y el mundo reacciona |
-| Elegir | Completa el hueco del código con el token correcto |
-| Predecir | Adivina qué imprime o si compila |
-| Escribir | Teclea el token, con feedback carácter a carácter |
-| Ordenar | Arma el programa línea a línea |
-| Ejecutar | Arregla un programa real y lo compila con el compilador oficial |
+| Dialog | The sensei introduces one idea in one or two sentences |
+| Act | Presses buttons: each one writes a line of code and the world reacts |
+| Pick | Fills the gap in the code with the right token |
+| Predict | Guesses what the code prints or whether it compiles |
+| Type | Types the token, with character-by-character feedback |
+| Order | Builds the program line by line |
+| Run | Fixes a real program and compiles it with the official compiler |
 
-## Características
+## Features
 
-- **Mundo en 3D low poly** con islas por región (Three.js), y escenas 2D pixel art animadas con GSAP sobre SVG.
-- **Juice arcade:** combos, PERFECT y GREAT por velocidad, partículas, temblores, música y efectos chiptune sintetizados con WebAudio, sin archivos de audio.
-- **Progreso persistente** en SQLite: XP, niveles, monedas, racha diaria, estrellas y dominio por lección.
-- **Repaso espaciado:** lo que fallas vuelve como "bugs errantes" en cajas de Leitner.
-- **Prueba de ingreso junior, semi senior y senior**, basada en lo que evalúan las empresas, con reporte por tema y salto de regiones dominadas.
-- **Marco 16:9** que escala con la ventana, con modo vertical para móvil.
-- **Tres paletas:** Naranja, Game Boy y NES.
-- **Contenido verificado:** cada afirmación sobre el compilador se compila de verdad antes de publicarse.
+- **Low poly 3D world** with one island per region (Three.js), plus animated 2D pixel art scenes driven by GSAP on SVG.
+- **Arcade juice:** combos, PERFECT and GREAT speed tiers, particles, screen shake, chiptune music and sound effects synthesized with WebAudio (no audio files).
+- **Persistent progress** in SQLite: XP, levels, gold, daily streak, stars and per-lesson mastery.
+- **Spaced repetition:** what you miss comes back as "wandering bugs" in Leitner boxes.
+- **Junior, mid-level and senior entry exams** based on what companies actually assess, with a per-topic report and skipping of regions you already master.
+- **Three languages:** English, Español and 日本語 for both UI and content, switchable in-game.
+- **16:9 frame** that scales with the window, with a portrait layout for mobile.
+- **Three palettes:** Orange, Game Boy and NES.
+- **Verified content:** every claim about the compiler is actually compiled before it ships.
 
-## Contenido de Rust
+## Rust content
 
 <!-- content-table:start -->
-| # | Región | Conceptos | Lecciones | Preguntas |
+| # | Region | Concepts | Lessons | Questions |
 | --- | --- | --- | --- | --- |
-| 1 | **Aldea Let** | Variables · mut · tipos | 3 + jefe | 27 |
-| 2 | **Bosque Ownership** | Move · clone · préstamos | 3 + jefe | 28 |
-| 3 | **Monte Lifetimes** | 'a · referencias que viven | 3 + jefe | 30 |
-| 4 | **Castillo Traits** | Traits · genéricos | 4 + jefe | 40 |
-| 5 | **Torre Fearless** | Hilos · Arc · Mutex | 4 + jefe | 45 |
+| 1 | **Let Village** | Variables · mut · types | 3 + boss | 27 |
+| 2 | **Ownership Forest** | Move · clone · borrowing | 3 + boss | 28 |
+| 3 | **Lifetime Peaks** | 'a · references that live | 3 + boss | 30 |
+| 4 | **Trait Castle** | Traits · generics | 4 + boss | 40 |
+| 5 | **Fearless Tower** | Threads · Arc · Mutex | 4 + boss | 45 |
 
-En total hay 170 preguntas de lección, todas verificadas contra el compilador.
+170 lesson questions in total, every compiler claim verified against the real compiler.
 
-**Prueba de ingreso**
+**Entry exam**
 
-| Nivel | Preguntas por intento | Aprueba con | Tiempo por pregunta |
+| Level | Questions per attempt | Pass mark | Time per question |
 | --- | --- | --- | --- |
-| Rust Developer Junior | 12 de un banco de 25 | 70% | 30 s |
-| Rust Developer Semi-Senior | 14 de un banco de 26 | 70% | 40 s |
-| Rust Developer Senior | 15 de un banco de 30 | 75% | 50 s |
+| Junior Rust Developer | 12 from a bank of 25 | 70% | 30 s |
+| Mid-level Rust Developer | 14 from a bank of 26 | 70% | 40 s |
+| Senior Rust Developer | 15 from a bank of 30 | 75% | 50 s |
 <!-- content-table:end -->
 
-## Empezar
+## Getting started
 
-Requisitos: Node 22.18 o superior (usa el SQLite nativo `node:sqlite`, sin módulos que compilar).
+Requirements: Node 22.18 or newer (the game uses Node's built-in `node:sqlite`, no native modules to compile).
 
 ```bash
 git clone https://github.com/franadoriv/coding-lab.git
@@ -97,52 +105,54 @@ npm install
 npm run dev
 ```
 
-Abre <http://localhost:3000> y pulsa **START**.
+Open <http://localhost:3000> and press **START**.
 
-| Comando | Para qué |
+| Command | Purpose |
 | --- | --- |
-| `npm run dev` | Servidor de desarrollo |
-| `npm run build` / `npm start` | Build y servidor de producción |
-| `npm run content:check` | Valida la estructura del contenido |
-| `npm run content:verify` | Compila cada afirmación contra el compilador real |
-| `npm run playtest -- <ruta>` | Un bot juega una lección en Chrome headless y guarda capturas |
-| `npm run typecheck` | Comprobación de tipos |
-| `npm run db:reset` | Borra el progreso local |
+| `npm run dev` | Development server |
+| `npm run build` / `npm start` | Production build and server |
+| `npm run content:check` | Validates content structure and translations |
+| `npm run content:verify` | Also compiles every claim against the real compiler |
+| `npm run playtest -- <path>` | A bot plays a lesson in headless Chrome and saves screenshots |
+| `npm run typecheck` | Type checking |
+| `npm run db:reset` | Deletes local progress |
 
-> Los retos de código envían el fragmento del jugador al Rust Playground público (`play.rust-lang.org`). Con `BITFORGE_RUNNER=off` no se hace ninguna llamada externa y la validación es local.
+> Code challenges send the player's snippet to the public Rust Playground (`play.rust-lang.org`). With `BITWISE_RUNNER=off` no external call is made and validation is done locally. The database lives in `data/bitwise.db` (override with `BITWISE_DB`).
 
-## Arquitectura
+## Architecture
 
 ```
-content/      Paquetes de lenguaje: regiones, lecciones, temas y exámenes (datos puros)
-lib/          SQLite, consultas, reglas de juego, sonido, efectos, runners de código
-components/   Motor de lección (escenario SVG + GSAP), mapa 3D, exámenes, UI
-app/          Rutas de Next.js (App Router) y API
-scripts/      Validador de contenido y bot de playtest
-docs/         Documentación para personas y agentes
+content/      Language packs: regions, lessons, topics and exams (pure data, localized)
+lib/          SQLite, queries, game rules, sound, effects, code runners, i18n
+components/   Lesson engine (SVG stage + GSAP), 3D map, exams, UI
+app/          Next.js routes (App Router) and API
+scripts/      Content validator and playtest bot
+docs/         Documentation for humans and AI agents
 ```
 
-El motor no sabe nada de Rust. Siete tipos de reto y un vocabulario de efectos visuales sirven para cualquier lenguaje, y añadir uno nuevo es escribir datos. Más detalle en [`docs/architecture.md`](docs/architecture.md).
+The engine knows nothing about Rust. Seven challenge kinds and a vocabulary of visual effects work for any language, and adding a new one means writing data. More detail in [`docs/architecture.md`](docs/architecture.md).
 
-## Extender
+## Extend
 
-| Quiero... | Guía |
+| I want to... | Guide |
 | --- | --- |
-| Añadir lecciones o regiones | [`docs/authoring-lessons.md`](docs/authoring-lessons.md) |
-| Añadir un lenguaje | [`docs/adding-a-language.md`](docs/adding-a-language.md) |
-| Ampliar la prueba de ingreso | [`docs/exams.md`](docs/exams.md) |
-| Entender el modelo de contenido | [`docs/content-model.md`](docs/content-model.md) |
-| Conocer el diseño de juego | [`docs/game-design.md`](docs/game-design.md) |
+| Add lessons or regions | [`docs/authoring-lessons.md`](docs/authoring-lessons.md) |
+| Add a programming language | [`docs/adding-a-language.md`](docs/adding-a-language.md) |
+| Extend the entry exam | [`docs/exams.md`](docs/exams.md) |
+| Translate or add a UI language | [`docs/i18n.md`](docs/i18n.md) |
+| Understand the content model | [`docs/content-model.md`](docs/content-model.md) |
+| Learn the game design | [`docs/game-design.md`](docs/game-design.md) |
 
-Los agentes de IA tienen instrucciones en [`AGENTS.md`](AGENTS.md) y playbooks paso a paso en [`docs/playbooks/`](docs/playbooks/).
+AI agents have instructions in [`AGENTS.md`](AGENTS.md) and step-by-step playbooks in [`docs/playbooks/`](docs/playbooks/).
 
-## Hoja de ruta
+## Roadmap
 
-- [x] Cartucho Rust: 5 regiones y prueba de ingreso en 3 niveles
-- [ ] Cartuchos Go, Zig y Haskell
-- [ ] Cuentas de usuario y tabla de récords
-- [ ] Más tipos de reto, como "encuentra el bug" en código largo
+- [x] Rust cartridge: 5 regions and a 3-level entry exam
+- [x] Full localization: English, Español, 日本語
+- [ ] Go, Zig and Haskell cartridges
+- [ ] User accounts and leaderboard
+- [ ] More challenge kinds, such as "find the bug" in longer code
 
-## Contribuir
+## Contributing
 
-Lee [`CONTRIBUTING.md`](CONTRIBUTING.md). Toda contribución de contenido debe pasar `npm run content:verify`.
+Read [`CONTRIBUTING.md`](CONTRIBUTING.md). Every content contribution must pass `npm run content:verify` and include all three languages.

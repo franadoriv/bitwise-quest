@@ -1,41 +1,48 @@
-# Cómo añadir un lenguaje
+# Adding a programming language
 
-Ejemplo: Go. Ningún archivo del motor cambia salvo el resaltado y, opcionalmente, un runner.
+This guide is about adding a new **programming language** (a cartridge such as Go). To add a new **human language** for the UI and content (for example French), see [i18n.md](i18n.md#adding-a-locale).
 
-## Pasos
+Example: Go. No engine file changes except syntax highlighting and, optionally, a runner.
 
-1. **Paquete.** Crea `content/go/index.ts` exportando un `LanguagePack`:
+## Steps
+
+1. **Pack.** Create `content/go/index.ts` exporting a `LanguagePack`:
    ```ts
+   import type { LanguagePack } from "../../lib/content/types.ts";
+   import { L } from "../../lib/i18n/text.ts";
+
    export const go: LanguagePack = {
-     slug: "go", name: "GO", tagline: "Concurrencia simple con goroutines", color: "#0099db",
+     slug: "go", name: "GO",
+     tagline: L("Simple concurrency with goroutines", "Concurrencia simple con goroutines", "goroutine でシンプルな並行処理"),
+     color: "#0099db",
      status: "active", runner: "go-playground",
-     regions: [/* importadas de ./regions/*.ts */],
+     regions: [/* imported from ./regions/*.ts */],
      topics, exams,
    };
    ```
-   Copia la estructura de `content/rust/`: `helpers.ts`, `topics.ts`, `exams.ts` y `regions/`.
-2. **Registro.** En `content/index.ts`, reemplaza `soon("go", ...)` por el paquete importado (`import { go } from "./go/index.ts"`).
-3. **Resaltado.** Añade la gramática en `GRAMMARS` de `lib/syntax.ts` (palabras clave y tipos). Si falta, se usa la de Rust.
-4. **Runner (opcional).** Para beats `run` y para verificar `check`:
-   - Implementa `LanguageRunner` en `lib/runners/<id>.ts` y regístralo en `lib/runners/index.ts`.
-   - Añade la ejecución en `runRust`/`verify` de `scripts/validate-content.ts`, eligiendo por `pack.runner`.
-   - Ajusta `buildProgram` si el lenguaje necesita otro envoltorio que `fn main`.
-   Sin runner, usa solo beats que no necesiten compilador y omite `check`.
-5. **Verifica** con la lista de abajo.
+   Copy the structure of `content/rust/`: `helpers.ts`, `topics.ts`, `exams.ts` and `regions/<slug>.ts` (English kebab-case slugs). All prose is `L(en, es, ja)`; see [content-model.md](content-model.md) and [i18n.md](i18n.md).
+2. **Registration.** In `content/index.ts`, replace `soon("go", ...)` with the imported pack (`import { go } from "./go/index.ts"`).
+3. **Highlighting.** Add the grammar to `GRAMMARS` in `lib/syntax.ts` (keywords and types). Without one, the Rust grammar is used.
+4. **Runner (optional).** Needed for `run` beats and for verifying `check`:
+   - Implement `LanguageRunner` (`lib/runners/types.ts`) in `lib/runners/<id>.ts` and register it in `lib/runners/index.ts`.
+   - Add execution in `runRust`/`verify` of `scripts/validate-content.ts`, choosing by `pack.runner`.
+   - Adjust `buildProgram` if the language needs a wrapper other than `fn main`.
+   Without a runner, use only beats that don't need a compiler and omit `check`.
+5. **Verify** with the checklist below.
 
-## Diseño del mapa de regiones
+## Designing the region map
 
-Ordena las regiones por dependencia pedagógica, de lo concreto a lo abstracto. Para cada lenguaje, identifica los 4–6 conceptos que más cuestan a quien llega de otros lenguajes y dedica una región a cada uno.
+Order regions by teaching dependency, from concrete to abstract. For each language, identify the 4–6 concepts that are hardest for people coming from other languages and dedicate one region to each.
 
-| Lenguaje | Regiones sugeridas |
+| Language | Suggested regions |
 | --- | --- |
-| Go | Variables y tipos · Slices y maps · Interfaces · Goroutines y channels · Errores y context |
-| Zig | Tipos y comptime · Punteros y slices · Allocators · Errores · Interop con C |
-| Haskell | Expresiones y tipos · Pattern matching · Tipos algebraicos · Typeclasses · Mónadas e IO |
+| Go | Variables and types · Slices and maps · Interfaces · Goroutines and channels · Errors and context |
+| Zig | Types and comptime · Pointers and slices · Allocators · Errors · C interop |
+| Haskell | Expressions and types · Pattern matching · Algebraic data types · Typeclasses · Monads and IO |
 
-## Lista de verificación
+## Checklist
 
-- [ ] `npm run content:check` y `npm run content:verify -- --lang=<slug>` sin errores.
-- [ ] El cartucho aparece activo en la pantalla de título.
-- [ ] `npm run playtest -- /play/<slug>/lesson/<primera-lección>` termina.
-- [ ] `npm run typecheck && npm run build` pasan.
+- [ ] `npm run content:check` and `npm run content:verify -- --lang=<slug>` with no errors (including translations).
+- [ ] The cartridge appears active on the title screen in every locale.
+- [ ] `npm run playtest -- /play/<slug>/lesson/<first-lesson>` finishes.
+- [ ] `npm run typecheck && npm run build` pass.

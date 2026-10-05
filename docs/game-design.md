@@ -1,37 +1,41 @@
-# Diseño de juego
+# Game design
 
-## Objetivo
+## Goal
 
-Aprender un lenguaje avanzado jugando, no solo repasarlo. El juego enseña con metáforas visuales antes de pedir código, y sirve también a quien ya sabe, mediante la prueba de ingreso y los jefes.
+Learn an advanced language by playing, not just review it. The game teaches with visual metaphors before asking for code, and it also serves people who already know the language, through the entry exam and the bosses.
 
-## Principios "dopagaki"
+## "Dopagaki" principles
 
-Estimulación frecuente y gratificación rápida, sin caos visual.
+Frequent stimulation and quick rewards, without visual chaos.
 
-- **Cada acción tiene respuesta inmediata:** sonido, partículas, número flotante, reacción del personaje.
-- **Victorias pequeñas:** beats de segundos. El bug pierde vida con cada acierto.
-- **El código controla el mundo:** las variables son etiquetas sobre los personajes, los move hacen volar objetos y los préstamos van y vuelven.
-- **Sin tiempos muertos:** si el jugador se queda quieto 9 segundos, el héroe lo anima.
-- **El error enseña:** el sensei explica el porqué y la pregunta vuelve al final ("¡el bug ha vuelto!").
+- **Every action gets an immediate response:** sound, particles, a floating number, a character reaction.
+- **Small wins:** beats last seconds. The bug loses health with every correct answer.
+- **Code controls the world:** variables are labels above characters, moves send items flying and borrows go and come back.
+- **No dead time:** if the player is idle for 9 seconds, the hero cheers them on.
+- **Mistakes teach:** the sensei explains why and the question comes back at the end ("the bug is back!").
 
-## Puntuación (`components/game/LessonGame.tsx`)
+## Scoring (`components/game/LessonGame.tsx`)
 
-| Concepto | Regla |
+| Concept | Rule |
 | --- | --- |
-| Puntos por acierto | `(100 + 60 × velocidad) × (1 + 0,1 × min(combo − 1, 10))` |
-| Velocidad | Fracción de tiempo restante. Más de 0,66 es PERFECT y más de 0,33 es GREAT |
-| Combo | Aciertos seguidos al primer intento. Banner en 3, 6, 9 y luego cada 5 |
-| Corazones | 5 en lecciones y 3 en jefes. Solo el primer fallo de cada beat quita corazón |
-| Estrellas | 3 sin errores, 2 con hasta 2 errores, 1 con más (`lib/game-rules.ts`) |
-| XP | `xp de la lección × factor de estrellas` (40% al repetir) `+ puntos / 25` |
-| Nivel | `floor(sqrt(xp / 40)) + 1` |
+| Points per correct answer | `(100 + 60 × speed) × (1 + 0.1 × min(combo − 1, 10))` |
+| Speed | Fraction of time remaining. Above 0.66 is PERFECT and above 0.33 is GREAT |
+| Combo | Consecutive first-try correct answers. Banner at 3, 6, 9 and then every 5 |
+| Hearts | 5 in lessons and 3 in bosses. Only the first mistake on each beat costs a heart |
+| Stars | 3 with no mistakes, 2 with up to 2 mistakes, 1 otherwise (`lib/game-rules.ts`) |
+| XP | `lesson xp × star factor` (40% on replays) `+ points / 25` |
+| Level | `floor(sqrt(xp / 40)) + 1` |
 
-## Retención
+## Retention
 
-- **Racha diaria** al completar cualquier lección, repaso o examen.
-- **Repaso espaciado:** cada beat fallado entra en una caja de Leitner. Los intervalos son 10 minutos, 1, 3, 7 y 14 días. Aparece en el mapa como "BUGS ERRANTES".
-- **Dominio por lección:** media de las últimas 20 respuestas, visible en el mapa.
+- **Daily streak** when completing any lesson, review or exam.
+- **Spaced repetition:** every missed beat enters a Leitner box. Intervals are 10 minutes, 1, 3, 7 and 14 days. It shows on the map as "WANDERING BUGS".
+- **Per-lesson mastery:** average of the last 20 answers, visible on the map.
 
-## Estética
+## Aesthetics
 
-Pixel art 8 bits, paletas Naranja (predeterminada), Game Boy y NES. Fuentes Press Start 2P (UI), DotGothic16 (diálogos) y VT323 (código). Música y efectos chiptune sintetizados en `lib/sfx.ts`. El mapa es low poly en Three.js, renderizado a baja resolución con píxeles nítidos.
+8-bit pixel art with the Orange (default), Game Boy and NES palettes. Fonts: Press Start 2P (UI), DotGothic16 (dialogs) and VT323 (code). Press Start 2P and VT323 have no Japanese glyphs, so they fall back to DotGothic16, which covers kana and kanji (`app/layout.tsx`, `app/globals.css`). Chiptune music and effects are synthesized in `lib/sfx.ts`. The map is low poly in Three.js, rendered at low resolution with crisp pixels.
+
+## Voice
+
+The sensei, Ferro, speaks in short, warm, encouraging sentences. In English and Spanish he is direct and playful; in Japanese he uses a friendly, beginner-friendly sensei tone (casual endings such as 〜だよ, 〜しよう). See [i18n.md](i18n.md#translation-guidelines).
