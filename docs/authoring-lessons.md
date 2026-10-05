@@ -83,3 +83,4 @@ Ask for content citing this document, `docs/content-model.md`, `docs/i18n.md` an
 - [ ] `npm run typecheck` passes.
 - [ ] `npm run playtest -- /play/<lang>/lesson/<slug>` finishes. Check the screenshots in `.playtest/`; repeat with `--locale=ja` to catch overflow.
 - [ ] No question uses a concept not introduced earlier in the region.
+- [ ] TS/TSX packs: snippets follow [content-model.md](content-model.md#writing-snippets-for-the-js-runner) (module bodies, `import React from "react"` for JSX, no Node globals or DOM at runtime, no effects expected to run) and `content:verify` type-checks them with `tsc --strict`.

@@ -53,7 +53,7 @@ await p.screenshot({ path: `${OUT}/memory-card.png` });
 await p.goto(BASE + "/galaxy"); await p.waitForTimeout(3500);
 await p.screenshot({ path: `${OUT}/galaxy.png` });
 await p.locator('button[aria-label="Next planet"]').click(); await p.waitForTimeout(2200);
-await p.screenshot({ path: `${OUT}/galaxy-go.png` });
+await p.screenshot({ path: `${OUT}/galaxy-ts.png` });
 await p.goto(BASE + "/play/rust"); await p.waitForTimeout(4500);
 await p.screenshot({ path: `${OUT}/map.png` });
 await p.goto(BASE + "/play/rust/lesson/one-owner"); await p.waitForTimeout(4500);

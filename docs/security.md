@@ -4,6 +4,8 @@ Bitwise Quest is a public game with two API endpoints, and one of them (`/api/ru
 
 The server is stateless: content is served from memory (`lib/repo.ts`), there is no database, and the server never receives or stores player saves. The only mutable server state is the abuse-protection counters and the run cache described below.
 
+**Player code never runs on the server.** Rust snippets are forwarded to an external sandbox (the public Rust Playground); JS/TS/React snippets run in a Web Worker in the player's own browser and never reach the server. See [Player code execution](#player-code-execution).
+
 ## Map
 
 | Piece | Path | Role |
@@ -14,6 +16,7 @@ The server is stateless: content is served from memory (`lib/repo.ts`), there is
 | Code runner endpoint | `app/api/run/route.ts` | Every guard applies; the most expensive endpoint |
 | Review endpoint | `app/api/review-play/route.ts` | Origin, rate limit, body cap, strict validation |
 | Upstream adapter | `lib/runners/rust-playground.ts` | Timeout, no redirects, response cap, shape check |
+| Browser runner | `lib/runners/browser.ts`, `js-worker.ts`, `js-core.ts`, `ids.ts` | JS/TS runs in a disposable Web Worker in the player's browser, 3 s hard timeout |
 | Page proxy | `proxy.ts` | Per-request nonce CSP and page rate limit |
 | Static headers | `next.config.ts` | Security headers on every response, `poweredByHeader: false` |
 | Client | `components/game/beats/RunBeatView.tsx` | Treats 429/503 as "busy, retry in N s", no penalty |
@@ -115,7 +118,7 @@ Body: `{ "language": string, "code": string }`. Checks, in order:
 | 5 | `language` matches `^[a-z0-9-]{1,32}$` | 400 `invalid_language` |
 | 6 | `code` is a non-blank string | 400 `invalid_code` |
 | 7 | `code` ≤ 10,000 chars, ≤ 400 lines, no NUL | 413 `code_too_large` |
-| 8 | The language exists and has a runner | 404 `unknown_language` |
+| 8 | The language exists, is `active` and has a **server** runner (packs with a browser runner such as `js-browser` are refused) | 404 `unknown_language` |
 | 9 | Runner disabled (`BITWISE_RUNNER=off`) | 200 `{ ok: false, available: false }`: the client validates offline |
 | 10 | Result cache (SHA-256 of language + code) | 200 with `x-cache: hit`, no upstream call, no global quota used |
 | 11 | Global token bucket (60/min) | 503 `busy` + `Retry-After` |
@@ -165,6 +168,39 @@ Keys that do not resolve to a question beat (or point to a `run` beat) are skipp
 - **Errors are reported as unavailable** (`available: false`) with empty output. Timeouts, network errors, non-2xx statuses and bad shapes never leak details to the client.
 - **Kill switch**: `BITWISE_RUNNER=off` disables every external call; `run` beats are then validated locally with their `fallback` regex.
 
+## Player code execution
+
+| Pack runner | Where the code runs | Server role |
+| --- | --- | --- |
+| `rust-playground` (server runner) | The public Rust Playground's sandbox | `/api/run` forwards the snippet with every guard above; nothing is executed locally |
+| `js-browser` (browser runner) | A Web Worker in the player's own browser | None. The code is never sent to the server, and `/api/run` refuses these packs (`getRunner` in `lib/repo.ts` returns `null` for ids in `BROWSER_RUNNER_IDS`) |
+
+Rule: **never execute player code in the server process** (no `eval`, `new Function`, `vm`, child processes or in-process interpreters on player input). A new language uses an external sandbox behind `/api/run` or a browser runner. The content validator (`scripts/validate-content.ts`) does run TS/TSX snippets in Node, but only the repository's own content, at authoring time, never player input.
+
+### The JS/TS worker
+
+`lib/runners/browser.ts` runs each snippet in a fresh module worker created from `lib/runners/js-worker.ts`:
+
+- **Isolation.** The worker is a separate thread with no DOM: player code cannot read or change the page, the game state or the save (`localStorage` does not exist in workers). It only sees the `console`, timer and `require` shims the core passes in, plus the standard worker globals. `import` statements resolve only `react` and `react-dom/server`.
+- **Disposable.** One worker per run; it is terminated as soon as the result arrives.
+- **Hard timeout.** If no result arrives within **3 s** the page calls `worker.terminate()`, which stops even an infinite synchronous loop, and the beat shows "it crashed while running" with `Timed out after 3 s (infinite loop?)`. Inside the worker, timers still pending after 2.5 s are cleared and the run fails.
+- **Bounded output.** stdout and stderr together are capped at about 8,000 characters.
+- **Fails closed to offline mode.** If the worker cannot be created, the result is `available: false` and the beat is checked with its `fallback` regex.
+- **Self-reported results.** The verdict is computed in the player's browser, like all progress, which already lives on the client. Nothing server-side trusts it.
+
+### The worker script and the CSP
+
+The worker script is bundled as a static asset under `/_next/static/`, which the `proxy.ts` matcher skips, so it is served **without the page CSP** (it still gets the static headers from `next.config.ts`). A dedicated worker's CSP comes from its own script response, not from the page, so:
+
+- the page keeps a strict CSP with no `'unsafe-eval'` in production, and only allows starting workers from `'self'` and `blob:` (`worker-src`);
+- inside the worker, `executeJs` can compile the player's code with `new Function`, which the page CSP would block.
+
+Review points (considerations, not known vulnerabilities):
+
+- Code in the worker is not restricted by `connect-src`, so a player's own snippet could call `fetch`. It runs only in that player's browser, with their own privileges, like code typed into the browser's developer console; content shipped in this repository must never do it.
+- Do not loosen the page CSP to make the runner work, and do not move `new Function` to the page. If the worker ever needs a CSP of its own, serve its script with one that allows `'unsafe-eval'` and nothing else.
+- `postMessage` data from the worker is only rendered as text by React, never as HTML.
+
 ## Pages (`proxy.ts`)
 
 Runs before every page request.
@@ -180,7 +216,7 @@ Runs before every page request.
 | `img-src` | `'self' data: blob:` | Sprites and generated images |
 | `font-src`, `media-src` | `'self'` | |
 | `connect-src` | `'self'` | The browser only talks to this site (plus `ws:`/`wss:` in development for hot reload) |
-| `worker-src` | `'self' blob:` | |
+| `worker-src` | `'self' blob:` | Lets the page start the JS/TS runner worker from this origin (see [Player code execution](#player-code-execution)) |
 | `object-src` | `'none'` | No plugins |
 | `base-uri`, `form-action` | `'self'` | No base hijacking or off-site form posts |
 | `frame-ancestors` | `'none'` | Cannot be framed (clickjacking) |
@@ -206,7 +242,7 @@ Set on every response (pages, API and static files):
 
 ## Client behavior
 
-`components/game/beats/RunBeatView.tsx`: when `/api/run` answers **429 or 503**, the beat shows `run.busy` ("Too many runs right now. Try again in N s.", with N from `Retry-After`, default 5). It is not the player's fault, so it costs **no heart** and the beat is not marked wrong. Network failures and `available: false` fall back to offline validation with the beat's `fallback` regex.
+`components/game/beats/RunBeatView.tsx`: when `/api/run` answers **429 or 503**, the beat shows `run.busy` ("Too many runs right now. Try again in N s.", with N from `Retry-After`, default 5). It is not the player's fault, so it costs **no heart** and the beat is not marked wrong. Network failures and `available: false` fall back to offline validation with the beat's `fallback` regex. Packs with a browser runner never call `/api/run`, so they are never rate limited.
 
 ## Threat model
 
@@ -214,6 +250,8 @@ Set on every response (pages, API and static files):
 | --- | --- |
 | API flooding | Per-client token buckets on every endpoint and on pages; uniform 429 with `Retry-After` |
 | Upstream cost abuse (using the game as a free compiler) | Per-client and instance-wide quotas on `/api/run`, 1 compile in flight per client, 4 in total, result cache, code size limits, origin check, `BITWISE_RUNNER=off` kill switch |
+| Remote code execution through player snippets | Player code never runs in the server process: Rust goes to an external sandbox, JS/TS runs in a Web Worker in the player's browser; `/api/run` refuses browser-runner packs |
+| A player's snippet freezing the page | The JS/TS worker runs off the main thread and is terminated after 3 s; one disposable worker per run |
 | CSRF / cross-site use of the API | `assertSameOrigin` (required `Origin`, host match or allowlist, `Sec-Fetch-Site`); JSON-only bodies; no auth cookies or sessions to ride |
 | Oversized payloads / JSON bombs | Content-type check, byte cap before and while reading (stream cancelled), strict UTF-8, small schemas with `onlyKeys`, length/line/count limits |
 | Spoofing client IPs via headers | `clientKey` reads `X-Forwarded-For` from the right with a configured number of trusted hops; invalid values fall back to `anonymous`; global quotas apply regardless |
@@ -241,7 +279,7 @@ Set on every response (pages, API and static files):
 
 ## Tests
 
-`npm test` runs `tests/security.test.ts` together with the save tests. It covers:
+`npm test` runs `tests/security.test.ts` together with the save, JS runner and music tests. `tests/js-runner.test.ts` checks that runtime and syntax errors are returned instead of thrown and that pending timers time out. The security tests cover:
 
 - Token bucket: burst, denial with the right `Retry-After`, independent clients, refill over time, and the RateLimit headers.
 - Token bucket memory cap: 10,000 distinct keys with `maxKeys: 100` keep only 100.

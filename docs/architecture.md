@@ -3,7 +3,8 @@
 ## Overview
 
 ```
-content/<lang>/        Language packs: planet, regions, lessons, topics, exams (pure data, localized with L(en, es, ja))
+content/<lang>/        Language packs: planet, regions, lessons, topics, exams (pure data, localized with L(en, es, ja)).
+                       A pack with `parent` is a moon (a framework of its planet's language, e.g. content/react)
 content/<lang>/sprites.ts   Pack pixel sprites (guide, bugs), registered in content/sprites.ts (client-safe)
         │  imported by
         ▼
@@ -20,7 +21,7 @@ lib/security/          Abuse protection: limits (token bucket, semaphores, TTL c
         ▼
 lib/save/              Client save system: schema, migrations, binary codec, localStorage slots, pure progress rules
 components/save/       SaveProvider/useSave/RequireSave, MemoryCard (/saves), PlayerChip (autosave light)
-components/galaxy/     Galaxy3D (low-poly planets, rings, moons, starfield) and GalaxyClient (planet card, LAND)
+components/galaxy/     Galaxy3D (low-poly planets, rings, framework and decorative moons, starfield) and GalaxyClient (planet card, moon buttons, LAND)
 components/world/      Three.js planet map (low poly islands) and its HUD, landing intro by the guide
 components/game/       Lesson engine: Stage (SVG+GSAP), beats, LessonGame (orchestrator), ResultScreen
 components/exam/       Exam hub and per-topic report
@@ -30,9 +31,11 @@ components/pixel/      Built-in pixel art sprites as text grids, getSprite() (bu
 lib/brand.ts           Game name, logo text and localized tagline (single source of truth)
 lib/i18n/              text.ts (locales, Text, L, tx, negotiateLocale) and messages.ts (UI dictionaries)
 lib/                   fx (particles, banners), sfx (WebAudio chiptune), syntax (highlighting), palette, game-rules
-lib/runners/           Per-language code execution adapters
-scripts/               validate-content.ts, playtest.mjs, e2e-memory-card.mjs
-tests/                 save.test.ts, security.test.ts (npm test)
+lib/runners/           Code execution: server runners (rust-playground, via /api/run) and the browser runner
+                       js-browser (js-core.ts shared with the validator, js-worker.ts, browser.ts); ids.ts lists browser ids
+lib/music/             Tracker songs (DSL) played by lib/sfx.ts
+scripts/               validate-content.ts, ts-check.ts (tsc --strict batch), playtest.mjs, e2e-memory-card.mjs, shots.mjs
+tests/                 save, security, js-runner and music tests (npm test)
 ```
 
 ## Client save vs server content
@@ -63,14 +66,18 @@ The server never receives or stores a save. Pages send content to client compone
 | --- | --- | --- |
 | `/` | `getLanguages()` (guide sprites) | `TitleScreen` |
 | `/saves` | `getLanguages()` (planet name and guide sprite per slot) | `MemoryCard` |
-| `/galaxy` | `getLanguages()` + lesson slugs per language | `GalaxyClient` + `Galaxy3D` |
-| `/play/[lang]` | `getWorldContent(lang)` (404 unless `active`) | `WorldClient` + `WorldMap3D` |
+| `/galaxy` | `getLanguages()` + lesson slugs per language, grouped as planets with their moons | `GalaxyClient` + `Galaxy3D` |
+| `/play/[lang]` | `getWorldContent(lang)` (404 unless `active`); `lang` is a planet or a moon slug | `WorldClient` + `WorldMap3D` |
 | `/play/[lang]/lesson/[slug]` | `getLessonPlay` + `getWorldContent` | `LessonClient` (redirects to the map if `isUnlocked` is false) |
 | `/play/[lang]/exam` | `getExams(lang)` | `ExamHub` |
 | `/play/[lang]/exam/[slug]` | `getExamPlay` (includes `exam` meta for client grading) | `LessonClient` |
 | `/play/[lang]/review` | `getLanguage(lang)` | `ReviewClient`: reads due keys from the save, then `POST /api/review-play` |
 
 The galaxy starts on the save's `lastLang`. Planets whose language is `soon` are shown locked ("under construction"). The planet card shows the guide, story, bugs, progress (`done/total` lessons) and the LAND button.
+
+### Planets and moons in the galaxy
+
+`app/galaxy/page.tsx` lists only planets (packs without `parent`) and attaches to each one the packs whose `parent` is its slug. In `Galaxy3D` each framework moon orbits its planet as a larger faceted sphere in the moon's `planet.colors.accent` color, dimmed when the moon is not `active`; `PlanetDef.moons` adds smaller grey decorative moons further out. The planet card lists the moons as buttons (guide sprite, name, `done/total` or "soon") that land on `/play/<moon slug>`. Everything after landing (map, lessons, exams, review, save progress) works on the moon's slug exactly as for a planet.
 
 ## Lesson flow
 
@@ -136,11 +143,30 @@ Computed on the client by `worldState` in `lib/save/progress.ts`:
 
 ## Code execution
 
-`run` beats call `POST /api/run`, which applies the guards described in [security.md](security.md) and picks the language's runner (`lib/runners/index.ts`). The Rust runner (`lib/runners/rust-playground.ts`) sends the player's snippet to the public Rust Playground. With `BITWISE_RUNNER=off` no external call is made and the beat is validated with its `fallback` regex. When the API answers 429 or 503, `RunBeatView` shows "busy, retry in N s" without costing a heart.
+`LessonPlay` carries the pack's `runner` id and `codeLang`. `RunBeatView` (`components/game/beats/RunBeatView.tsx`) picks the path:
+
+```
+runner in BROWSER_RUNNER_IDS (lib/runners/ids.ts)?
+├── yes (js-browser)  runInBrowser(code, { jsx: codeLang === "tsx" })      lib/runners/browser.ts
+│                     └── new Web Worker (lib/runners/js-worker.ts) per run, terminated after 3 s at most
+│                         └── executeJs (lib/runners/js-core.ts) with modules react, react-dom/server
+└── no (rust-playground)  POST /api/run → guards → getRunner(id) (lib/runners/index.ts) → external sandbox
+```
+
+**Server runners.** `POST /api/run` applies the guards described in [security.md](security.md) and picks the language's runner (`lib/runners/index.ts`). The Rust runner (`lib/runners/rust-playground.ts`) sends the player's snippet to the public Rust Playground. With `BITWISE_RUNNER=off` no external call is made and the beat is validated with its `fallback` regex. When the API answers 429 or 503, `RunBeatView` shows "busy, retry in N s" without costing a heart.
+
+**Browser runner (`js-browser`).** JS/TS/TSX runs in the player's own browser; the server never receives or executes player code, and `getRunner` in `lib/repo.ts` returns `null` for browser runners, so `/api/run` answers 404 `unknown_language` for those packs.
+
+- `lib/runners/js-core.ts` is shared by the worker and the content validator, so a snippet prints the same thing in both. It strips types and converts JSX (classic runtime) and `import`/`export` with sucrase (types are **not** checked at play time), runs the result in strict mode inside an async function (top-level `await` works), captures `console.log/info/debug` to stdout and `console.warn/error` to stderr formatted like Node's `util.inspect` for short values, tracks `setTimeout`/`setInterval` so the run ends when the program and its pending timers finish (pending timers after 2.5 s fail the run), resolves `import` only for `react` and `react-dom/server`, caps output at 8,000 characters and reports errors as `Name: message` text.
+- `lib/runners/js-worker.ts` is the Web Worker: it receives `{ code, jsx }`, calls `executeJs` and posts the result back.
+- `lib/runners/browser.ts` (client only) creates a fresh module worker for every run, terminates it when the result arrives or after a 3 s hard timeout (the only way to stop an infinite synchronous loop), and answers `available: false` if the worker cannot be created, so the beat falls back to its `fallback` regex.
+
+**Results.** `RunBeatView` turns the runner answer into one of: correct (`stdout` contains `expect`), wrong output, "the compiler complains" (Rust failures and JS `SyntaxError`), "it crashed while running" (any other JS failure: a thrown error, a timeout or timers still pending; `run.runtimeError`), offline pass/fail with `fallback`, or busy (server runners only).
 
 ## Checklist when changing the architecture
 
-- [ ] Engine stays language-agnostic: nothing Rust-specific in `components/` or `lib/` (except `lib/runners/` and grammars in `lib/syntax.ts`).
+- [ ] Engine stays language-agnostic: nothing language-specific in `components/` or `lib/` (except `lib/runners/` and grammars in `lib/syntax.ts`).
+- [ ] Player code never runs in the server process: server runners forward it to an external sandbox, browser runners keep it in a Web Worker.
 - [ ] The server stays stateless with respect to players; progress logic stays pure in `lib/save/progress.ts`.
 - [ ] Save shape changes follow the checklist in [save-system.md](save-system.md#changing-the-save-format).
 - [ ] New UI strings added to all dictionaries in `lib/i18n/messages.ts`.
