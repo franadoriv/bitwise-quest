@@ -6,7 +6,7 @@ The entry exam simulates the technical screening companies run when hiring for r
 
 - Each `ExamDef` has a **bank** of questions larger than `count`. Each attempt draws `count` questions spread across topics (round robin) and sorted from easy to hard (`difficulty` 1–3). Every attempt is different.
 - One chance per question, no hearts and no retries, with `secondsPerQuestion` per question (40% more for `difficulty: 3` questions, see `questionTime` in `lib/repo.ts`). Running out of time counts as a miss.
-- The server grades using the bank as the source of truth (`completeExam` in `lib/repo.ts`) and stores the attempt in `exam_results` with a per-topic breakdown.
+- The server sends the drawn questions plus an `exam` meta block (`getExamPlay` in `lib/repo.ts`: pass mark, topic → region map, active regions and their lessons). The client grades the attempt with `completeExam` in `lib/save/progress.ts` and stores it in the save (`langs.<lang>.exams.<slug>`: attempts, best percentage, passed, last per-topic breakdown). See [save-system.md](save-system.md).
 - The report shows the percentage, whether the player passed (`passPct`), per-topic performance and which region to study.
 - **Skipping regions:** walking the regions in order, if the player answers at least 80% of the questions on that region's topics correctly (minimum 2), its lessons are marked as skipped. It stops at the first region that doesn't pass.
 - Exam UI text generated on the server (the intro dialog, the exam title, the interviewer's name) is built with `localized(key, vars)` from `lib/i18n/messages.ts`, so it reaches the client in every locale.

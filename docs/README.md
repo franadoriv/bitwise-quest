@@ -8,23 +8,24 @@ The game and all its content are localized in **English** (primary), **Spanish**
 
 | Document | Read it when you want to... |
 | --- | --- |
-| [architecture.md](architecture.md) | Understand how Next.js, SQLite, the SVG stage and the 3D map fit together |
-| [content-model.md](content-model.md) | Learn every beat kind and every visual effect, with examples |
+| [architecture.md](architecture.md) | Understand how Next.js, SQLite, the client save, the SVG stage and the 3D galaxy and maps fit together |
+| [save-system.md](save-system.md) | Understand the memory card: save format, migrations, `.bwq` files, progress rules |
+| [content-model.md](content-model.md) | Learn the planet, sprites, every beat kind and every visual effect, with examples |
 | [authoring-lessons.md](authoring-lessons.md) | Add lessons or regions to an existing language |
-| [adding-a-language.md](adding-a-language.md) | Add a new programming language (Go, Zig, ...) |
+| [adding-a-language.md](adding-a-language.md) | Add a new programming language (a planet with its guide and bugs: Go, Zig, ...) |
 | [exams.md](exams.md) | Understand or extend the entry exam (junior, mid, senior) |
 | [i18n.md](i18n.md) | Understand localization, translate content or add a UI locale |
-| [game-design.md](game-design.md) | Learn the "dopagaki" principles, scoring and progression |
-| [testing.md](testing.md) | Validate content, play headless and check the build |
+| [game-design.md](game-design.md) | Learn the "dopagaki" principles, planets, the memory card, scoring and progression |
+| [testing.md](testing.md) | Validate content, run unit and end-to-end tests, play headless and check the build |
 | [research/](research/) | Supporting research, such as what companies assess in Rust |
 
 ## Key ideas in 30 seconds
 
-1. **Content is data.** Everything the player sees lives in `content/<language>/`. The engine knows nothing about Rust.
+1. **Content is data.** Everything the player sees lives in `content/<language>/`, including each language's planet, guide and bugs. The engine knows nothing about Rust.
 2. **The engine is generic.** Seven beat kinds and a vocabulary of visual effects cover any language.
 3. **Everything is verifiable.** Every compiler claim carries a `check` that `npm run content:verify` actually compiles.
 4. **Every prose string is localized.** Content uses `L(en, es, ja)`; UI strings live in `lib/i18n/messages.ts`. The validator rejects missing translations.
-5. **SQLite syncs itself.** On startup, content is copied into the database without touching player progress (except for lessons whose slug was removed).
+5. **The server serves content, the client keeps progress.** SQLite is a self-syncing copy of `content/`. All player progress lives in the browser on a 15-slot memory card, keyed by stable slugs, so adding content never breaks a save.
 
 ## Commands
 
@@ -33,8 +34,10 @@ npm run dev              # development server
 npm run content:check    # validates content structure and translations
 npm run content:verify   # also compiles every check against the real compiler
 npm run playtest -- /play/rust/lesson/hello-let --locale=en   # a bot plays the lesson in headless Chrome
+npm test                 # save system unit tests
+npm run e2e   # memory card end to end (with npm run dev running)
 npm run typecheck && npm run build
-npm run db:reset         # deletes local progress
+npm run db:reset         # deletes the local content database (rebuilt on next start; saves are untouched)
 ```
 
 ## For AI agents

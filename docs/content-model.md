@@ -6,6 +6,7 @@ Source of truth: `lib/content/types.ts`. This document explains it with examples
 
 ```
 LanguagePack            content/<lang>/index.ts
+├── planet              PlanetDef: the planet in the galaxy, its guide (mascot), bugs and story
 ├── regions[]           RegionDef: one big concept, one island on the map
 │   └── lessons[]       LessonDef: 8–14 beats. The last lesson of each region has mode "boss"
 │       └── beats[]     Beat: the smallest unit of play (a few seconds)
@@ -26,7 +27,7 @@ Every field typed `Text` accepts either:
 
 Fields that are **always plain strings** (never translated): `code`, `line`, `starter`, `solution`, `expect`, `fallback`, `output`, `lines`, `type` `answer`, `error.compiler`, `tag`/`value`/`print` effect text, slugs and ids.
 
-Fields that **must be `L(...)`**: dialog `text`, every `prompt`, `explain`, act step `label`, `error.plain`, `say`/`banner` effect text, lesson `title`/`enemyName`, region `name`/`subtitle`, topic `name`, exam `title`/`description`, pack `tagline`. `hint` is typed `Text` too and should be `L(...)`.
+Fields that **must be `L(...)`**: dialog `text`, every `prompt`, `explain`, act step `label`, `error.plain`, `say`/`banner` effect text, lesson `title`/`enemyName`, region `name`/`subtitle`, topic `name`, exam `title`/`description`, pack `tagline`, planet `name`/`story`, guide `name`/`title`. `hint` is typed `Text` too and should be `L(...)`.
 
 Options in `pick`/`predict` may be either: plain strings for code tokens (`"b"`, `"&mut x"`), `L(...)` for prose answers (`L("No: s1 moved to s2", ...)`).
 
@@ -41,7 +42,7 @@ Code in exercises uses **English identifiers** for every locale (`let sword = ..
 | `concept` | string | Concept id, usually a `topics` id |
 | `mode` | `"lesson"` \| `"boss"` | 5 hearts, or 3 hearts where a timeout counts as a mistake |
 | `xp` | number | 40–85 for lessons (more in advanced regions), 120–200 for bosses |
-| `enemy` | `slime` \| `ghost` \| `golem` \| `dragon` | Sprite of the lesson's bug |
+| `enemy` | `EnemyKind` (= `SpriteId`) | Sprite of the lesson's bug: a built-in id (`slime`, `ghost`, `golem`, `dragon`) or a pack sprite such as `"rust/mite"`. Prefer the planet's own bugs. The validator rejects unknown ids |
 | `enemyName` | `L(...)` | Upper case, budget 20: `L("THIEF BUG", "BUG LADRÓN", "ドロボウバグ")` |
 
 The lesson's bug has as many hit points as there are questions. Each correct answer removes one and each mistake heals one, because the question comes back at the end.
@@ -57,13 +58,61 @@ The lesson's bug has as many hit points as there are questions. Each correct ans
 | `status` | `"active"` \| `"soon"` | `soon` shows a locked placeholder |
 | `lessons` | `LessonDef[]` | Last one should be `mode: "boss"` |
 
+## Planet
+
+Each language is a planet with its own guide (mascot), bugs and story. `LanguagePack.planet` is a `PlanetDef`:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `name` | `L(...)` | Planet name, budget 20: `L("Oxide", "Óxido", "オキサイド")` |
+| `story` | `L(...)` | Two or three sentences of lore shown on the galaxy card, budget 260 |
+| `guide.name` | `L(...)` | The guide's name, budget 14 |
+| `guide.sprite` | `SpriteId` | Usually a pack sprite, e.g. `"rust/ferro"` |
+| `guide.title` | `L(...)` | One-line personality shown on the planet card, budget 40 |
+| `colors` | `{ surface, accent, ring? }` | `#rrggbb` hex colors for the 3D planet; `ring` adds a ring |
+| `moons` | number? | Moons orbiting the planet in the galaxy |
+| `bugs` | `SpriteId[]` | This planet's bugs, shown on the planet card. Review runs use the first one; exams pick one by level (junior: 1st, mid: 3rd, senior: 4th, clamped to the list) |
+
+The guide is the voice of the planet: it speaks every `dialog` with `speaker: "master"`, appears in the mistake explanation box (with its name, e.g. "FERRO: SO CLOSE!"), and gives the landing intro the first time the player lands. "Soon" languages also have a planet (in `content/<lang>/planet.ts`) so they show in the galaxy as locked planets.
+
+| Language | Planet | Guide | Bugs | Files |
+| --- | --- | --- | --- | --- |
+| Rust | Oxide | Ferro (crab sensei) | `rust/mite`, `rust/dangler`, `rust/cog-golem`, `rust/borrow-dragon` | `content/rust/index.ts`, `content/rust/sprites.ts` |
+| Go | Concurra | Gopi (cheerful tunnel digger) | `go/nil-blob`, `go/deadlock-snail`, `go/race-twins` | `content/go/planet.ts`, `content/go/sprites.ts` |
+| Zig | Comptia | Iggi (iguana forge engineer) | `zig/leak-jelly`, `zig/undefined-imp`, `zig/overflow-spark` | `content/zig/planet.ts`, `content/zig/sprites.ts` |
+| Haskell | Lambdara | Lambo (wise owl of pure functions) | `haskell/thunk-pile`, `haskell/bottom-wraith`, `haskell/partial-moth` | `content/haskell/planet.ts`, `content/haskell/sprites.ts` |
+
+Guides and bugs are **original designs inspired by the language**, never copies of official mascots or logos.
+
+## Sprites
+
+Sprites are text grids, one string per row, one character per pixel. Legend (`components/pixel/sprites.ts`):
+
+| Char | Color | Char | Color |
+| --- | --- | --- | --- |
+| `.` | transparent | `0` `1` `2` `3` | palette ramp, dark → light |
+| `r` | red | `y` | gold |
+| `b` | blue | `s` | skin |
+| `w` | white | `g` | good (green) |
+| `p` | purple | `c` | cyan |
+
+Every color is a palette CSS variable (`lib/palette.ts`, which defines `purple` and `cyan` in each palette), so sprites recolor with the chosen palette.
+
+- **Built-in sprites** (`hero`, `ally`, `master`, `slime`, `ghost`, `golem`, `dragon`, items...) live in `components/pixel/sprites.ts`.
+- **Pack sprites** live in `content/<lang>/sprites.ts` as `Record<string, string[]>` (e.g. `RUST_SPRITES`) and are registered in `content/sprites.ts` (`PACK_SPRITES`). That registry is client-safe: it only imports sprite files, never lesson content.
+- **Ids are namespaced** `<lang>/<name>` in kebab-case (`rust/borrow-dragon`).
+- Draw them as **16×16** grids, like the built-in characters.
+- `getSprite(id)` resolves built-in and pack sprites; an unknown id falls back to `slime`.
+
+`npm run content:check` validates sprites: namespaced ids, 1–24 rows, every row the same width, only legend characters; and that every lesson `enemy`, `planet.guide.sprite` and `planet.bugs` entry is a known sprite, plus the planet color format and prose budgets above.
+
 ## Beats
 
 Common fields (`BeatBase`): `setup` (effects before the beat; if present, the scene is reset), `win` (effects on success), `time` (seconds for the speed bonus; in bosses and exams, the time limit), `check` (proof for the validator), `hint` and `concept`.
 
 | kind | Purpose | Key fields |
 | --- | --- | --- |
-| `dialog` | The sensei explains an idea | `speaker` (master, hero, ally, enemy), `text` (budget 140), `code?` |
+| `dialog` | The planet's guide explains an idea | `speaker` (`master` = the planet's guide, `hero`, `ally`, `enemy` = the lesson's bug), `text` (budget 140), `code?` |
 | `act` | **Teach by doing.** Each button writes a line and the world reacts | `prompt` (70), `steps[]: { label (16), line?, effects?, output?, error? }` |
 | `pick` | Choose the token that fills `___` | `code` with exactly one `___`, `options` (2–4), `answer` (index), `explain` |
 | `predict` | Predict output or whether it compiles | `code`, `options`, `answer`, `explain`, `output?` (printed on success) |
@@ -164,5 +213,6 @@ See [exams.md](exams.md).
 ## Checklist
 
 - [ ] Every prose field is `L(en, es, ja)`; code fields are plain strings.
+- [ ] Every `enemy`, guide sprite and bug is a known sprite id; pack sprites are namespaced `<lang>/<name>`.
 - [ ] Every compiler-dependent question has `check`; every `run` has `solution` and `fallback`.
 - [ ] `npm run content:check` reports 0 errors.
