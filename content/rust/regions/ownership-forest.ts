@@ -12,7 +12,7 @@ const ownership: LessonDef = {
   concept: "ownership",
   mode: "lesson",
   xp: 60,
-  enemy: "slime",
+  enemy: "rust/mite",
   enemyName: L("THIEF BUG", "BUG LADRÓN", "ドロボウバグ"),
   beats: [
     say(L(
@@ -133,7 +133,7 @@ const cloneLesson: LessonDef = {
   concept: "clone",
   mode: "lesson",
   xp: 60,
-  enemy: "ghost",
+  enemy: "rust/dangler",
   enemyName: L("MIRROR BUG", "BUG ESPEJO", "カガミバグ"),
   beats: [
     say(L(
@@ -241,7 +241,7 @@ const borrowLesson: LessonDef = {
   concept: "borrowing",
   mode: "lesson",
   xp: 70,
-  enemy: "slime",
+  enemy: "rust/mite",
   enemyName: L("CHAIN BUG", "BUG CADENA", "クサリバグ"),
   beats: [
     say(L(
@@ -356,7 +356,7 @@ const boss2: LessonDef = {
   concept: "borrowing",
   mode: "boss",
   xp: 150,
-  enemy: "dragon",
+  enemy: "rust/borrow-dragon",
   enemyName: L("BORROW DRAGON", "DRAGÓN BORROW", "借用ドラゴン"),
   beats: [
     enemySays(L(

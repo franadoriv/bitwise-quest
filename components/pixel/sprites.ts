@@ -1,5 +1,7 @@
 // Pixel-art sprites as character grids. Legend:
-// . transparent · 0-3 palette ramp (dark→light) · r red · y gold · b blue · s skin · w white · g good
+// . transparent · 0-3 palette ramp (dark→light) · r red · y gold · b blue · s skin · w white · g good · p purple · c cyan
+// Built-in sprites live here; planet-specific ones (guides, bugs) live in content/<lang>/sprites.ts.
+import { PACK_SPRITES } from "@/content/sprites";
 export const SPRITES = {
   hero: [
     "....000000......",
@@ -259,7 +261,14 @@ export const SPRITES = {
   ],
 } satisfies Record<string, string[]>;
 
-export type SpriteName = keyof typeof SPRITES;
+/** A built-in sprite name or a pack sprite id such as "rust/mite". */
+export type SpriteName = keyof typeof SPRITES | (string & {});
+
+const ALL: Record<string, string[]> = { ...SPRITES, ...PACK_SPRITES };
+
+export function getSprite(name: string): string[] {
+  return ALL[name] ?? SPRITES.slime;
+}
 
 export const COLOR_VARS: Record<string, string> = {
   "0": "var(--p0)",
@@ -272,11 +281,13 @@ export const COLOR_VARS: Record<string, string> = {
   s: "var(--skin)",
   w: "var(--white)",
   g: "var(--good)",
+  p: "var(--purple)",
+  c: "var(--cyan)",
 };
 
 /** Merges horizontal runs of the same color into single rects. */
 export function spriteRuns(name: SpriteName) {
-  const rows = SPRITES[name];
+  const rows = getSprite(name);
   const runs: { x: number; y: number; w: number; c: string }[] = [];
   rows.forEach((row, y) => {
     let x = 0;

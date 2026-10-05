@@ -18,6 +18,8 @@ export interface Palette {
   skin: string;
   white: string;
   good: string;
+  purple: string;
+  cyan: string;
 }
 
 export const PALETTES: Record<PaletteId, Palette> = {
@@ -34,6 +36,8 @@ export const PALETTES: Record<PaletteId, Palette> = {
     skin: "#ffe0bd",
     white: "#fff8ea",
     good: "#a8ec4f",
+    purple: "#7b4bb5",
+    cyan: "#3fb8c8",
   },
   gb: {
     id: "gb",
@@ -48,6 +52,8 @@ export const PALETTES: Record<PaletteId, Palette> = {
     skin: "#e8c9a0",
     white: "#e0f8d0",
     good: "#d6f26b",
+    purple: "#4b5a8a",
+    cyan: "#5fa8a0",
   },
   nes: {
     id: "nes",
@@ -62,6 +68,8 @@ export const PALETTES: Record<PaletteId, Palette> = {
     skin: "#f6c79e",
     white: "#ffffff",
     good: "#63c74d",
+    purple: "#8a4fd8",
+    cyan: "#2ce8f5",
   },
 };
 
@@ -69,7 +77,7 @@ export function applyPalette(id: PaletteId) {
   const p = PALETTES[id];
   const root = document.documentElement;
   root.dataset.palette = id;
-  for (const k of ["p0", "p1", "p2", "p3", "red", "gold", "blue", "skin", "white", "good"] as const) {
+  for (const k of ["p0", "p1", "p2", "p3", "red", "gold", "blue", "skin", "white", "good", "purple", "cyan"] as const) {
     root.style.setProperty(`--${k}`, p[k]);
   }
 }

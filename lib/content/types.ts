@@ -9,7 +9,10 @@ export type { Locale, Localized, Text } from "../i18n/text.ts";
 
 export type ActorId = "hero" | "ally" | "enemy";
 export type ItemKind = "sword" | "potion" | "gem" | "shield" | "scroll" | "key";
-export type EnemyKind = "slime" | "ghost" | "golem" | "dragon";
+/** Id of a pixel sprite: a built-in one (components/pixel/sprites.ts) or a pack sprite
+ *  registered in content/sprites.ts (namespaced, e.g. "rust/mite"). */
+export type SpriteId = string;
+export type EnemyKind = SpriteId;
 export type Theme = "village" | "forest" | "mountain" | "castle" | "tower";
 
 // Visual vocabulary the stage understands. Content describes WHAT happens in the
@@ -195,6 +198,27 @@ export interface TopicDef {
   region?: string;
 }
 
+/** The planet's mascot: speaks every `speaker: "master"` dialog and explains mistakes. */
+export interface GuideDef {
+  name: Text;
+  sprite: SpriteId;
+  /** One-line personality shown on the planet card. */
+  title: Text;
+}
+
+/** Each language is a planet with its own guide, bugs and story. */
+export interface PlanetDef {
+  name: Text;
+  /** Two or three sentences of lore shown when choosing the planet. */
+  story: Text;
+  guide: GuideDef;
+  /** Colors for the 3D planet (hex). */
+  colors: { surface: string; accent: string; ring?: string };
+  moons?: number;
+  /** Sprite ids of this planet's bugs, shown on the planet card. */
+  bugs: SpriteId[];
+}
+
 export interface LanguagePack {
   slug: string;
   name: string;
@@ -202,6 +226,7 @@ export interface LanguagePack {
   color: string;
   status: "active" | "soon";
   runner?: string;
+  planet: PlanetDef;
   regions: RegionDef[];
   topics: Record<string, TopicDef>;
   exams: ExamDef[];

@@ -37,7 +37,7 @@ const threads: LessonDef = {
   concept: "concurrency",
   mode: "lesson",
   xp: 75,
-  enemy: "slime",
+  enemy: "rust/mite",
   enemyName: L("IMPATIENT BUG", "BUG IMPACIENTE", "せっかちバグ"),
   beats: [
     say(L(
@@ -243,7 +243,7 @@ const arc: LessonDef = {
   concept: "concurrency",
   mode: "lesson",
   xp: 80,
-  enemy: "ghost",
+  enemy: "rust/dangler",
   enemyName: L("DUPLICATE BUG", "BUG DUPLICADO", "分身バグ"),
   beats: [
     say(L(
@@ -430,7 +430,7 @@ const mutex: LessonDef = {
   concept: "concurrency",
   mode: "lesson",
   xp: 85,
-  enemy: "golem",
+  enemy: "rust/cog-golem",
   enemyName: L("RACE BUG", "BUG DE CARRERA", "競合バグ"),
   beats: [
     say(L(
@@ -642,7 +642,7 @@ const channels: LessonDef = {
   concept: "concurrency",
   mode: "lesson",
   xp: 80,
-  enemy: "ghost",
+  enemy: "rust/dangler",
   enemyName: L("GOSSIP BUG", "BUG CHISMOSO", "うわさバグ"),
   beats: [
     say(L(
@@ -821,7 +821,7 @@ const boss5: LessonDef = {
   concept: "concurrency",
   mode: "boss",
   xp: 200,
-  enemy: "dragon",
+  enemy: "rust/borrow-dragon",
   enemyName: L("FEARLESS DRAGON", "DRAGÓN FEARLESS", "フィアレス竜"),
   beats: [
     enemySays(L(
