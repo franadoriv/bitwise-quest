@@ -243,7 +243,7 @@ async function verifyTs(tsJobs: Job[]) {
     const typeOk = d.length === 0;
     const notMode = job.contains?.startsWith("\u0000NOT:");
     if (notMode) {
-      if (!typeOk) continue; // a starter that does not even type-check is fine
+      // The game runs code without type-checking, so a starter is judged by what it prints at runtime.
       const r = await executeJs(job.program, { jsx: job.lang === "tsx", modules });
       if (r.ok && r.stdout.includes(job.contains!.slice(5))) err(job.where, "starter already produces the expected output");
       continue;

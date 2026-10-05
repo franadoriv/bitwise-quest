@@ -62,3 +62,8 @@ test("pending intervals time out", async () => {
   assert.equal(r.timedOut, true);
   assert.equal(r.ok, false);
 });
+
+test("Node-only globals are hidden so verification matches the browser", async () => {
+  const r = await executeJs("console.log(typeof process, typeof setImmediate, typeof global);");
+  assert.equal(r.stdout, "undefined undefined undefined");
+});

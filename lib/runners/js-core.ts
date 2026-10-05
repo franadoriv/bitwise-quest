@@ -144,10 +144,11 @@ export async function executeJs(
   try {
     const module = { exports: {} as Record<string, unknown> };
     const fn = new Function(
-      "require", "module", "exports", "console", "setTimeout", "clearTimeout", "setInterval", "clearInterval",
+      // `process` and `global` are shadowed so Node (verification) behaves like the browser worker (the game).
+      "require", "module", "exports", "console", "setTimeout", "clearTimeout", "setInterval", "clearInterval", "process", "global", "setImmediate",
       `return (async () => {\n${compiled}\n})();`,
     );
-    await fn(requireShim, module, module.exports, consoleShim, setT, clearT, setI, clearI);
+    await fn(requireShim, module, module.exports, consoleShim, setT, clearT, setI, clearI, undefined, undefined, undefined);
     // let pending timers and their promise chains settle
     while (pending.size > 0 && Date.now() < deadline) await new Promise((r) => realSet(r, 2));
     if (pending.size > 0) {
