@@ -70,7 +70,7 @@ const myLesson: LessonDef = {
 2. Import it in `content/<lang>/index.ts` with a `.ts` extension and place it in learning order. If there was a `status: "soon"` placeholder, replace it.
 3. If the region teaches an exam topic, set its slug in `topics.<topic>.region` (`content/<lang>/topics.ts`).
 
-> Renaming or removing a lesson or region slug deletes the matching content rows on the next server start (`pruneRemoved` in `lib/db.ts`). Player saves are keyed by slug, so progress stored under the old slug no longer matches anything: that lesson shows as not completed again. Keep slugs stable. See [save-system.md](save-system.md#why-adding-a-language-doesnt-break-saves).
+> Player saves are keyed by slug. Renaming or removing a lesson or region slug leaves the old key in every save with nothing to match (orphaned progress): that lesson shows as not completed again. Keep slugs stable. See [save-system.md](save-system.md#why-adding-a-language-doesnt-break-saves).
 
 ## Writing with an LLM
 

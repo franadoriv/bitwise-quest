@@ -13,7 +13,6 @@ First planet: **Rust** (Oxide).
 ![Next.js](https://img.shields.io/badge/Next.js-16-000?logo=nextdotjs)
 ![Three.js](https://img.shields.io/badge/Three.js-low%20poly-049EF4?logo=threedotjs)
 ![GSAP](https://img.shields.io/badge/GSAP-SVG%20motion-88CE02?logo=greensock&logoColor=white)
-![SQLite](https://img.shields.io/badge/SQLite-node%3Asqlite-003B57?logo=sqlite)
 ![Rust](https://img.shields.io/badge/cartridge-Rust-CE422B?logo=rust)
 ![Languages](https://img.shields.io/badge/i18n-EN%20%C2%B7%20ES%20%C2%B7%20JA-6b5bd2)
 
@@ -102,7 +101,7 @@ Each lesson is a series of challenges that take a few seconds each and follow th
 
 ## Getting started
 
-Requirements: Node 22.18 or newer (the game uses Node's built-in `node:sqlite`, no native modules to compile).
+Requirements: Node 22.18 or newer (the validator, playtest and test scripts run TypeScript files directly with Node). There is no database to set up: the server reads content straight from the language packs in memory.
 
 ```bash
 git clone https://github.com/franadoriv/bitwise-quest.git
@@ -121,21 +120,22 @@ Open <http://localhost:3000>, press **START**, pick a memory card slot, name you
 | `npm run content:verify` | Also compiles every claim against the real compiler |
 | `npm run playtest -- <path>` | A bot plays a lesson in headless Chrome and saves screenshots |
 | `npm run typecheck` | Type checking |
-| `npm test` | Unit tests of the save system (codec, migrations, progress rules) |
+| `npm test` | Unit tests of the save system (codec, migrations, progress rules) and of the backend abuse protection (rate limits, origin checks, body limits) |
 | `npm run e2e` | End-to-end memory card test in headless Chrome (with `npm run dev` running) |
-| `npm run db:reset` | Deletes the local content database (rebuilt on next start; saves are not affected) |
 
-> Code challenges send the player's snippet to the public Rust Playground (`play.rust-lang.org`). With `BITWISE_RUNNER=off` no external call is made and validation is done locally. The content database lives in `data/bitwise.db` (override with `BITWISE_DB`); player saves live in the browser's localStorage.
+> Code challenges send the player's snippet to the public Rust Playground (`play.rust-lang.org`). With `BITWISE_RUNNER=off` no external call is made and validation is done locally. The server is stateless and writes nothing to disk; player saves live in the browser's localStorage.
+
+> The API is protected against abuse: same-origin checks, per-client and global rate limits, concurrency caps, bounded JSON bodies, strict validation, a per-request nonce Content-Security-Policy and security headers. See [`docs/security.md`](docs/security.md).
 
 ## Architecture
 
 ```
 content/      Language packs: planet, sprites, regions, lessons, topics and exams (pure data, localized)
-lib/          SQLite content, queries, save system, game rules, sound, effects, code runners, i18n
+lib/          In-memory content queries, save system, game rules, sound, effects, code runners, i18n, security guards
 components/   Lesson engine (SVG stage + GSAP), memory card, 3D galaxy and planet map, exams, UI
 app/          Next.js routes (App Router) and API
 scripts/      Content validator, playtest bot and memory card end-to-end test
-tests/        Save system unit tests
+tests/        Save system and security unit tests
 docs/         Documentation for humans and AI agents
 ```
 
@@ -152,6 +152,7 @@ The server only serves content; all player progress lives on the client (see [`d
 | Understand the content model | [`docs/content-model.md`](docs/content-model.md) |
 | Understand or change the save format | [`docs/save-system.md`](docs/save-system.md) |
 | Learn the game design | [`docs/game-design.md`](docs/game-design.md) |
+| Understand the backend abuse protection | [`docs/security.md`](docs/security.md) |
 
 AI agents have instructions in [`AGENTS.md`](AGENTS.md) and step-by-step playbooks in [`docs/playbooks/`](docs/playbooks/).
 

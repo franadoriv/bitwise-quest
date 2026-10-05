@@ -46,7 +46,7 @@ interface LangRecord {
 
 Design rules:
 
-- **Progress is keyed by stable slugs** (language slug → lesson, review or exam slug), never by array position or database id.
+- **Progress is keyed by stable slugs** (language slug → lesson, review or exam slug), never by array position or numeric lesson id.
 - **Unknown keys are preserved.** `normalize` spreads the original objects, so fields written by a newer content pack or an older game round-trip untouched.
 - **Saves never store content**, only results. Titles, beats and XP values always come from the server.
 

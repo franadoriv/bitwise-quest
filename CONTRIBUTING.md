@@ -10,6 +10,7 @@ Thanks for wanting to help! The most common contribution is content: lessons, re
    - The save system (memory card): [`docs/save-system.md`](docs/save-system.md)
    - Exam questions: [`docs/exams.md`](docs/exams.md)
    - Translations and UI languages: [`docs/i18n.md`](docs/i18n.md)
+   - API routes and backend abuse protection: [`docs/security.md`](docs/security.md)
 2. Use Node 22.18 or newer (`nvm use`).
 
 ## Branches
@@ -29,7 +30,7 @@ There is no `main` branch.
    npm run content:check
    npm run content:verify -- --lang=rust      # compiles every claim against the real compiler
    npm run typecheck
-   npm test                                   # save system unit tests
+   npm test                                   # save system and security unit tests
    npm run playtest -- /play/rust/lesson/<slug> --locale=en   # with npm run dev running
    ```
 3. Write commits with [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `content:`, `docs:`, `refactor:`, `chore:`.
@@ -47,8 +48,14 @@ There is no `main` branch.
 
 ## Save system rules
 
-- Progress lives on the client; the server only serves content. Never add player data to the database or the API.
+- Progress lives on the client; the server only serves content. There is no database; never add one, nor player data in the API.
 - Any change to the save shape bumps `SAVE_VERSION`, adds a migration and a fixture test. See [`docs/save-system.md`](docs/save-system.md#changing-the-save-format).
+
+## Security rules
+
+- Every API endpoint uses the guards in `lib/security/`: origin check, per-client rate limit, `readJson` with a byte cap, strict validation with `onlyKeys`, and `errorResponse` with stable error codes. See [`docs/security.md`](docs/security.md#adding-an-endpoint).
+- Quotas live only in `LIMITS` (`lib/security/policies.ts`); update the table in `docs/security.md` when you change one.
+- Never log player code, IP addresses or request bodies, and never return internal error details.
 
 ## Checklist for a pull request
 
@@ -57,4 +64,5 @@ There is no `main` branch.
 - [ ] `npm run typecheck` and `npm test` pass (and `npm run build` for engine/UI changes).
 - [ ] Save system or memory card changes: `npm run e2e` passes with the dev server running.
 - [ ] New text exists in English, Spanish and Japanese.
+- [ ] API, `proxy.ts` or `lib/security/` changes: every endpoint uses the guards, limits are in `policies.ts`, `tests/security.test.ts` covers new guards and the manual probes in `docs/security.md` give the expected statuses.
 - [ ] Playtested at least one affected lesson or exam, ideally in more than one locale.

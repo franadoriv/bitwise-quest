@@ -7,13 +7,15 @@ content/<lang>/        Language packs: planet, regions, lessons, topics, exams (
 content/<lang>/sprites.ts   Pack pixel sprites (guide, bugs), registered in content/sprites.ts (client-safe)
         │  imported by
         ▼
-lib/db.ts              SQLite content tables + idempotent seed (content hash) + pruning + additive migrations
-lib/repo.ts            Content reads only: languages/planets, world, lesson, review, exams
+lib/repo.ts            Content reads only, straight from LANGUAGE_PACKS (indexed once in memory at module load):
+                       languages/planets, world, lesson, review, exams. No database, no disk writes
         │  used by
         ▼
-app/                   Next.js routes (App Router). Server pages read SQLite and pass CONTENT to client components
+app/                   Next.js routes (App Router). Server pages read lib/repo.ts and pass CONTENT to client components
 app/layout.tsx         Fonts, locale negotiation (cookie / Accept-Language), I18nProvider, SaveProvider, GameFrame
-app/api/*              Endpoints: run (code runner), review-play (beats for due review keys)
+app/api/*              Endpoints: run (code runner), review-play (beats for due review keys). POST only, guarded
+proxy.ts               Per-request nonce CSP + page rate limit (runs before every page request)
+lib/security/          Abuse protection: limits (token bucket, semaphores, TTL cache), http guards, policies (quotas)
         │
         ▼
 lib/save/              Client save system: schema, migrations, binary codec, localStorage slots, pure progress rules
@@ -30,7 +32,7 @@ lib/i18n/              text.ts (locales, Text, L, tx, negotiateLocale) and messa
 lib/                   fx (particles, banners), sfx (WebAudio chiptune), syntax (highlighting), palette, game-rules
 lib/runners/           Per-language code execution adapters
 scripts/               validate-content.ts, playtest.mjs, e2e-memory-card.mjs
-tests/                 save.test.ts (npm test)
+tests/                 save.test.ts, security.test.ts (npm test)
 ```
 
 ## Client save vs server content
@@ -39,7 +41,7 @@ The split is strict:
 
 | Side | Holds | Where |
 | --- | --- | --- |
-| **Server** | Content only: planets, regions, lessons, topics, exams. Stateless with respect to players | `lib/db.ts`, `lib/repo.ts`, `app/**/page.tsx`, `app/api/*` |
+| **Server** | Content only: planets, regions, lessons, topics, exams. Stateless with respect to players | `content/index.ts` (`LANGUAGE_PACKS`), `lib/repo.ts`, `app/**/page.tsx`, `app/api/*` |
 | **Client** | All player progress: XP, coins, streak, stars, mastery, reviews, exam results, landings, play time | `lib/save/*`, `components/save/*`, localStorage `bwq:slot:<n>` |
 
 The server never receives or stores a save. Pages send content to client components; the client combines it with the active save through the pure functions in `lib/save/progress.ts` (`worldState`, `completeLesson`, `completeExam`...) and autosaves with `useSave().commit()`. Every screen that needs a player is wrapped in `RequireSave`, which redirects to `/saves` when no slot is loaded. Full details in [save-system.md](save-system.md).
@@ -72,7 +74,7 @@ The galaxy starts on the save's `lastLang`. Planets whose language is `soon` are
 
 ## Lesson flow
 
-1. `app/play/[lang]/lesson/[slug]/page.tsx` loads `LessonPlay` (beats, enemy sprite, theme, the planet's `guide`) and the world content from SQLite.
+1. `app/play/[lang]/lesson/[slug]/page.tsx` loads `LessonPlay` (beats, enemy sprite, theme, the planet's `guide`) and the world content from `lib/repo.ts`.
 2. `LessonClient` waits for a save (`RequireSave`), checks `isUnlocked` against it and mounts `LessonGame` on the client only, because it uses audio, GSAP and random shuffling.
 3. `LessonGame` walks the beat queue. For each beat it runs `setup` on the stage, shows the beat component and waits for `solved` or `wrong`.
 4. A correct answer adds points, combo and speed bonus, plays the `win` effects and hits the bug. A wrong answer costs a heart, shows `explain` in a box with the planet's guide and pushes the beat to the end of the queue.
@@ -84,8 +86,10 @@ All content arrives at the client with every locale (`Text` values). Components 
 
 | Endpoint | Body | Returns |
 | --- | --- | --- |
-| `POST /api/run` | `{ language, code }` (code ≤ 20 000 chars) | Runner result `{ ok, stdout, stderr, available }` |
-| `POST /api/review-play` | `{ lang, keys }` with keys `"<lessonSlug>#<beatIndex>"` | A review `LessonPlay` with those beats (max 12, question beats except `run`), or 400/404 |
+| `POST /api/run` | `{ language, code }` (body ≤ 16 KB, code ≤ 10,000 chars and 400 lines) | Runner result `{ ok, stdout, stderr, available }` (output capped at 8,000 chars each) |
+| `POST /api/review-play` | `{ lang, keys }` with keys `"<lessonSlug>#<beatIndex>"` (body ≤ 2 KB) | A review `LessonPlay` with those beats (max 12, question beats except `run`), or 400/404 |
+
+Both endpoints only export `POST` (any other method gets 405), require a same-origin `Origin`, are rate limited per client and answer errors as `{ "error": "<code>" }` with a stable code. The full list of checks, quotas and status codes is in [security.md](security.md).
 
 There are no progress endpoints: the old `complete`, `attempts`, `review` and `exam` endpoints were removed when progress moved to the client.
 
@@ -111,22 +115,16 @@ Sprites are text grids. `getSprite(id)` in `components/pixel/sprites.ts` looks u
 
 Full details in [i18n.md](i18n.md).
 
-## Database (content only)
+## Content serving (no database)
 
-Node's built-in SQLite (`node:sqlite`), file `data/bitwise.db`. Override the path with `BITWISE_DB`. It is a cache of `content/`; it holds no player data and can be deleted at any time (`npm run db:reset`).
+There is no database. `lib/repo.ts` imports `LANGUAGE_PACKS` from `content/index.ts` and indexes it once, at module load, into in-memory maps (packs by slug, lessons by language and slug). Every read is computed from that immutable data, so:
 
-| Table | Contents |
-| --- | --- |
-| `meta` | `content_hash` of the last seeded content |
-| `languages` | Pack metadata plus JSON blobs: `topics`, `exams`, `planet` |
-| `regions`, `lessons` | Copy of the content. Rewritten when the hash of `content/` changes |
+- **The server is stateless.** It writes nothing to disk and keeps no player data; any number of instances can serve the same build.
+- **Content changes ship with the build.** Editing `content/` and restarting (or rebuilding) is all it takes; there is nothing to seed, migrate or reset.
+- **All locales travel together.** `Text` values keep every locale and are resolved on the client with `useI18n().tx(text)`.
+- **Renaming or removing a slug** simply leaves the old key in players' saves with nothing to match (orphaned progress): that lesson shows as not completed. Keep slugs stable (see [save-system.md](save-system.md#why-adding-a-language-doesnt-break-saves)).
 
-Notes:
-
-- **Localized columns are JSON.** Every `Text` field (`tagline`, region `name`/`subtitle`, lesson `title`/`enemy_name`, and the `beats`, `topics`, `exams` and `planet` blobs) is stored with `JSON.stringify` and parsed back in `lib/repo.ts`.
-- **Seeding.** `db()` computes a SHA-1 of `LANGUAGE_PACKS`. If it differs from `meta.content_hash`, `seed()` upserts every language, region and lesson by slug in one transaction.
-- **Pruning.** In the same transaction, `pruneRemoved()` deletes lessons and regions whose slug no longer exists in the content. Saves are not touched, but progress stored under the old slug no longer matches any lesson (see [save-system.md](save-system.md#why-adding-a-language-doesnt-break-saves)).
-- **Migrations** are additive and live in `migrate()` in `lib/db.ts`. The one exception is historical: `migrate()` drops the legacy player tables (`players`, `progress`, `attempts`, `reviews`, `placements`, `exam_results`) from databases created before progress moved to the client. That server-side progress is not converted into a save.
+The only in-memory mutable state on the server is the abuse-protection counters and the run cache in `lib/security/policies.ts` (see [security.md](security.md)).
 
 ## Unlock rules
 
@@ -138,7 +136,7 @@ Computed on the client by `worldState` in `lib/save/progress.ts`:
 
 ## Code execution
 
-`run` beats call `POST /api/run`, which picks the language's runner (`lib/runners/index.ts`). The Rust runner (`lib/runners/rust-playground.ts`) sends the player's snippet to the public Rust Playground. With `BITWISE_RUNNER=off` no external call is made and the beat is validated with its `fallback` regex.
+`run` beats call `POST /api/run`, which applies the guards described in [security.md](security.md) and picks the language's runner (`lib/runners/index.ts`). The Rust runner (`lib/runners/rust-playground.ts`) sends the player's snippet to the public Rust Playground. With `BITWISE_RUNNER=off` no external call is made and the beat is validated with its `fallback` regex. When the API answers 429 or 503, `RunBeatView` shows "busy, retry in N s" without costing a heart.
 
 ## Checklist when changing the architecture
 
@@ -146,5 +144,6 @@ Computed on the client by `worldState` in `lib/save/progress.ts`:
 - [ ] The server stays stateless with respect to players; progress logic stays pure in `lib/save/progress.ts`.
 - [ ] Save shape changes follow the checklist in [save-system.md](save-system.md#changing-the-save-format).
 - [ ] New UI strings added to all dictionaries in `lib/i18n/messages.ts`.
-- [ ] Database schema changes are additive in `migrate()`.
+- [ ] No database or disk writes on the server; content comes from `LANGUAGE_PACKS` via `lib/repo.ts`.
+- [ ] New endpoints follow the rules in [security.md](security.md#adding-an-endpoint).
 - [ ] `npm test && npm run typecheck && npm run build` pass.

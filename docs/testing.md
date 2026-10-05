@@ -6,7 +6,7 @@
 | `npm run content:verify` | All of the above, plus compiles every `check`, every `solution` and every `starter` against the real compiler | Before accepting new content, especially LLM-generated content |
 | `npm run typecheck` | TypeScript types, including that every UI dictionary has every message key | After code changes |
 | `npm run shots` | Regenerates the README screenshots in `docs/screenshots/` | After visible UI changes |
-| `npm test` | Unit tests of the save system (`tests/save.test.ts`, `node:test`) | After any change to `lib/save/` or game rules |
+| `npm test` | Unit tests of the save system (`tests/save.test.ts`) and of the abuse-protection guards (`tests/security.test.ts`), with `node:test` | After any change to `lib/save/`, game rules, `lib/security/`, API routes or `proxy.ts` |
 | `npm run playtest -- <path>` | A bot plays the lesson, exam or review in headless Chrome, saves screenshots to `.playtest/` and checks the result was saved | After visual or content changes |
 | `npm run e2e` | End-to-end memory card flow in headless Chrome | After changes to the save system, memory card, galaxy or landing |
 | `npm run build` | Production build | Before delivering |
@@ -15,7 +15,9 @@ CI (`.github/workflows/ci.yml`) runs `content:check`, `npm test`, `typecheck` an
 
 ## Unit tests (`npm test`)
 
-`npm test` runs `node --test "tests/**/*.test.ts"`. `tests/save.test.ts` covers:
+`npm test` runs `node --test "tests/**/*.test.ts"`.
+
+`tests/save.test.ts` covers:
 
 - **Codec:** encode/decode round-trip (binary and base64); two exports of the same save differ and don't reveal the player name; any modified byte is rejected with `checksum`; a non-save file is rejected with `format`.
 - **Migration:** a newer `version` is refused with `newer`; an old, partial shape is normalized (defaults filled, name trimmed, unknown keys and unknown languages preserved).
@@ -23,6 +25,19 @@ CI (`.github/workflows/ci.yml`) runs `content:check`, `npm test`, `typecheck` an
 - **Progress rules:** lessons unlock in order, rewards accumulate, a missed beat becomes a due review and moves up a Leitner box; an exam skips mastered regions in order and unlocks the next one.
 
 When the save format changes, add a fixture test here (see [save-system.md](save-system.md#changing-the-save-format)).
+
+`tests/security.test.ts` covers the primitives and guards in `lib/security/`:
+
+- **Token bucket:** burst, denial with the right `Retry-After`, independent clients, refill over time, RateLimit headers; memory stays capped at `maxKeys` with LRU eviction.
+- **Concurrency:** the semaphore fails fast and a double release frees only one slot; keyed concurrency limits each client separately.
+- **TTL cache:** evicts the oldest entry at the cap and expires entries.
+- **Client identity:** `clientKey` ignores `X-Forwarded-For` with 0 trusted hops, reads the right-most hop with 1, and rejects non-IP values.
+- **Origin check:** same origin and allowlisted origins pass; cross-site and origin-less requests get 403.
+- **Body parsing:** `readJson` rejects oversized bodies (413), the wrong content type (415) and invalid JSON (400); `onlyKeys` rejects unknown fields.
+
+## Security probes
+
+After touching an API route, `proxy.ts`, `next.config.ts` or `lib/security/`, run the manual probes in [security.md](security.md#manual-probes) against `npm run dev`: hostile requests (no `Origin`, a foreign `Origin`, wrong content type, oversized or malformed bodies, unknown fields, bursts of calls) must get the listed status codes (403, 415, 413, 400, 404, 429, 503, 405), and pages must carry the nonce CSP and the security headers.
 
 ## Content validator flags
 
@@ -91,5 +106,6 @@ Uses the same `BASE_URL` and `CHROME_PATH` as the playtest, in English. Steps, w
 - [ ] `npm run content:verify` with 0 errors for touched content.
 - [ ] `npm run typecheck` passes.
 - [ ] `npm test` passes; for save or memory card changes, also `npm run e2e`.
+- [ ] For API, `proxy.ts` or `lib/security/` changes, the manual probes in [security.md](security.md#manual-probes) give the expected statuses.
 - [ ] Playtest of an affected lesson; for layout changes, also `--locale=ja` and a portrait `--size`.
 - [ ] `npm run build` for engine/UI changes.
