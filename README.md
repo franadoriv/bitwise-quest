@@ -8,7 +8,7 @@
 NES/Game Boy pixel art, constant feedback and a world that reacts to your code.
 First cartridge: **Rust**.
 
-[![CI](https://github.com/franadoriv/coding-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/franadoriv/coding-lab/actions/workflows/ci.yml)
+[![CI](https://github.com/franadoriv/bitwise-quest/actions/workflows/ci.yml/badge.svg)](https://github.com/franadoriv/bitwise-quest/actions/workflows/ci.yml)
 ![Next.js](https://img.shields.io/badge/Next.js-16-000?logo=nextdotjs)
 ![Three.js](https://img.shields.io/badge/Three.js-low%20poly-049EF4?logo=threedotjs)
 ![GSAP](https://img.shields.io/badge/GSAP-SVG%20motion-88CE02?logo=greensock&logoColor=white)
@@ -99,8 +99,8 @@ Each lesson is a series of challenges that take a few seconds each and follow th
 Requirements: Node 22.18 or newer (the game uses Node's built-in `node:sqlite`, no native modules to compile).
 
 ```bash
-git clone https://github.com/franadoriv/coding-lab.git
-cd coding-lab
+git clone https://github.com/franadoriv/bitwise-quest.git
+cd bitwise-quest
 npm install
 npm run dev
 ```
