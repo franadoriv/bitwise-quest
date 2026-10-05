@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS languages (
   runner TEXT,
   topics TEXT NOT NULL DEFAULT '{}',
   exams TEXT NOT NULL DEFAULT '[]',
+  planet TEXT NOT NULL DEFAULT 'null',
   sort INTEGER NOT NULL DEFAULT 0
 );
 
@@ -56,64 +57,7 @@ CREATE TABLE IF NOT EXISTS lessons (
   UNIQUE(language_id, slug)
 );
 
-CREATE TABLE IF NOT EXISTS players (
-  id INTEGER PRIMARY KEY,
-  name TEXT NOT NULL DEFAULT 'HERO',
-  xp INTEGER NOT NULL DEFAULT 0,
-  coins INTEGER NOT NULL DEFAULT 0,
-  streak INTEGER NOT NULL DEFAULT 0,
-  best_streak INTEGER NOT NULL DEFAULT 0,
-  last_day TEXT,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS progress (
-  player_id INTEGER NOT NULL REFERENCES players(id),
-  lesson_id INTEGER NOT NULL REFERENCES lessons(id),
-  stars INTEGER NOT NULL DEFAULT 0,
-  best_score INTEGER NOT NULL DEFAULT 0,
-  plays INTEGER NOT NULL DEFAULT 0,
-  skipped INTEGER NOT NULL DEFAULT 0,
-  completed_at TEXT,
-  PRIMARY KEY (player_id, lesson_id)
-);
-
-CREATE TABLE IF NOT EXISTS attempts (
-  id INTEGER PRIMARY KEY,
-  player_id INTEGER NOT NULL,
-  lesson_id INTEGER NOT NULL,
-  beat INTEGER NOT NULL,
-  correct INTEGER NOT NULL,
-  ms INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX IF NOT EXISTS attempts_by_lesson ON attempts(player_id, lesson_id);
-
--- Leitner boxes for spaced repetition ("wandering bugs").
-CREATE TABLE IF NOT EXISTS reviews (
-  player_id INTEGER NOT NULL,
-  lesson_id INTEGER NOT NULL,
-  beat INTEGER NOT NULL,
-  box INTEGER NOT NULL DEFAULT 1,
-  due_at TEXT NOT NULL,
-  PRIMARY KEY (player_id, lesson_id, beat)
-);
-
--- Entry exam attempts (company-style screening). topics = JSON [{id, correct, total}].
-CREATE TABLE IF NOT EXISTS exam_results (
-  id INTEGER PRIMARY KEY,
-  player_id INTEGER NOT NULL,
-  language_id INTEGER NOT NULL,
-  exam TEXT NOT NULL,
-  correct INTEGER NOT NULL,
-  total INTEGER NOT NULL,
-  pct INTEGER NOT NULL,
-  passed INTEGER NOT NULL,
-  topics TEXT NOT NULL,
-  skipped_regions INTEGER NOT NULL DEFAULT 0,
-  taken_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX IF NOT EXISTS exam_results_by_player ON exam_results(player_id, language_id, exam);
+-- Player progress is NOT stored here: it lives in client save slots (lib/save).
 `;
 
 function contentHash() {
@@ -126,10 +70,10 @@ function seed(d: DatabaseSync) {
   const row = d.prepare("SELECT value FROM meta WHERE key = 'content_hash'").get() as { value: string } | undefined;
   if (row?.value === hash) return;
 
-  const upLang = d.prepare(`INSERT INTO languages (slug, name, tagline, color, status, runner, topics, exams, sort)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  const upLang = d.prepare(`INSERT INTO languages (slug, name, tagline, color, status, runner, topics, exams, planet, sort)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(slug) DO UPDATE SET name=excluded.name, tagline=excluded.tagline, color=excluded.color,
-      status=excluded.status, runner=excluded.runner, topics=excluded.topics, exams=excluded.exams, sort=excluded.sort
+      status=excluded.status, runner=excluded.runner, topics=excluded.topics, exams=excluded.exams, planet=excluded.planet, sort=excluded.sort
     RETURNING id`);
   const upRegion = d.prepare(`INSERT INTO regions (language_id, slug, name, subtitle, theme, status, sort)
     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -145,7 +89,7 @@ function seed(d: DatabaseSync) {
   d.exec("BEGIN");
   try {
     LANGUAGE_PACKS.forEach((pack, li) => {
-      const { id: langId } = upLang.get(pack.slug, pack.name, JSON.stringify(pack.tagline), pack.color, pack.status, pack.runner ?? null, JSON.stringify(pack.topics), JSON.stringify(pack.exams), li) as { id: number };
+      const { id: langId } = upLang.get(pack.slug, pack.name, JSON.stringify(pack.tagline), pack.color, pack.status, pack.runner ?? null, JSON.stringify(pack.topics), JSON.stringify(pack.exams), JSON.stringify(pack.planet), li) as { id: number };
       pack.regions.forEach((region, ri) => {
         const { id: regionId } = upRegion.get(langId, region.slug, JSON.stringify(region.name), JSON.stringify(region.subtitle), region.theme, region.status ?? "active", ri) as { id: number };
         region.lessons.forEach((lesson, si) => {
@@ -167,9 +111,12 @@ function migrate(d: DatabaseSync) {
   const cols = (d.prepare("PRAGMA table_info(languages)").all() as { name: string }[]).map((c) => c.name);
   if (!cols.includes("topics")) d.exec("ALTER TABLE languages ADD COLUMN topics TEXT NOT NULL DEFAULT '{}'");
   if (!cols.includes("exams")) d.exec("ALTER TABLE languages ADD COLUMN exams TEXT NOT NULL DEFAULT '[]'");
+  // v0.2: player progress moved to client save slots; drop the old server-side player tables.
+  d.exec("DROP TABLE IF EXISTS progress; DROP TABLE IF EXISTS attempts; DROP TABLE IF EXISTS reviews; DROP TABLE IF EXISTS placements; DROP TABLE IF EXISTS exam_results; DROP TABLE IF EXISTS players;");
+  if (!cols.includes("planet")) d.exec("ALTER TABLE languages ADD COLUMN planet TEXT NOT NULL DEFAULT 'null'");
 }
 
-/** Deletes lessons/regions that no longer exist in the packs (e.g. renamed slugs), with their player rows. */
+/** Deletes lessons/regions that no longer exist in the packs (e.g. renamed slugs). */
 function pruneRemoved(d: DatabaseSync) {
   for (const pack of LANGUAGE_PACKS) {
     const lang = d.prepare("SELECT id FROM languages WHERE slug = ?").get(pack.slug) as { id: number } | undefined;
@@ -178,7 +125,6 @@ function pruneRemoved(d: DatabaseSync) {
     const regionSlugs = new Set(pack.regions.map((r) => r.slug));
     const lessons = d.prepare("SELECT id, slug FROM lessons WHERE language_id = ?").all(lang.id) as { id: number; slug: string }[];
     for (const l of lessons.filter((l) => !lessonSlugs.has(l.slug))) {
-      for (const t of ["progress", "attempts", "reviews"]) d.prepare(`DELETE FROM ${t} WHERE lesson_id = ?`).run(l.id);
       d.prepare("DELETE FROM lessons WHERE id = ?").run(l.id);
     }
     const regions = d.prepare("SELECT id, slug FROM regions WHERE language_id = ?").all(lang.id) as { id: number; slug: string }[];
@@ -195,7 +141,6 @@ export function db(): DatabaseSync {
     d.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
     d.exec(SCHEMA);
     migrate(d);
-    d.prepare("INSERT OR IGNORE INTO players (id) VALUES (1)").run();
     globalThis.__bitwiseDb = d;
   }
   // Re-check content on every module (re)load so edits to content/ show up in dev.

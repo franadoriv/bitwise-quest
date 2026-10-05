@@ -11,4 +11,5 @@ export function levelProgress(xp: number) {
 
 export const starsFor = (mistakes: number) => (mistakes === 0 ? 3 : mistakes <= 2 ? 2 : 1);
 
-export const today = () => new Date().toISOString().slice(0, 10);
+/** Local calendar day "YYYY-MM-DD" (streaks follow the player's clock). */
+export const today = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
