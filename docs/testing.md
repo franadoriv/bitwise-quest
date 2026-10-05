@@ -11,7 +11,7 @@
 | `npm run e2e` | End-to-end memory card flow in headless Chrome | After changes to the save system, memory card, galaxy or landing |
 | `npm run build` | Production build | Before delivering |
 
-CI (`.github/workflows/ci.yml`) runs `content:check`, `npm test`, `typecheck` and `build` on every push to `main` or `develop` and on every pull request.
+CI (`.github/workflows/ci.yml`) runs `content:check`, `npm test`, `typecheck` and `build` on every push to `develop` or `release` and on every pull request. The `check` job is required to merge into `release`.
 
 ## Unit tests (`npm test`)
 

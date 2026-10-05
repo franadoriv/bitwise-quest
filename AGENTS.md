@@ -17,6 +17,11 @@ A retro arcade game (Next.js 16 + Three.js + GSAP/SVG + Node's built-in SQLite) 
 - Project playbooks live in `docs/playbooks/`: `add-lessons`, `add-language`, `add-exam-questions` and `verify-content`.
 - The brand lives in `lib/brand.ts` (`BRAND.name`, `BRAND.logo`, `BRAND.tagline`). Never hard-code the game's name.
 
+
+## Branches
+- Commit and push to `develop` (the default branch). There is no `main`.
+- `release` is protected: changes reach it only through a pull request from `develop` with CI passing. Never push to it directly.
+
 ## Rules
 - **Content is data.** Planets, sprites, lessons, regions, topics and exams live in `content/<lang>/`. Do not put language-specific logic in the engine (`components/`, `lib/`).
 - **Planets.** Every pack has a `planet` (name, story, guide, colors, bugs). Pack sprites go in `content/<lang>/sprites.ts` with ids `<lang>/<name>` and are registered in `content/sprites.ts`. Guides and bugs are original designs inspired by the language, never copies of official mascots.

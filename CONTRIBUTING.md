@@ -12,9 +12,18 @@ Thanks for wanting to help! The most common contribution is content: lessons, re
    - Translations and UI languages: [`docs/i18n.md`](docs/i18n.md)
 2. Use Node 22.18 or newer (`nvm use`).
 
+## Branches
+
+| Branch | Role | How changes get in |
+| --- | --- | --- |
+| `develop` | Default branch. All day-to-day work lands here | Direct pushes or PRs from feature branches |
+| `release` | What is published | **Only by pull request from `develop`**. The branch is protected: CI (`check`) must pass, conversations must be resolved, no force pushes, no deletion, rules apply to admins too |
+
+There is no `main` branch.
+
 ## Workflow
 
-1. Create a branch from `main`: `feat/<topic>`, `fix/<topic>` or `content/<topic>`.
+1. Work on `develop`, or create a branch from it: `feat/<topic>`, `fix/<topic>` or `content/<topic>`.
 2. Make your changes and verify:
    ```bash
    npm run content:check
@@ -24,7 +33,8 @@ Thanks for wanting to help! The most common contribution is content: lessons, re
    npm run playtest -- /play/rust/lesson/<slug> --locale=en   # with npm run dev running
    ```
 3. Write commits with [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `content:`, `docs:`, `refactor:`, `chore:`.
-4. Open a pull request explaining what the change teaches or fixes, with screenshots if it affects the UI.
+4. Push to `develop` (or open a pull request into `develop`) explaining what the change teaches or fixes, with screenshots if it affects the UI.
+5. To publish, open a pull request from `develop` into `release` and merge it once CI is green.
 
 ## Content rules
 
