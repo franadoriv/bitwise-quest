@@ -1,0 +1,20 @@
+---
+name: add-language
+description: Add a new programming language (cartridge) to Bit Forge, such as Go, Zig or Haskell, including its regions, topics, exams, syntax highlighting and optional code runner.
+---
+
+# Add a language
+
+## Read first
+`docs/adding-a-language.md`, `docs/architecture.md`, `docs/content-model.md`, and the whole `content/rust/` folder as the reference implementation.
+
+## Steps
+1. Design the region map: 4–6 regions ordered from concrete to abstract, each a concept that is hard for people coming from other languages. Write it down before coding.
+2. Create `content/<slug>/` mirroring `content/rust/` (`index.ts`, `helpers.ts`, `topics.ts`, `exams.ts`, `regions/*.ts`). Use `.ts` extensions in relative imports.
+3. Register it in `content/index.ts`, replacing the `soon(...)` placeholder.
+4. Add a grammar to `GRAMMARS` in `lib/syntax.ts`.
+5. Runner, if beats `run`/`check` are needed: implement `LanguageRunner` in `lib/runners/<id>.ts`, register it in `lib/runners/index.ts`, and teach `scripts/validate-content.ts` to call it for `pack.runner` (plus the right program wrapper in `buildProgram`). Prefer an official public playground or a local toolchain; mention any external service to the user.
+6. Build the first region with the `add-lessons` skill and the exam banks with the `add-exam-questions` skill.
+
+## Verify
+`verify-content` skill, then `npm run build`. Confirm the cartridge is active on the title screen.
