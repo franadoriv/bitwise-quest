@@ -1,0 +1,200 @@
+// Language-agnostic content model. A language pack is pure data:
+// adding a new language means writing a new pack, not touching the engine.
+
+export type ActorId = "hero" | "ally" | "enemy";
+export type ItemKind = "sword" | "potion" | "gem" | "shield" | "scroll" | "key";
+export type EnemyKind = "slime" | "ghost" | "golem" | "dragon";
+export type Theme = "village" | "forest" | "mountain" | "castle" | "tower";
+
+// Visual vocabulary the stage understands. Content describes WHAT happens in the
+// world when code runs; the stage decides HOW it looks.
+export type Effect =
+  | { t: "enter"; actor: ActorId }
+  | { t: "exit"; actor: ActorId }
+  | { t: "tag"; actor: ActorId; text: string; value?: string } // variable binding label
+  | { t: "untag"; actor: ActorId }
+  | { t: "value"; actor: ActorId; text: string } // value chip next to the label
+  | { t: "dead"; actor: ActorId } // binding invalidated (moved out)
+  | { t: "item"; kind: ItemKind; holder: ActorId } // spawn the item
+  | { t: "give"; to: ActorId } // move ownership
+  | { t: "clone"; to: ActorId } // duplicate the item
+  | { t: "lend"; to: ActorId; mut?: boolean } // borrow: ghost copy goes and comes back
+  | { t: "drop" } // value destroyed
+  | { t: "attack"; from: ActorId; to: ActorId; dmg?: number }
+  | { t: "hp"; actor: ActorId; value: number }
+  | { t: "say"; actor: ActorId; text: string }
+  | { t: "print"; text: string }
+  | { t: "shake" }
+  | { t: "banner"; text: string }
+  | { t: "wait"; ms: number };
+
+/**
+ * Machine-checkable claim about a snippet. `npm run content:verify` compiles it with the
+ * language runner and fails if reality disagrees. Use it on every pick/predict/type beat
+ * whose correctness depends on compiler behavior.
+ */
+export interface SnippetCheck {
+  /** Full program to run. If omitted, the beat's `code` (with the answer filled into `___`)
+   *  is used, wrapped in `fn main() { ... }` when it has no `fn main`. */
+  program?: string;
+  /** Whether the program must compile. */
+  compiles: boolean;
+  /** Expected stdout (trimmed) when it compiles. */
+  stdout?: string;
+  /** pick only: also prove that every wrong option fails to compile (no ambiguous distractors).
+   *  Leave it off when a distractor compiles but is semantically wrong, and say why in `explain`. */
+  wrongFail?: boolean;
+}
+
+export interface BeatBase {
+  concept?: string;
+  /** Proof for the validator (see SnippetCheck). */
+  check?: SnippetCheck;
+  /** Effects that build the scene before the beat starts. Having a setup resets items/tags. */
+  setup?: Effect[];
+  /** Effects played when the player gets it right. */
+  win?: Effect[];
+  hint?: string;
+  /** Seconds for the speed bonus (and the timeout in boss fights). */
+  time?: number;
+}
+
+export interface DialogBeat extends BeatBase {
+  kind: "dialog";
+  speaker: "master" | "hero" | "ally" | "enemy";
+  text: string;
+  code?: string;
+}
+
+export interface ActStep {
+  label: string;
+  line?: string;
+  effects?: Effect[];
+  output?: string;
+  error?: { compiler: string; plain: string };
+}
+
+/** The player presses buttons; each one writes a line of code and the world reacts. */
+export interface ActBeat extends BeatBase {
+  kind: "act";
+  prompt: string;
+  steps: ActStep[];
+}
+
+/** Fill the single `___` slot by choosing a token. */
+export interface PickBeat extends BeatBase {
+  kind: "pick";
+  prompt: string;
+  code: string;
+  options: string[];
+  answer: number;
+  explain: string;
+}
+
+/** Read code and predict the result. */
+export interface PredictBeat extends BeatBase {
+  kind: "predict";
+  prompt: string;
+  code: string;
+  options: string[];
+  answer: number;
+  explain: string;
+  output?: string;
+}
+
+/** Tap lines in the right order. `lines` is the correct order. */
+export interface OrderBeat extends BeatBase {
+  kind: "order";
+  prompt: string;
+  lines: string[];
+  explain: string;
+}
+
+/** Type the missing token in the `___` slot. Validated char by char. */
+export interface TypeBeat extends BeatBase {
+  kind: "type";
+  prompt: string;
+  code: string;
+  answer: string;
+  explain: string;
+}
+
+/** Edit and run real code through the language runner. */
+export interface RunBeat extends BeatBase {
+  kind: "run";
+  prompt: string;
+  starter: string;
+  /** Substring expected in stdout. */
+  expect: string;
+  /** Regex source(s) used to validate offline if the runner is unavailable. Any match passes.
+   *  Each must not match `starter`; at least one must match `solution`. List alternative valid fixes. */
+  fallback?: string | string[];
+  /** A correct program. The validator runs it and expects `expect` in stdout. */
+  solution?: string;
+  explain: string;
+}
+
+export type Beat = DialogBeat | ActBeat | PickBeat | PredictBeat | OrderBeat | TypeBeat | RunBeat;
+export type QuestionBeat = PickBeat | PredictBeat | OrderBeat | TypeBeat | RunBeat;
+
+export function isQuestion(b: Beat): b is QuestionBeat {
+  return b.kind !== "dialog" && b.kind !== "act";
+}
+
+export interface LessonDef {
+  slug: string;
+  title: string;
+  concept: string;
+  mode: "lesson" | "boss";
+  xp: number;
+  enemy: EnemyKind;
+  enemyName: string;
+  beats: Beat[];
+}
+
+export interface RegionDef {
+  slug: string;
+  name: string;
+  subtitle: string;
+  theme: Theme;
+  status?: "active" | "soon";
+  lessons: LessonDef[];
+}
+
+// ─── entry exams (company-style technical screening) ───────────────────────
+export type ExamLevel = "junior" | "mid" | "senior";
+
+/** Exam questions are regular beats tagged with a topic from the pack's `topics`. */
+export type ExamQuestion = (PickBeat | PredictBeat | TypeBeat | OrderBeat) & { topic: string; difficulty?: 1 | 2 | 3 };
+
+export interface ExamDef {
+  slug: string;
+  level: ExamLevel;
+  title: string;
+  /** Who this exam simulates, e.g. "Pantalla técnica para Rust Developer Junior". */
+  description: string;
+  /** Questions drawn per attempt (balanced across topics). The bank can be larger. */
+  count: number;
+  /** Percentage needed to pass. */
+  passPct: number;
+  secondsPerQuestion: number;
+  questions: ExamQuestion[];
+}
+
+export interface TopicDef {
+  name: string;
+  /** Region that teaches this topic. Passing all of a region's topics in an exam skips it. */
+  region?: string;
+}
+
+export interface LanguagePack {
+  slug: string;
+  name: string;
+  tagline: string;
+  color: string;
+  status: "active" | "soon";
+  runner?: string;
+  regions: RegionDef[];
+  topics: Record<string, TopicDef>;
+  exams: ExamDef[];
+}
