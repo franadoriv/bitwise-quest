@@ -16,7 +16,10 @@
     "typecheck": "next typegen && tsc --noEmit",
     "content:check": "node scripts/validate-content.ts",
     "content:verify": "node scripts/validate-content.ts --verify",
-    "playtest": "node scripts/playtest.mjs"
+    "playtest": "node scripts/playtest.mjs",
+    "test": "node --test \"tests/**/*.test.ts\"",
+    "e2e": "node scripts/e2e-memory-card.mjs",
+    "shots": "node scripts/shots.mjs"
   },
   "dependencies": {
     "gsap": "^3.15.0",
