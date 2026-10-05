@@ -4,6 +4,7 @@
 import { LANGUAGE_PACKS } from "../content/index.ts";
 import type { Beat, Effect, LanguagePack, SnippetCheck } from "../lib/content/types.ts";
 import { LOCALES, isLocalized, tx, type Text } from "../lib/i18n/text.ts";
+import { PACK_SPRITES } from "../content/sprites.ts";
 
 const VERIFY = process.argv.includes("--verify");
 const ONLY = process.argv.find((a) => a.startsWith("--lang="))?.slice(7);
@@ -15,7 +16,23 @@ const ACTORS = ["hero", "ally", "enemy"];
 const ITEMS = ["sword", "potion", "gem", "shield", "scroll", "key"];
 const EFFECTS = ["enter", "exit", "tag", "untag", "value", "dead", "item", "give", "clone", "lend", "drop", "attack", "hp", "say", "print", "shake", "banner", "wait"];
 const THEMES = ["village", "forest", "mountain", "castle", "tower"];
-const ENEMIES = ["slime", "ghost", "golem", "dragon"];
+// Built-in sprites (components/pixel/sprites.ts) usable as enemies or guides; packs add their own in content/sprites.ts.
+const BUILTIN_SPRITES = ["slime", "ghost", "golem", "dragon", "hero", "ally", "master"];
+const LEGEND = new Set([".", "0", "1", "2", "3", "r", "y", "b", "s", "w", "g", "p", "c"]);
+const spriteExists = (id: string) => BUILTIN_SPRITES.includes(id) || id in PACK_SPRITES;
+
+function checkSprites() {
+ for (const [id, rows] of Object.entries(PACK_SPRITES)) {
+  const where = `sprite ${id}`;
+  if (!/^[a-z0-9-]+\/[a-z0-9-]+$/.test(id)) err(where, 'ids must be namespaced "<lang>/<name>"');
+  if (!rows.length || rows.length > 24) err(where, `height ${rows.length} (1-24 rows)`);
+  const w = rows[0]?.length ?? 0;
+  rows.forEach((r, i) => {
+    if (r.length !== w) err(where, `row ${i} is ${r.length} wide, expected ${w}`);
+    for (const ch of r) if (!LEGEND.has(ch)) { err(where, `row ${i} uses unknown color "${ch}"`); break; }
+  });
+ }
+}
 
 const errors: string[] = [];
 const warnings: string[] = [];
@@ -137,6 +154,7 @@ function checkBeat(where: string, b: Beat, pack: LanguagePack) {
   }
 }
 
+checkSprites();
 for (const pack of LANGUAGE_PACKS) {
   if (ONLY && pack.slug !== ONLY) continue;
   const lessonSlugs = new Set<string>();
@@ -155,12 +173,20 @@ for (const pack of LANGUAGE_PACKS) {
       lessonSlugs.add(lesson.slug);
       prose(lw, "title", lesson.title, 28);
       prose(lw, "enemyName", lesson.enemyName, 20);
-      if (!ENEMIES.includes(lesson.enemy)) err(lw, `unknown enemy "${lesson.enemy}"`);
+      if (!spriteExists(lesson.enemy)) err(lw, `unknown enemy sprite "${lesson.enemy}"`);
       if (!lesson.beats.some((b) => b.kind !== "dialog" && b.kind !== "act")) err(lw, "lesson without questions");
       lesson.beats.forEach((b, i) => checkBeat(`${lw}#${i}(${b.kind})`, b, pack));
     }
   }
   prose(pack.slug, "tagline", pack.tagline, 60);
+  const pw = `${pack.slug}/planet`;
+  prose(pw, "name", pack.planet?.name, 20);
+  prose(pw, "story", pack.planet?.story, 260);
+  prose(pw, "guide.name", pack.planet?.guide?.name, 14);
+  prose(pw, "guide.title", pack.planet?.guide?.title, 40);
+  if (pack.planet && !spriteExists(pack.planet.guide.sprite)) err(pw, `unknown guide sprite "${pack.planet.guide.sprite}"`);
+  for (const b of pack.planet?.bugs ?? []) if (!spriteExists(b)) err(pw, `unknown bug sprite "${b}"`);
+  for (const c of Object.values(pack.planet?.colors ?? {})) if (c && !/^#[0-9a-f]{6}$/i.test(c)) err(pw, `color "${c}" must be #rrggbb`);
   for (const [id, t] of Object.entries(pack.topics)) prose(`${pack.slug} topic ${id}`, "name", t.name, 36);
   for (const [id, t] of Object.entries(pack.topics)) if (t.region && !regionSlugs.has(t.region)) err(`${pack.slug} topic ${id}`, `unknown region "${t.region}"`);
   const examSlugs = new Set<string>();

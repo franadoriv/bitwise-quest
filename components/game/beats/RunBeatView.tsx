@@ -11,7 +11,7 @@ import { useI18n } from "@/components/ui/I18n";
 const offlinePass = (fallback: string | string[] | undefined, code: string) =>
   (Array.isArray(fallback) ? fallback : fallback ? [fallback] : []).some((re) => new RegExp(re).test(code));
 
-type Result = { kind: "ok" | "compile" | "output" | "offline-ok" | "offline-bad"; stdout: string; stderr: string };
+type Result = { kind: "ok" | "compile" | "output" | "offline-ok" | "offline-bad" | "busy"; stdout: string; stderr: string; retry?: number };
 
 /** Real code, real compiler. Highlighted textarea overlay + a lively "compiling" bar. */
 export function RunBeatView({ beat, ctx }: { beat: RunBeat; ctx: BeatCtx }) {
@@ -37,13 +37,18 @@ export function RunBeatView({ beat, ctx }: { beat: RunBeat; ctx: BeatCtx }) {
     let res: Result;
     try {
       const r = await fetch("/api/run", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ language: ctx.lang, code }) });
+      if (r.status === 429 || r.status === 503) {
+        // Quota hit: not the player's fault, so no penalty — just ask them to wait.
+        res = { kind: "busy", stdout: "", stderr: "", retry: Number(r.headers.get("retry-after") ?? "5") || 5 };
+        throw res;
+      }
       const data = (await r.json()) as { ok: boolean; stdout: string; stderr: string; available: boolean };
       if (!data.available) {
         res = { kind: offlinePass(beat.fallback, code) ? "offline-ok" : "offline-bad", stdout: "", stderr: "" };
       } else if (!data.ok) res = { kind: "compile", stdout: data.stdout, stderr: data.stderr };
       else res = { kind: data.stdout.includes(beat.expect) ? "ok" : "output", stdout: data.stdout, stderr: "" };
-    } catch {
-      res = { kind: offlinePass(beat.fallback, code) ? "offline-ok" : "offline-bad", stdout: "", stderr: "" };
+    } catch (e) {
+      res = (e as Result)?.kind === "busy" ? (e as Result) : { kind: offlinePass(beat.fallback, code) ? "offline-ok" : "offline-bad", stdout: "", stderr: "" };
     }
     clearInterval(beep);
     tween.kill();
@@ -51,6 +56,7 @@ export function RunBeatView({ beat, ctx }: { beat: RunBeat; ctx: BeatCtx }) {
     setResult(res);
     setRunning(false);
     requestAnimationFrame(() => {
+      if (res.kind === "busy") return;
       if (res.kind === "ok" || res.kind === "offline-ok") {
         solvedRef.current = true;
         res.stdout.split("\n").filter(Boolean).slice(0, 3).forEach((l) => ctx.print(l));
@@ -77,6 +83,7 @@ export function RunBeatView({ beat, ctx }: { beat: RunBeat; ctx: BeatCtx }) {
   };
 
   const good = result?.kind === "ok" || result?.kind === "offline-ok";
+  const busy = result?.kind === "busy";
 
   return (
     <div className="beat-split">
@@ -107,8 +114,9 @@ export function RunBeatView({ beat, ctx }: { beat: RunBeat; ctx: BeatCtx }) {
         <span className="pixel" style={{ fontSize: 9, color: "var(--p2)" }}>{t("run.shortcut")}</span>
       </div>
       {result && (
-        <div ref={resultRef} className="box dark" style={{ padding: 12, marginTop: 12, boxShadow: `0 0 0 4px ${good ? "var(--good)" : "var(--red)"}` }}>
-          <div className="pixel" style={{ fontSize: 11, color: good ? "var(--good)" : "var(--red)", marginBottom: 6 }}>
+        <div ref={resultRef} className="box dark" style={{ padding: 12, marginTop: 12, boxShadow: `0 0 0 4px ${good ? "var(--good)" : busy ? "var(--gold)" : "var(--red)"}` }}>
+          <div className="pixel" style={{ fontSize: 11, color: good ? "var(--good)" : busy ? "var(--gold)" : "var(--red)", marginBottom: 6 }}>
+            {result.kind === "busy" && t("run.busy", { secs: result.retry ?? 5 })}
             {result.kind === "ok" && t("run.ok")}
             {result.kind === "offline-ok" && t("run.offlineOk")}
             {result.kind === "offline-bad" && t("run.offlineBad")}

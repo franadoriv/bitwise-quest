@@ -8,15 +8,21 @@ export const rustPlayground: LanguageRunner = {
     try {
       const res = await fetch("https://play.rust-lang.org/execute", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", "user-agent": "bitwise-quest (learning game)" },
         body: JSON.stringify({ channel: "stable", mode: "debug", edition: "2021", crateType: "bin", tests: false, backtrace: false, code }),
-        signal: AbortSignal.timeout(20_000),
+        signal: AbortSignal.timeout(15_000),
+        redirect: "error",
       });
-      if (!res.ok) return { ok: false, stdout: "", stderr: `runner HTTP ${res.status}`, available: false };
-      const data = (await res.json()) as { success: boolean; stdout: string; stderr: string };
-      return { ok: data.success, stdout: data.stdout ?? "", stderr: cleanStderr(data.stderr ?? ""), available: true };
-    } catch (e) {
-      return { ok: false, stdout: "", stderr: String(e), available: false };
+      if (!res.ok) return { ok: false, stdout: "", stderr: "", available: false };
+      // Never trust an upstream blindly: cap what we read and check the shape.
+      const text = await res.text();
+      if (text.length > 1_000_000) return { ok: false, stdout: "", stderr: "", available: false };
+      const data = JSON.parse(text) as { success?: unknown; stdout?: unknown; stderr?: unknown };
+      if (typeof data.success !== "boolean") return { ok: false, stdout: "", stderr: "", available: false };
+      return { ok: data.success, stdout: String(data.stdout ?? ""), stderr: cleanStderr(String(data.stderr ?? "")), available: true };
+    } catch {
+      // Timeouts and network errors are reported as "unavailable"; details stay on the server.
+      return { ok: false, stdout: "", stderr: "", available: false };
     }
   },
 };

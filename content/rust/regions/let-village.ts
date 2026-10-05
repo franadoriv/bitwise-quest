@@ -12,7 +12,7 @@ const letBasics: LessonDef = {
   concept: "let",
   mode: "lesson",
   xp: 40,
-  enemy: "slime",
+  enemy: "rust/mite",
   enemyName: L("SYNTAX BUG", "BUG SINTAXIS", "構文バグ"),
   beats: [
     say(L(
@@ -147,7 +147,7 @@ const mutLesson: LessonDef = {
   concept: "mut",
   mode: "lesson",
   xp: 50,
-  enemy: "slime",
+  enemy: "rust/mite",
   enemyName: L("FROZEN BUG", "BUG CONGELADO", "凍ったバグ"),
   beats: [
     say(L(
@@ -280,7 +280,7 @@ const typesLesson: LessonDef = {
   concept: "types",
   mode: "lesson",
   xp: 50,
-  enemy: "ghost",
+  enemy: "rust/dangler",
   enemyName: L("GHOST BUG", "BUG FANTASMA", "おばけバグ"),
   beats: [
     say(L(
@@ -404,7 +404,7 @@ const boss1: LessonDef = {
   concept: "let",
   mode: "boss",
   xp: 120,
-  enemy: "golem",
+  enemy: "rust/cog-golem",
   enemyName: L("IMMUTABLE GOLEM", "GOLEM INMUTABLE", "不変ゴーレム"),
   beats: [
     enemySays(L(

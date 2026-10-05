@@ -10,9 +10,9 @@ import type { Text } from "@/lib/i18n/text";
 import { CodeBlock } from "../CodeBlock";
 import type { BeatCtx } from "./types";
 
-const NAMES = { master: { en: "FERRO", es: "FERRO", ja: "フェロ" }, ally: { en: "LUMA", es: "LUMA", ja: "ルマ" } } as const;
+const ALLY = { en: "LUMA", es: "LUMA", ja: "ルマ" } as const;
 
-export function DialogBeatView({ beat, ctx, enemy, enemyName }: { beat: DialogBeat; ctx: BeatCtx; enemy: EnemyKind; enemyName: Text }) {
+export function DialogBeatView({ beat, ctx, enemy, enemyName, guide }: { beat: DialogBeat; ctx: BeatCtx; enemy: EnemyKind; enemyName: Text; guide: { name: Text; sprite: string } }) {
   const { t, tx } = useI18n();
   const text = tx(beat.text);
   const [shown, setShown] = useState(0);
@@ -57,8 +57,8 @@ export function DialogBeatView({ beat, ctx, enemy, enemyName }: { beat: DialogBe
     return () => window.removeEventListener("keydown", onKey);
   });
 
-  const sprite: SpriteName = beat.speaker === "enemy" ? enemy : beat.speaker;
-  const name = beat.speaker === "enemy" ? tx(enemyName) : beat.speaker === "hero" ? t("dialog.you") : tx(NAMES[beat.speaker]);
+  const sprite: SpriteName = beat.speaker === "enemy" ? enemy : beat.speaker === "master" ? guide.sprite : beat.speaker;
+  const name = beat.speaker === "enemy" ? tx(enemyName) : beat.speaker === "hero" ? t("dialog.you") : beat.speaker === "master" ? tx(guide.name).toUpperCase() : tx(ALLY);
 
   return (
     <button onClick={advance} className="box dark" style={{ display: "flex", gap: 16, alignItems: "flex-start", padding: 16, textAlign: "left", width: "calc(100% - 8px)", minHeight: 140 }} aria-label={t("dialog.continue")}>

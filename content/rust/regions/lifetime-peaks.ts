@@ -14,7 +14,7 @@ const dangling: LessonDef = {
   concept: "lifetimes",
   mode: "lesson",
   xp: 70,
-  enemy: "ghost",
+  enemy: "rust/dangler",
   enemyName: L("DANGLING BUG", "BUG COLGANTE", "ダングリングバグ"),
   beats: [
     say(L(
@@ -196,7 +196,7 @@ const annotations: LessonDef = {
   concept: "lifetimes",
   mode: "lesson",
   xp: 70,
-  enemy: "golem",
+  enemy: "rust/cog-golem",
   enemyName: L("AMBIGUOUS BUG", "BUG AMBIGUO", "あいまいバグ"),
   beats: [
     say(L(
@@ -364,7 +364,7 @@ const structsStatic: LessonDef = {
   concept: "lifetimes",
   mode: "lesson",
   xp: 70,
-  enemy: "slime",
+  enemy: "rust/mite",
   enemyName: L("ETERNAL BUG", "BUG ETERNO", "永遠バグ"),
   beats: [
     say(L(
@@ -514,7 +514,7 @@ const boss3: LessonDef = {
   concept: "lifetimes",
   mode: "boss",
   xp: 170,
-  enemy: "golem",
+  enemy: "rust/cog-golem",
   enemyName: L("ETERNAL GOLEM", "GÓLEM ETERNO", "永遠のゴーレム"),
   beats: [
     enemySays(L(

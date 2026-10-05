@@ -11,6 +11,9 @@ import fs from "node:fs";
 import { LANGUAGE_PACKS } from "../content/index.ts";
 import { MESSAGES } from "../lib/i18n/messages.ts";
 import { tx } from "../lib/i18n/text.ts";
+import { decodeSave, encodeSave, fromBase64, toBase64 } from "../lib/save/codec.ts";
+import { newSave } from "../lib/save/schema.ts";
+import { completeLesson } from "../lib/save/progress.ts";
 
 const args = process.argv.slice(2);
 const opt = (k, d) => args.find((a) => a.startsWith(`--${k}=`))?.split("=")[1] ?? d;
@@ -32,6 +35,30 @@ const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const browser = await chromium.launch({ executablePath: CHROME, headless: true, args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
 const context = await browser.newContext({ viewport: { width: vw, height: vh } });
 await context.addCookies([{ name: "locale", value: locale, url: BASE }]);
+
+// A fresh save in slot 1 with every lesson before the target already cleared, so any lesson is reachable.
+const [, , langSlug, kind, target] = path.split("/");
+const pack = LANGUAGE_PACKS.find((p) => p.slug === langSlug);
+let save = newSave("BOT");
+if (pack && kind === "lesson") {
+  const world = { regions: pack.regions.map((r) => ({ ...r, status: r.status ?? "active", lessons: r.lessons.map((l) => ({ slug: l.slug, title: l.title, mode: l.mode, xp: l.xp })) })) };
+  for (const l of world.regions.flatMap((r) => r.lessons)) {
+    if (l.slug === target) break;
+    save = completeLesson(save, langSlug, world, l, { score: 500, mistakes: 0, maxCombo: 3, correct: 5, attempts: [] }).save;
+  }
+}
+if (pack) save.langs[langSlug] = { ...(save.langs[langSlug] ?? { lessons: {}, reviews: {}, exams: {} }), landedAt: Date.now() };
+// Review runs need due "wandering bugs": seed the first questions of the first lesson.
+let seeded = [];
+if (pack && kind === "review") {
+  const first = pack.regions[0].lessons[0];
+  seeded = first.beats.map((b, i) => ({ b, i })).filter(({ b }) => !["dialog", "act", "run"].includes(b.kind)).slice(0, 3).map(({ i }) => `${first.slug}#${i}`);
+  for (const k of seeded) save.langs[langSlug].reviews[k] = { box: 1, due: Date.now() - 1000 };
+}
+const encodedSave = toBase64(await encodeSave(save));
+await context.addInitScript((b64) => {
+  if (!localStorage.getItem("bwq:slot:1")) { localStorage.setItem("bwq:slot:1", b64); localStorage.setItem("bwq:active", "1"); }
+}, encodedSave);
 const page = await context.newPage();
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
@@ -97,7 +124,19 @@ for (let step = 0; step < 200 && !finished; step++) {
     console.log(`step ${step} (${beat.kind}): ${String(e).split("\n")[0]}`);
   }
 }
+// The result must be persisted in the save slot.
+let persisted = true;
+if (finished && pack) {
+  await sleep(1200);
+  const b64 = await page.evaluate(() => localStorage.getItem("bwq:slot:1"));
+  const after = b64 ? await decodeSave(fromBase64(b64)) : null;
+  const rec = after?.langs[langSlug];
+  persisted = kind === "lesson" ? !!rec?.lessons[target]?.doneAt
+    : kind === "exam" ? (rec?.exams[target]?.attempts ?? 0) > 0
+    : kind === "review" ? seeded.every((k) => (rec?.reviews[k]?.box ?? 0) >= 1 && (rec?.reviews[k]?.due ?? 0) > Date.now()) : true;
+  console.log(persisted ? `✓ saved · xp ${after?.stats.xp} · streak ${after?.stats.streak}` : "✗ result was not saved to the slot");
+}
 console.log(finished ? `✓ finished ${path}` : `✗ did not finish ${path}`, `· screenshots in ${out}/`);
 if (errors.length) console.log("page errors:", errors);
 await browser.close();
-process.exit(finished && !errors.length ? 0 : 1);
+process.exit(finished && persisted && !errors.length ? 0 : 1);

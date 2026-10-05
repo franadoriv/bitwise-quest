@@ -23,7 +23,7 @@ const contract: LessonDef = {
   concept: "traits",
   mode: "lesson",
   xp: 70,
-  enemy: "slime",
+  enemy: "rust/mite",
   enemyName: L("IMPOSTOR BUG", "BUG IMPOSTOR", "なりすましバグ"),
   beats: [
     say(L(
@@ -184,7 +184,7 @@ const generics: LessonDef = {
   concept: "traits",
   mode: "lesson",
   xp: 75,
-  enemy: "ghost",
+  enemy: "rust/dangler",
   enemyName: L("BADGELESS BUG", "BUG SIN INSIGNIA", "バッジなしバグ"),
   beats: [
     say(L(
@@ -347,7 +347,7 @@ const armory: LessonDef = {
   concept: "traits",
   mode: "lesson",
   xp: 75,
-  enemy: "golem",
+  enemy: "rust/cog-golem",
   enemyName: L("UNREADABLE BUG", "BUG ILEGIBLE", "読めないバグ"),
   beats: [
     say(L(
@@ -520,7 +520,7 @@ const squad: LessonDef = {
   concept: "traits",
   mode: "lesson",
   xp: 75,
-  enemy: "slime",
+  enemy: "rust/mite",
   enemyName: L("UNIFORM BUG", "BUG UNIFORME", "そっくりバグ"),
   beats: [
     say(L(
@@ -691,7 +691,7 @@ const boss4: LessonDef = {
   concept: "traits",
   mode: "boss",
   xp: 180,
-  enemy: "dragon",
+  enemy: "rust/borrow-dragon",
   enemyName: L("GENERIC DRAGON", "DRAGÓN GENÉRICO", "ジェネリック竜"),
   beats: [
     enemySays(L(

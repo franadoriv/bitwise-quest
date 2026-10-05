@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [develop, release]
   pull_request:
 
 jobs:
@@ -15,8 +15,12 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
       - name: Validate content
         run: npm run content:check
+      - name: Unit tests (save format and progress rules)
+        run: npm test
       - name: Typecheck
         run: npm run typecheck
       - name: Build
