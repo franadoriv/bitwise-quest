@@ -57,7 +57,7 @@ export function TitleScreen({ guides }: { guides: string[] }) {
         ))}
       </div>
       <div style={{ textAlign: "center", position: "relative", zIndex: 1 }}>
-        <h1 ref={logo} className="pixel" aria-label={BRAND.name} style={{ fontSize: portrait ? 40 : 76, color: "var(--gold)", textShadow: "6px 6px 0 var(--red), 12px 12px 0 var(--p1)", lineHeight: 1.2 }}>
+        <h1 ref={logo} className="pixel latin" aria-label={BRAND.name} style={{ fontSize: portrait ? 29 : 76, color: "var(--gold)", textShadow: portrait ? "4px 4px 0 var(--red), 8px 8px 0 var(--p1)" : "6px 6px 0 var(--red), 12px 12px 0 var(--p1)", lineHeight: 1.2, whiteSpace: "nowrap" }}>
           {BRAND.logo.split("").map((c, i) => (
             <span key={i} className="logo-ch" style={{ display: "inline-block", minWidth: c === " " ? "0.5em" : undefined }}>{c}</span>
           ))}
