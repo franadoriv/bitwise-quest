@@ -12,7 +12,6 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "db:reset": "rm -rf data",
     "typecheck": "next typegen && tsc --noEmit",
     "content:check": "node scripts/validate-content.ts",
     "content:verify": "node scripts/validate-content.ts --verify",

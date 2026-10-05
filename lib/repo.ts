@@ -1,24 +1,24 @@
 import "server-only";
-import { db } from "./db";
-import type { Beat, EnemyKind, ExamDef, ExamLevel, ExamQuestion, PlanetDef, Theme, TopicDef } from "./content/types";
+import { LANGUAGE_PACKS } from "@/content/index.ts";
+import type { Beat, EnemyKind, ExamDef, ExamLevel, ExamQuestion, LanguagePack, LessonDef, PlanetDef, RegionDef, Theme } from "./content/types";
 import { isQuestion } from "./content/types";
 import { localized } from "./i18n/messages";
 import type { Localized, Text } from "./i18n/text";
 import type { ExamMeta, RegionInfo, WorldContent } from "./save/progress";
 
-// The server only serves CONTENT. Player progress lives in the client save (lib/save).
+// The server only serves CONTENT, straight from the language packs in content/: no database and no
+// disk writes, so the process is stateless and runs anywhere. Player progress lives in the client
+// save (lib/save). Everything here is computed from immutable data indexed once at module load.
 
-type Row = Record<string, unknown>;
+const PACKS = new Map(LANGUAGE_PACKS.map((p) => [p.slug, p]));
 
-/** Text columns hold JSON (a Localized object or a plain string). */
-function txt(v: unknown): Text {
-  const raw = String(v ?? "");
-  try {
-    const parsed = JSON.parse(raw);
-    return typeof parsed === "string" || (parsed && typeof parsed === "object") ? (parsed as Text) : raw;
-  } catch {
-    return raw;
-  }
+interface LessonEntry { lesson: LessonDef; region: RegionDef; id: number }
+const LESSONS = new Map<string, Map<string, LessonEntry>>();
+for (const pack of LANGUAGE_PACKS) {
+  const bySlug = new Map<string, LessonEntry>();
+  let id = 0;
+  for (const region of pack.regions) for (const lesson of region.lessons) bySlug.set(lesson.slug, { lesson, region, id: ++id });
+  LESSONS.set(pack.slug, bySlug);
 }
 
 // ─── view models ────────────────────────────────────────────────────────────
@@ -68,119 +68,97 @@ export interface ExamSummary {
   bankSize: number;
 }
 
-function langView(r: Row): LanguageView {
-  return {
-    slug: String(r.slug),
-    name: String(r.name),
-    tagline: txt(r.tagline),
-    color: String(r.color),
-    status: r.status as "active" | "soon",
-    planet: JSON.parse(String(r.planet ?? "null")) as PlanetDef,
-  };
-}
+const langView = (p: LanguagePack): LanguageView => ({ slug: p.slug, name: p.name, tagline: p.tagline, color: p.color, status: p.status, planet: p.planet });
+const guideOf = (p: LanguagePack): Guide => ({ name: p.planet.guide.name, sprite: p.planet.guide.sprite });
 
-const getLanguageRow = (slug: string) => db().prepare("SELECT * FROM languages WHERE slug = ?").get(slug) as Row | undefined;
-const guideOf = (lang: LanguageView): Guide => ({ name: lang.planet.guide.name, sprite: lang.planet.guide.sprite });
-
+// ─── queries ────────────────────────────────────────────────────────────────
 export function getLanguages(): LanguageView[] {
-  return (db().prepare("SELECT * FROM languages ORDER BY sort").all() as Row[]).map(langView);
+  return LANGUAGE_PACKS.map(langView);
 }
 
 export function getLanguage(slug: string): LanguageView | null {
-  const r = getLanguageRow(slug);
-  return r ? langView(r) : null;
+  const p = PACKS.get(slug);
+  return p ? langView(p) : null;
+}
+
+/** Active languages that can compile code (used to validate /api/run). */
+export function getRunner(slug: string): string | null {
+  const p = PACKS.get(slug);
+  return p?.status === "active" ? p.runner ?? null : null;
 }
 
 export function getWorldContent(langSlug: string): (WorldContent & { language: LanguageView }) | null {
-  const lang = getLanguageRow(langSlug);
-  if (!lang) return null;
-  const regions = db().prepare("SELECT * FROM regions WHERE language_id = ? ORDER BY sort").all(lang.id as number) as Row[];
-  const lessons = db().prepare("SELECT region_id, slug, title, mode, xp FROM lessons WHERE language_id = ? ORDER BY sort").all(lang.id as number) as Row[];
+  const pack = PACKS.get(langSlug);
+  if (!pack) return null;
   return {
-    language: langView(lang),
-    regions: regions.map(
+    language: langView(pack),
+    regions: pack.regions.map(
       (r): RegionInfo => ({
-        slug: String(r.slug),
-        name: txt(r.name),
-        subtitle: txt(r.subtitle),
-        theme: r.theme as Theme,
-        status: r.status as "active" | "soon",
-        lessons: lessons
-          .filter((l) => l.region_id === r.id)
-          .map((l) => ({ slug: String(l.slug), title: txt(l.title), mode: l.mode as "lesson" | "boss", xp: Number(l.xp) })),
+        slug: r.slug,
+        name: r.name,
+        subtitle: r.subtitle,
+        theme: r.theme,
+        status: r.status ?? "active",
+        lessons: r.lessons.map((l) => ({ slug: l.slug, title: l.title, mode: l.mode, xp: l.xp })),
       }),
     ),
   };
 }
 
 export function getLessonPlay(langSlug: string, lessonSlug: string): LessonPlay | null {
-  const row = db()
-    .prepare(
-      `SELECT l.*, r.theme, r.name AS region_name, g.slug AS lang_slug FROM lessons l
-       JOIN regions r ON r.id = l.region_id JOIN languages g ON g.id = l.language_id
-       WHERE g.slug = ? AND l.slug = ?`,
-    )
-    .get(langSlug, lessonSlug) as Row | undefined;
-  const lang = getLanguage(langSlug);
-  if (!row || !lang) return null;
-  const beats = JSON.parse(String(row.beats)) as Beat[];
+  const pack = PACKS.get(langSlug);
+  const entry = LESSONS.get(langSlug)?.get(lessonSlug);
+  if (!pack || !entry) return null;
+  const { lesson, region, id } = entry;
   return {
-    slug: String(row.slug),
-    title: txt(row.title),
-    mode: row.mode as "lesson" | "boss",
-    xp: Number(row.xp),
-    enemy: String(row.enemy),
-    enemyName: txt(row.enemy_name),
-    theme: row.theme as Theme,
-    regionName: txt(row.region_name),
+    slug: lesson.slug,
+    title: lesson.title,
+    mode: lesson.mode,
+    xp: lesson.xp,
+    enemy: lesson.enemy,
+    enemyName: lesson.enemyName,
+    theme: region.theme,
+    regionName: region.name,
     languageSlug: langSlug,
-    guide: guideOf(lang),
-    beats: beats.map((beat, index) => ({ lessonId: Number(row.id), index, beat, lesson: String(row.slug) })),
+    guide: guideOf(pack),
+    beats: lesson.beats.map((beat, index) => ({ lessonId: id, index, beat, lesson: lesson.slug })),
   };
 }
 
 /** Builds a review run from save keys "<lessonSlug>#<beatIndex>" (the client knows which are due). */
 export function getReviewPlay(langSlug: string, keys: string[]): LessonPlay | null {
-  const lang = getLanguage(langSlug);
-  if (!lang) return null;
+  const pack = PACKS.get(langSlug);
+  if (!pack) return null;
   const beats: PlayBeat[] = [];
-  const cache = new Map<string, Row | undefined>();
   for (const key of keys.slice(0, 12)) {
     const [slug, idx] = key.split("#");
-    if (!cache.has(slug)) cache.set(slug, db().prepare("SELECT l.id, l.beats FROM lessons l JOIN languages g ON g.id = l.language_id WHERE g.slug = ? AND l.slug = ?").get(langSlug, slug) as Row | undefined);
-    const row = cache.get(slug);
-    const beat = row ? (JSON.parse(String(row.beats)) as Beat[])[Number(idx)] : undefined;
-    if (beat && isQuestion(beat) && beat.kind !== "run") beats.push({ lessonId: Number(row!.id), index: Number(idx), lesson: slug, beat: { ...beat, setup: undefined, win: undefined } });
+    const entry = LESSONS.get(langSlug)?.get(slug);
+    const beat = entry?.lesson.beats[Number(idx)];
+    if (entry && beat && isQuestion(beat) && beat.kind !== "run") {
+      beats.push({ lessonId: entry.id, index: Number(idx), lesson: slug, beat: { ...beat, setup: undefined, win: undefined } });
+    }
   }
-  const enemy = lang.planet.bugs[0] ?? "ghost";
   return {
     slug: "review",
     title: localized("review.title"),
     mode: "review",
     xp: 0,
-    enemy,
+    enemy: pack.planet.bugs[0] ?? "ghost",
     enemyName: localized("review.enemy"),
     theme: "forest",
     regionName: localized("review.region"),
     languageSlug: langSlug,
-    guide: guideOf(lang),
+    guide: guideOf(pack),
     beats,
   };
 }
 
-function langExams(lang: Row) {
-  return {
-    exams: JSON.parse(String(lang.exams ?? "[]")) as ExamDef[],
-    topics: JSON.parse(String(lang.topics ?? "{}")) as Record<string, TopicDef>,
-  };
-}
-
 export function getExams(langSlug: string): { language: LanguageView; exams: ExamSummary[] } | null {
-  const lang = getLanguageRow(langSlug);
-  if (!lang) return null;
+  const pack = PACKS.get(langSlug);
+  if (!pack) return null;
   return {
-    language: langView(lang),
-    exams: langExams(lang).exams.map((e) => ({
+    language: langView(pack),
+    exams: pack.exams.map((e) => ({
       slug: e.slug, level: e.level, title: e.title, description: e.description, count: e.count, passPct: e.passPct,
       secondsPerQuestion: e.secondsPerQuestion, bankSize: e.questions.length,
     })),
@@ -203,11 +181,10 @@ function sampleQuestions(bank: ExamQuestion[], count: number) {
 }
 
 export function getExamPlay(langSlug: string, examSlug: string): LessonPlay | null {
-  const row = getLanguageRow(langSlug);
+  const pack = PACKS.get(langSlug);
   const world = getWorldContent(langSlug);
-  if (!row || !world) return null;
-  const { exams, topics } = langExams(row);
-  const exam = exams.find((e) => e.slug === examSlug);
+  if (!pack || !world) return null;
+  const exam = pack.exams.find((e) => e.slug === examSlug);
   if (!exam || exam.questions.length === 0) return null;
   const title = exam.title as Localized;
   const intro: Beat = {
@@ -216,7 +193,7 @@ export function getExamPlay(langSlug: string, examSlug: string): LessonPlay | nu
     text: localized("exam.introDialog", (l) => ({ title: typeof title === "string" ? title : title[l], count: exam.count, secs: exam.secondsPerQuestion, pct: exam.passPct })),
   };
   const ids = sampleQuestions(exam.questions, exam.count);
-  const bugs = world.language.planet.bugs;
+  const bugs = pack.planet.bugs;
   return {
     slug: exam.slug,
     title: localized("exam.playTitle", (l) => ({ level: localized(`exam.${exam.level}`)[l] })),
@@ -227,7 +204,7 @@ export function getExamPlay(langSlug: string, examSlug: string): LessonPlay | nu
     theme: exam.level === "senior" ? "tower" : "village",
     regionName: localized("exam.region"),
     languageSlug: langSlug,
-    guide: guideOf(world.language),
+    guide: guideOf(pack),
     beats: [
       { lessonId: 0, index: -1, lesson: "", beat: intro },
       ...ids.map((i) => ({ lessonId: 0, index: i, lesson: "", beat: { ...exam.questions[i], time: questionTime(exam, exam.questions[i]), setup: undefined, win: undefined } as Beat })),
@@ -237,7 +214,7 @@ export function getExamPlay(langSlug: string, examSlug: string): LessonPlay | nu
       level: exam.level,
       title: exam.title,
       passPct: exam.passPct,
-      topics: Object.fromEntries(Object.entries(topics).map(([k, t]) => [k, { name: t.name, region: t.region }])),
+      topics: Object.fromEntries(Object.entries(pack.topics).map(([k, t]) => [k, { name: t.name, region: t.region }])),
       regions: world.regions.filter((r) => r.status === "active").map((r) => ({ slug: r.slug, name: r.name, lessons: r.lessons.map((l) => l.slug) })),
     },
   };
