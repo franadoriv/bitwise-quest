@@ -5,13 +5,14 @@ import gsap from "gsap";
 import { Sprite } from "@/components/pixel/Sprite";
 import { levelProgress } from "@/lib/game-rules";
 import { fx, wait } from "@/lib/fx";
-import type { LessonPlay, RewardView } from "@/lib/repo";
+import type { LessonPlay } from "@/lib/repo";
+import type { Reward } from "@/lib/save/progress";
 import { music, sfx } from "@/lib/sfx";
 import { useI18n } from "@/components/ui/I18n";
 
 /** Staggered reward reveal: stars → stats → XP bar → coins → level up. */
 export function ResultScreen({ play, score, maxCombo, mistakes, reward }: {
-  play: LessonPlay; score: number; maxCombo: number; mistakes: number; reward: RewardView | null;
+  play: LessonPlay; score: number; maxCombo: number; mistakes: number; reward: Reward | null;
 }) {
   const router = useRouter();
   const { t } = useI18n();
@@ -44,9 +45,9 @@ export function ResultScreen({ play, score, maxCombo, mistakes, reward }: {
         await wait(320);
       }
       if (reward && alive) {
-        const before = reward.player.xp - reward.xpGained;
+        const before = reward.xpAfter - reward.xpGained;
         const from = levelProgress(before);
-        const to = levelProgress(reward.player.xp);
+        const to = levelProgress(reward.xpAfter);
         const counter = { xp: 0, coins: 0 };
         gsap.to(counter, {
           xp: reward.xpGained,
@@ -101,7 +102,7 @@ export function ResultScreen({ play, score, maxCombo, mistakes, reward }: {
             {reward && (
               <div style={{ marginBottom: 20 }}>
                 <div className="pixel" style={{ fontSize: 10, display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <span>{t("common.level")} {reward.player.level} {levelUp && <span style={{ color: "var(--good)" }}>▲</span>}</span>
+                  <span>{t("common.level")} {reward.levelAfter} {levelUp && <span style={{ color: "var(--good)" }}>▲</span>}</span>
                   <span style={{ color: "var(--good)" }}>XP <span ref={xpText}>+0</span></span>
                   <span style={{ color: "var(--gold)" }}><Sprite name="coin" size={14} /> <span ref={coinText}>+0</span></span>
                 </div>

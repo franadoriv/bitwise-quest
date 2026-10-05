@@ -7,7 +7,10 @@ import { Settings } from "@/components/ui/Settings";
 import { useOrientation } from "@/components/ui/GameFrame";
 import { isQuestion, type Beat, type Text } from "@/lib/content/types";
 import { fx, wait } from "@/lib/fx";
-import type { ExamReport, LessonPlay, PlayBeat, RewardView } from "@/lib/repo";
+import type { LessonPlay, PlayBeat } from "@/lib/repo";
+import { useSave } from "@/components/save/SaveProvider";
+import { completeExam, completeLesson, completeReview, recordFailedRun, type ExamReport, type Reward, type WorldContent } from "@/lib/save/progress";
+import type { ExamQuestion } from "@/lib/content/types";
 import { ExamReportView } from "@/components/exam/ExamReportView";
 import { useI18n } from "@/components/ui/I18n";
 import type { MessageKey } from "@/lib/i18n/messages";
@@ -27,7 +30,10 @@ type Phase = "intro" | "play" | "anim" | "finishing" | "result" | "gameover";
 
 const CHEERS: MessageKey[] = ["lesson.cheer1", "lesson.cheer2", "lesson.cheer3", "lesson.cheer4", "lesson.cheer5"];
 
-export function LessonGame({ play }: { play: LessonPlay }) {
+export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldContent }) {
+  const { save, commit } = useSave();
+  const saveRef = useRef(save);
+  saveRef.current = save;
   const boss = play.mode === "boss";
   const placement = play.mode === "exam"; // exam: one shot per question, no hearts, no retries
   const review = play.mode === "review";
@@ -49,10 +55,10 @@ export function LessonGame({ play }: { play: LessonPlay }) {
   const [explain, setExplain] = useState<Text | null>(null);
   const [terminal, setTerminal] = useState<string[]>([]);
   const [timeLeft, setTimeLeft] = useState(1);
-  const [reward, setReward] = useState<RewardView | null>(null);
+  const [reward, setReward] = useState<Reward | null>(null);
   const [examReport, setExamReport] = useState<ExamReport | null>(null);
 
-  const stats = useRef({ mistakes: 0, maxCombo: 0, correct: 0, attempts: [] as { lessonId: number; beat: number; correct: boolean; ms: number }[], placement: [] as { index: number; correct: boolean }[] });
+  const stats = useRef({ mistakes: 0, maxCombo: 0, correct: 0, attempts: [] as { lesson: string; beat: number; correct: boolean; ms: number }[], placement: [] as { topic: string; correct: boolean }[] });
   const failed = useRef(false);
   const beatStart = useRef(Date.now());
   const stage = useRef<StageHandle>(null);
@@ -154,21 +160,24 @@ export function LessonGame({ play }: { play: LessonPlay }) {
     if (questionCount > 0) await stage.current?.enemyDefeated();
     await fx.banner(placement ? t("lesson.time") : boss ? t("lesson.bossDefeated") : t("lesson.clear"), { size: 28, hold: 0.7 });
     const s = stats.current;
-    try {
-      if (placement) {
-        const r = await fetch("/api/exam", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ lang: play.languageSlug, exam: play.slug, answers: s.placement }) });
-        if (r.ok) setExamReport((await r.json()) as ExamReport);
-      } else {
-        const url = review ? "/api/review" : "/api/complete";
-        const r = await fetch(url, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ lang: play.languageSlug, slug: play.slug, score, mistakes: s.mistakes, maxCombo: s.maxCombo, correct: s.correct, attempts: s.attempts }),
+    const current = saveRef.current;
+    const lang = play.languageSlug;
+    if (current) {
+      if (placement && play.exam) {
+        const r = completeExam(current, lang, play.exam, s.placement);
+        setExamReport(r.report);
+        await commit(r.save);
+      } else if (review) {
+        const r = completeReview(current, lang, s.attempts.map((a) => ({ key: `${a.lesson}#${a.beat}`, correct: a.correct })), score);
+        setReward(r.reward);
+        await commit(r.save);
+      } else if (world) {
+        const r = completeLesson(current, lang, world, { slug: play.slug, title: play.title, mode: play.mode as "lesson" | "boss", xp: play.xp }, {
+          score, mistakes: s.mistakes, maxCombo: s.maxCombo, correct: s.correct, attempts: s.attempts.map((a) => ({ beat: a.beat, correct: a.correct })),
         });
-        if (r.ok) setReward((await r.json()) as RewardView);
+        setReward(r.reward);
+        await commit(r.save);
       }
-    } catch {
-      /* offline: still show the result screen */
     }
     setPhase("result");
   };
@@ -183,8 +192,8 @@ export function LessonGame({ play }: { play: LessonPlay }) {
   const record = (correct: boolean) => {
     if (!current || current.retry > 0) return;
     const ms = Date.now() - beatStart.current;
-    if (placement) stats.current.placement.push({ index: current.index, correct });
-    else stats.current.attempts.push({ lessonId: current.lessonId, beat: current.index, correct, ms });
+    if (placement) stats.current.placement.push({ topic: (current.beat as ExamQuestion).topic ?? "", correct });
+    else stats.current.attempts.push({ lesson: current.lesson, beat: current.index, correct, ms });
   };
 
   async function onSolved(at?: Element | null) {
@@ -260,12 +269,8 @@ export function LessonGame({ play }: { play: LessonPlay }) {
     }
     if (h <= 0) {
       setTimeout(() => { sfx.gameOver(); music.stop(); setPhase("gameover"); }, 900);
-      if (!review) {
-        void fetch("/api/attempts", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ lang: play.languageSlug, slug: play.slug, attempts: stats.current.attempts }),
-        }).catch(() => {});
+      if (!review && saveRef.current) {
+        void commit(recordFailedRun(saveRef.current, play.languageSlug, play.slug, stats.current.attempts.map((a) => ({ beat: a.beat, correct: a.correct }))));
       }
     }
   }
@@ -336,9 +341,9 @@ export function LessonGame({ play }: { play: LessonPlay }) {
       <main className="scroll" style={{ padding: "14px 16px 24px", flex: 1, minHeight: 0 }}>
         {explain && (
           <div ref={explainRef} className="box" style={{ display: "flex", gap: 12, padding: 10, marginBottom: 14, background: "var(--white)", alignItems: "center" }}>
-            <Sprite name="master" size={40} />
+            <Sprite name={play.guide.sprite} size={40} />
             <div>
-              <div className="pixel" style={{ fontSize: 9, color: "var(--red)" }}>{t("lesson.almost")}</div>
+              <div className="pixel" style={{ fontSize: 9, color: "var(--red)" }}>{t("lesson.almost", { name: tx(play.guide.name).toUpperCase() })}</div>
               <div style={{ fontSize: 18, color: "var(--p0)" }}>{tx(explain)}</div>
               {!placement && isQuestion(beat!) && current.retry < 2 && <div className="pixel" style={{ fontSize: 8, color: "var(--p1)", marginTop: 4 }}>{t("lesson.bugReturns")}</div>}
             </div>
@@ -348,7 +353,7 @@ export function LessonGame({ play }: { play: LessonPlay }) {
           {phase !== "intro" && beat && phase !== "result" && phase !== "gameover" && (
             <>
               {current.retry > 0 && <div className="pixel blink" style={{ fontSize: 10, color: "var(--red)", marginBottom: 8 }}>{t("lesson.bugBack")}</div>}
-              {beat.kind === "dialog" && <DialogBeatView beat={beat} ctx={ctx} enemy={play.enemy} enemyName={play.enemyName} />}
+              {beat.kind === "dialog" && <DialogBeatView beat={beat} ctx={ctx} enemy={play.enemy} enemyName={play.enemyName} guide={play.guide} />}
               {beat.kind === "act" && <ActBeatView beat={beat} ctx={ctx} />}
               {(beat.kind === "pick" || beat.kind === "predict") && <ChoiceBeatView beat={beat} ctx={ctx} seed={seed} />}
               {beat.kind === "type" && <TypeBeatView beat={beat} ctx={ctx} />}

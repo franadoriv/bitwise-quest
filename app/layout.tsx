@@ -4,6 +4,7 @@ import { DotGothic16, Press_Start_2P, VT323 } from "next/font/google";
 import { GameFrame } from "@/components/ui/GameFrame";
 import { Providers } from "@/components/ui/Providers";
 import { I18nProvider } from "@/components/ui/I18n";
+import { SaveProvider } from "@/components/save/SaveProvider";
 import { BRAND } from "@/lib/brand";
 import { isLocale, negotiateLocale } from "@/lib/i18n/text";
 import "./globals.css";
@@ -27,9 +28,11 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
     <html lang={locale} data-palette="orange" className={`${press.variable} ${dot.variable} ${vt.variable}`}>
       <body>
         <I18nProvider initial={locale}>
-          <Providers>
-            <GameFrame>{children}</GameFrame>
-          </Providers>
+          <SaveProvider>
+            <Providers>
+              <GameFrame>{children}</GameFrame>
+            </Providers>
+          </SaveProvider>
         </I18nProvider>
       </body>
     </html>

@@ -13,7 +13,12 @@ function WorldLoading() {
   const { t } = useI18n();
   return <div className="pixel blink" style={{ display: "grid", placeItems: "center", height: "100%", fontSize: 12 }}>{t("world.loading")}</div>;
 }
-import type { WorldView } from "@/lib/repo";
+import type { LanguageView } from "@/lib/repo";
+import { RequireSave, useSave } from "@/components/save/SaveProvider";
+import { PlayerChip } from "@/components/save/PlayerChip";
+import { levelProgress } from "@/lib/game-rules";
+import { markLanded, worldState, type WorldContent } from "@/lib/save/progress";
+import type { SaveData } from "@/lib/save/schema";
 import { fx } from "@/lib/fx";
 import { music, sfx } from "@/lib/sfx";
 
@@ -22,14 +27,27 @@ const WorldMap3D = dynamic(() => import("./WorldMap3D").then((m) => m.WorldMap3D
   loading: () => <WorldLoading />,
 });
 
-export function WorldClient({ world }: { world: WorldView }) {
+type Content = WorldContent & { language: LanguageView };
+
+export function WorldClient({ content }: { content: Content }) {
+  return <RequireSave>{(save) => <World content={content} save={save} />}</RequireSave>;
+}
+
+function World({ content, save }: { content: Content; save: SaveData }) {
   const router = useRouter();
   const portrait = useOrientation() === "portrait";
   const { t, tx } = useI18n();
-  const { regions, player, language } = world;
+  const { commit } = useSave();
+  const language = content.language;
+  const guide = language.planet.guide;
+  const world = useMemo(() => worldState(content, save.langs[language.slug]), [content, save, language.slug]);
+  const { regions } = world;
+  const lp = levelProgress(save.stats.xp);
+  const player = { level: lp.level, levelCurrent: lp.current, levelNeeded: lp.needed, coins: save.stats.coins, streak: save.stats.streak };
   const lastUnlocked = Math.max(0, regions.reduce((acc, r, i) => (r.unlocked ? i : acc), 0));
   const [selected, setSelected] = useState(lastUnlocked);
-  const [showIntro, setShowIntro] = useState(world.isNew);
+  const [showIntro, setShowIntro] = useState(!save.langs[language.slug]?.landedAt);
+  const closeIntro = () => { setShowIntro(false); void commit(markLanded(save, language.slug)); };
   const panel = useRef<HTMLDivElement>(null);
   const nextRef = useRef<HTMLButtonElement>(null);
   const region = regions[selected];
@@ -73,9 +91,9 @@ export function WorldClient({ world }: { world: WorldView }) {
     <div className="screen">
       {/* HUD */}
       <header style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 16px", flexWrap: "wrap", zIndex: 2 }}>
-        <Link href="/" className="btn small" onClick={() => sfx.select()}>◀ {language.name}</Link>
+        <Link href="/galaxy" className="btn small" onClick={() => sfx.select()}>{t("world.toGalaxy")}</Link>
+        <PlayerChip />
         <div className="pixel" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 10 }}>
-          <span style={{ color: "var(--gold)" }}>{t("common.level")} {player.level}</span>
           <div style={{ width: 90, height: 8, background: "var(--p1)", boxShadow: "0 0 0 2px var(--p3)" }} title={`${player.levelCurrent}/${player.levelNeeded} XP`}>
             <div style={{ width: `${pct}%`, height: "100%", background: "var(--good)" }} />
           </div>
@@ -113,7 +131,7 @@ export function WorldClient({ world }: { world: WorldView }) {
         {region.status === "soon" ? (
           <div className="box dark" style={{ padding: 20, display: "flex", gap: 16, alignItems: "center" }}>
             <Sprite name="lock" size={40} />
-            <p style={{ fontSize: 19 }}>{t("world.soonRegion")}</p>
+            <p style={{ fontSize: 19 }}>{t("world.soonRegion", { name: tx(guide.name) })}</p>
           </div>
         ) : !region.unlocked ? (
           <div className="box dark" style={{ padding: 20, display: "flex", gap: 16, alignItems: "center" }}>
@@ -159,16 +177,16 @@ export function WorldClient({ world }: { world: WorldView }) {
         <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.7)", display: "grid", placeItems: "center", zIndex: 600, padding: 16 }}>
           <div className="box dark" style={{ padding: 24, maxWidth: 520, display: "flex", flexDirection: "column", gap: 16 }}>
             <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-              <Sprite name="master" size={72} />
+              <Sprite name={guide.sprite} size={72} />
               <div>
-                <div className="pixel" style={{ fontSize: 11, color: "var(--gold)", marginBottom: 6 }}>{tx({ en: "FERRO", es: "FERRO", ja: "フェロ" })}</div>
-                <p style={{ fontSize: 19 }}>{t("world.welcome", { lang: language.name })}</p>
+                <div className="pixel" style={{ fontSize: 11, color: "var(--gold)", marginBottom: 6 }}>{tx(guide.name).toUpperCase()}</div>
+                <p style={{ fontSize: 19 }}>{t("world.landing", { planet: tx(language.planet.name), player: save.player.name, guide: tx(guide.name), lang: language.name })}</p>
               </div>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <button className="btn primary" onClick={() => { setShowIntro(false); start(regions[0].lessons[0].slug); }}>{t("world.newbie")}</button>
-              <button className="btn" onClick={() => { sfx.start(); router.push(`/play/${language.slug}/exam`); }}>{t("world.knowSome")}</button>
-              <button className="btn small" onClick={() => { sfx.select(); setShowIntro(false); }}>{t("world.justLook")}</button>
+              <button className="btn primary" onClick={() => { closeIntro(); start(regions[0].lessons[0].slug); }}>{t("world.newbie")}</button>
+              <button className="btn" onClick={() => { sfx.start(); closeIntro(); router.push(`/play/${language.slug}/exam`); }}>{t("world.knowSome")}</button>
+              <button className="btn small" onClick={() => { sfx.select(); closeIntro(); }}>{t("world.justLook")}</button>
             </div>
           </div>
         </div>

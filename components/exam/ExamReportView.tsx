@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import gsap from "gsap";
 import { fx, wait } from "@/lib/fx";
-import type { ExamReport } from "@/lib/repo";
+import type { ExamReport } from "@/lib/save/progress";
 import { music, sfx } from "@/lib/sfx";
 import { useOrientation } from "@/components/ui/GameFrame";
 import { useI18n } from "@/components/ui/I18n";

@@ -11,6 +11,9 @@ import type { ExamSummary, LanguageView } from "@/lib/repo";
 import { fx } from "@/lib/fx";
 import { music, sfx } from "@/lib/sfx";
 import { useI18n } from "@/components/ui/I18n";
+import { RequireSave } from "@/components/save/SaveProvider";
+import { PlayerChip } from "@/components/save/PlayerChip";
+import type { SaveData } from "@/lib/save/schema";
 
 const LEVEL: Record<string, { label: "exam.junior" | "exam.mid" | "exam.senior"; sprite: SpriteName; color: string }> = {
   junior: { label: "exam.junior", sprite: "slime", color: "var(--good)" },
@@ -18,10 +21,15 @@ const LEVEL: Record<string, { label: "exam.junior" | "exam.mid" | "exam.senior";
   senior: { label: "exam.senior", sprite: "dragon", color: "var(--red)" },
 };
 
-export function ExamHub({ language, exams }: { language: LanguageView; exams: ExamSummary[] }) {
+export function ExamHub(props: { language: LanguageView; exams: ExamSummary[] }) {
+  return <RequireSave>{(save) => <Hub {...props} save={save} />}</RequireSave>;
+}
+
+function Hub({ language, exams, save }: { language: LanguageView; exams: ExamSummary[]; save: SaveData }) {
   const router = useRouter();
   const portrait = useOrientation() === "portrait";
   const { t, tx } = useI18n();
+  const rec = (slug: string) => save.langs[language.slug]?.exams[slug];
 
   useEffect(() => {
     music.play("map");
@@ -40,6 +48,7 @@ export function ExamHub({ language, exams }: { language: LanguageView; exams: Ex
     <div className="screen">
       <header style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 16px" }}>
         <Link href={`/play/${language.slug}`} className="btn small" onClick={() => sfx.select()}>{t("common.backToMap")}</Link>
+        <PlayerChip />
         <div style={{ flex: 1 }} />
         <Settings />
       </header>
@@ -64,8 +73,8 @@ export function ExamHub({ language, exams }: { language: LanguageView; exams: Ex
                 <div className="pixel" style={{ fontSize: 9, lineHeight: 2, color: "var(--p2)" }}>
                   {t("exam.meta1", { count: e.count, secs: e.secondsPerQuestion })}<br />{t("exam.meta2", { pct: e.passPct, bank: e.bankSize })}
                 </div>
-                <div className="pixel" style={{ fontSize: 9, minHeight: 14, color: e.best?.passed ? "var(--good)" : "var(--p2)" }}>
-                  {e.best ? t("exam.best", { pct: e.best.pct, passed: e.best.passed ? t("exam.passedTag") : "", n: e.attempts }) : t("exam.noAttempts")}
+                <div className="pixel" style={{ fontSize: 9, minHeight: 14, color: rec(e.slug)?.passed ? "var(--good)" : "var(--p2)" }}>
+                  {rec(e.slug) ? t("exam.best", { pct: rec(e.slug)!.bestPct, passed: rec(e.slug)!.passed ? t("exam.passedTag") : "", n: rec(e.slug)!.attempts }) : t("exam.noAttempts")}
                 </div>
                 <button className="btn primary" onClick={(ev) => start(e.slug, ev.currentTarget)} onMouseEnter={() => sfx.hover()}>
                   {t("exam.start")}
