@@ -36,6 +36,7 @@ Scriptara has three framework moons: Reactia (React, guide Orbi), Shadera (WebGL
 - **The guide** is the planet's teacher and voice: it speaks the lesson dialogs, explains every mistake and greets the player on the first landing with three choices: start from scratch, take the entry exam, or just look at the map.
 - **The bugs** are the language's classic mistakes as monsters (dangling references, deadlocks, leaks...). They are the lesson enemies, and the planet card shows them before landing.
 - **The galaxy card** shows the guide, the story, the bugs, the player's progress on that planet and the LAND button. Planets that are not playable yet are shown dimmed and locked.
+- **Choosing where to land.** Swipes (or ◀ ▶ and the arrow keys) move between planets. Tapping a planet or one of its moons, the LAND button or Enter dims the screen and opens a "Where to land?" modal listing the planet and each framework moon (guide, name, language or framework, progress). Highlighting a card previews it: the camera moves to that moon, which keeps orbiting, and the card below shows its guide, story and bugs. Choosing one closes the modal, lifts the dim and starts the landing dive. Esc or a tap outside closes it without landing. Framework moons show a floating name tag while their planet is selected.
 - Guides and bugs are original designs inspired by each language, not official mascots.
 
 ## Memory card
