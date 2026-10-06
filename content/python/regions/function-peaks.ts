@@ -1,4 +1,4 @@
-import type { Beat, LessonDef, RegionDef, Text } from "../../../lib/content/types.ts";
+import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
 
 // REGION 3 · FUNCTION PEAKS (functions and arguments, scope and closures, decorators, exceptions).
@@ -14,7 +14,125 @@ const code = (...lines: string[]) => lines.join("\n");
 const PRINT = L("What does it print?", "¿Qué imprime?", "何が表示される？");
 const HAPPENS = L("What happens?", "¿Qué pasa?", "どうなる？");
 
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example; the validator checks `output` against the real interpreter. */
+const ex = (src: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code: src, output, caption });
+/** An example that must raise a SyntaxError (verified too). */
+const bad = (src: string, caption: Text): NoteBlock => ({ t: "code", code: src, caption, check: { compiles: false } });
+/** An example that runs and then crashes with the given exception (verified too). */
+const boom = (src: string, throws: string, caption: Text): NoteBlock => ({ t: "code", code: src, caption, check: { compiles: true, throws } });
+
 // ─── 3.1 Spell keys: functions and arguments ────────────────────────────────
+const defReturnNote = note("def-return", L("def, return and None", "def, return y None", "def と return と None"),
+  p(
+    "A function is a named recipe. def name(parameters): starts it, and the indented lines below are its body. The body does not run when def runs: it runs every time you CALL the function with parentheses, like name(3). The values you pass fill the parameters in order.",
+    "Una función es una receta con nombre. def nombre(parámetros): la empieza, y las líneas indentadas debajo son su cuerpo. El cuerpo no se ejecuta cuando corre def: se ejecuta cada vez que LLAMAS a la función con paréntesis, como nombre(3). Los valores que pasas llenan los parámetros en orden.",
+    "関数は名前つきのレシピ。def 名前(引数): で始め、その下の字下げした行が本体だよ。def の時点では本体は動かない。名前(3) のようにかっこをつけて呼ぶたびに動く。わたした値は順番に引数へ入るよ。",
+  ),
+  ex(code("def area(w, h):", "    return w * h", "print(area(3, 4))", "print(area(2, 5))"), "12\n10",
+    L("One recipe, two calls with different values", "Una receta, dos llamadas con valores distintos", "1つのレシピを、ちがう値で2回呼ぶ")),
+  p(
+    "return hands a value back to the caller and ends the function right there. print only shows text on the screen; it hands nothing back. A function that ends without return gives back None, Python's \"nothing here\" value. So printing inside a function is not the same as returning.",
+    "return devuelve un valor a quien llamó y termina la función ahí mismo. print solo muestra texto en pantalla; no devuelve nada. Una función que termina sin return devuelve None, el \"aquí no hay nada\" de Python. Imprimir dentro de una función no es lo mismo que devolver.",
+    "return は呼んだ側に値を返し、その場で関数を終える。print は画面に表示するだけで、何も返さない。return なしで終わる関数は None（Pythonの「何もない」）を返す。中で print するのと return するのは別物だよ。",
+  ),
+  ex(code("def tell(msg):", '    print("says:", msg)', 'out = tell("hey")', "print(out is None)"), "says: hey\nTrue",
+    L("tell prints, but its call gives back None", "tell imprime, pero su llamada devuelve None", "tell は表示するが、呼び出しの結果は None")),
+  p(
+    "return a, b looks like two values, but the comma builds ONE tuple. You can unpack it straight into names: lo, hi = f(). lambda makes a tiny function in one expression, lambda params: expression, with no name and no return keyword: the expression's value comes back automatically. It can have defaults, like a def.",
+    "return a, b parece devolver dos valores, pero la coma arma UNA tupla. Puedes desempacarla directo en nombres: lo, hi = f(). lambda crea una función diminuta en una expresión, lambda params: expresión, sin nombre ni return: el valor de la expresión se devuelve solo. Puede tener valores por defecto, como un def.",
+    "return a, b は2つの値に見えるが、カンマで1つのタプルを作っている。lo, hi = f() のように名前へ分けて受け取れる。lambda は式1つの小さな関数。lambda 引数: 式 と書き、名前も return もなく、式の値が自動で返る。def と同じくデフォルト値も使えるよ。",
+  ),
+  ex(code("def min_max(nums):", "    return min(nums), max(nums)", "lo, hi = min_max([8, 2, 6])", "print(lo, hi)", "cube = lambda n: n ** 3", "print(cube(2))"), "2 8\n8",
+    L("A tuple unpacked into two names, and a lambda", "Una tupla desempacada en dos nombres, y una lambda", "2つの名前に分けたタプルと lambda")),
+  p(
+    "Common mistake: printing a result inside a function and then expecting the call to hold it. If someone needs the value later, return it. Another: unpacking into the wrong number of names, like a, b, c = f() when f returns two items, raises ValueError.",
+    "Error común: imprimir un resultado dentro de la función y luego esperar que la llamada lo contenga. Si alguien necesita el valor después, devuélvelo. Otro: desempacar en un número equivocado de nombres, como a, b, c = f() cuando f devuelve dos elementos, lanza ValueError.",
+    "よくあるミス：関数の中で結果を print して、呼び出しにその値があると思うこと。あとで値が要るなら return しよう。もう1つ：f が2つ返すのに a, b, c = f() のように数が合わないと ValueError になるよ。",
+  ),
+);
+
+const argumentsNote = note("arguments", L("Defaults and keyword arguments", "Argumentos por defecto y con nombre", "デフォルト値とキーワード引数"),
+  p(
+    "A parameter written as name=value has a default: if the caller leaves it out, the default is used; if the caller passes a value, that value wins. Parameters with defaults go after the ones without, so Python can tell which is which.",
+    "Un parámetro escrito como nombre=valor tiene un valor por defecto: si quien llama lo omite, se usa el defecto; si pasa un valor, gana ese valor. Los parámetros con defecto van después de los que no lo tienen, para que Python sepa cuál es cuál.",
+    "名前=値 と書いた引数にはデフォルト値がある。呼ぶ側が省略すればデフォルトが使われ、値をわたせばその値が勝つ。デフォルトつきの引数は、なしの引数のあとに並べるよ。",
+  ),
+  p(
+    "Keyword arguments name the parameter in the call: f(size=2, name=\"x\"). They match by NAME, so their order does not matter. You can mix both styles, but positional arguments must come first. Naming arguments makes calls easier to read, especially for flags like fast=True.",
+    "Los argumentos con nombre nombran el parámetro en la llamada: f(size=2, name=\"x\"). Se emparejan por NOMBRE, así que su orden no importa. Puedes mezclar ambos estilos, pero los posicionales van primero. Nombrar argumentos hace las llamadas más legibles, sobre todo en banderas como fast=True.",
+    "キーワード引数は呼び出しで引数の名前を書く：f(size=2, name=\"x\")。名前で対応するので順番は関係ない。位置引数と混ぜてもよいが、位置引数が先。fast=True のような旗は名前つきだと読みやすいよ。",
+  ),
+  ex(code("def greet(name, greeting=\"hello\"):", '    return f"{greeting}, {name}"', 'print(greet("Kai"))', 'print(greet("Kai", "hey"))', 'print(greet(greeting="yo", name="Mo"))'), "hello, Kai\nhey, Kai\nyo, Mo",
+    L("Default used, default replaced, and names in any order", "Defecto usado, defecto reemplazado y nombres en cualquier orden", "デフォルト使用、上書き、名前なら順不同")),
+  p(
+    "A signature can force a style. Parameters after a bare * are keyword-only: callers MUST write their name. Parameters before a / are positional-only: callers can NOT name them. The def itself is fine either way; breaking the rule shows up when the call runs, as a TypeError.",
+    "Una firma puede imponer un estilo. Los parámetros después de un * suelto son solo por nombre: quien llama DEBE escribir su nombre. Los que van antes de una / son solo posicionales: NO se pueden nombrar. El def está bien en ambos casos; romper la regla aparece al ejecutar la llamada, como TypeError.",
+    "引数の書き方は強制できる。単独の * より後ろはキーワード専用で、名前を必ず書く。/ より前は位置専用で、名前は書けない。def 自体は問題なく、ルールを破ると呼び出しの実行時に TypeError になるよ。",
+  ),
+  boom(code("def scale(v, /, factor=2):", "    return v * factor", "print(scale(5))", "print(scale(v=5))"), "TypeError",
+    L("Prints 10, then TypeError: v is positional-only", "Imprime 10 y luego TypeError: v es solo posicional", "10 を表示し、そのあと TypeError：v は位置専用")),
+  p(
+    "Common mistakes: thinking keyword arguments must follow the order of the def (they don't), and putting a positional argument after a keyword one, like f(a=1, 2), which is a SyntaxError.",
+    "Errores comunes: creer que los argumentos con nombre deben seguir el orden del def (no hace falta) y poner un posicional después de uno con nombre, como f(a=1, 2), que es un SyntaxError.",
+    "よくあるミス：キーワード引数も def の順に書くべきだと思うこと（不要）。f(a=1, 2) のように名前つきのあとに位置引数を置くこと。これは SyntaxError だよ。",
+  ),
+);
+
+const starArgsNote = note("star-args", L("*args and **kwargs", "*args y **kwargs", "*args と **kwargs"),
+  p(
+    "A parameter with one star, like *args, collects all the extra positional arguments into a TUPLE. Two stars, like **kwargs, collect the extra keyword arguments into a DICT that maps each name (as a string) to its value. The names args and kwargs are only a convention: the stars do the work.",
+    "Un parámetro con una estrella, como *args, junta todos los argumentos posicionales extra en una TUPLA. Dos estrellas, como **kwargs, juntan los argumentos con nombre extra en un DICT que asocia cada nombre (como texto) con su valor. Los nombres args y kwargs son solo convención: las estrellas hacen el trabajo.",
+    "星1つの *args は、余った位置引数をすべてタプルに集める。星2つの **kwargs は、余ったキーワード引数を「名前（文字列）→値」の辞書に集める。args や kwargs という名前はただの慣習で、働くのは星だよ。",
+  ),
+  ex(code("def report(*nums, **opts):", "    print(nums)", "    print(opts)", 'report(4, 5, 6, unit="m")'), "(4, 5, 6)\n{'unit': 'm'}",
+    L("Positional extras form a tuple, named extras a dict", "Los extra posicionales forman una tupla; los con nombre, un dict", "位置の余りはタプル、名前つきの余りは辞書")),
+  p(
+    "It is always a tuple, even with no extra arguments (an empty tuple) or just one. Inside the function you use it like any tuple: len(args), args[0], a for loop, sum(args). The stars work the other way in a call too: f(*items) spreads a list into positional arguments, and f(**options) spreads a dict into keyword ones.",
+    "Siempre es una tupla, incluso sin argumentos extra (tupla vacía) o con uno solo. Dentro de la función la usas como cualquier tupla: len(args), args[0], un for, sum(args). Las estrellas también funcionan al revés en una llamada: f(*items) reparte una lista como posicionales y f(**options) reparte un dict como argumentos con nombre.",
+    "余りが0個（空のタプル）でも1個でも、必ずタプルになる。中では len(args)、args[0]、for、sum(args) など普通のタプルとして使う。呼び出し側でも星は使える：f(*items) はリストを位置引数に、f(**options) は辞書をキーワード引数に広げるよ。",
+  ),
+  ex(code("def add3(a, b, c):", "    return a + b + c", "vals = [1, 10, 100]", "print(add3(*vals))"), "111",
+    L("A star in the call spreads the list into a, b and c", "Una estrella en la llamada reparte la lista en a, b y c", "呼び出しの星でリストが a, b, c に広がる")),
+  p(
+    "Rule to remember: one star means positional, packed as a tuple; two stars mean keyword, packed as a dict. Common mistakes: forgetting the star (then the parameter is one ordinary argument) and expecting *args to be a list, so calling args.append fails.",
+    "Regla para recordar: una estrella significa posicional, empacado en tupla; dos estrellas significan con nombre, empacado en dict. Errores comunes: olvidar la estrella (entonces el parámetro es un argumento normal) y esperar que *args sea una lista, así que args.append falla.",
+    "覚え方：星1つは位置引数でタプル、星2つはキーワード引数で辞書。よくあるミス：星を忘れる（ただの1つの引数になる）、*args をリストだと思って args.append を呼んで失敗する。",
+  ),
+);
+
+const mutableDefaultNote = note("mutable-default", L("The mutable default trap", "La trampa del valor por defecto mutable", "変更できるデフォルト値のワナ"),
+  p(
+    "Default values are built ONCE, when the def line runs, not each time you call the function. For numbers and strings that is harmless, because they can't change. But a list, dict or set used as a default is one single object, kept by the function and shared by every call that leaves that argument out.",
+    "Los valores por defecto se crean UNA vez, cuando corre la línea def, no en cada llamada. Con números y textos no pasa nada, porque no pueden cambiar. Pero una lista, dict o set usado como defecto es un único objeto, guardado por la función y compartido por todas las llamadas que omiten ese argumento.",
+    "デフォルト値は def の行が動いたときに1回だけ作られ、呼ぶたびには作られない。数や文字列は変わらないので問題ない。だがリスト・辞書・集合をデフォルトにすると、それは関数が持つ1つのオブジェクトで、省略したすべての呼び出しで共有されるよ。",
+  ),
+  ex(code("def tally(key, counts={}):", "    counts[key] = counts.get(key, 0) + 1", "    return counts", 'tally("x")', 'print(tally("y"))'), "{'x': 1, 'y': 1}",
+    L("The second call still sees the first call's key", "La segunda llamada aún ve la clave de la primera", "2回目の呼び出しにも1回目のキーが残っている")),
+  p(
+    "Why? def is a statement that runs once and stores the defaults on the function object. Every call that omits the argument reuses that stored object, so changes like append or item assignment pile up. A call that passes its own list is not affected: it uses the list you passed.",
+    "¿Por qué? def es una instrucción que se ejecuta una vez y guarda los valores por defecto en el objeto función. Cada llamada que omite el argumento reutiliza ese objeto guardado, así que cambios como append o asignar claves se acumulan. Una llamada que pasa su propia lista no se ve afectada: usa la que pasaste.",
+    "なぜか？def は1回だけ動く文で、デフォルト値を関数オブジェクトにしまう。省略した呼び出しはみな、しまってある同じオブジェクトを使うので、append などの変更が積み重なる。自分でリストをわたした呼び出しは、そのリストを使うので影響を受けないよ。",
+  ),
+  p(
+    "The fix is the None sentinel: use None as the default, then build a fresh object inside the body with if x is None: x = []. That line runs on every call, so each call that omits the argument gets a brand new container.",
+    "La solución es el centinela None: usa None como defecto y crea un objeto nuevo dentro del cuerpo con if x is None: x = []. Esa línea se ejecuta en cada llamada, así que cada llamada que omite el argumento recibe un contenedor nuevo.",
+    "直し方は None を目印に使うこと。デフォルトを None にして、本体で if x is None: x = [] と新しく作る。この行は毎回動くので、省略した呼び出しのたびに新しい入れ物ができるよ。",
+  ),
+  ex(code("def tally(key, counts=None):", "    if counts is None:", "        counts = {}", "    counts[key] = counts.get(key, 0) + 1", "    return counts", 'tally("x")', 'print(tally("y"))'), "{'y': 1}",
+    L("Each call that omits counts builds its own dict", "Cada llamada que omite counts crea su propio dict", "counts を省略するたびに新しい辞書を作る")),
+  p(
+    "Common mistake: writing if not counts: instead of if counts is None:. An empty dict or list is also falsy, so a caller who passes an empty one on purpose would get it silently replaced. Test for None with is.",
+    "Error común: escribir if not counts: en vez de if counts is None:. Un dict o lista vacíos también son falsos, así que si alguien pasa uno vacío a propósito, se reemplazaría sin aviso. Comprueba None con is.",
+    "よくあるミス：if counts is None: のかわりに if not counts: と書くこと。空の辞書やリストも偽なので、わざと空のものをわたした人の入れ物が黙って置きかわる。None は is で確かめよう。",
+  ),
+);
+
+const functionsNotes: NoteDef[] = [defReturnNote, argumentsNote, starArgsNote, mutableDefaultNote];
+
 const functions: LessonDef = {
   slug: "functions-and-arguments",
   title: L("Spell keys", "Llaves de hechizo", "呪文のカギ"),
@@ -23,6 +141,7 @@ const functions: LessonDef = {
   xp: 70,
   enemy: "python/mutable-mimic",
   enemyName: L("MIMIC BAG", "BOLSA MÍMICA", "ミミックぶくろ"),
+  notes: functionsNotes,
   beats: [
     say(L(
       "Welcome to Function Peaks! def builds a FUNCTION: a spell key. Give it arguments, and return hands a value back.",
@@ -41,6 +160,8 @@ const functions: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("Check which calls leave amount out, and remember keyword arguments match by name, not position.", "Mira qué llamadas omiten amount y recuerda que los argumentos con nombre se emparejan por nombre, no por posición.", "amount を省略した呼び出しはどれ？キーワード引数は位置でなく名前で対応するよ。"),
+      note: "arguments",
       prompt: PRINT,
       code: code("def heal(hp, amount=5):", "    return hp + amount", "print(heal(10), heal(10, 1), heal(amount=2, hp=1))"),
       options: ["15 11 3", "15 11 7", "15 6 3"],
@@ -61,6 +182,8 @@ const functions: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("Printing and returning are different. What does a function hand back when it has no return?", "Imprimir y devolver son distintos. ¿Qué devuelve una función que no tiene return?", "表示と return は別物。return のない関数は何を返す？"),
+      note: "def-return",
       prompt: PRINT,
       code: code("def shout():", '    print("hi")', "r = shout()", "print(r)"),
       options: ["hi None", "hi hi", "None"],
@@ -82,6 +205,8 @@ const functions: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("One star packs extra positional arguments; two stars pack the named ones. Which container does each use?", "Una estrella empaca los posicionales extra; dos, los que tienen nombre. ¿Qué contenedor usa cada una?", "星1つは余った位置引数、星2つは名前つき引数を集める。それぞれ何の入れ物？"),
+      note: "star-args",
       prompt: PRINT,
       code: code("def total(*args, **kwargs):", "    return args, kwargs", "print(total(1, 2, x=3))"),
       options: ["((1, 2), {'x': 3})", "([1, 2], {'x': 3})", "((1, 2, 3), {})"],
@@ -97,6 +222,8 @@ const functions: LessonDef = {
     },
     {
       kind: "type",
+      hint: L("You need the prefix that packs every positional argument into one tuple. How many stars is that?", "Necesitas el prefijo que empaca todos los posicionales en una tupla. ¿Cuántas estrellas son?", "位置引数を全部1つのタプルに集める記号が要る。星はいくつ？"),
+      note: "star-args",
       prompt: L("Gather every argument", "Junta todos los argumentos", "引数をぜんぶ集めよう"),
       code: code("def total(___args):", "    return sum(args)", "print(total(1, 2, 3))"),
       answer: "*",
@@ -127,6 +254,8 @@ const functions: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("When is the default [] created: once at def, or on every call? Both calls leave bag out.", "¿Cuándo se crea el [] por defecto: una vez en el def o en cada llamada? Ambas llamadas omiten bag.", "デフォルトの [] はいつ作られる？def のとき1回？毎回？どちらの呼び出しも bag を省略しているよ。"),
+      note: "mutable-default",
       prompt: PRINT,
       code: code("def add_item(item, bag=[]):", "    bag.append(item)", "    return bag", 'add_item("gem")', 'print(add_item("key"))'),
       options: ["['gem', 'key']", "['key']", "['gem']"],
@@ -142,6 +271,8 @@ const functions: LessonDef = {
     },
     {
       kind: "pick",
+      hint: L("Read the body: it checks for one special marker and builds a new list when it sees it.", "Lee el cuerpo: busca un marcador especial y crea una lista nueva cuando lo ve.", "本体を読もう。ある特別な目印を調べて、見つけたら新しいリストを作っているよ。"),
+      note: "mutable-default",
       prompt: L("Pick the safe default", "Elige el valor seguro", "安全なデフォルトは？"),
       code: code("def add_item(item, bag=___):", "    if bag is None:", "        bag = []", "    bag.append(item)", "    return bag", 'add_item("gem")', 'print(add_item("key"))'),
       options: ["None", "[]"],
@@ -161,6 +292,8 @@ const functions: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("Find the bare * in the signature. How must the parameters after it be passed?", "Busca el * suelto en la firma. ¿Cómo deben pasarse los parámetros que van después?", "引数の並びにある単独の * を探そう。その後ろの引数はどうわたす決まり？"),
+      note: "arguments",
       prompt: HAPPENS,
       code: code("def cast(a, /, b, *, c):", "    return a + b + c", "print(cast(1, 2, c=3))", "print(cast(1, 2, 3))"),
       options: [L("6, then TypeError", "6 y luego TypeError", "6 の後 TypeError"), "6 6", L("SyntaxError", "SyntaxError", "SyntaxError")],
@@ -180,6 +313,8 @@ const functions: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("The comma in return 3, 5 builds one object. What kind of object is it?", "La coma en return 3, 5 arma un solo objeto. ¿De qué tipo es?", "return 3, 5 のカンマは1つのオブジェクトを作る。その型は？"),
+      note: "def-return",
       prompt: PRINT,
       code: code("def stats():", "    return 3, 5", "hp, mp = stats()", "print(hp, mp, type(stats()).__name__)"),
       options: ["3 5 tuple", "3 5 list", "(3, 5) None tuple"],
@@ -191,6 +326,8 @@ const functions: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("A lambda returns its expression. The second one is called with one argument, so check its default.", "Una lambda devuelve su expresión. La segunda se llama con un argumento, así que mira su valor por defecto.", "lambda は式の値を返す。2つ目は引数1つで呼ばれるので、デフォルト値を見よう。"),
+      note: "def-return",
       prompt: PRINT,
       code: code("sq = lambda x: x * x", "print(sq(4), (lambda a, b=2: a * b)(3))"),
       options: ["16 6", "16 9", "8 6"],
@@ -202,6 +339,8 @@ const functions: LessonDef = {
     },
     {
       kind: "run",
+      hint: L("The list default is shared by every call. Use a marker default and build the list inside the body.", "La lista por defecto la comparten todas las llamadas. Usa un marcador como defecto y crea la lista en el cuerpo.", "リストのデフォルトは全呼び出しで共有。目印をデフォルトにして本体でリストを作ろう。"),
+      note: "mutable-default",
       prompt: L("Give each hero their own bag", "Dale a cada héroe su propia bolsa", "それぞれに自分の袋を持たせよう"),
       starter: code("def add_loot(item, bag=[]):", "    bag.append(item)", "    return bag", "", 'print("ada:", add_loot("gem"))', 'print("bo:", add_loot("key"))', ""),
       solution: code("def add_loot(item, bag=None):", "    if bag is None:", "        bag = []", "    bag.append(item)", "    return bag", "", 'print("ada:", add_loot("gem"))', 'print("bo:", add_loot("key"))', ""),
@@ -217,6 +356,110 @@ const functions: LessonDef = {
 };
 
 // ─── 3.2 The fog and the backpack: scope and closures ───────────────────────
+const legbNote = note("legb", L("Where Python finds a name: LEGB", "Dónde busca Python un nombre: LEGB", "名前の探し方：LEGB"),
+  p(
+    "When code uses a name, Python searches four places in order: Local (inside the current function), Enclosing (any functions around it), Global (the module's top level) and Built-in (names like print and len). The first place that has the name wins.",
+    "Cuando el código usa un nombre, Python busca en cuatro lugares en orden: Local (dentro de la función actual), Enclosing (las funciones que la rodean), Global (el nivel superior del módulo) y Built-in (nombres como print y len). Gana el primer lugar que tenga el nombre.",
+    "コードが名前を使うと、Pythonは4つの場所を順に探す。Local（今の関数の中）、Enclosing（外側の関数）、Global（モジュールの一番外）、Built-in（print や len など）。最初に見つかった場所が勝つよ。",
+  ),
+  p(
+    "Assigning to a name inside a function creates a NEW local variable, which hides a global with the same name while the function runs. The global itself is untouched: outside the function, the name still means the global value.",
+    "Asignar un nombre dentro de una función crea una variable local NUEVA, que oculta a una global con el mismo nombre mientras corre la función. La global no cambia: fuera de la función, el nombre sigue significando el valor global.",
+    "関数の中で名前に代入すると、新しいローカル変数ができ、関数の実行中は同じ名前のグローバルを隠す。グローバル自体は変わらず、関数の外ではその名前はグローバルの値のままだよ。",
+  ),
+  ex(code('color = "red"', "def paint():", '    color = "blue"', '    print("inside:", color)', "paint()", 'print("outside:", color)'), "inside: blue\noutside: red",
+    L("The local color hides the global one only inside paint", "El color local oculta al global solo dentro de paint", "ローカルの color がグローバルを隠すのは paint の中だけ")),
+  p(
+    "Reading without assigning is different: the function has no local of that name, so Python looks outward. The lookup happens when the function RUNS, not when it is defined, so it sees whatever value the global has at that moment.",
+    "Leer sin asignar es distinto: la función no tiene un local con ese nombre, así que Python busca afuera. La búsqueda ocurre cuando la función SE EJECUTA, no cuando se define, así que ve el valor que tenga la global en ese momento.",
+    "代入せずに読むだけなら話は別。関数にその名前のローカルがないので、Pythonは外を探す。探すのは定義したときではなく実行したときなので、その瞬間のグローバルの値が見えるよ。",
+  ),
+  ex(code('mode = "day"', "def show():", "    return mode", "print(show())", 'mode = "night"', "print(show())"), "day\nnight",
+    L("The same function sees the global's current value", "La misma función ve el valor actual de la global", "同じ関数でも、そのときのグローバルの値が見える")),
+  p(
+    "Common mistake: thinking a function \"freezes\" the globals it reads when def runs. It doesn't; it reads them fresh on every call. Another: expecting an assignment inside a function to change the global. It only creates a local.",
+    "Error común: creer que una función \"congela\" las globales que lee cuando corre def. No lo hace; las lee de nuevo en cada llamada. Otro: esperar que una asignación dentro de una función cambie la global. Solo crea un local.",
+    "よくあるミス：def のときに読むグローバルの値が「固定」されると思うこと。実際は呼ぶたびに読み直す。もう1つ：関数の中の代入でグローバルが変わると思うこと。ローカルができるだけだよ。",
+  ),
+);
+
+const unboundNote = note("unbound-global", L("UnboundLocalError and global", "UnboundLocalError y global", "UnboundLocalError と global"),
+  p(
+    "Python decides which names are local BEFORE the function runs, by scanning its whole body. If a name is assigned anywhere in the function (=, +=, a for loop variable), it is local for the WHOLE function, even on lines above the assignment.",
+    "Python decide qué nombres son locales ANTES de ejecutar la función, revisando todo su cuerpo. Si un nombre se asigna en cualquier parte de la función (=, +=, la variable de un for), es local en TODA la función, incluso en líneas arriba de la asignación.",
+    "Pythonは関数を動かす前に本体全体を見て、どの名前がローカルかを決める。関数のどこかで代入（=、+=、for の変数）があれば、その名前は代入より上の行も含めて関数全体でローカルになるよ。",
+  ),
+  p(
+    "So reading such a name before it gets a value fails with UnboundLocalError: the local exists but is still empty. x += 1 on a global x fails the same way, because += reads x and then assigns it, and the assignment made x local.",
+    "Por eso, leer ese nombre antes de que tenga valor falla con UnboundLocalError: el local existe pero aún está vacío. x += 1 sobre una x global falla igual, porque += lee x y luego la asigna, y esa asignación hizo local a x.",
+    "だから値が入る前にその名前を読むと UnboundLocalError になる。ローカルはあるが、まだ空なんだ。グローバルの x に x += 1 も同じ理由で失敗する。+= は読んでから代入するので、その代入で x がローカルになるからだよ。",
+  ),
+  boom(code("score = 5", "def bonus():", "    print(score)", "    score = 10", "bonus()"), "UnboundLocalError",
+    L("The assignment below makes score local, so the print fails", "La asignación de abajo hace local a score y el print falla", "下の代入で score がローカルになり、print が失敗")),
+  p(
+    "To rebind the module's variable from inside a function, declare it first: global name. From then on, reads and assignments in that function use the module-level variable instead of creating a local.",
+    "Para reasignar la variable del módulo desde una función, declárala primero: global nombre. Desde ahí, las lecturas y asignaciones en esa función usan la variable del módulo en vez de crear un local.",
+    "関数の中からモジュールの変数に代入し直すには、先に global 名前 と宣言する。するとその関数の中の読み書きは、ローカルを作らずモジュールの変数を使うよ。",
+  ),
+  ex(code("total = 0", "def add(n):", "    global total", "    total = total + n", "add(4)", "add(6)", "print(total)"), "10"),
+  p(
+    "Use global sparingly: functions that change module variables are harder to test and reason about. Often it is cleaner to return the new value. Also note that changing an object in place, like items.append(x), is not an assignment, so it needs no global.",
+    "Usa global con moderación: las funciones que cambian variables del módulo son más difíciles de probar y entender. A menudo es más limpio devolver el nuevo valor. Además, cambiar un objeto en su lugar, como items.append(x), no es una asignación, así que no necesita global.",
+    "global はほどほどに。モジュールの変数を変える関数はテストも理解も難しくなる。新しい値を return するほうがすっきりすることが多い。なお items.append(x) のように中身を変えるのは代入ではないので global は要らないよ。",
+  ),
+);
+
+const closuresNote = note("closures", L("Closures and nonlocal", "Closures y nonlocal", "クロージャと nonlocal"),
+  p(
+    "A function defined inside another can use the outer function's variables. If the inner function is returned, it keeps those variables alive even after the outer function has finished. That bundle of function plus remembered variables is called a closure.",
+    "Una función definida dentro de otra puede usar las variables de la función externa. Si la interna se devuelve, mantiene vivas esas variables incluso después de que la externa terminó. Ese paquete de función más variables recordadas se llama closure.",
+    "関数の中で作った関数は、外側の関数の変数を使える。内側の関数を return すると、外側が終わったあともその変数を生かしておく。この「関数＋覚えている変数」のセットをクロージャというよ。",
+  ),
+  ex(code("def make_greeter(word):", "    def greet(name):", '        return word + ", " + name', "    return greet", 'hi = make_greeter("Hi")', 'yo = make_greeter("Yo")', 'print(hi("Sam"), yo("Sam"))'), "Hi, Sam Yo, Sam",
+    L("Each call to make_greeter makes a closure with its own word", "Cada llamada a make_greeter crea un closure con su propio word", "make_greeter を呼ぶたびに、自分の word を持つクロージャができる")),
+  p(
+    "Each call to the outer function creates fresh variables, so every closure it returns has its own private copy. Reading an outer variable needs nothing special. But ASSIGNING to it would create a local in the inner function, the same rule as with globals.",
+    "Cada llamada a la función externa crea variables nuevas, así que cada closure que devuelve tiene su propia copia privada. Leer una variable externa no requiere nada especial. Pero ASIGNARLA crearía un local en la función interna, la misma regla que con las globales.",
+    "外側の関数を呼ぶたびに新しい変数ができるので、返されるクロージャはそれぞれ自分専用の変数を持つ。外の変数を読むだけなら何も要らない。でも代入すると、グローバルと同じルールで内側にローカルができてしまうよ。",
+  ),
+  p(
+    "nonlocal name tells Python: this name belongs to the enclosing function, so update that one. It is the closure version of global. global would look at the module instead, which is wrong when the variable lives in a function.",
+    "nonlocal nombre le dice a Python: este nombre pertenece a la función que me rodea, así que actualiza ese. Es la versión de global para closures. global buscaría en el módulo, lo cual está mal si la variable vive en una función.",
+    "nonlocal 名前 は「この名前は外側の関数のもの。そちらを更新して」という宣言。クロージャ版の global だね。global だとモジュールを見に行くので、変数が関数の中にある場合はまちがいだよ。",
+  ),
+  ex(code("def make_bank():", "    coins = 100", "    def spend(n):", "        nonlocal coins", "        coins -= n", "        return coins", "    return spend", "pay = make_bank()", "pay(30)", "print(pay(20))"), "50",
+    L("spend keeps updating the same coins between calls", "spend sigue actualizando el mismo coins entre llamadas", "spend は呼び出しをまたいで同じ coins を更新する")),
+  p(
+    "Common mistake: forgetting nonlocal and writing coins -= n anyway. Python then treats coins as local to the inner function and raises UnboundLocalError when it tries to read it.",
+    "Error común: olvidar nonlocal y escribir coins -= n de todos modos. Python trata entonces coins como local de la función interna y lanza UnboundLocalError al intentar leerla.",
+    "よくあるミス：nonlocal を忘れて coins -= n と書くこと。Pythonは coins を内側の関数のローカルとみなし、読もうとして UnboundLocalError になるよ。",
+  ),
+);
+
+const lateBindingNote = note("late-binding", L("Late binding in loops", "Enlace tardío en bucles", "ループの遅延バインディング"),
+  p(
+    "A closure remembers the VARIABLE, not the value it had when the function was created. It looks the value up only when it is called. Usually that is what you want, but it surprises people in loops.",
+    "Un closure recuerda la VARIABLE, no el valor que tenía cuando se creó la función. Busca el valor solo cuando se llama. Normalmente eso es lo que quieres, pero sorprende en los bucles.",
+    "クロージャが覚えているのは変数そのもので、作った瞬間の値ではない。値を調べるのは呼ばれたときだけ。ふつうはそれで良いが、ループの中では驚きのもとになるよ。",
+  ),
+  p(
+    "Every function created inside a loop shares the ONE loop variable. If they are called after the loop has finished, they all read its final value. A list comprehension has the same effect: it has its own scope, but all the lambdas inside share its single variable.",
+    "Todas las funciones creadas dentro de un bucle comparten la ÚNICA variable del bucle. Si se llaman cuando el bucle ya terminó, todas leen su valor final. Una comprensión de lista hace lo mismo: tiene su propio scope, pero todas las lambdas de dentro comparten su única variable.",
+    "ループの中で作った関数は、みな1つのループ変数を共有する。ループが終わってから呼ぶと、全員がその最後の値を読む。リスト内包表記も同じで、専用のスコープはあるが、中の lambda はみな1つの変数を共有するよ。",
+  ),
+  ex(code("makers = []", "for n in [5, 6, 7]:", "    makers.append(lambda: n + 100)", "print([m() for m in makers])"), "[107, 107, 107]",
+    L("All three lambdas read n after the loop, when it is 7", "Las tres lambdas leen n tras el bucle, cuando vale 7", "3つの lambda は、ループ後の n（7）を読む")),
+  p(
+    "The fix is to capture the current value when each function is created. Default values are evaluated at creation time, so lambda n=n: ... stores each value in its own default. A factory function that takes the value as a parameter works too, because each call makes fresh variables.",
+    "La solución es capturar el valor actual cuando se crea cada función. Los valores por defecto se evalúan al crearla, así que lambda n=n: ... guarda cada valor en su propio defecto. Una función fábrica que reciba el valor como parámetro también sirve, porque cada llamada crea variables nuevas.",
+    "直すには、関数を作るときに今の値をつかまえる。デフォルト値は作った時点で評価されるので、lambda n=n: ... ならそれぞれの値が自分のデフォルトに残る。値を引数で受けとる工場関数でもよい。呼ぶたびに新しい変数ができるからだよ。",
+  ),
+  ex(code("makers = []", "for n in [5, 6, 7]:", "    makers.append(lambda n=n: n + 100)", "print([m() for m in makers])"), "[105, 106, 107]",
+    L("The default freezes each value as the lambda is made", "El defecto congela cada valor al crear la lambda", "デフォルトが、作った時点の値を固定する")),
+);
+
+const scopeNotes: NoteDef[] = [legbNote, unboundNote, closuresNote, lateBindingNote];
+
 const scope: LessonDef = {
   slug: "scope-and-closures",
   title: L("The fog and the backpack", "La niebla y la mochila", "霧とリュック"),
@@ -225,6 +468,7 @@ const scope: LessonDef = {
   xp: 75,
   enemy: "python/none-ghost",
   enemyName: L("FOG GHOST", "FANTASMA DE NIEBLA", "キリゴースト"),
+  notes: scopeNotes,
   beats: [
     say(L(
       "Fog rings! Python looks a name up from the inside out: Local, Enclosing, Global, Built-in. LEGB.",
@@ -244,6 +488,8 @@ const scope: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("Assigning inside f creates a name somewhere. Does it touch the module-level x?", "Asignar dentro de f crea un nombre en algún lugar. ¿Toca la x del módulo?", "f の中の代入はどこかに名前を作る。モジュールの x に影響する？"),
+      note: "legb",
       prompt: PRINT,
       code: code('x = "global"', "def f():", '    x = "local"', "    return x", "print(f(), x)"),
       options: ["local global", "local local", "global global"],
@@ -259,6 +505,8 @@ const scope: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("f has no local x, so it reads the global one. When does that read happen: at def or at the call?", "f no tiene x local, así que lee la global. ¿Cuándo ocurre esa lectura: en el def o en la llamada?", "f にローカルの x はないので、グローバルを読む。読むのは def のとき？呼んだとき？"),
+      note: "legb",
       prompt: PRINT,
       code: code("x = 10", "def f():", "    return x", "x = 20", "print(f())"),
       options: ["20", "10", "NameError"],
@@ -279,6 +527,8 @@ const scope: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("+= reads and then assigns. An assignment anywhere in a function makes that name local.", "+= lee y luego asigna. Una asignación en cualquier parte de una función hace local ese nombre.", "+= は読んでから代入する。関数のどこかで代入すると、その名前はローカルになる。"),
+      note: "unbound-global",
       prompt: HAPPENS,
       code: code("count = 0", "def inc():", "    count += 1", "inc()"),
       options: ["UnboundLocalError", L("count becomes 1", "count pasa a 1", "count が 1 になる"), "NameError"],
@@ -293,6 +543,8 @@ const scope: LessonDef = {
     },
     {
       kind: "type",
+      hint: L("count lives at the module's top level. Which keyword declares that a function uses that one?", "count vive en el nivel superior del módulo. ¿Qué palabra clave declara que la función usa ese?", "count はモジュールの一番外にある。関数でそれを使うと宣言するキーワードは？"),
+      note: "unbound-global",
       prompt: L("Use the module's count", "Usa el count del módulo", "モジュールの count を使おう"),
       code: code("count = 0", "def inc():", "    ___ count", "    count += 1", "inc()", "inc()", "print(count)"),
       answer: "global",
@@ -321,6 +573,8 @@ const scope: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("step keeps count between calls, and nonlocal lets it update. Count the calls one by one.", "step conserva count entre llamadas y nonlocal le deja actualizarlo. Cuenta las llamadas una por una.", "step は呼び出しをまたいで count を持ち、nonlocal で更新できる。呼び出しを1つずつ数えよう。"),
+      note: "closures",
       prompt: PRINT,
       code: code("def make_counter():", "    count = 0", "    def step():", "        nonlocal count", "        count += 1", "        return count", "    return step", "c = make_counter()", "c()", "c()", "print(c())"),
       options: ["3", "1", "0"],
@@ -336,6 +590,8 @@ const scope: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("Each call to mult makes a fresh n. Which n does each returned lambda remember?", "Cada llamada a mult crea un n nuevo. ¿Qué n recuerda cada lambda devuelta?", "mult を呼ぶたびに新しい n ができる。返された lambda はそれぞれどの n を覚えている？"),
+      note: "closures",
       prompt: PRINT,
       code: code("def mult(n):", "    return lambda x: x * n", "double = mult(2)", "print(double(5), mult(3)(5))"),
       options: ["10 15", "10 10", "15 15"],
@@ -352,6 +608,8 @@ const scope: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("The lambdas run after the loop. Do they remember i's value, or the variable i itself?", "Las lambdas corren tras el bucle. ¿Recuerdan el valor de i o la variable i misma?", "lambda はループの後で動く。覚えているのは i の値？それとも変数 i そのもの？"),
+      note: "late-binding",
       prompt: PRINT,
       code: code("fns = [lambda: i for i in range(3)]", "print([f() for f in fns])"),
       options: ["[2, 2, 2]", "[0, 1, 2]", "[0, 0, 0]"],
@@ -367,6 +625,8 @@ const scope: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("Defaults are evaluated when each lambda is created. What does i=i store at that moment?", "Los valores por defecto se evalúan al crear cada lambda. ¿Qué guarda i=i en ese momento?", "デフォルト値は各 lambda を作ったときに評価される。その時点で i=i は何をしまう？"),
+      note: "late-binding",
       prompt: PRINT,
       code: code("fns = [lambda i=i: i for i in range(3)]", "print([f() for f in fns])"),
       options: ["[0, 1, 2]", "[2, 2, 2]", "TypeError"],
@@ -382,6 +642,8 @@ const scope: LessonDef = {
     },
     {
       kind: "run",
+      hint: L("count += 1 assigns, so count becomes local to step. Declare that it belongs to the enclosing function.", "count += 1 asigna, así que count se vuelve local de step. Declara que pertenece a la función externa.", "count += 1 は代入なので count は step のローカルになる。外側の関数のものだと宣言しよう。"),
+      note: "closures",
       prompt: L("Fix the counter: it must print count: 2", "Arregla el contador: debe imprimir count: 2", "カウンターを直して count: 2 と表示しよう"),
       starter: code("def make_counter():", "    count = 0", "    def step():", "        count += 1", "        return count", "    return step", "", "c = make_counter()", "c()", 'print("count:", c())', ""),
       solution: code("def make_counter():", "    count = 0", "    def step():", "        nonlocal count", "        count += 1", "        return count", "    return step", "", "c = make_counter()", "c()", 'print("count:", c())', ""),
@@ -397,6 +659,104 @@ const scope: LessonDef = {
 };
 
 // ─── 3.3 Wrapping spells: decorators ────────────────────────────────────────
+const decoratorNote = note("decorator-basics", L("How a decorator wraps a function", "Cómo un decorador envuelve una función", "デコレータが関数を包むしくみ"),
+  p(
+    "In Python, functions are objects: you can pass them as arguments, store them in variables and return them from other functions. A decorator is simply a function that takes a function and returns a new one, usually an inner wrapper that adds something before or after calling the original.",
+    "En Python las funciones son objetos: puedes pasarlas como argumentos, guardarlas en variables y devolverlas desde otras funciones. Un decorador es simplemente una función que recibe una función y devuelve otra nueva, normalmente un wrapper interno que añade algo antes o después de llamar a la original.",
+    "Pythonでは関数もオブジェクト。引数としてわたせるし、変数にしまえるし、別の関数から返せる。デコレータは「関数を受けとって新しい関数を返す関数」にすぎない。ふつうは元の関数を呼ぶ前後に何かを足す内側の wrapper を返すよ。",
+  ),
+  p(
+    "Writing @deco above def f is shorthand for f = deco(f), right after the def. The name f now points to whatever deco returned, typically the wrapper. Calling f(...) runs the wrapper, and the wrapper calls the original it remembers.",
+    "Escribir @deco encima de def f es un atajo de f = deco(f), justo después del def. El nombre f ahora apunta a lo que devolvió deco, normalmente el wrapper. Llamar f(...) ejecuta el wrapper, y el wrapper llama a la original que recuerda.",
+    "def f の上に @deco と書くのは、def の直後に f = deco(f) と書くのと同じ。名前 f は deco が返したもの、ふつうは wrapper を指すようになる。f(...) を呼ぶと wrapper が動き、wrapper が覚えている元の関数を呼ぶよ。",
+  ),
+  ex(code("def twice(fn):", "    def wrapper(x):", "        return fn(fn(x))", "    return wrapper", "@twice", "def inc(x):", "    return x + 1", "print(inc(10))"), "12",
+    L("inc is now the wrapper, which calls the original inc twice", "inc ahora es el wrapper, que llama dos veces al inc original", "inc は wrapper になり、元の inc を2回呼ぶ")),
+  p(
+    "The wrapper decides what the call gives back, so it must return the original's result; if it forgets return, every call gives None. The wrapper also controls order: lines before fn(...) run first, then the original, then lines after. Using *args, **kwargs lets one wrapper fit any function.",
+    "El wrapper decide qué devuelve la llamada, así que debe devolver el resultado de la original; si olvida return, cada llamada da None. El wrapper también controla el orden: las líneas antes de fn(...) van primero, luego la original, luego las de después. Usar *args, **kwargs permite que un wrapper sirva para cualquier función.",
+    "呼び出しの結果は wrapper が決めるので、元の関数の結果を return しないといけない。忘れると毎回 None。順番も wrapper しだいで、fn(...) より前の行、元の関数、後ろの行の順に動く。*args, **kwargs を使えばどんな関数にも合うよ。",
+  ),
+  ex(code("def announce(fn):", "    def wrapper(*args, **kwargs):", '        print("calling", fn.__name__)', "        return fn(*args, **kwargs)", "    return wrapper", "def add(a, b):", "    return a + b", "add = announce(add)", "print(add(2, 3))"), "calling add\n5",
+    L("Decorating by hand, without the @ line", "Decorar a mano, sin la línea @", "@ を使わずに手で包む")),
+  p(
+    "The decorator itself runs ONCE, at def time, when the module loads, not at each call. Code in the decorator's body (outside the wrapper) runs immediately; code inside the wrapper runs on every call. Frameworks use this to register functions, like web routes, the moment they are defined.",
+    "El decorador en sí se ejecuta UNA vez, al correr el def, cuando carga el módulo, no en cada llamada. El código del cuerpo del decorador (fuera del wrapper) corre de inmediato; el de dentro del wrapper corre en cada llamada. Los frameworks lo usan para registrar funciones, como rutas web, en cuanto se definen.",
+    "デコレータ自体は呼び出しのたびではなく、def のとき（モジュール読みこみ時）に1回だけ動く。デコレータ本体（wrapper の外）のコードはすぐ動き、wrapper の中は呼ぶたびに動く。フレームワークはこれで Web のルートなどを定義した瞬間に登録するよ。",
+  ),
+  p(
+    "Common mistakes: forgetting return in the wrapper, and returning wrapper() (calling it right away) instead of wrapper (the function itself).",
+    "Errores comunes: olvidar return en el wrapper, y devolver wrapper() (llamarlo en el acto) en vez de wrapper (la función misma).",
+    "よくあるミス：wrapper の return を忘れること。wrapper（関数そのもの）ではなく wrapper()（その場で呼んだ結果）を返してしまうこと。",
+  ),
+);
+
+const wrapsNote = note("wraps", L("functools.wraps keeps the name", "functools.wraps conserva el nombre", "functools.wraps で名前を残す"),
+  p(
+    "After decoration, the function's name points to the wrapper, so its metadata is the wrapper's too: __name__ is the wrapper's name and __doc__ (the docstring) is the wrapper's, often empty. Logs, error messages, debuggers and help() then show the wrong name.",
+    "Tras decorar, el nombre de la función apunta al wrapper, así que sus metadatos también son del wrapper: __name__ es el nombre del wrapper y __doc__ (el docstring) es el del wrapper, a menudo vacío. Los logs, mensajes de error, depuradores y help() muestran entonces el nombre equivocado.",
+    "デコレートすると、関数の名前は wrapper を指すので、情報も wrapper のものになる。__name__ は wrapper の名前、__doc__（説明文）も wrapper のもので、たいてい空。ログやエラー、デバッガ、help() がまちがった名前を表示してしまうよ。",
+  ),
+  p(
+    "functools.wraps(fn) fixes this. It is itself a decorator that you put on the wrapper: it copies __name__, __doc__ and other details from fn onto the wrapper, and keeps the original in __wrapped__.",
+    "functools.wraps(fn) lo arregla. Es un decorador que se pone sobre el wrapper: copia __name__, __doc__ y otros detalles de fn al wrapper, y guarda la original en __wrapped__.",
+    "functools.wraps(fn) がこれを直す。wrapper の上につけるデコレータで、fn の __name__ や __doc__ などを wrapper に写し、元の関数を __wrapped__ に残すよ。",
+  ),
+  ex(code("import functools", "def quiet(fn):", "    @functools.wraps(fn)", "    def inner(*args):", "        return fn(*args)", "    return inner", "@quiet", "def ping():", '    """Answer pong."""', '    return "pong"', "print(ping.__name__, ping.__doc__)"), "ping Answer pong.",
+    L("With wraps, the decorated function keeps its name and docstring", "Con wraps, la función decorada conserva nombre y docstring", "wraps があれば名前と説明文が残る")),
+  p(
+    "Rule to remember: every wrapper you write gets @functools.wraps(fn) right above its def. Common mistakes: putting it on the outer decorator instead of the inner wrapper, or forgetting to pass fn in the parentheses.",
+    "Regla para recordar: todo wrapper que escribas lleva @functools.wraps(fn) justo encima de su def. Errores comunes: ponerlo sobre el decorador externo en vez del wrapper interno, u olvidar pasar fn entre los paréntesis.",
+    "覚え方：自分で書く wrapper には必ず、その def の真上に @functools.wraps(fn) をつける。よくあるミス：内側の wrapper ではなく外側のデコレータにつけること、かっこに fn をわたし忘れること。",
+  ),
+);
+
+const decoArgsNote = note("decorator-args", L("Decorator arguments and stacking", "Argumentos y apilado de decoradores", "デコレータの引数と重ねがけ"),
+  p(
+    "@tag(\"x\") has parentheses, so Python first CALLS tag(\"x\"), and whatever that returns is used as the decorator. That's why a decorator with arguments has three levels: the outer function takes the settings and returns a decorator; the decorator takes the function and returns a wrapper; the wrapper runs on each call.",
+    "@tag(\"x\") lleva paréntesis, así que Python primero LLAMA a tag(\"x\"), y lo que devuelva se usa como decorador. Por eso un decorador con argumentos tiene tres niveles: la función externa recibe la configuración y devuelve un decorador; el decorador recibe la función y devuelve un wrapper; el wrapper corre en cada llamada.",
+    "@tag(\"x\") にはかっこがあるので、Pythonはまず tag(\"x\") を呼び、その戻り値をデコレータとして使う。だから引数つきデコレータは3段。外側が設定を受けてデコレータを返し、デコレータが関数を受けて wrapper を返し、wrapper が毎回動くよ。",
+  ),
+  ex(code("def prefix(text):", "    def deco(fn):", "        def wrapper(name):", "            return text + fn(name)", "        return wrapper", "    return deco", '@prefix(">> ")', "def label(name):", "    return name.title()", 'print(label("ivy"))'), ">> Ivy",
+    L("prefix(\">> \") returns deco, and deco wraps label", "prefix(\">> \") devuelve deco, y deco envuelve a label", "prefix(\">> \") が deco を返し、deco が label を包む")),
+  p(
+    "Stacked decorators apply from the BOTTOM up: the one closest to def wraps the function first, and the one above wraps that result. When you call the function, the top (outermost) layer runs first, like opening nested boxes from the outside.",
+    "Los decoradores apilados se aplican de ABAJO hacia arriba: el más cercano al def envuelve la función primero, y el de arriba envuelve ese resultado. Al llamar la función, la capa de arriba (la más externa) corre primero, como abrir cajas anidadas desde afuera.",
+    "重ねたデコレータは下から順にかかる。def に一番近いものが先に関数を包み、その上のものがそれをさらに包む。呼ぶときは一番上（一番外側）の層から動く。入れ子の箱を外から開けるイメージだよ。",
+  ),
+  ex(code("def stars(fn):", '    return lambda: "*" + fn() + "*"', "def dashes(fn):", '    return lambda: "-" + fn() + "-"', "@dashes", "@stars", "def word():", '    return "ok"', "print(word())"), "-*ok*-",
+    L("stars wraps first, so dashes ends up on the outside", "stars envuelve primero, así que dashes queda afuera", "stars が先に包むので、dashes が外側になる")),
+  p(
+    "Common mistake: writing @prefix with no parentheses when it expects settings. Then prefix receives the function itself as text, and the result is not a working decorator.",
+    "Error común: escribir @prefix sin paréntesis cuando espera configuración. Entonces prefix recibe la función misma como text, y el resultado no es un decorador que funcione.",
+    "よくあるミス：設定が必要なのに、かっこなしの @prefix と書くこと。すると prefix は text として関数そのものを受けとり、まともなデコレータにならないよ。",
+  ),
+);
+
+const lruNote = note("lru-cache", L("Caching results with lru_cache", "Guardar resultados con lru_cache", "lru_cache で結果を覚える"),
+  p(
+    "functools.lru_cache is a ready-made decorator that remembers results by their arguments. The first call with some arguments runs the body and stores the result; later calls with the same arguments return the stored result WITHOUT running the body at all.",
+    "functools.lru_cache es un decorador listo que recuerda resultados según sus argumentos. La primera llamada con ciertos argumentos ejecuta el cuerpo y guarda el resultado; las siguientes con los mismos argumentos devuelven lo guardado SIN ejecutar el cuerpo.",
+    "functools.lru_cache は、引数ごとに結果を覚える既製のデコレータ。ある引数での最初の呼び出しは本体を動かして結果をしまい、同じ引数の次からは本体を一切動かさずにしまった結果を返すよ。",
+  ),
+  ex(code("from functools import lru_cache", "@lru_cache(maxsize=None)", "def slow_square(n):", '    print("working on", n)', "    return n * n", "print(slow_square(7))", "print(slow_square(7))"), "working on 7\n49\n49",
+    L("The second call skips the body, so nothing is printed inside", "La segunda llamada salta el cuerpo y no imprime nada dentro", "2回目は本体を飛ばすので、中の print は出ない")),
+  p(
+    "This makes recursive functions like Fibonacci fast: each distinct argument is computed once, instead of again and again. maxsize limits how many results are kept (None means no limit); functools.cache is the same as lru_cache(maxsize=None).",
+    "Esto hace rápidas las funciones recursivas como Fibonacci: cada argumento distinto se calcula una vez, en vez de una y otra vez. maxsize limita cuántos resultados se guardan (None significa sin límite); functools.cache equivale a lru_cache(maxsize=None).",
+    "これでフィボナッチのような再帰関数が速くなる。同じ引数を何度も計算せず、ちがう引数ごとに1回だけ計算するからだ。maxsize は覚える数の上限（None なら無制限）。functools.cache は lru_cache(maxsize=None) と同じだよ。",
+  ),
+  p(
+    "Watch out: side effects in a cached function (printing, counting, writing) happen only on the first call for each argument. And arguments must be hashable, because they are used as dictionary keys: tuples work, lists raise TypeError.",
+    "Cuidado: los efectos secundarios de una función con caché (imprimir, contar, escribir) solo ocurren en la primera llamada de cada argumento. Y los argumentos deben ser hashables, porque se usan como claves de diccionario: las tuplas sirven, las listas lanzan TypeError.",
+    "注意：キャッシュつき関数の副作用（表示・カウント・書きこみ）は、引数ごとの最初の1回しか起きない。また引数は辞書のキーに使うのでハッシュ可能でないといけない。タプルはOK、リストは TypeError だよ。",
+  ),
+  boom(code("from functools import cache", "@cache", "def total(items):", "    return sum(items)", "print(total((1, 2)))", "print(total([1, 2]))"), "TypeError",
+    L("Prints 3 for the tuple, then TypeError for the list", "Imprime 3 con la tupla y luego TypeError con la lista", "タプルでは 3、リストでは TypeError")),
+);
+
+const decoratorsNotes: NoteDef[] = [decoratorNote, wrapsNote, decoArgsNote, lruNote];
+
 const decorators: LessonDef = {
   slug: "decorators",
   title: L("Wrapping spells", "Hechizos envueltos", "呪文をつつむ"),
@@ -405,6 +765,7 @@ const decorators: LessonDef = {
   xp: 75,
   enemy: "python/indent-gremlin",
   enemyName: L("WRAPPER GREMLIN", "GREMLIN ENVOLTORIO", "ラッパーグレムリン"),
+  notes: decoratorsNotes,
   beats: [
     say(L(
       "Functions are objects: you can pass them and return them. A DECORATOR takes a function and returns a wrapped one.",
@@ -426,6 +787,8 @@ const decorators: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("After @shout, the name greet points to what shout returned. What does that wrapper do to the result?", "Tras @shout, el nombre greet apunta a lo que devolvió shout. ¿Qué le hace ese wrapper al resultado?", "@shout の後、greet は shout が返したものを指す。その wrapper は結果に何をする？"),
+      note: "decorator-basics",
       prompt: PRINT,
       code: code("def shout(fn):", "    def wrapper(*args, **kwargs):", "        return fn(*args, **kwargs).upper()", "    return wrapper", "@shout", "def greet(name):", '    return f"hi {name}"', 'print(greet("ada"))'),
       options: ["HI ADA", "hi ada", "None"],
@@ -446,6 +809,8 @@ const decorators: LessonDef = {
     )),
     {
       kind: "pick",
+      hint: L("@deco above def f means f = deco(f). Which name here is the decorator function?", "@deco sobre def f significa f = deco(f). ¿Qué nombre aquí es la función decoradora?", "def f の上の @deco は f = deco(f) の意味。ここでデコレータの関数はどれ？"),
+      note: "decorator-basics",
       prompt: L("Decorate without the @", "Decora sin la @", "@ を使わずに飾ろう"),
       code: code("def shout(fn):", "    def wrapper(name):", "        return fn(name).upper()", "    return wrapper", "def greet(name):", '    return f"hi {name}"', "greet = ___(greet)", 'print(greet("ada"))'),
       options: ["shout", "wrapper", "greet"],
@@ -456,6 +821,8 @@ const decorators: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("Follow the wrapper line by line: its own prints surround the call to the original.", "Sigue el wrapper línea por línea: sus propios print rodean la llamada a la original.", "wrapper を1行ずつ追おう。自分の print が元の関数の呼び出しをはさんでいる。"),
+      note: "decorator-basics",
       prompt: PRINT,
       code: code("def log(fn):", "    def wrapper(x):", '        print("before")', "        r = fn(x)", '        print("after")', "        return r", "    return wrapper", "@log", "def f(x):", '    print("in", x)', "    return x", "print(f(1))"),
       options: ["before in 1 after 1", "in 1 before after 1", "before after in 1 1"],
@@ -471,6 +838,8 @@ const decorators: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("A decorator runs when def runs, not when the function is called. Where is the first call?", "Un decorador corre cuando corre el def, no cuando se llama la función. ¿Dónde está la primera llamada?", "デコレータは呼び出し時ではなく def のときに動く。最初の呼び出しはどこ？"),
+      note: "decorator-basics",
       prompt: PRINT,
       code: code("def register(fn):", '    print("registering", fn.__name__)', "    return fn", "@register", "def spell():", '    print("cast")', 'print("start")', "spell()"),
       options: ["registering spell start cast", "start registering spell cast", "start cast"],
@@ -491,6 +860,8 @@ const decorators: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("After decoration, hello points to a different function. Whose __name__ do you get?", "Tras decorar, hello apunta a otra función. ¿De quién es el __name__ que obtienes?", "デコレート後の hello は別の関数を指す。どの関数の __name__ が出る？"),
+      note: "wraps",
       prompt: PRINT,
       code: code("def deco(fn):", "    def wrapper():", "        return fn()", "    return wrapper", "@deco", "def hello():", '    return "hi"', "print(hello.__name__)"),
       options: ["wrapper", "hello", "deco"],
@@ -502,6 +873,8 @@ const decorators: LessonDef = {
     },
     {
       kind: "type",
+      hint: L("functools has a decorator for wrappers that copies the original's name and docstring.", "functools tiene un decorador para wrappers que copia el nombre y el docstring de la original.", "functools には、元の名前と説明文を wrapper に写すデコレータがある。"),
+      note: "wraps",
       prompt: L("Keep the name hello", "Conserva el nombre hello", "名前 hello を残そう"),
       code: code("import functools", "def deco(fn):", "    @functools.___(fn)", "    def wrapper():", "        return fn()", "    return wrapper", "@deco", "def hello():", '    return "hi"', "print(hello.__name__)"),
       answer: "wraps",
@@ -516,6 +889,8 @@ const decorators: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("repeat(3) is called first and returns the real decorator. How many times does the wrapper call roll?", "Primero se llama repeat(3), que devuelve el decorador real. ¿Cuántas veces llama el wrapper a roll?", "まず repeat(3) が呼ばれ、本物のデコレータを返す。wrapper は roll を何回呼ぶ？"),
+      note: "decorator-args",
       prompt: PRINT,
       code: code("def repeat(n):", "    def deco(fn):", "        def wrapper():", "            return [fn() for _ in range(n)]", "        return wrapper", "    return deco", "@repeat(3)", "def roll():", "    return 6", "print(roll())"),
       options: ["[6, 6, 6]", "6", "18"],
@@ -527,6 +902,8 @@ const decorators: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("Stacked decorators apply bottom-up. Which one wraps f first, and which ends up outside?", "Los decoradores apilados se aplican de abajo arriba. ¿Cuál envuelve a f primero y cuál queda afuera?", "重ねたデコレータは下からかかる。先に f を包むのはどれ？外側になるのは？"),
+      note: "decorator-args",
       prompt: PRINT,
       code: code("def a(fn):", '    return lambda: "a(" + fn() + ")"', "def b(fn):", '    return lambda: "b(" + fn() + ")"', "@a", "@b", "def f():", '    return "f"', "print(f())"),
       options: ["a(b(f))", "b(a(f))", "a(f)"],
@@ -543,6 +920,8 @@ const decorators: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("With the cache, each different n runs the body only once. Which n values does fib(30) ever need?", "Con la caché, cada n distinto ejecuta el cuerpo una sola vez. ¿Qué valores de n necesita fib(30)?", "キャッシュがあれば、ちがう n ごとに本体は1回だけ。fib(30) が必要とする n はどれ？"),
+      note: "lru-cache",
       prompt: PRINT,
       code: code("from functools import lru_cache", "calls = 0", "@lru_cache(maxsize=None)", "def fib(n):", "    global calls", "    calls += 1", "    return n if n < 2 else fib(n - 1) + fib(n - 2)", "print(fib(30), calls)"),
       options: ["832040 31", "832040 1664079", "832040 30"],
@@ -558,6 +937,8 @@ const decorators: LessonDef = {
     },
     {
       kind: "run",
+      hint: L("The wrapper computes a value but the call still gives None. What is the wrapper missing?", "El wrapper calcula un valor, pero la llamada sigue dando None. ¿Qué le falta al wrapper?", "wrapper は値を計算しているのに呼び出しは None。wrapper に足りないものは？"),
+      note: "decorator-basics",
       prompt: L("Fix the wrapper: it must print power: 10", "Arregla el wrapper: debe imprimir power: 10", "wrapper を直して power: 10 と表示しよう"),
       starter: code("def double_result(fn):", "    def wrapper(*args):", "        fn(*args) * 2", "    return wrapper", "", "@double_result", "def power(x):", "    return x + 1", "", 'print("power:", power(4))', ""),
       solution: code("def double_result(fn):", "    def wrapper(*args):", "        return fn(*args) * 2", "    return wrapper", "", "@double_result", "def power(x):", "    return x + 1", "", 'print("power:", power(4))', ""),
@@ -573,6 +954,100 @@ const decorators: LessonDef = {
 };
 
 // ─── 3.4 Traps and nets: exceptions ─────────────────────────────────────────
+const tryExceptNote = note("try-except", L("Catching errors with try/except", "Atrapar errores con try/except", "try/except でエラーを捕まえる"),
+  p(
+    "When an operation fails, Python RAISES an exception: an object that says what went wrong, like ZeroDivisionError or ValueError. If nothing catches it, the program stops and prints a traceback, and the lines after the failure never run.",
+    "Cuando una operación falla, Python LANZA una excepción: un objeto que dice qué salió mal, como ZeroDivisionError o ValueError. Si nada la atrapa, el programa se detiene e imprime un traceback, y las líneas después del fallo nunca se ejecutan.",
+    "操作が失敗すると、Pythonは例外を投げる。ZeroDivisionError や ValueError のように、何が起きたかを表すオブジェクトだ。だれも捕まえなければプログラムは止まって traceback を表示し、失敗より後の行は動かないよ。",
+  ),
+  p(
+    "try: wraps code that might fail. If an exception happens inside, Python skips the rest of the try block, jumps to the matching except block, runs it, and then continues AFTER the whole try statement as if nothing happened.",
+    "try: envuelve código que podría fallar. Si ocurre una excepción dentro, Python salta el resto del bloque try, va al except que coincide, lo ejecuta y luego continúa DESPUÉS de toda la instrucción try como si nada.",
+    "try: は失敗するかもしれないコードを包む。中で例外が起きると、try の残りを飛ばして合う except に移り、それを実行してから、try 文全体の後ろへ何事もなかったように進むよ。",
+  ),
+  ex(code("try:", '    n = int("abc")', '    print("never printed")', "except ValueError:", '    print("not a number")', 'print("moving on")'), "not a number\nmoving on",
+    L("The line after the failure is skipped; the program goes on", "La línea tras el fallo se salta; el programa sigue", "失敗の次の行は飛ばされ、プログラムは続く")),
+  p(
+    "A common pattern is a small helper that converts and falls back to a default in except. Keep the try block small, catch the specific exception you expect, and avoid a bare except:, which also hides real bugs.",
+    "Un patrón común es una pequeña función que convierte y, en except, recurre a un valor por defecto. Mantén pequeño el bloque try, atrapa la excepción concreta que esperas y evita un except: sin tipo, que también oculta errores reales.",
+    "よくある形は、変換して失敗したら except でデフォルト値を返す小さな関数。try はなるべく小さく、予想する例外を名指しで捕まえよう。型なしの except: は本物のバグまで隠すので避けるよ。",
+  ),
+  ex(code("def to_float(s):", "    try:", "        return float(s)", "    except ValueError:", "        return 0.0", 'print([to_float(s) for s in ["1.5", "?", "2"]])'), "[1.5, 0.0, 2.0]"),
+);
+
+const elseFinallyNote = note("else-finally", L("else and finally", "else y finally", "else と finally"),
+  p(
+    "The full form is try, then one or more except, then else, then finally, always in that order. else runs only if the try block finished WITHOUT an exception: put success-only code there and keep try small. finally runs ALWAYS at the end: success, error, or even a return.",
+    "La forma completa es try, luego uno o más except, luego else y luego finally, siempre en ese orden. else solo corre si el try terminó SIN excepción: pon ahí el código de éxito y mantén pequeño el try. finally corre SIEMPRE al final: con éxito, con error o incluso tras un return.",
+    "完全な形は try、except（1つ以上）、else、finally の順。else は try が例外なしで終わったときだけ動くので、成功時だけのコードを置いて try を小さく保つ。finally は成功でもエラーでも return でも、最後に必ず動くよ。",
+  ),
+  ex(code('for text in ["8", "eight"]:', "    try:", "        v = int(text)", "    except ValueError:", '        print("bad", text)', "    else:", '        print("good", v)', "    finally:", '        print("checked", text)'), "good 8\nchecked 8\nbad eight\nchecked eight",
+    L("else runs only on success; finally runs both times", "else solo corre con éxito; finally corre las dos veces", "else は成功時だけ、finally は毎回")),
+  p(
+    "finally and return: when try (or except) reaches return, the return value is ready, but finally still runs before the function actually leaves. So anything finally prints appears BEFORE the caller can print the returned value.",
+    "finally y return: cuando try (o except) llega a return, el valor de retorno queda listo, pero finally corre igual antes de que la función salga de verdad. Así que lo que imprima finally aparece ANTES de que quien llamó pueda imprimir el valor devuelto.",
+    "finally と return：try（や except）で return に着くと戻り値は決まるが、関数が本当に抜ける前に finally が動く。だから finally の表示は、呼んだ側が戻り値を表示するより先に出るよ。",
+  ),
+  ex(code("def load():", "    try:", '        print("loading")', "        return 42", "    finally:", '        print("cleanup")', "result = load()", "print(result)"), "loading\ncleanup\n42"),
+  p(
+    "Order rules: except clauses come before else, and else before finally. else needs at least one except. Breaking the order is a SyntaxError. Use finally for cleanup that must always happen, like closing a file or releasing a lock.",
+    "Reglas de orden: los except van antes de else, y else antes de finally. else necesita al menos un except. Romper el orden es un SyntaxError. Usa finally para limpiezas que siempre deben ocurrir, como cerrar un archivo o liberar un candado.",
+    "順番のルール：except は else の前、else は finally の前。else には except が最低1つ要る。順番を破ると SyntaxError。ファイルを閉じるなど、必ず行う後始末は finally に書こう。",
+  ),
+  bad(code("try:", "    y = 1", "else:", "    print(y)"),
+    L("SyntaxError: else needs an except before it", "SyntaxError: else necesita un except antes", "SyntaxError：else の前に except が必要")),
+);
+
+const excTreeNote = note("exception-tree", L("Catching kinds of exceptions", "Atrapar tipos de excepciones", "例外の種類を捕まえる"),
+  p(
+    "An except can list several classes in a tuple: except (TypeError, ValueError):. Add as e to get the exception object itself: type(e).__name__ is its class name and str(e) its message.",
+    "Un except puede listar varias clases en una tupla: except (TypeError, ValueError):. Añade as e para obtener el objeto excepción: type(e).__name__ es el nombre de su clase y str(e) su mensaje.",
+    "except にはタプルで複数のクラスを書ける：except (TypeError, ValueError):。as e をつけると例外オブジェクトが手に入る。type(e).__name__ はクラス名、str(e) はメッセージだよ。",
+  ),
+  ex(code("try:", '    int("x9")', "except (TypeError, ValueError) as e:", "    print(type(e).__name__)"), "ValueError"),
+  p(
+    "Exceptions form a family tree. except Parent: catches the parent AND all its children. KeyError (a missing dict key) and IndexError (a list or string index out of range) are both children of LookupError, and almost every error is a child of Exception.",
+    "Las excepciones forman un árbol familiar. except Padre: atrapa al padre Y a todos sus hijos. KeyError (una clave de dict que falta) e IndexError (un índice de lista o texto fuera de rango) son hijas de LookupError, y casi todo error es hijo de Exception.",
+    "例外は家系図のようになっている。except 親: は親とその子をすべて捕まえる。KeyError（辞書のキーがない）と IndexError（リストや文字列の番号が範囲外）はどちらも LookupError の子で、ほとんどのエラーは Exception の子だよ。",
+  ),
+  ex(code("try:", '    "abc"[10]', "except LookupError as e:", '    print("lookup failed:", type(e).__name__)'), "lookup failed: IndexError",
+    L("The parent class catches its child", "La clase padre atrapa a su hija", "親クラスが子を捕まえる")),
+  p(
+    "But a net for one sibling does not catch another: except KeyError ignores an IndexError, which keeps flying and stops the program. So first ask which exception the operation really raises: d[key] gives KeyError, seq[i] gives IndexError, int(\"x\") gives ValueError.",
+    "Pero la red de un hermano no atrapa a otro: except KeyError ignora un IndexError, que sigue volando y detiene el programa. Así que primero pregúntate qué excepción lanza de verdad la operación: d[clave] da KeyError, seq[i] da IndexError, int(\"x\") da ValueError.",
+    "でも兄弟用のネットは別の兄弟を捕まえない。except KeyError は IndexError を見のがし、例外は飛び続けてプログラムが止まる。まず操作が本当に投げる例外を考えよう。d[key] は KeyError、seq[i] は IndexError、int(\"x\") は ValueError だよ。",
+  ),
+  p(
+    "With several except clauses, the first one that matches wins, so put specific classes before general ones. An except Exception: at the top would catch everything and the specific handlers below would never run.",
+    "Con varios except, gana el primero que coincida, así que pon las clases específicas antes que las generales. Un except Exception: arriba lo atraparía todo y los manejadores específicos de abajo nunca correrían.",
+    "except が複数あると最初に合ったものが勝つので、具体的なクラスを一般的なものより先に書く。一番上に except Exception: があると全部捕まえてしまい、下の個別の処理は動かないよ。",
+  ),
+);
+
+const raiseNote = note("raise-custom", L("raise and your own exceptions", "raise y tus propias excepciones", "raise と自作の例外"),
+  p(
+    "raise SomeError(\"message\") throws an exception yourself, for example when an input makes no sense. It behaves like any built-in error: the function stops at once, nothing after the raise runs, and if nobody catches it, the whole program stops.",
+    "raise SomeError(\"mensaje\") lanza una excepción tú mismo, por ejemplo cuando una entrada no tiene sentido. Se comporta como cualquier error incorporado: la función se detiene en el acto, nada después del raise se ejecuta y, si nadie la atrapa, se detiene todo el programa.",
+    "raise SomeError(\"メッセージ\") で自分から例外を投げられる。入力がおかしいときなどに使う。組みこみのエラーと同じで、関数はすぐ止まり、raise の後は動かず、だれも捕まえなければプログラム全体が止まるよ。",
+  ),
+  boom(code("def withdraw(balance, amount):", "    if amount > balance:", '        raise ValueError("not enough coins")', "    return balance - amount", "print(withdraw(10, 4))", "print(withdraw(10, 40))"), "ValueError",
+    L("Prints 6, then the uncaught ValueError stops the program", "Imprime 6 y luego el ValueError sin atrapar detiene el programa", "6 を表示し、捕まらない ValueError で停止")),
+  p(
+    "You can create your own kind with a class that inherits from Exception: class NotFound(Exception): pass. The name documents the problem, and callers can catch exactly that kind. Because it is a child of Exception, an except Exception: net catches it too.",
+    "Puedes crear tu propio tipo con una clase que herede de Exception: class NotFound(Exception): pass. El nombre documenta el problema, y quien llama puede atrapar justo ese tipo. Como es hija de Exception, una red except Exception: también la atrapa.",
+    "Exception を継承したクラスで自分の例外を作れる：class NotFound(Exception): pass。名前が問題を説明し、呼ぶ側はその種類だけを捕まえられる。Exception の子なので、except Exception: のネットでも捕まるよ。",
+  ),
+  ex(code("class LockedDoor(Exception):", "    pass", "try:", '    raise LockedDoor("needs a key")', "except LockedDoor as e:", '    print("stopped:", e)'), "stopped: needs a key",
+    L("Printing the exception shows the message you raised it with", "Imprimir la excepción muestra el mensaje con que la lanzaste", "例外を表示すると、投げたときのメッセージが出る")),
+  p(
+    "Rule to remember: print(e) or str(e) shows the message passed when raising, and type(e).__name__ shows the class name. Common mistake: catching your custom error with a sibling class that it doesn't inherit from; the net only works for the class and its children.",
+    "Regla para recordar: print(e) o str(e) muestran el mensaje pasado al lanzar, y type(e).__name__ muestra el nombre de la clase. Error común: atrapar tu error propio con una clase hermana de la que no hereda; la red solo funciona para la clase y sus hijas.",
+    "覚え方：print(e) や str(e) は投げたときのメッセージ、type(e).__name__ はクラス名を表示する。よくあるミス：継承していない別のクラスで自作の例外を捕まえようとすること。ネットはそのクラスと子にしか効かないよ。",
+  ),
+);
+
+const exceptionsNotes: NoteDef[] = [tryExceptNote, elseFinallyNote, excTreeNote, raiseNote];
+
 const exceptions: LessonDef = {
   slug: "exceptions",
   title: L("Traps and nets", "Trampas y redes", "ワナとネット"),
@@ -581,6 +1056,7 @@ const exceptions: LessonDef = {
   xp: 75,
   enemy: "python/keyerror-key",
   enemyName: L("TRAP KEY", "LLAVE TRAMPA", "ワナのカギ"),
+  notes: exceptionsNotes,
   beats: [
     say(L(
       "When something goes wrong, Python RAISES an exception. Uncaught, it stops the program. try/except is a net.",
@@ -608,6 +1084,8 @@ const exceptions: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("If the except matches, the handler runs. Where does the program continue afterwards?", "Si el except coincide, corre el manejador. ¿Dónde continúa el programa después?", "except が合えば処理が動く。そのあとプログラムはどこから続く？"),
+      note: "try-except",
       prompt: PRINT,
       code: code("try:", "    print(1 / 0)", "except ZeroDivisionError:", '    print("caught")', 'print("still alive")'),
       options: ["caught still alive", "caught", "ZeroDivisionError"],
@@ -624,6 +1102,8 @@ const exceptions: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("Does int(\"7\") fail? else runs only without an error; finally runs no matter what.", "¿Falla int(\"7\")? else solo corre si no hay error; finally corre pase lo que pase.", "int(\"7\") は失敗する？else はエラーなしのときだけ、finally は必ず動く。"),
+      note: "else-finally",
       prompt: PRINT,
       code: code("try:", '    x = int("7")', "except ValueError:", '    print("bad")', "else:", '    print("ok", x)', "finally:", '    print("done")'),
       options: ["ok 7 done", "bad done", "ok 7"],
@@ -635,6 +1115,8 @@ const exceptions: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("The return value is ready, but something must run before the function really leaves.", "El valor de retorno está listo, pero algo debe correr antes de que la función salga de verdad.", "戻り値は決まったが、関数が本当に抜ける前に動くものがある。"),
+      note: "else-finally",
       prompt: PRINT,
       code: code("def f():", "    try:", '        return "try"', "    finally:", '        print("finally")', "print(f())"),
       options: ["finally try", "try finally", "try"],
@@ -650,6 +1132,8 @@ const exceptions: LessonDef = {
     },
     {
       kind: "order",
+      hint: L("The parts of the net have a fixed order. else must come after every handler.", "Las partes de la red tienen un orden fijo. else debe ir después de todos los manejadores.", "ネットの部品には決まった順番がある。else はすべての except の後。"),
+      note: "else-finally",
       prompt: L("Build the full net", "Arma la red completa", "ネットを組み立てよう"),
       lines: ["try:", '    n = int("5")', "except ValueError:", '    print("bad")', "else:", '    print("ok", n)'],
       check: { compiles: true, stdout: "ok 5" },
@@ -663,6 +1147,8 @@ const exceptions: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("What does indexing an empty list raise? type(e).__name__ prints the real class.", "¿Qué lanza indexar una lista vacía? type(e).__name__ imprime la clase real.", "空のリストに番号でアクセスすると何が起きる？type(e).__name__ は本当のクラス名。"),
+      note: "exception-tree",
       prompt: PRINT,
       code: code("try:", "    [][0]", "except (KeyError, IndexError) as e:", "    print(type(e).__name__)"),
       options: ["IndexError", "KeyError", "LookupError"],
@@ -674,6 +1160,8 @@ const exceptions: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("A missing dict key raises one exception. Is LookupError its parent?", "Una clave de dict que falta lanza una excepción. ¿Es LookupError su padre?", "辞書にないキーはある例外を投げる。LookupError はその親？"),
+      note: "exception-tree",
       prompt: PRINT,
       code: code("try:", '    {}["x"]', "except LookupError:", '    print("lookup")'),
       options: ["lookup", "KeyError", L("Nothing", "Nada", "何も出ない")],
@@ -690,6 +1178,8 @@ const exceptions: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("mp is 1, so raise fires. Is there any try around the call to catch it?", "mp vale 1, así que se ejecuta raise. ¿Hay algún try alrededor de la llamada que lo atrape?", "mp は 1 なので raise が動く。呼び出しのまわりに捕まえる try はある？"),
+      note: "raise-custom",
       prompt: HAPPENS,
       code: code("def cast(mp):", "    if mp < 5:", '        raise ValueError("low mana")', '    return "boom"', "print(cast(1))"),
       options: ["ValueError", "None", "boom"],
@@ -700,6 +1190,8 @@ const exceptions: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("OutOfMana inherits from Exception. type(e).__name__ is the class name, and e prints its message.", "OutOfMana hereda de Exception. type(e).__name__ es el nombre de la clase y e imprime su mensaje.", "OutOfMana は Exception を継承。type(e).__name__ はクラス名、e はメッセージを表示する。"),
+      note: "raise-custom",
       prompt: PRINT,
       code: code("class OutOfMana(Exception):", "    pass", "try:", '    raise OutOfMana("need 5")', "except Exception as e:", "    print(type(e).__name__, e)"),
       options: ["OutOfMana need 5", "Exception need 5", "need 5"],
@@ -711,6 +1203,8 @@ const exceptions: LessonDef = {
     },
     {
       kind: "run",
+      hint: L("int(\"x\") raises an error. Catch that kind inside parse and hand back a neutral number.", "int(\"x\") lanza un error. Atrapa ese tipo dentro de parse y devuelve un número neutro.", "int(\"x\") はエラーを投げる。parse の中でその種類を捕まえ、影響のない数を返そう。"),
+      note: "try-except",
       prompt: L("Skip bad text: it must print total: 7", "Salta el texto malo: debe imprimir total: 7", "変な文字は飛ばして total: 7 と表示しよう"),
       starter: code("def parse(text):", "    return int(text)", "", "total = 0", 'for t in ["3", "x", "4"]:', "    total += parse(t)", 'print("total:", total)', ""),
       solution: code("def parse(text):", "    try:", "        return int(text)", "    except ValueError:", "        return 0", "", "total = 0", 'for t in ["3", "x", "4"]:', "    total += parse(t)", 'print("total:", total)', ""),
@@ -726,6 +1220,9 @@ const exceptions: LessonDef = {
 };
 
 // ─── 3.5 Boss: the closure wyvern ───────────────────────────────────────────
+// The boss reuses the region's notes as a recap.
+const bossNotes: NoteDef[] = [mutableDefaultNote, starArgsNote, closuresNote, lateBindingNote, lruNote, elseFinallyNote, excTreeNote, decoratorNote];
+
 const boss: LessonDef = {
   slug: "closure-wyvern",
   title: L("The closure wyvern", "El guiverno closure", "クロージャの翼竜"),
@@ -734,6 +1231,7 @@ const boss: LessonDef = {
   xp: 180,
   enemy: "dragon",
   enemyName: L("CLOSURE WYVERN", "GUIVERNO CLOSURE", "クロージャ翼竜"),
+  notes: bossNotes,
   beats: [
     enemySays(L(
       "I AM THE CLOSURE WYVERN. I keep stale lists in my claws and old loop values in my backpack. Read carefully!",
@@ -742,6 +1240,8 @@ const boss: LessonDef = {
     )),
     {
       kind: "predict", time: 15, prompt: PRINT,
+      hint: L("The first two calls share the default list. The third passes its own list.", "Las dos primeras llamadas comparten la lista por defecto. La tercera pasa su propia lista.", "最初の2回はデフォルトのリストを共有。3回目は自分のリストをわたしている。"),
+      note: "mutable-default",
       code: code("def f(x, items=[]):", "    items.append(x)", "    return len(items)", "print(f(1), f(2), f(3, []))"),
       options: ["1 2 1", "1 1 1", "1 2 3"], answer: 0, output: "1 2 1",
       check: { compiles: true, stdout: "1 2 1" },
@@ -749,6 +1249,8 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 12, prompt: PRINT,
+      hint: L("One star packs the extra positional arguments. Into which kind of container?", "Una estrella empaca los posicionales extra. ¿En qué tipo de contenedor?", "星1つは余った位置引数を集める。どんな入れ物に？"),
+      note: "star-args",
       code: code("def f(*args):", "    return type(args).__name__", "print(f(1, 2))"),
       options: ["tuple", "list", "int"], answer: 0, output: "tuple",
       check: { compiles: true, stdout: "tuple" },
@@ -756,6 +1258,8 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 15, prompt: PRINT,
+      hint: L("Count only the positional arguments for a, and remember sorted orders the keys.", "Cuenta solo los posicionales para a, y recuerda que sorted ordena las claves.", "a に入るのは位置引数だけ。sorted はキーを並べかえるよ。"),
+      note: "star-args",
       code: "print((lambda *a, **k: (len(a), sorted(k)))(1, 2, b=1, a=2))",
       options: ["(2, ['a', 'b'])", "(4, ['a', 'b'])", "(2, ['b', 'a'])"], answer: 0, output: "(2, ['a', 'b'])",
       check: { compiles: true, stdout: "(2, ['a', 'b'])" },
@@ -763,6 +1267,8 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 15, prompt: PRINT,
+      hint: L("Both calls to inner update the same n through nonlocal. What does the second call return?", "Las dos llamadas a inner actualizan el mismo n con nonlocal. ¿Qué devuelve la segunda?", "inner の2回の呼び出しは nonlocal で同じ n を更新。2回目は何を返す？"),
+      note: "closures",
       code: code("def outer():", "    n = 0", "    def inner():", "        nonlocal n", "        n += 1", "        return n", "    inner()", "    return inner()", "print(outer())"),
       options: ["2", "1", "0"], answer: 0, output: "2",
       check: { compiles: true, stdout: "2" },
@@ -770,6 +1276,8 @@ const boss: LessonDef = {
     },
     {
       kind: "pick", time: 15, prompt: L("Change the outer hp", "Cambia el hp de afuera", "外側の hp を変えよう"),
+      hint: L("hp lives in the enclosing function, not at the module level. Which keyword reaches it?", "hp vive en la función externa, no en el nivel del módulo. ¿Qué palabra clave lo alcanza?", "hp はモジュールではなく外側の関数にある。届くキーワードはどれ？"),
+      note: "closures",
       code: code("def outer():", "    hp = 3", "    def hit():", "        ___ hp", "        hp -= 1", "    hit()", "    return hp", "print(outer())"),
       options: ["nonlocal", "global"], answer: 0,
       check: { compiles: true, stdout: "2" },
@@ -777,6 +1285,8 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 12, prompt: PRINT,
+      hint: L("The lambda reads i when it is called. What is i after the loop has finished?", "La lambda lee i cuando se llama. ¿Cuánto vale i cuando el bucle terminó?", "lambda は呼ばれたときに i を読む。ループが終わったとき i はいくつ？"),
+      note: "late-binding",
       code: code("fns = []", "for i in range(3):", "    fns.append(lambda: i * 10)", "print(fns[0]())"),
       options: ["20", "0", "30"], answer: 0, output: "20",
       check: { compiles: true, stdout: "20" },
@@ -784,6 +1294,8 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 15, prompt: PRINT,
+      hint: L("A cached call with the same argument skips the body. Which calls actually run it?", "Una llamada con caché y el mismo argumento salta el cuerpo. ¿Qué llamadas lo ejecutan de verdad?", "同じ引数のキャッシュ呼び出しは本体を飛ばす。本当に本体が動くのはどれ？"),
+      note: "lru-cache",
       code: code("from functools import lru_cache", "@lru_cache(maxsize=None)", "def sq(x):", '    print("calc", x)', "    return x * x", "sq(3)", "sq(3)", "print(sq(4))"),
       options: ["calc 3 calc 4 16", "calc 3 calc 3 calc 4 16", "16"], answer: 0, output: "calc 3\ncalc 4\n16",
       check: { compiles: true, stdout: "calc 3\ncalc 4\n16" },
@@ -791,6 +1303,8 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 15, prompt: PRINT,
+      hint: L("except returns a value, but finally runs before the function leaves. Which prints first?", "except devuelve un valor, pero finally corre antes de que la función salga. ¿Qué se imprime primero?", "except が値を返すが、関数が抜ける前に finally が動く。先に出るのは？"),
+      note: "else-finally",
       code: code("def f():", "    try:", '        return int("x")', "    except ValueError:", "        return -1", "    finally:", '        print("net")', "print(f())"),
       options: ["net -1", "-1 net", "ValueError"], answer: 0, output: "net\n-1",
       check: { compiles: true, stdout: "net\n-1" },
@@ -798,6 +1312,8 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 12, prompt: HAPPENS,
+      hint: L("Which exception does a bad list index raise? Does a KeyError net catch it?", "¿Qué excepción lanza un índice de lista inválido? ¿La atrapa una red de KeyError?", "リストの番号が範囲外だと何の例外？KeyError のネットで捕まる？"),
+      note: "exception-tree",
       code: code("try:", "    [1, 2][5]", "except KeyError:", '    print("caught")'),
       options: ["IndexError", "caught", "KeyError"], answer: 0,
       check: { compiles: true, throws: "IndexError" },
@@ -805,6 +1321,8 @@ const boss: LessonDef = {
     },
     {
       kind: "order", time: 20, prompt: L("Build a shouting decorator", "Arma un decorador que grita", "大声デコレータを作ろう"),
+      hint: L("Write the decorator and its wrapper first, return the wrapper, then decorate and call.", "Escribe primero el decorador y su wrapper, devuelve el wrapper y luego decora y llama.", "まずデコレータと wrapper を書き、wrapper を返し、それから飾って呼ぶ。"),
+      note: "decorator-basics",
       lines: ["def shout(fn):", "    def wrapper(name):", "        return fn(name).upper()", "    return wrapper", "@shout", "def greet(name):", '    return "hi " + name', 'print(greet("bo"))'],
       check: { compiles: true, stdout: "HI BO" },
       explain: L("Define the decorator, return the wrapper, then put @shout right above def.", "Define el decorador, devuelve el wrapper y pon @shout justo encima de def.", "デコレータを書き、wrapper を返し、def の真上に @shout。"),

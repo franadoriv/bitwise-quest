@@ -1,4 +1,4 @@
-import type { Beat, LessonDef, RegionDef, Text } from "../../../lib/content/types.ts";
+import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
 
 // REGION 5 · EVENT LOOP TOWER (timers and the call stack, promises, async/await and errors,
@@ -9,6 +9,15 @@ const say = (text: Text): Beat => ({ kind: "dialog", speaker: "master", text });
 const enemySays = (text: Text): Beat => ({ kind: "dialog", speaker: "enemy", text });
 /** Code is written line by line for readability. */
 const code = (...lines: string[]) => lines.join("\n");
+
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example; the validator checks `output` against the real runner. */
+const ex = (src: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code: src, output, caption });
+/** An example that must NOT type-check (verified too). */
+const bad = (src: string, caption: Text): NoteBlock => ({ t: "code", code: src, caption, check: { compiles: false } });
 
 // Shared labels and answers.
 const WHAT_PRINTS = L("What does it print?", "¿Qué imprime?", "何が表示される？");
@@ -21,6 +30,86 @@ const WAIT_ = L("WAIT", "ESPERAR", "待つ");
 const WAIT_DEF = "const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));";
 
 // ─── 5.1 timers and the call stack ──────────────────────────────────────────
+const timersNotes: NoteDef[] = [
+  note("set-timeout", L("setTimeout and the timer queue", "setTimeout y la cola de timers", "setTimeout とタイマーの列"),
+    p(
+      "setTimeout(callback, ms) asks JavaScript to run a function later. It does not pause anything: it hands the callback to the timer queue and returns at once, so the next line runs immediately. When the time is up AND the call stack is empty, the event loop takes the callback from the queue and runs it.",
+      "setTimeout(callback, ms) le pide a JavaScript que ejecute una función más tarde. No pausa nada: entrega el callback a la cola de timers y vuelve enseguida, así que la línea siguiente corre de inmediato. Cuando se cumple el tiempo Y la pila de llamadas está vacía, el event loop saca el callback de la cola y lo ejecuta.",
+      "setTimeout(callback, ms) は「この関数をあとで動かして」という頼みごと。何も止めず、コールバックをタイマーの列に預けてすぐ戻るので、次の行がすぐ動く。時間が来て、しかもコールスタックが空になったら、イベントループが列からコールバックを取り出して実行するよ。",
+    ),
+    ex(code('setTimeout(() => console.log("bell"), 0);', 'console.log("open");', 'console.log("close");'), "open\nclose\nbell",
+      L("Even written first, the timer runs after the plain lines", "Aunque va primero, el timer corre tras las líneas normales", "先に書いても、タイマーは普通の行のあと")),
+    p(
+      "0 ms does not mean now. The delay is a minimum wait, not an exact time. Even with 0, the callback waits until every line of the current code finishes. And timers are sorted by when they are due, not by the line that created them: a 10 ms timer fires before a 60 ms one, even if it was written last.",
+      "0 ms no significa ahora. El retraso es una espera mínima, no un tiempo exacto. Incluso con 0, el callback espera a que termine cada línea del código actual. Y los timers se ordenan por cuándo vencen, no por la línea que los creó: un timer de 10 ms salta antes que uno de 60 ms, aunque se haya escrito al final.",
+      "0 ms は「今すぐ」ではない。待ち時間は最低限の目安で、正確な時刻ではないんだ。0 でも、今のコードが全部終わるまで待つ。それにタイマーは書いた行の順ではなく、時間が来る順に動く。10 ms のタイマーは最後に書いても 60 ms より先だよ。",
+    ),
+    ex(code('setTimeout(() => console.log("third"), 60);', 'setTimeout(() => console.log("second"), 30);', 'setTimeout(() => console.log("first"), 10);'), "first\nsecond\nthird",
+      L("Timers fire in order of their delay", "Los timers saltan según su retraso", "タイマーは待ち時間の順に動く")),
+    p(
+      "setTimeout returns an id, a number that names that timer. Keep it in a variable and pass it to clearTimeout(id) to cancel the callback before it runs; a cancelled callback never runs. Repeating timers have a matching pair: setInterval starts one, clearInterval stops it.",
+      "setTimeout devuelve un id, un número que identifica ese timer. Guárdalo en una variable y pásalo a clearTimeout(id) para cancelar el callback antes de que corra; un callback cancelado nunca se ejecuta. Los timers que se repiten tienen su pareja: setInterval inicia uno y clearInterval lo detiene.",
+      "setTimeout はそのタイマーを表す id（数値）を返す。変数にとっておき、clearTimeout(id) に渡せば実行前に取り消せる。取り消したコールバックは二度と動かない。くり返しのタイマーにも対があって、setInterval で始めて clearInterval で止めるよ。",
+    ),
+    ex(code('const alarm = setTimeout(() => console.log("ring"), 100);', "const snooze = true;", "if (snooze) clearTimeout(alarm);", 'console.log("snoozed:", snooze);'), "snoozed: true",
+      L("The cancelled alarm never rings", "La alarma cancelada nunca suena", "取り消したアラームは鳴らない")),
+    p(
+      "Common mistakes: thinking setTimeout(fn, 0) runs fn right away, and writing fn() with parentheses inside setTimeout. fn() calls the function immediately and passes its result, not the function. Pass the function itself, or an arrow like () => ...",
+      "Errores comunes: creer que setTimeout(fn, 0) ejecuta fn al instante, y escribir fn() con paréntesis dentro de setTimeout. fn() llama a la función en ese momento y pasa su resultado, no la función. Pasa la función misma, o una flecha como () => ...",
+      "よくあるミス：setTimeout(fn, 0) で fn がすぐ動くと思うこと。それと setTimeout の中に fn() とかっこ付きで書くこと。fn() はその場で呼んで結果を渡してしまう。関数そのものか、() => ... のようなアロー関数を渡そう。",
+    ),
+    bad(code('const wave = () => console.log("hi");', "setTimeout(wave(), 10);"),
+      L("Does not compile: wave() passes undefined, not a function", "No compila: wave() pasa undefined, no una función", "コンパイル不可：wave() は関数でなく undefined を渡す")),
+  ),
+  note("run-to-completion", L("The stack is never interrupted", "La pila nunca se interrumpe", "スタックは割り込まれない"),
+    p(
+      "JavaScript has one call stack and runs one thing at a time. Once a piece of code starts (your whole script, or one callback), it runs to the end without being interrupted. This is called run-to-completion. Timers, clicks and network replies never cut in: they wait in a queue.",
+      "JavaScript tiene una sola pila de llamadas y hace una cosa a la vez. Cuando un trozo de código empieza (tu script entero o un callback), corre hasta el final sin interrupciones. Esto se llama run-to-completion. Los timers, los clics y las respuestas de red nunca se cuelan: esperan en una cola.",
+      "JavaScript のコールスタックは 1 つだけで、一度にひとつしか実行しない。コード（スクリプト全体や 1 つのコールバック）は一度始まったら最後まで中断されない。これを run-to-completion という。タイマーもクリックも通信の返事も割り込まず、列で待つよ。",
+    ),
+    ex(code('setTimeout(() => console.log("timer"), 0);', "let total = 0;", "for (let i = 1; i <= 1000; i++) total += i;", 'console.log("sum", total);'), "sum 500500\ntimer",
+      L("The whole loop finishes before the timer gets a turn", "Todo el bucle termina antes de que el timer tenga turno", "ループが全部終わってからタイマーの番")),
+    p(
+      "So a slow loop delays every timer. If the script takes 2 seconds, a 0 ms timer runs after 2 seconds. In a browser it also freezes the page: no clicks, no repaint, because the event loop can't take the next task until the stack is empty.",
+      "Por eso un bucle lento retrasa todos los timers. Si el script tarda 2 segundos, un timer de 0 ms corre a los 2 segundos. En el navegador además congela la página: ni clics ni repintado, porque el event loop no puede tomar la siguiente tarea hasta que la pila esté vacía.",
+      "だから重いループはすべてのタイマーを遅らせる。スクリプトに 2 秒かかれば、0 ms のタイマーも 2 秒後。ブラウザではページも固まる。スタックが空になるまでイベントループは次の仕事を取れないので、クリックも再描画もできないんだ。",
+    ),
+    p(
+      "Rule: synchronous code (plain lines, loops, function calls) always finishes first. Queued callbacks come after, one by one. To predict output, first list every synchronous log from top to bottom, then add the callbacks.",
+      "Regla: el código síncrono (líneas normales, bucles, llamadas a funciones) siempre termina primero. Los callbacks en cola vienen después, uno por uno. Para predecir la salida, primero anota cada log síncrono de arriba abajo y luego añade los callbacks.",
+      "ルール：同期のコード（普通の行、ループ、関数呼び出し）がいつも先に終わる。列に並んだコールバックはそのあと 1 つずつ。出力を予想するときは、まず同期のログを上から順に書き出し、最後にコールバックを足そう。",
+    ),
+    ex(code("function countdown() {", "  for (let n = 3; n > 0; n--) console.log(n);", "}", 'setTimeout(() => console.log("liftoff"), 0);', "countdown();"), "3\n2\n1\nliftoff",
+      L("A function call is synchronous too", "Una llamada a función también es síncrona", "関数呼び出しも同期処理")),
+    p(
+      "Common mistakes: believing a timer interrupts a loop when its time is up (it never does), and thinking setTimeout makes heavy work run in parallel. The callback still runs on the same single stack, just later.",
+      "Errores comunes: creer que un timer interrumpe un bucle cuando se cumple su tiempo (nunca lo hace) y pensar que setTimeout hace que un trabajo pesado corra en paralelo. El callback sigue corriendo en la misma única pila, solo que después.",
+      "よくあるミス：時間が来たらタイマーがループに割り込むと思うこと（絶対にしない）。それと setTimeout で重い処理が並行に動くと思うこと。コールバックは同じ 1 つのスタックで、あとで動くだけだよ。",
+    ),
+  ),
+  note("callbacks-later", L("Callbacks run later", "Los callbacks corren después", "コールバックはあとで動く"),
+    p(
+      "A callback is a function you pass to another function so it can call it later. setTimeout takes one, and so do event listeners and many older APIs. The function that receives the callback usually returns right away and calls it when its work is done.",
+      "Un callback es una función que le pasas a otra función para que la llame después. setTimeout recibe uno, igual que los listeners de eventos y muchas APIs antiguas. La función que recibe el callback suele volver enseguida y lo llama cuando termina su trabajo.",
+      "コールバックとは、別の関数に渡して「あとで呼んでね」と頼む関数。setTimeout も、イベントリスナーや多くの古い API も受け取る。受け取った関数はふつうすぐ戻り、仕事が終わったときにコールバックを呼ぶよ。",
+    ),
+    ex(code("function fetchName(done: (name: string) => void) {", '  setTimeout(() => done("Mira"), 20);', "}", 'fetchName((n) => console.log("hello", n));', 'console.log("asked");'), "asked\nhello Mira",
+      L("fetchName returns at once; the callback runs 20 ms later", "fetchName vuelve enseguida; el callback corre 20 ms después", "fetchName はすぐ戻り、コールバックは 20 ms 後")),
+    p(
+      "That means the code after the call doesn't see the result yet. Anything that needs the value must live inside the callback, or be called from it. Reading a variable outside, on the next line, gives its old value, because the callback hasn't run.",
+      "Eso significa que el código después de la llamada todavía no ve el resultado. Todo lo que necesite el valor debe ir dentro del callback, o llamarse desde él. Leer una variable afuera, en la línea siguiente, da su valor viejo, porque el callback aún no corrió.",
+      "つまり、呼び出しの次の行からはまだ結果が見えない。値が必要な処理はコールバックの中に書くか、そこから呼ぶこと。外の次の行で変数を読むと古い値のまま。コールバックがまだ動いていないからだよ。",
+    ),
+    ex(code("let score = 0;", "setTimeout(() => {", "  score = 99;", '  console.log("inside", score);', "}, 0);", 'console.log("outside", score);'), "outside 0\ninside 99",
+      L("Outside, the update hasn't happened yet", "Afuera, el cambio aún no ocurrió", "外ではまだ更新されていない")),
+    p(
+      "Rule: a callback runs after the current code finishes, so put the work that depends on it inside the callback. This style gets messy when callbacks nest inside callbacks (callback hell), which is why Promises and async/await exist: you will meet them next in the tower.",
+      "Regla: un callback corre después de que termina el código actual, así que pon dentro del callback el trabajo que depende de él. Este estilo se enreda cuando hay callbacks dentro de callbacks (callback hell), y por eso existen las Promises y async/await: las verás a continuación en la torre.",
+      "ルール：コールバックは今のコードが終わってから動く。だから、それに頼る処理はコールバックの中へ。コールバックの中にコールバック…と重なると読みにくくなる（コールバック地獄）。そのために Promise と async/await がある。塔の次の階で会えるよ。",
+    ),
+  ),
+];
+
 const timers: LessonDef = {
   slug: "callbacks-and-timers",
   title: L("Later, not now", "Luego, no ahora", "今じゃなく、あとで"),
@@ -57,6 +146,8 @@ const timers: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("Which lines run on the stack right away, and which one was handed to the timer queue to wait?", "¿Qué líneas corren en la pila enseguida y cuál se entregó a la cola de timers para esperar?", "すぐスタックで動く行はどれ？タイマーの列に預けられて待つのはどれ？"),
+      note: "set-timeout",
       prompt: IN_ORDER,
       code: code('console.log("A");', 'setTimeout(() => console.log("B"), 0);', 'console.log("C");'),
       options: ["A B C", "A C B", "B A C"],
@@ -73,6 +164,8 @@ const timers: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("Both callbacks wait in the timer queue. What decides which is due first: line order or delay?", "Ambos callbacks esperan en la cola de timers. ¿Qué decide cuál vence primero: el orden o el retraso?", "どちらもタイマーの列で待つ。先に時間が来るのを決めるのは行の順？待ち時間？"),
+      note: "set-timeout",
       prompt: IN_ORDER,
       code: code('setTimeout(() => console.log("1"), 100);', 'setTimeout(() => console.log("2"), 0);'),
       options: ["1 2", "2 1"],
@@ -93,6 +186,8 @@ const timers: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("Can a ready timer cut into the loop, or must the stack finish all its synchronous work first?", "¿Puede un timer listo colarse en el bucle, o la pila debe terminar antes todo su trabajo síncrono?", "準備できたタイマーはループに割り込める？それとも同期の仕事が全部終わるまで待つ？"),
+      note: "run-to-completion",
       prompt: IN_ORDER,
       code: code('setTimeout(() => console.log("x"), 0);', "for (let i = 0; i < 1e7; i++) {}", 'console.log("y");'),
       options: ["x y", "y x"],
@@ -109,6 +204,8 @@ const timers: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("load only schedules the callback. Does it wait for it, or return right away to the next line?", "load solo programa el callback. ¿Lo espera, o vuelve enseguida a la línea siguiente?", "load はコールバックを予約するだけ。待つ？それともすぐ次の行へ戻る？"),
+      note: "callbacks-later",
       prompt: IN_ORDER,
       code: code(
         "function load(cb: (d: string) => void) {",
@@ -134,6 +231,8 @@ const timers: LessonDef = {
     )),
     {
       kind: "pick",
+      hint: L("Remember the dialog: setTimeout returned an id in t. Only one option is a real function that takes it.", "Recuerda el diálogo: setTimeout dejó un id en t. Solo una opción es una función real que lo recibe.", "会話を思い出そう。t には setTimeout の id が入っている。それを受け取る本物の関数は 1 つだけ。"),
+      note: "set-timeout",
       prompt: L("Cancel the timer before it fires", "Cancela el timer antes de que salte", "動く前にタイマーを取り消そう"),
       code: code('const t = setTimeout(() => console.log("boom"), 0);', "___(t);", 'console.log("safe");'),
       options: ["clearTimeout", "setTimeout", "stopTimeout"],
@@ -149,6 +248,8 @@ const timers: LessonDef = {
     },
     {
       kind: "type",
+      hint: L("You need the function that hands a callback to the timer queue with a delay in ms. It's used all lesson.", "Necesitas la función que entrega un callback a la cola de timers con un retraso en ms. Sale en toda la lección.", "コールバックを ms の待ち時間つきでタイマーの列に預ける関数。このレッスンでずっと使っているよ。"),
+      note: "set-timeout",
       prompt: L("Schedule the callback for later", "Programa el callback para después", "コールバックをあとで動かそう"),
       code: code('___(() => console.log("later"), 0);', 'console.log("now");'),
       answer: "setTimeout",
@@ -162,6 +263,8 @@ const timers: LessonDef = {
     },
     {
       kind: "run",
+      hint: L("The log runs before the timer fires. Where in the code is ready guaranteed to be true already?", "El log corre antes de que salte el timer. ¿En qué parte del código ready ya es true con seguridad?", "ログはタイマーより先に動く。ready が確実に true になっている場所はコードのどこ？"),
+      note: "callbacks-later",
       prompt: L("Fix it: it must print go", "Arréglalo: debe imprimir go", "直そう：go と表示させる"),
       starter: code("let ready = false;", "setTimeout(() => {", "  ready = true;", "}, 0);", 'console.log(ready ? "go" : "wait");', ""),
       solution: code("let ready = false;", "setTimeout(() => {", "  ready = true;", '  console.log(ready ? "go" : "wait");', "}, 0);", ""),
@@ -177,9 +280,120 @@ const timers: LessonDef = {
       ),
     },
   ],
+  notes: timersNotes,
 };
 
 // ─── 5.2 promises ───────────────────────────────────────────────────────────
+const promisesNotes: NoteDef[] = [
+  note("promise-basics", L("What a Promise is", "Qué es una Promise", "Promise とは"),
+    p(
+      "A Promise is an object that stands for a value that isn't ready yet. It starts pending and then settles exactly once: fulfilled with a value, or rejected with a reason (usually an Error). After that it never changes. You read the value with .then(callback) and the error with .catch(callback).",
+      "Una Promise es un objeto que representa un valor que aún no está listo. Empieza pendiente y luego se resuelve una sola vez: cumplida con un valor, o rechazada con un motivo (casi siempre un Error). Después nunca cambia. El valor se lee con .then(callback) y el error con .catch(callback).",
+      "Promise は「まだ準備できていない値」を表すオブジェクト。最初は保留中で、そのあと一度だけ決まる。値をもって成功するか、理由（ふつうは Error）をもって失敗するか。決まったら二度と変わらない。値は .then(callback)、エラーは .catch(callback) で受け取るよ。",
+    ),
+    ex(code('const order = new Promise<string>((resolve) => resolve("soup"));', 'order.then((dish) => console.log("served", dish));'), "served soup"),
+    p(
+      "The function you pass to new Promise is called the executor. It runs immediately and synchronously, right inside new Promise, so its logs appear before the next line. Only the then and catch callbacks are delayed: they always run later, even when the promise is already settled.",
+      "La función que le pasas a new Promise se llama ejecutor. Corre de inmediato y de forma síncrona, dentro de new Promise, así que sus logs aparecen antes de la línea siguiente. Solo los callbacks de then y catch se retrasan: siempre corren después, aunque la promesa ya esté resuelta.",
+      "new Promise に渡す関数を executor という。new Promise の中で、すぐに同期的に動くので、そのログは次の行より先に出る。あとに回るのは then と catch のコールバックだけ。Promise がもう決まっていても、必ずあとで動くよ。",
+    ),
+    ex(code('console.log("before");', "const p = new Promise<number>((resolve) => {", '  console.log("executor");', "  resolve(4);", "});", 'p.then((n) => console.log("then", n));', 'console.log("after");'), "before\nexecutor\nafter\nthen 4",
+      L("Executor now, then callback later", "El ejecutor ahora, el callback de then después", "executor は今、then はあとで")),
+    p(
+      "Rule: executor now, callbacks later. Promise.resolve(v) and Promise.reject(err) are shortcuts that create an already settled promise; their then and catch callbacks still wait for the current code to finish.",
+      "Regla: el ejecutor ahora, los callbacks después. Promise.resolve(v) y Promise.reject(err) son atajos que crean una promesa ya resuelta; sus callbacks de then y catch igual esperan a que termine el código actual.",
+      "ルール：executor は今、コールバックはあと。Promise.resolve(v) と Promise.reject(err) は、もう決まった Promise を作る近道。それでも then や catch のコールバックは、今のコードが終わるまで待つよ。",
+    ),
+    p(
+      "Common mistakes: thinking resolve() runs the then callbacks on the spot (it only settles the promise; the callbacks are queued for later), and calling resolve twice. Only the first call counts.",
+      "Errores comunes: creer que resolve() ejecuta los callbacks de then en el acto (solo resuelve la promesa; los callbacks quedan en cola para después) y llamar a resolve dos veces. Solo cuenta la primera llamada.",
+      "よくあるミス：resolve() でその場で then のコールバックが動くと思うこと（Promise を決めるだけで、コールバックはあとに並ぶ）。それと resolve を 2 回呼ぶこと。効くのは最初の 1 回だけだよ。",
+    ),
+    ex(code("new Promise<string>((res) => {", '  res("first");', '  res("second");', "}).then((v) => console.log(v));"), "first",
+      L("A promise settles only once", "Una promesa se resuelve una sola vez", "Promise が決まるのは一度だけ")),
+  ),
+  note("then-chains", L("then returns a new promise", "then devuelve una promesa nueva", "then は新しい Promise を返す"),
+    p(
+      "then returns a NEW promise, and that new promise holds whatever the callback returns. That's what lets you chain: each then receives the previous callback's return value. If a callback returns a promise, the chain waits for it and passes its value along.",
+      "then devuelve una promesa NUEVA, y esa promesa guarda lo que retorna el callback. Eso permite encadenar: cada then recibe el valor que retornó el callback anterior. Si un callback retorna una promesa, la cadena la espera y pasa su valor.",
+      "then は「新しい」Promise を返し、その中身はコールバックの戻り値になる。だからつなげられる。どの then も、前のコールバックが返した値を受け取る。コールバックが Promise を返したら、チェーンはそれを待って中の値を渡すよ。",
+    ),
+    ex(code('Promise.resolve("ab")', "  .then((s) => s.toUpperCase())", '  .then((s) => s + "!")', "  .then((s) => console.log(s));"), "AB!",
+      L("Each step gets what the previous step returned", "Cada paso recibe lo que retornó el anterior", "各ステップは前の戻り値を受け取る")),
+    p(
+      "Arrow functions have two forms. Without braces, n => n + 100 returns the expression automatically. With braces, n => { n + 100; } is a block: it runs the line and returns nothing unless you write return. Returning nothing means the next then receives undefined.",
+      "Las funciones flecha tienen dos formas. Sin llaves, n => n + 100 retorna la expresión automáticamente. Con llaves, n => { n + 100; } es un bloque: ejecuta la línea y no retorna nada a menos que escribas return. No retornar nada significa que el siguiente then recibe undefined.",
+      "アロー関数には 2 つの形がある。波かっこなしの n => n + 100 は式の値を自動で返す。波かっこ付きの n => { n + 100; } はブロックで、return を書かないかぎり何も返さない。何も返さなければ、次の then は undefined を受け取るよ。",
+    ),
+    ex(code("const short = (n: number) => n + 100;", "const block = (n: number) => { n + 100; };", "console.log(short(1), block(1));"), "101 undefined",
+      L("Same math, but the block form returns nothing", "La misma cuenta, pero el bloque no retorna nada", "同じ計算でも、ブロック形は何も返さない")),
+    p(
+      "Rule: in a chain, every then must return the value the next step needs. If a later then prints undefined, look for a callback with braces and no return, and fix it by adding return or removing the braces.",
+      "Regla: en una cadena, cada then debe retornar el valor que necesita el paso siguiente. Si un then posterior imprime undefined, busca un callback con llaves y sin return, y arréglalo agregando return o quitando las llaves.",
+      "ルール：チェーンでは、どの then も次のステップに必要な値を返すこと。後ろの then が undefined を表示したら、波かっこ付きで return のないコールバックを探そう。return を足すか、波かっこを外せば直るよ。",
+    ),
+    p(
+      "Common mistake: nesting a then inside another then instead of returning. Return the inner promise and keep the chain flat: it reads from top to bottom, and a single catch at the end handles every step.",
+      "Error común: anidar un then dentro de otro then en vez de retornar. Retorna la promesa interna y mantén la cadena plana: se lee de arriba abajo y un solo catch al final maneja todos los pasos.",
+      "よくあるミス：return せずに then の中に then を入れ子にすること。中の Promise を return してチェーンを平らに保とう。上から下へ読めて、最後の catch 1 つで全ステップのエラーを受け止められるよ。",
+    ),
+    ex(code("Promise.resolve(2)", "  .then((n) => {", "    return n * n;", "  })", '  .then((sq) => console.log("square", sq));'), "square 4",
+      L("With braces, write return explicitly", "Con llaves, escribe return explícitamente", "波かっこ付きなら return を書く")),
+  ),
+  note("catch-errors", L("Rejections and catch", "Rechazos y catch", "失敗と catch"),
+    p(
+      "A promise can reject in three ways: Promise.reject(err), calling reject(err) in an executor, or a throw inside any then callback. A rejected promise skips every following then and travels down the chain until it reaches a catch.",
+      "Una promesa puede rechazarse de tres formas: Promise.reject(err), llamar a reject(err) en un ejecutor, o un throw dentro de cualquier callback de then. Una promesa rechazada se salta todos los then siguientes y baja por la cadena hasta llegar a un catch.",
+      "Promise が失敗する道は 3 つ。Promise.reject(err)、executor の中で reject(err) を呼ぶ、then のコールバックの中で throw する。失敗した Promise は後ろの then を全部飛ばし、catch に着くまでチェーンを下っていくよ。",
+    ),
+    p(
+      "catch(callback) is like then for failures. Its callback receives the reason, usually an Error, so e.message is the text. Once catch handles it, the chain is healthy again: the next then runs with whatever catch returned.",
+      "catch(callback) es como then, pero para fallos. Su callback recibe el motivo, casi siempre un Error, así que e.message es el texto. Cuando catch lo maneja, la cadena vuelve a estar sana: el siguiente then corre con lo que haya retornado catch.",
+      "catch(callback) は失敗用の then のようなもの。コールバックは理由（ふつうは Error）を受け取るので、e.message が文章になる。catch が受け止めればチェーンは元気に戻り、次の then は catch の戻り値で動くよ。",
+    ),
+    ex(code('Promise.reject(new Error("rain"))', '  .then(() => console.log("picnic"))', '  .catch((e) => console.log("plan B:", e.message))', '  .then(() => console.log("home"));'), "plan B: rain\nhome",
+      L("then is skipped; after catch the chain goes on", "then se salta; tras catch la cadena sigue", "then は飛ばされ、catch のあとは続く")),
+    p(
+      "Rule: put one catch at the end of a chain; it covers every step above it. A rejection with no catch is an unhandled rejection: browsers print a red error, and Node can stop the program.",
+      "Regla: pon un catch al final de la cadena; cubre todos los pasos de arriba. Un rechazo sin catch es un unhandled rejection: los navegadores muestran un error en rojo y Node puede detener el programa.",
+      "ルール：チェーンの最後に catch を 1 つ置こう。それより上の全ステップをカバーする。catch のない失敗は「未処理の rejection」になり、ブラウザは赤いエラーを出し、Node はプログラムを止めることもあるよ。",
+    ),
+    ex(code("Promise.resolve(10)", "  .then((n) => {", '    if (n > 5) throw new Error("too big");', "    return n;", "  })", "  .catch(() => -1)", '  .then((v) => console.log("value", v));'), "value -1",
+      L("A throw inside then becomes a rejection; catch replaces it", "Un throw en then se vuelve rechazo; catch lo reemplaza", "then の throw は失敗になり、catch が置きかえる")),
+    p(
+      "Common mistakes: expecting a then after a throw to still run (it's skipped), and putting catch at the top of a chain while expecting it to catch errors from later steps. catch only sees failures from the steps above it.",
+      "Errores comunes: esperar que un then después de un throw igual corra (se salta) y poner catch al principio de la cadena esperando que atrape errores de pasos posteriores. catch solo ve los fallos de los pasos que tiene arriba.",
+      "よくあるミス：throw のあとの then も動くと思うこと（飛ばされる）。それと catch をチェーンの先頭に置いて、後ろのステップのエラーも捕まえると思うこと。catch が見るのは自分より上のステップの失敗だけだよ。",
+    ),
+  ),
+  note("combinators", L("all, allSettled, race and any", "all, allSettled, race y any", "all・allSettled・race・any"),
+    p(
+      "Promise.all([...]) waits for every promise and gives an array of their values, in the same order as the input, not the order they finished. It fails fast: as soon as one rejects, the whole thing rejects with that error and the other results are lost.",
+      "Promise.all([...]) espera a todas las promesas y da un array con sus valores, en el mismo orden de entrada, no en el orden en que terminaron. Falla rápido: en cuanto una se rechaza, todo se rechaza con ese error y los demás resultados se pierden.",
+      "Promise.all([...]) は全部の Promise を待ち、値を配列で返す。並びは終わった順ではなく、渡した順。そして失敗は即決：1 つでも失敗したら、その理由で全体が失敗し、ほかの結果は捨てられるよ。",
+    ),
+    ex(code('const late = new Promise<string>((r) => setTimeout(() => r("slow"), 30));', 'Promise.all([late, Promise.resolve("quick")]).then((v) => console.log(v));'), "[ 'slow', 'quick' ]",
+      L("Results keep the input order, even if slow is last to finish", "Los resultados siguen el orden de entrada", "結果は渡した順のまま")),
+    p(
+      "Promise.allSettled never rejects: it waits for all of them and returns objects like { status: \"fulfilled\", value } or { status: \"rejected\", reason }. Use it when you want every outcome, even if some fail.",
+      "Promise.allSettled nunca se rechaza: espera a todas y devuelve objetos como { status: \"fulfilled\", value } o { status: \"rejected\", reason }. Úsalo cuando quieras todos los resultados, aunque algunos fallen.",
+      "Promise.allSettled は失敗しない。全部を待って、{ status: \"fulfilled\", value } や { status: \"rejected\", reason } のようなオブジェクトを返す。いくつか失敗しても全部の結果が欲しいときに使おう。",
+    ),
+    ex(code('Promise.allSettled([Promise.resolve(1), Promise.reject(new Error("nope"))])', '  .then((rs) => console.log(rs.map((r) => r.status).join(" ")));'), "fulfilled rejected"),
+    p(
+      "Promise.race settles like the first promise to settle, success or failure. Promise.any waits for the first SUCCESS and ignores rejections; it only rejects, with an AggregateError, if every promise rejects.",
+      "Promise.race se resuelve igual que la primera promesa que se resuelva, sea éxito o fallo. Promise.any espera el primer ÉXITO e ignora los rechazos; solo se rechaza, con un AggregateError, si todas las promesas se rechazan.",
+      "Promise.race は、成功でも失敗でも最初に決まった Promise と同じ結果になる。Promise.any は最初の「成功」を待ち、失敗は無視する。全部が失敗したときだけ AggregateError で失敗するよ。",
+    ),
+    ex(code('const tortoise = new Promise<string>((r) => setTimeout(() => r("tortoise"), 40));', 'const hare = new Promise<string>((r) => setTimeout(() => r("hare"), 10));', 'Promise.race([tortoise, hare]).then((w) => console.log("winner:", w));'), "winner: hare"),
+    p(
+      "Choose by the question you're asking: need every value? all. Every outcome? allSettled. Whoever finishes first? race. The first one that works? any. Common mistake: using race when a quick failure should be ignored; race would reject with it.",
+      "Elige según la pregunta: ¿necesitas todos los valores? all. ¿Todos los resultados? allSettled. ¿El primero en terminar? race. ¿El primero que funcione? any. Error común: usar race cuando un fallo rápido debería ignorarse; race se rechazaría con él.",
+      "何を知りたいかで選ぼう。全部の値なら all、全部の結果なら allSettled、最初に終わったものなら race、最初にうまくいったものなら any。よくあるミス：すぐ失敗するものを無視したいのに race を使うこと。race はその失敗で失敗するよ。",
+    ),
+  ),
+];
+
 const promises: LessonDef = {
   slug: "promise-chains",
   title: L("Sealed scrolls", "Pergaminos sellados", "封印された巻物"),
@@ -221,6 +435,8 @@ const promises: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("Is the function passed to new Promise delayed like a then callback, or run during new Promise?", "¿La función que se pasa a new Promise se retrasa como un then, o corre durante new Promise?", "new Promise に渡す関数は then のようにあとで動く？それとも new Promise の最中に動く？"),
+      note: "promise-basics",
       prompt: IN_ORDER,
       code: code("new Promise<void>((resolve) => {", '  console.log("A");', "  resolve();", "});", 'console.log("B");'),
       options: ["A B", "B A"],
@@ -236,6 +452,8 @@ const promises: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("Each then passes along what its callback RETURNS. Follow the value through each step.", "Cada then pasa lo que su callback RETORNA. Sigue el valor paso a paso.", "then はコールバックの「戻り値」を次へ渡す。値を 1 歩ずつ追いかけよう。"),
+      note: "then-chains",
       prompt: WHAT_PRINTS,
       code: code("Promise.resolve(1)", "  .then((x) => x + 1)", "  .then((x) => console.log(x));"),
       options: ["1", "2", "undefined"],
@@ -257,6 +475,8 @@ const promises: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("After a throw, the chain is rejected. Which callbacks are skipped until something handles it?", "Tras un throw, la cadena queda rechazada. ¿Qué callbacks se saltan hasta que algo lo maneje?", "throw のあとチェーンは失敗になる。受け止められるまで飛ばされるのはどれ？"),
+      note: "catch-errors",
       prompt: WHAT_PRINTS,
       code: code(
         "Promise.resolve(1)",
@@ -278,6 +498,8 @@ const promises: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("Look at the braces in the first arrow. Does a block body return anything without return?", "Mira las llaves de la primera flecha. ¿Un cuerpo de bloque retorna algo sin return?", "1 つ目のアロー関数の波かっこを見て。return なしのブロックは何か返す？"),
+      note: "then-chains",
       prompt: WHAT_PRINTS,
       code: code("Promise.resolve(5)", "  .then((x) => { x * 2; })", "  .then((v) => console.log(v));"),
       options: ["10", "5", "undefined"],
@@ -298,6 +520,8 @@ const promises: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("Promise.all needs every promise to succeed. What does it do as soon as one fails?", "Promise.all necesita que todas las promesas tengan éxito. ¿Qué hace en cuanto una falla?", "Promise.all は全部の成功が必要。1 つ失敗したらすぐどうなる？"),
+      note: "combinators",
       prompt: WHAT_PRINTS,
       code: code(
         "Promise.all([",
@@ -319,6 +543,8 @@ const promises: LessonDef = {
     },
     {
       kind: "pick",
+      hint: L("Think about what each option does when the first promise rejects. Which keeps waiting for a success?", "Piensa qué hace cada opción cuando la primera promesa se rechaza. ¿Cuál sigue esperando un éxito?", "最初の Promise が失敗したら各選択肢はどうなる？成功を待ちつづけるのはどれ？"),
+      note: "combinators",
       prompt: L("Take the first SUCCESS, ignore failures", "Toma el primer ÉXITO, ignora fallos", "最初の成功を取り、失敗は無視"),
       code: code('Promise.___([Promise.reject(new Error("a")), Promise.resolve(2)])', "  .then((v) => console.log(v));"),
       options: ["any", "all", "race"],
@@ -332,6 +558,8 @@ const promises: LessonDef = {
     },
     {
       kind: "type",
+      hint: L("then handles success; its partner method handles failure. The burnt-scroll demo used it.", "then maneja el éxito; su método compañero maneja el fallo. La demo del pergamino quemado lo usó.", "then は成功担当。失敗担当の相棒メソッドは？燃えた巻物のデモで使ったよ。"),
+      note: "catch-errors",
       prompt: L("Put out the fire", "Apaga el fuego", "火を消そう"),
       code: code('Promise.reject(new Error("x"))', '  .___((e) => console.log("caught", e.message));'),
       answer: "catch",
@@ -346,6 +574,8 @@ const promises: LessonDef = {
     },
     {
       kind: "run",
+      hint: L("Check the arrow with braces: what does it hand to the next then? A block needs an explicit return.", "Revisa la flecha con llaves: ¿qué le pasa al siguiente then? Un bloque necesita un return explícito.", "波かっこ付きのアロー関数は次の then に何を渡してる？ブロックには return が必要だよ。"),
+      note: "then-chains",
       prompt: L("Fix it: it must print xp: 30", "Arréglalo: debe imprimir xp: 30", "直そう：xp: 30 と表示させる"),
       starter: code(
         "function fetchLevel() {",
@@ -374,9 +604,116 @@ const promises: LessonDef = {
       ),
     },
   ],
+  notes: promisesNotes,
 };
 
 // ─── 5.3 async/await and errors ─────────────────────────────────────────────
+const asyncAwaitNotes: NoteDef[] = [
+  note("async-functions", L("async returns a Promise", "async devuelve una Promise", "async は Promise を返す"),
+    p(
+      "Writing async before a function changes what it returns: it ALWAYS returns a Promise. return 42 inside becomes a promise that fulfills with 42, and a throw inside becomes a rejected promise. TypeScript shows it in the type: async function load(): Promise<number>.",
+      "Escribir async antes de una función cambia lo que devuelve: SIEMPRE devuelve una Promise. Un return 42 adentro se vuelve una promesa que se cumple con 42, y un throw adentro se vuelve una promesa rechazada. TypeScript lo muestra en el tipo: async function load(): Promise<number>.",
+      "関数の前に async を書くと戻り値が変わる。「必ず」Promise を返すんだ。中の return 42 は 42 で成功する Promise に、中の throw は失敗した Promise になる。TypeScript では型に出る：async function load(): Promise<number>。",
+    ),
+    ex(code("async function luckyNumber() {", "  return 42;", "}", "const r = luckyNumber();", "console.log(typeof r);", "r.then((n) => console.log(n));"), "object\n42",
+      L("The call gives a Promise object; then receives the 42", "La llamada da un objeto Promise; then recibe el 42", "呼ぶと Promise オブジェクト、then が 42 を受け取る")),
+    p(
+      "await, used inside an async function or at the top level of a module, unwraps a promise: const n = await p; gives you the plain value. Without await you hold the Promise itself, not the value inside it.",
+      "await, usado dentro de una función async o en el nivel superior de un módulo, abre una promesa: const n = await p; te da el valor simple. Sin await tienes la Promise misma, no el valor que guarda.",
+      "await は async 関数の中かモジュールの一番外側で使い、Promise を開ける。const n = await p; でふつうの値が手に入る。await がなければ、持っているのは中の値ではなく Promise そのものだよ。",
+    ),
+    ex(code("async function petName() {", '  return "Biscuit";', "}", "const name = await petName();", "console.log(name.length);"), "7",
+      L("After await, name is a plain string", "Tras await, name es un string simple", "await のあと name はただの文字列")),
+    p(
+      "Forgetting await is a classic bug. In plain JavaScript, math on a promise gives nonsense like NaN or [object Promise]1, with no error. TypeScript stops it: a Promise<number> is not a number, so the compiler rejects the math. Read that error as \"did you forget await?\".",
+      "Olvidar await es un bug clásico. En JavaScript puro, hacer cuentas con una promesa da cosas sin sentido como NaN o [object Promise]1, sin ningún error. TypeScript lo detiene: una Promise<number> no es un number, así que el compilador rechaza la cuenta. Lee ese error como \"¿olvidaste await?\".",
+      "await の付け忘れは定番のバグ。素の JavaScript では Promise で計算すると NaN や [object Promise]1 のような変な結果になり、エラーも出ない。TypeScript は止めてくれる。Promise<number> は number ではないので計算を拒否する。そのエラーは「await を忘れてない？」と読もう。",
+    ),
+    bad(code("async function coins() {", "  return 5;", "}", "const total = coins() * 2;"),
+      L("Does not compile: coins() is a Promise, not a number", "No compila: coins() es una Promise, no un number", "コンパイル不可：coins() は number でなく Promise")),
+    p(
+      "Rule: async goes on the function, await goes on the call. async alone doesn't unwrap anything; it wraps. And then is not a keyword you put before a call: it's a method you call on a promise, p.then(...).",
+      "Regla: async va en la función, await va en la llamada. async solo no abre nada; envuelve. Y then no es una palabra clave que se pone antes de una llamada: es un método que se llama sobre una promesa, p.then(...).",
+      "ルール：async は関数に、await は呼び出しにつける。async だけでは何も開けない。包むだけだ。そして then は呼び出しの前に置くキーワードではなく、Promise に対して呼ぶメソッド p.then(...) だよ。",
+    ),
+  ),
+  note("await-pauses", L("await pauses only its function", "await pausa solo su función", "await が止めるのは自分の関数だけ"),
+    p(
+      "An async function runs synchronously, like a normal function, until its first await. There it pauses and hands control back to whoever called it, and the caller keeps going with its next lines. The rest of the function resumes later, as a microtask, after the current synchronous code finishes.",
+      "Una función async corre de forma síncrona, como una normal, hasta su primer await. Ahí se pausa y le devuelve el control a quien la llamó, que sigue con sus líneas siguientes. El resto de la función continúa después, como microtarea, cuando termina el código síncrono actual.",
+      "async 関数は最初の await までは普通の関数と同じく同期で動く。そこで一時停止して、呼んだ側に制御を返す。呼んだ側は次の行へ進む。関数の残りは、今の同期コードが終わってから、マイクロタスクとして再開するよ。",
+    ),
+    ex(code("async function brew() {", '  console.log("boil");', "  await null;", '  console.log("pour");', "}", "brew();", 'console.log("wait");'), "boil\nwait\npour",
+      L("brew pauses at await; the caller logs wait first", "brew se pausa en await; quien llama imprime wait antes", "brew は await で止まり、先に wait が出る")),
+    p(
+      "await pauses only its own function, never the whole program. That's what lets other code (clicks, timers, other functions) run while one function waits. Even awaiting a value that is already ready, like await null or await 0, pauses for a moment.",
+      "await pausa solo su propia función, nunca el programa entero. Eso permite que otro código (clics, timers, otras funciones) corra mientras una función espera. Incluso esperar un valor que ya está listo, como await null o await 0, pausa un momento.",
+      "await が止めるのは自分の関数だけで、プログラム全体は止めない。だから 1 つの関数が待っている間も、クリックやタイマーやほかの関数が動ける。await null や await 0 のように準備済みの値でも、ほんの一瞬止まるよ。",
+    ),
+    p(
+      "To predict the order, read top to bottom. When you enter an async function, keep going inside it until its first await, then jump back out to the caller. The lines after that await come after all the remaining synchronous lines.",
+      "Para predecir el orden, lee de arriba abajo. Al entrar en una función async, sigue dentro de ella hasta su primer await y luego vuelve a quien la llamó. Las líneas después de ese await vienen tras todas las líneas síncronas que quedan.",
+      "順番を予想するには上から読もう。async 関数に入ったら最初の await まで中を進み、そこで呼んだ側へ戻る。その await より後ろの行は、残りの同期の行が全部終わってからだよ。",
+    ),
+    ex(code("async function step(label: string) {", '  console.log(label, "start");', "  await 0;", '  console.log(label, "end");', "}", 'step("red");', 'step("blue");'), "red start\nblue start\nred end\nblue end",
+      L("Both start synchronously; both ends come later", "Ambos empiezan síncronos; los finales vienen después", "どちらも同期で始まり、終わりはあと")),
+    p(
+      "Common mistake: believing the whole program stops at await, so everything after f() waits for it. Only f waits. If the caller needs f's result, the caller must await f() too.",
+      "Error común: creer que todo el programa se detiene en await, así que todo lo que sigue a f() la espera. Solo f espera. Si quien llama necesita el resultado de f, también debe hacer await f().",
+      "よくあるミス：await でプログラム全体が止まり、f() の後ろの行も全部待つと思うこと。待つのは f だけ。呼んだ側が f の結果を必要とするなら、呼んだ側も await f() と書こう。",
+    ),
+  ),
+  note("try-catch-await", L("await errors and try/catch", "Errores de await y try/catch", "await のエラーと try/catch"),
+    p(
+      "When the promise you await rejects, await throws the error right there, like a throw statement. So you handle async failures with the same try/catch you'd use for synchronous code. Lines after the failing await inside try are skipped, and execution jumps to catch.",
+      "Cuando la promesa que esperas se rechaza, await lanza el error ahí mismo, como una instrucción throw. Así que manejas los fallos async con el mismo try/catch que usarías para código síncrono. Las líneas después del await que falla dentro del try se saltan y la ejecución salta al catch.",
+      "await した Promise が失敗すると、await はその場で throw 文のようにエラーを投げる。だから非同期の失敗も、同期コードと同じ try/catch で受け止められる。try の中で失敗した await より後ろの行は飛ばされ、catch へジャンプするよ。",
+    ),
+    p(
+      "In TypeScript strict mode the catch variable e is unknown, because any value can be thrown. Narrow it before reading properties: if (e instanceof Error) gives you e.message safely. Reading e.message directly does not compile.",
+      "En el modo estricto de TypeScript, la variable e del catch es unknown, porque se puede lanzar cualquier valor. Estréchala antes de leer propiedades: if (e instanceof Error) te da e.message de forma segura. Leer e.message directamente no compila.",
+      "TypeScript の strict モードでは、catch の e は unknown 型。どんな値でも throw できるからだ。プロパティを読む前に絞りこもう。if (e instanceof Error) なら e.message を安全に読める。いきなり e.message と書くとコンパイルできないよ。",
+    ),
+    ex(code('const fail = () => Promise.reject(new RangeError("too far"));', "try {", "  await fail();", '  console.log("arrived");', "} catch (e) {", "  if (e instanceof Error) console.log(e.name, e.message);", "}"), "RangeError too far",
+      L("arrived is skipped; catch narrows e before reading it", "arrived se salta; catch estrecha e antes de leerla", "arrived は飛ばされ、catch で e を絞って読む")),
+    bad(code("try {", '  await Promise.reject(new Error("z"));', "} catch (e) {", "  console.log(e.message);", "}"),
+      L("Does not compile: e is unknown until you narrow it", "No compila: e es unknown hasta que la estreches", "コンパイル不可：絞りこむまで e は unknown")),
+    p(
+      "Rule: the await must be INSIDE the try block for catch to see its error. An await placed before or after the try isn't protected, and its rejection escapes. You can also add finally { ... } to run cleanup either way, like hiding a loading spinner.",
+      "Regla: el await debe estar DENTRO del bloque try para que catch vea su error. Un await puesto antes o después del try no está protegido y su rechazo se escapa. También puedes agregar finally { ... } para limpiar pase lo que pase, como ocultar un spinner de carga.",
+      "ルール：catch がエラーを見るには、await が try ブロックの「中」にあること。try の前や後ろの await は守られず、失敗が外へ逃げる。finally { ... } を足せば、成功でも失敗でも後片づけ（読み込み表示を消すなど）ができるよ。",
+    ),
+    ex(code("async function save() {", '  return "saved";', "}", "try {", "  console.log(await save());", "} finally {", '  console.log("spinner off");', "}"), "saved\nspinner off",
+      L("finally runs after success too", "finally también corre tras un éxito", "finally は成功のあとも動く")),
+  ),
+  note("loops-and-await", L("Loops that really wait", "Bucles que esperan de verdad", "ちゃんと待つループ"),
+    p(
+      "array.forEach(cb) calls cb for each item and ignores what cb returns. An async callback returns a promise, so forEach throws those promises away and returns immediately. Nothing waits: the code after forEach runs before any callback finishes its await.",
+      "array.forEach(cb) llama a cb por cada elemento e ignora lo que cb retorna. Un callback async retorna una promesa, así que forEach tira esas promesas y vuelve de inmediato. Nada espera: el código después de forEach corre antes de que algún callback termine su await.",
+      "array.forEach(cb) は要素ごとに cb を呼び、cb の戻り値は無視する。async のコールバックは Promise を返すので、forEach はそれを捨ててすぐ戻る。誰も待たない。forEach の次のコードは、どのコールバックの await が終わるより先に動くよ。",
+    ),
+    ex(code("const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));", "let fed = 0;", '["owl", "cat"].forEach(async () => {', "  await sleep(5);", "  fed++;", "});", 'console.log("fed:", fed);'), "fed: 0",
+      L("forEach returned before any pet was fed", "forEach volvió antes de alimentar a nadie", "えさをあげる前に forEach は戻った")),
+    p(
+      "To go one at a time, use a for...of loop with await inside an async function, or at the top level. Each iteration waits before the next one starts, so the order is guaranteed and the total time is the sum of all the waits.",
+      "Para ir de uno en uno, usa un bucle for...of con await dentro de una función async o en el nivel superior. Cada vuelta espera antes de que empiece la siguiente, así que el orden está garantizado y el tiempo total es la suma de todas las esperas.",
+      "1 つずつ進めるなら、async 関数の中か一番外側で、await 入りの for...of ループを使おう。各回が終わるまで次は始まらないので順番は保証され、かかる時間は待ち時間の合計になるよ。",
+    ),
+    ex(code("const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));", 'for (const pet of ["owl", "cat"]) {', "  await sleep(5);", '  console.log("fed", pet);', "}", 'console.log("all fed");'), "fed owl\nfed cat\nall fed"),
+    p(
+      "To run them all at the same time, map each item to a promise and await Promise.all(...). It starts everything at once, waits for the slowest, and returns the results in input order. It's faster when the tasks don't depend on each other.",
+      "Para correrlos todos a la vez, convierte cada elemento en una promesa con map y haz await Promise.all(...). Inicia todo al mismo tiempo, espera al más lento y devuelve los resultados en el orden de entrada. Es más rápido cuando las tareas no dependen unas de otras.",
+      "全部を同時に走らせるなら、map で各要素を Promise にして await Promise.all(...)。全部を一度に始め、一番遅いものを待ち、結果を渡した順で返す。仕事どうしが関係ないときはこちらが速いよ。",
+    ),
+    ex(code("const double = async (n: number) => n * 2;", "const out = await Promise.all([5, 6].map(double));", "console.log(out);"), "[ 10, 12 ]"),
+    p(
+      "Common mistakes: an async callback in forEach, and filling an array with forEach and returning it before it's full. Also, map(async ...) alone gives an array of promises; you still need await Promise.all to get the values.",
+      "Errores comunes: un callback async en forEach, y llenar un array con forEach y devolverlo antes de que esté lleno. Además, map(async ...) solo da un array de promesas; igual necesitas await Promise.all para obtener los valores.",
+      "よくあるミス：forEach に async コールバックを渡すこと。forEach で配列を埋めて、埋まる前に返してしまうこと。それに map(async ...) だけでは Promise の配列になる。値が欲しければ await Promise.all がまだ必要だよ。",
+    ),
+  ),
+];
+
 const asyncAwait: LessonDef = {
   slug: "async-await-errors",
   title: L("Waiting spells", "Hechizos de espera", "待つ呪文"),
@@ -409,6 +746,8 @@ const asyncAwait: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("An async function always wraps its result. Is f() the number itself, or something holding it?", "Una función async siempre envuelve su resultado. ¿f() es el número mismo, o algo que lo guarda?", "async 関数は結果を必ず包む。f() は数そのもの？それとも数を包んだもの？"),
+      note: "async-functions",
       prompt: WHAT_PRINTS,
       code: code("async function f() {", "  return 1;", "}", "console.log(f() instanceof Promise);", "f().then((v) => console.log(v));"),
       options: ["true 1", "false 1", "1 1"],
@@ -423,6 +762,8 @@ const asyncAwait: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("f runs synchronously until its first await, then control goes back to the caller. What runs next?", "f corre de forma síncrona hasta su primer await y luego vuelve a quien la llamó. ¿Qué corre después?", "f は最初の await まで同期で動き、そこで呼んだ側へ戻る。次に動くのは？"),
+      note: "await-pauses",
       prompt: IN_ORDER,
       code: code(
         "async function f() {",
@@ -453,6 +794,8 @@ const asyncAwait: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("Without await, what type does hp have? Can TypeScript add 1 to that type?", "Sin await, ¿qué tipo tiene hp? ¿Puede TypeScript sumarle 1 a ese tipo?", "await がないと hp の型は？その型に TypeScript は 1 を足せる？"),
+      note: "async-functions",
       prompt: COMPILES,
       code: code("async function getHp() {", "  return 7;", "}", "const hp = getHp();", "console.log(hp + 1);"),
       options: [YES, L("No: hp is a Promise", "No: hp es una Promise", "いいえ：hp は Promise")],
@@ -467,6 +810,8 @@ const asyncAwait: LessonDef = {
     },
     {
       kind: "pick",
+      hint: L("Look back at the demo: which keyword stood before getHp() to get the plain 7?", "Mira la demo: ¿qué palabra clave iba antes de getHp() para obtener el 7 simple?", "デモを思い出そう。ただの 7 を取り出すとき getHp() の前にあったキーワードは？"),
+      note: "async-functions",
       prompt: L("Get the number, not the Promise", "Obtén el número, no la Promise", "Promise でなく数を取り出そう"),
       code: code("async function getHp() {", "  return 7;", "}", "const hp = ___ getHp();", "console.log(hp + 1);"),
       options: ["await", "async", "then"],
@@ -485,6 +830,8 @@ const asyncAwait: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("When an awaited promise rejects, await throws. What happens to the lines after it inside try?", "Cuando una promesa esperada se rechaza, await lanza. ¿Qué pasa con las líneas que siguen dentro del try?", "await した Promise が失敗すると await は throw する。try の中のその後ろの行は？"),
+      note: "try-catch-await",
       prompt: WHAT_PRINTS,
       code: code(
         "try {",
@@ -506,6 +853,8 @@ const asyncAwait: LessonDef = {
     },
     {
       kind: "order",
+      hint: L("Open the protected block first. Which line can fail, and where should the fallback message go?", "Abre primero el bloque protegido. ¿Qué línea puede fallar y dónde va el mensaje de respaldo?", "まず守るブロックを開こう。失敗しうる行はどれ？代わりのメッセージはどこ？"),
+      note: "try-catch-await",
       prompt: L("Load the hp and survive a failure", "Carga el hp y sobrevive a un fallo", "hp を読み、失敗にも耐えよう"),
       lines: ["try {", "const hp = await loadHp();", "console.log(hp);", "} catch (e) {", 'console.log("failed");', "}"],
       explain: L(
@@ -526,6 +875,8 @@ const asyncAwait: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("Does forEach wait for the promises its async callbacks return? Which log needs no waiting?", "¿forEach espera las promesas que retornan sus callbacks async? ¿Qué log no necesita esperar?", "forEach は async コールバックの Promise を待つ？待たずに出せるログはどれ？"),
+      note: "loops-and-await",
       prompt: IN_ORDER,
       code: code(WAIT_DEF, "[1, 2].forEach(async (n) => {", "  await wait(10);", "  console.log(n);", "});", 'console.log("done");'),
       options: ["1 2 done", "done 1 2", "done"],
@@ -540,6 +891,8 @@ const asyncAwait: LessonDef = {
     },
     {
       kind: "type",
+      hint: L("You want one promise that waits for every promise in the array and gives back all results.", "Quieres una promesa que espere a todas las del array y devuelva todos los resultados.", "配列の Promise を全部待って、結果を全部返す 1 つの Promise が欲しい。"),
+      note: "loops-and-await",
       prompt: L("Wait for both at the same time", "Espera a ambos a la vez", "両方を同時に待とう"),
       code: code("const [a, b] = await Promise.___([", "  Promise.resolve(1),", "  Promise.resolve(2),", "]);", "console.log(a + b);"),
       answer: "all",
@@ -552,6 +905,8 @@ const asyncAwait: LessonDef = {
     },
     {
       kind: "run",
+      hint: L("forEach doesn't wait for async callbacks. Which kind of loop lets you await each step inside it?", "forEach no espera callbacks async. ¿Qué tipo de bucle te deja hacer await en cada paso?", "forEach は async コールバックを待たない。中で 1 歩ずつ await できるループは？"),
+      note: "loops-and-await",
       prompt: L("Fix it: it must print [2,4,6]", "Arréglalo: debe imprimir [2,4,6]", "直そう：[2,4,6] と表示させる"),
       starter: code(
         WAIT_DEF,
@@ -588,9 +943,89 @@ const asyncAwait: LessonDef = {
       ),
     },
   ],
+  notes: asyncAwaitNotes,
 };
 
 // ─── 5.4 microtasks vs macrotasks ───────────────────────────────────────────
+const queuesNotes: NoteDef[] = [
+  note("two-queues", L("Microtasks before macrotasks", "Microtareas antes que macrotareas", "マイクロはマクロより先"),
+    p(
+      "The event loop has more than one waiting line. Timer callbacks (setTimeout, setInterval) and events are macrotasks: they wait in the task queue. Promise callbacks (then, catch, finally, and the rest of an async function after await) and queueMicrotask are microtasks: they wait in the microtask queue, the VIP line.",
+      "El event loop tiene más de una fila de espera. Los callbacks de timers (setTimeout, setInterval) y los eventos son macrotareas: esperan en la cola de tareas. Los callbacks de promesas (then, catch, finally y el resto de una función async tras await) y queueMicrotask son microtareas: esperan en la cola de microtareas, la fila VIP.",
+      "イベントループの待ち列は 1 つではない。タイマー（setTimeout、setInterval）やイベントのコールバックはマクロタスクで、タスクの列で待つ。Promise のコールバック（then、catch、finally、await 後の async 関数の続き）と queueMicrotask はマイクロタスクで、VIP 列で待つよ。",
+    ),
+    p(
+      "The VIP rule: as soon as the call stack is empty, the loop runs EVERY microtask in the queue before it touches the next macrotask. So a promise callback always beats a timer scheduled at the same moment, even a 0 ms one, whichever line came first.",
+      "La regla VIP: en cuanto la pila de llamadas queda vacía, el bucle ejecuta TODAS las microtareas de la cola antes de tocar la siguiente macrotarea. Así que un callback de promesa siempre le gana a un timer programado en el mismo momento, incluso de 0 ms, sin importar qué línea vino primero.",
+      "VIP のルール：コールスタックが空になったら、次のマクロタスクに手をつける前に、列のマイクロタスクを「全部」実行する。だから同じときに予約したタイマーには、0 ms でも、どちらの行が先でも、Promise のコールバックが必ず勝つよ。",
+    ),
+    ex(code('setTimeout(() => console.log("taxi"), 0);', 'Promise.resolve().then(() => console.log("vip"));', 'queueMicrotask(() => console.log("vip 2"));', 'console.log("walk");'), "walk\nvip\nvip 2\ntaxi",
+      L("Sync, then both microtasks in queue order, then the timer", "Síncrono, las dos microtareas en orden y luego el timer", "同期→マイクロ 2 つを並んだ順→タイマー")),
+    p(
+      "Recipe to predict: 1) all synchronous logs, top to bottom; 2) microtasks, in the order they were queued; 3) macrotasks such as timers, by due time. queueMicrotask(fn) puts fn straight into the VIP line without making a promise.",
+      "Receta para predecir: 1) todos los logs síncronos, de arriba abajo; 2) las microtareas, en el orden en que se encolaron; 3) las macrotareas como los timers, según cuándo vencen. queueMicrotask(fn) mete fn directo en la fila VIP sin crear una promesa.",
+      "予想のレシピ：1) 同期のログを上から全部、2) マイクロタスクを並んだ順に、3) タイマーなどのマクロタスクを時間が来る順に。queueMicrotask(fn) は Promise を作らずに fn を直接 VIP 列へ入れるよ。",
+    ),
+    p(
+      "Common mistakes: treating setTimeout(fn, 0) and Promise.resolve().then(fn) as the same kind of later (both wait for the stack, but microtasks go first), and assuming line order decides. The type of queue decides.",
+      "Errores comunes: tratar setTimeout(fn, 0) y Promise.resolve().then(fn) como el mismo tipo de después (ambos esperan a la pila, pero las microtareas van primero) y suponer que decide el orden de las líneas. Decide el tipo de cola.",
+      "よくあるミス：setTimeout(fn, 0) と Promise.resolve().then(fn) を同じ「あとで」と思うこと（どちらもスタックを待つが、マイクロが先）。それと行の順で決まると思うこと。決めるのは列の種類だよ。",
+    ),
+  ),
+  note("loop-cycle", L("One turn of the event loop", "Una vuelta del event loop", "イベントループの 1 周"),
+    p(
+      "One turn of the event loop: take ONE macrotask, such as a timer callback, and run it to completion; then drain the microtask queue completely, including microtasks added while draining; then the browser may repaint; then the next macrotask. Your script itself is the first macrotask.",
+      "Una vuelta del event loop: toma UNA macrotarea, como un callback de timer, y córrela hasta el final; luego vacía por completo la cola de microtareas, incluso las que se agreguen mientras tanto; luego el navegador puede repintar; luego la siguiente macrotarea. Tu propio script es la primera macrotarea.",
+      "イベントループの 1 周：マクロタスク（タイマーのコールバックなど）を「1 つ」取って最後まで実行。次にマイクロタスクの列を完全に空にする（途中で増えた分も）。ブラウザはそこで再描画するかも。そして次のマクロタスク。スクリプト自体が最初のマクロタスクだよ。",
+    ),
+    p(
+      "So a promise created inside a timer callback runs right after that callback, before the next timer, even if both timers were due at the same time. Each macrotask gets its own clean-up round of microtasks.",
+      "Por eso una promesa creada dentro de un callback de timer corre justo después de ese callback, antes del siguiente timer, aunque ambos timers vencieran al mismo tiempo. Cada macrotarea tiene su propia ronda de microtareas.",
+      "だから、タイマーのコールバックの中で作った Promise は、そのコールバックの直後、次のタイマーより先に動く。2 つのタイマーが同時に時間切れでもね。マクロタスクごとに、マイクロタスクの片づけが 1 回ずつあるんだ。",
+    ),
+    ex(code("setTimeout(() => {", '  console.log("lunch");', '  queueMicrotask(() => console.log("dessert"));', "}, 0);", 'setTimeout(() => console.log("nap"), 0);'), "lunch\ndessert\nnap",
+      L("The microtask runs between the two timers", "La microtarea corre entre los dos timers", "マイクロタスクは 2 つのタイマーの間")),
+    p(
+      "Because the loop drains microtasks until the queue is EMPTY, a microtask that keeps queuing new microtasks never lets the loop move on. Timers starve, clicks are ignored and the page freezes. A repeating setTimeout doesn't do this, because each callback is a separate macrotask.",
+      "Como el bucle vacía las microtareas hasta que la cola queda VACÍA, una microtarea que no para de encolar nuevas microtareas nunca deja avanzar al bucle. Los timers se quedan sin turno, se ignoran los clics y la página se congela. Un setTimeout que se repite no hace esto, porque cada callback es una macrotarea aparte.",
+      "ループは列が「空」になるまでマイクロタスクを片づけるので、新しいマイクロタスクを足しつづけるマイクロタスクがあると先へ進めない。タイマーは飢え、クリックは無視され、ページは固まる。くり返す setTimeout なら大丈夫。コールバックが毎回別のマクロタスクだからだよ。",
+    ),
+    ex(code("let n = 0;", "function tick() {", "  n++;", "  if (n < 3) queueMicrotask(tick);", "}", "tick();", 'setTimeout(() => console.log("ticks:", n), 0);'), "ticks: 3",
+      L("The timer waits until the chain of microtasks stops", "El timer espera a que pare la cadena de microtareas", "マイクロタスクの連鎖が止まるまでタイマーは待つ")),
+    p(
+      "Rule: microtasks are for short follow-up work. Anything long or repeating belongs in a timer (or requestAnimationFrame in browsers), so the loop can breathe between turns.",
+      "Regla: las microtareas son para trabajo corto de seguimiento. Todo lo largo o repetitivo va en un timer (o en requestAnimationFrame en los navegadores), para que el bucle respire entre vueltas.",
+      "ルール：マイクロタスクは短い後始末用。長い処理やくり返しはタイマー（ブラウザなら requestAnimationFrame）に任せて、ループが 1 周ごとに息をつけるようにしよう。",
+    ),
+  ),
+  note("chain-turns", L("Chains and await take turns", "Cadenas y await se turnan", "チェーンと await は交代で進む"),
+    p(
+      "A then callback is queued only when its promise settles. In a chain p.then(a).then(b), the promise that b waits for settles only after a has run, so b joins the microtask queue at that moment: at the BACK of the line, behind anything queued earlier.",
+      "Un callback de then se encola solo cuando su promesa se resuelve. En una cadena p.then(a).then(b), la promesa que espera b se resuelve solo después de que corre a, así que b entra en la cola de microtareas en ese momento: al FINAL de la fila, detrás de todo lo encolado antes.",
+      "then のコールバックが列に並ぶのは、その Promise が決まったとき。p.then(a).then(b) では、b が待つ Promise は a が動いてから決まる。だから b はその時点で列の「最後尾」に並ぶ。先に並んだものの後ろだよ。",
+    ),
+    p(
+      "That's why two chains started together take turns: the first steps of both chains run, then the second steps of both, and so on. Each step moves to the end of the line after the previous step finishes.",
+      "Por eso dos cadenas que empiezan juntas se turnan: corren los primeros pasos de ambas, luego los segundos de ambas, y así. Cada paso pasa al final de la fila cuando termina el paso anterior.",
+      "だから同時に始めた 2 つのチェーンは交代で進む。まず両方の 1 歩目、次に両方の 2 歩目…という具合。前のステップが終わるたびに、次のステップが列の最後に並ぶんだ。",
+    ),
+    ex(code('Promise.resolve().then(() => console.log("x1")).then(() => console.log("x2")).then(() => console.log("x3"));', 'Promise.resolve().then(() => console.log("y1")).then(() => console.log("y2"));'), "x1\ny1\nx2\ny2\nx3",
+      L("A three-step chain and a two-step chain interleave", "Una cadena de tres pasos y otra de dos se intercalan", "3 歩と 2 歩のチェーンが交互に進む")),
+    p(
+      "await works the same way: the rest of an async function after await is a microtask, queued when the awaited value is ready. Awaiting a promise that is already fulfilled (like a call to an async function with no await inside) queues the continuation right away, ahead of anything queued later.",
+      "await funciona igual: el resto de una función async después de await es una microtarea que se encola cuando el valor esperado está listo. Esperar una promesa ya cumplida (como la llamada a una función async sin await adentro) encola la continuación de inmediato, antes de lo que se encole después.",
+      "await も同じ。await のあとの async 関数の続きはマイクロタスクで、待つ値が準備できたときに並ぶ。もう成功している Promise（中に await のない async 関数の呼び出しなど）を await すると、続きはすぐに並び、あとから並ぶものより先になるよ。",
+    ),
+    ex(code("async function helper() {", '  console.log("helper");', "}", "async function run() {", "  await helper();", '  console.log("run resumes");', "}", "run();", 'queueMicrotask(() => console.log("queued later"));', 'console.log("sync end");'), "helper\nsync end\nrun resumes\nqueued later",
+      L("run's continuation was queued first, so it goes first", "La continuación de run se encoló primero y va primero", "run の続きが先に並んだので先に動く")),
+    p(
+      "Common mistake: assuming each chain finishes before the next one starts. Instead, write down the microtask line on paper, add each callback when its promise settles, and always take from the front.",
+      "Error común: suponer que cada cadena termina antes de que empiece la siguiente. Mejor anota la fila de microtareas en papel, agrega cada callback cuando su promesa se resuelva y saca siempre del frente.",
+      "よくあるミス：1 つのチェーンが終わってから次が始まると思うこと。紙にマイクロタスクの列を書き、Promise が決まるたびにコールバックを後ろに足し、いつも先頭から取り出そう。",
+    ),
+  ),
+];
+
 const queues: LessonDef = {
   slug: "microtasks-and-macrotasks",
   title: L("The three queues", "Las tres colas", "3つの列"),
@@ -633,6 +1068,8 @@ const queues: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("Sort the lines into sync code, promise callbacks (VIP line) and timers. Which group goes first?", "Separa las líneas en código síncrono, callbacks de promesas (fila VIP) y timers. ¿Qué grupo va primero?", "行を同期・Promise（VIP 列）・タイマーに分けよう。どの組が先？"),
+      note: "two-queues",
       prompt: IN_ORDER,
       code: code('console.log("A");', 'setTimeout(() => console.log("B"), 0);', 'Promise.resolve().then(() => console.log("C"));', 'console.log("D");'),
       options: ["A B C D", "A D B C", "A D C B"],
@@ -649,6 +1086,8 @@ const queues: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("queueMicrotask puts its callback in a line. Which line, and does it beat the timer queue?", "queueMicrotask pone su callback en una fila. ¿En cuál, y le gana a la cola de timers?", "queueMicrotask はどの列に並べる？その列はタイマーの列より先？"),
+      note: "two-queues",
       prompt: IN_ORDER,
       code: code('setTimeout(() => console.log("T"), 0);', 'queueMicrotask(() => console.log("M"));', 'console.log("S");'),
       options: ["S M T", "S T M", "T M S"],
@@ -668,6 +1107,8 @@ const queues: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("After each timer callback, the loop empties the microtask queue. When is p1 queued?", "Tras cada callback de timer, el bucle vacía la cola de microtareas. ¿Cuándo se encola p1?", "タイマーのコールバックのたびにマイクロタスクを空にする。p1 が並ぶのはいつ？"),
+      note: "loop-cycle",
       prompt: IN_ORDER,
       code: code(
         "setTimeout(() => {",
@@ -688,6 +1129,8 @@ const queues: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("A chained then is queued only after the previous step runs. Track the microtask line step by step.", "Un then encadenado se encola solo cuando corre el paso anterior. Sigue la fila de microtareas paso a paso.", "つないだ then は前のステップが動いてから並ぶ。マイクロタスクの列を 1 歩ずつ追おう。"),
+      note: "chain-turns",
       prompt: IN_ORDER,
       code: code(
         "Promise.resolve()",
@@ -709,6 +1152,8 @@ const queues: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("Run a up to its await, including the call to b. Is the rest of a queued before or after p?", "Corre a hasta su await, incluida la llamada a b. ¿El resto de a se encola antes o después de p?", "a を await まで動かそう（b の呼び出しも）。a の続きは p より先に並ぶ？後？"),
+      note: "chain-turns",
       prompt: IN_ORDER,
       code: code(
         'async function a() {',
@@ -734,6 +1179,8 @@ const queues: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("The loop drains ALL microtasks before taking a timer. Does this microtask queue ever become empty?", "El bucle vacía TODAS las microtareas antes de tomar un timer. ¿Esta cola de microtareas llega a vaciarse?", "タイマーの前にマイクロタスクを「全部」片づける。この列はいつか空になる？"),
+      note: "loop-cycle",
       prompt: L("What happens?", "¿Qué pasa?", "どうなる？"),
       code: code("function loop() {", "  Promise.resolve().then(loop);", "}", "loop();", 'setTimeout(() => console.log("never"), 0);'),
       options: [
@@ -751,6 +1198,8 @@ const queues: LessonDef = {
     },
     {
       kind: "run",
+      hint: L("The sync log already comes first. Of the two callbacks, which runs second? Make it print the 2nd letter.", "El log síncrono ya va primero. De los dos callbacks, ¿cuál corre segundo? Haz que imprima la 2.ª letra.", "同期のログはもう先頭。2 つのコールバックのうち 2 番目に動くのは？そこで 2 番目の文字を。"),
+      note: "two-queues",
       prompt: L("Make it print A, B, C without moving lines", "Haz que imprima A, B, C sin mover líneas", "行を動かさず A, B, C の順にしよう"),
       starter: code('setTimeout(() => console.log("B"), 0);', 'Promise.resolve().then(() => console.log("C"));', 'console.log("A");', ""),
       solution: code('setTimeout(() => console.log("C"), 0);', 'Promise.resolve().then(() => console.log("B"));', 'console.log("A");', ""),
@@ -765,9 +1214,53 @@ const queues: LessonDef = {
       ),
     },
   ],
+  notes: queuesNotes,
 };
 
 // ─── boss ───────────────────────────────────────────────────────────────────
+const bossNotes: NoteDef[] = [
+  note("recap-timers", L("Recap: the stack and timers", "Repaso: la pila y los timers", "復習：スタックとタイマー"),
+    p(
+      "JavaScript runs one thing at a time on the call stack, and code that starts runs to the end. setTimeout hands its callback to the timer queue and returns at once; the callback runs only when its delay has passed AND the stack is empty, even with 0 ms.",
+      "JavaScript hace una cosa a la vez en la pila de llamadas, y el código que empieza corre hasta el final. setTimeout entrega su callback a la cola de timers y vuelve enseguida; el callback corre solo cuando pasó su retraso Y la pila está vacía, incluso con 0 ms.",
+      "JavaScript はコールスタックで一度にひとつだけ実行し、始まったコードは最後まで動く。setTimeout はコールバックをタイマーの列に預けてすぐ戻る。コールバックが動くのは、時間が過ぎて、しかもスタックが空のときだけ。0 ms でもね。",
+    ),
+    ex(code('setTimeout(() => console.log("echo"), 0);', 'console.log("shout");'), "shout\necho"),
+  ),
+  note("recap-promises", L("Recap: promises", "Repaso: promesas", "復習：Promise"),
+    p(
+      "The executor of new Promise runs synchronously; then and catch callbacks run later. Each then passes on what its callback returns (an arrow with braces needs return). A rejection skips thens until a catch handles it.",
+      "El ejecutor de new Promise corre de forma síncrona; los callbacks de then y catch corren después. Cada then pasa lo que retorna su callback (una flecha con llaves necesita return). Un rechazo se salta los then hasta que un catch lo maneja.",
+      "new Promise の executor は同期で動き、then と catch のコールバックはあとで動く。then はコールバックの戻り値を次へ渡す（波かっこ付きのアロー関数には return が必要）。失敗すると、catch が受け止めるまで then は飛ばされるよ。",
+    ),
+    ex(code("Promise.resolve(3)", "  .then((n) => n + 4)", '  .then((n) => { if (n > 5) throw new Error("over"); })', '  .catch((e) => console.log("caught", e.message));'), "caught over"),
+    p(
+      "Combinators: all gives an array of every value and fails fast; allSettled reports every outcome; race follows the first to settle; any takes the first success.",
+      "Combinadores: all da un array con todos los valores y falla rápido; allSettled informa todos los resultados; race sigue a la primera que se resuelve; any toma el primer éxito.",
+      "組み合わせ：all は全部の値を配列で返し、失敗は即決。allSettled は全部の結果を報告。race は最初に決まったものに従い、any は最初の成功を取るよ。",
+    ),
+  ),
+  note("recap-async", L("Recap: async and await", "Repaso: async y await", "復習：async と await"),
+    p(
+      "An async function always returns a Promise, so its result isn't a plain number until you await it; TypeScript rejects using a Promise<number> as a number. await pauses only its own function: the caller continues, and the rest of the function resumes later as a microtask.",
+      "Una función async siempre devuelve una Promise, así que su resultado no es un number simple hasta que le haces await; TypeScript rechaza usar una Promise<number> como number. await pausa solo su propia función: quien llama sigue, y el resto de la función continúa después como microtarea.",
+      "async 関数は必ず Promise を返すので、await するまで結果はただの数ではない。TypeScript は Promise<number> を number として使うのを拒否する。await が止めるのは自分の関数だけ。呼んだ側は進み、関数の続きはあとでマイクロタスクとして再開するよ。",
+    ),
+    ex(code("async function tea() {", '  console.log("kettle on");', "  await null;", '  console.log("tea ready");', "}", "tea();", 'console.log("read a book");'), "kettle on\nread a book\ntea ready"),
+    bad(code("async function level() {", "  return 2;", "}", "const next: number = level() + 1;"),
+      L("Does not compile: level() is a Promise<number>", "No compila: level() es una Promise<number>", "コンパイル不可：level() は Promise<number>")),
+  ),
+  note("recap-queues", L("Recap: the three queues", "Repaso: las tres colas", "復習：3 つの列"),
+    p(
+      "Order of the loop: all synchronous code first; then every microtask (promise callbacks, code after await, queueMicrotask) in the order queued; then one macrotask (a timer), then microtasks again. A chained then is queued only after the previous step runs, so it goes to the back of the line.",
+      "Orden del bucle: primero todo el código síncrono; luego cada microtarea (callbacks de promesas, código tras await, queueMicrotask) en el orden en que se encoló; luego una macrotarea (un timer) y otra vez las microtareas. Un then encadenado se encola solo cuando corre el paso anterior, así que va al final de la fila.",
+      "ループの順番：まず同期コードを全部。次にマイクロタスク（Promise のコールバック、await の後ろ、queueMicrotask）を並んだ順に全部。そしてマクロタスク（タイマー）を 1 つ、またマイクロタスク。つないだ then は前のステップが動いてから並ぶので、列の最後尾だよ。",
+    ),
+    ex(code('setTimeout(() => console.log("macro"), 0);', "Promise.resolve()", '  .then(() => console.log("micro 1"))', '  .then(() => console.log("micro 3"));', 'queueMicrotask(() => console.log("micro 2"));', 'console.log("sync");'), "sync\nmicro 1\nmicro 2\nmicro 3\nmacro",
+      L("micro 3 is queued only after micro 1 runs", "micro 3 se encola solo cuando corre micro 1", "micro 3 は micro 1 が動いてから並ぶ")),
+  ),
+];
+
 const boss: LessonDef = {
   slug: "event-loop-kraken",
   title: L("BOSS: Event Loop Kraken", "JEFE: Kraken del Bucle", "ボス：ループクラーケン"),
@@ -783,63 +1276,63 @@ const boss: LessonDef = {
       "我こそループのクラーケン。触手でスタック、マイクロタスク、タイマーを操る。順番を当ててみよ！",
     )),
     {
-      kind: "predict", time: 12, prompt: IN_ORDER,
+      kind: "predict", hint: L("Synchronous work comes first. Where does a timer callback wait?", "Primero va el trabajo síncrono. ¿Dónde espera un callback de timer?", "同期の仕事が先。タイマーのコールバックはどこで待つ？"), note: "recap-timers", time: 12, prompt: IN_ORDER,
       code: code('setTimeout(() => console.log("T"), 0);', 'console.log("S");'),
       options: ["T S", "S T"], answer: 1,
       explain: L("Timers wait for the empty stack.", "Los timers esperan la pila vacía.", "タイマーはスタックが空になるまで待つ。"),
       check: { compiles: true, stdout: "S\nT" },
     },
     {
-      kind: "predict", time: 12, prompt: IN_ORDER,
+      kind: "predict", hint: L("Does the executor of new Promise run now or later?", "¿El ejecutor de new Promise corre ahora o después?", "new Promise の executor は今動く？あとで？"), note: "recap-promises", time: 12, prompt: IN_ORDER,
       code: code('new Promise<void>((r) => {', '  console.log("in");', "  r();", "});", 'console.log("out");'),
       options: ["in out", "out in"], answer: 0,
       explain: L("The executor runs synchronously.", "El ejecutor corre de forma síncrona.", "executor は同期で動く。"),
       check: { compiles: true, stdout: "in\nout" },
     },
     {
-      kind: "predict", time: 12, prompt: WHAT_PRINTS,
+      kind: "predict", hint: L("Each then passes on its callback's return value.", "Cada then pasa el valor de retorno de su callback.", "then はコールバックの戻り値を次へ渡す。"), note: "recap-promises", time: 12, prompt: WHAT_PRINTS,
       code: "Promise.resolve(2).then((x) => x * 3).then(console.log);",
       options: ["2", "6", "undefined"], answer: 1,
       explain: L("then passes its return value along: 2 * 3.", "then pasa su valor de retorno: 2 * 3.", "then は戻り値を次へ渡す：2 * 3。"),
       check: { compiles: true, stdout: "6" },
     },
     {
-      kind: "type", time: 12, prompt: L("Handle the rejection", "Maneja el rechazo", "失敗を受け止めよう"),
+      kind: "type", hint: L("then handles success. Which method handles failure?", "then maneja el éxito. ¿Qué método maneja el fallo?", "then は成功担当。失敗担当のメソッドは？"), note: "recap-promises", time: 12, prompt: L("Handle the rejection", "Maneja el rechazo", "失敗を受け止めよう"),
       code: code('Promise.reject(new Error("x"))', '  .___(() => console.log("saved"));'),
       answer: "catch",
       explain: L("catch handles rejections.", "catch maneja los rechazos.", "catch が失敗を受け取る。"),
       check: { compiles: true, stdout: "saved" },
     },
     {
-      kind: "pick", time: 12, prompt: L("Wait for every result", "Espera todos los resultados", "全部の結果を待とう"),
+      kind: "pick", hint: L("You need every value as an array. Which combinator collects all results?", "Necesitas todos los valores en un array. ¿Qué combinador junta todos los resultados?", "全部の値を配列で欲しい。結果を全部集めるのは？"), note: "recap-promises", time: 12, prompt: L("Wait for every result", "Espera todos los resultados", "全部の結果を待とう"),
       code: code("Promise.___([Promise.resolve(1), Promise.resolve(2)])", '  .then((v) => console.log(v.join("+")));'),
       options: ["all", "race", "any"], answer: 0,
       explain: L("all gives an array; race and any give one value.", "all da un array; race y any dan un solo valor.", "all は配列、race と any は値1つ。"),
       check: { compiles: true, stdout: "1+2", wrongFail: true },
     },
     {
-      kind: "predict", time: 12, prompt: COMPILES,
+      kind: "predict", hint: L("What does an async function always return? Is that a number?", "¿Qué devuelve siempre una función async? ¿Eso es un number?", "async 関数がいつも返すものは？それは number？"), note: "recap-async", time: 12, prompt: COMPILES,
       code: code("async function f() {", "  return 1;", "}", "const n: number = f();"),
       options: [YES, L("No: it's a Promise", "No: es una Promise", "いいえ：Promise だ")], answer: 1,
       explain: L("f() returns Promise<number>: await it.", "f() devuelve Promise<number>: usa await.", "f() は Promise<number>。await しよう。"),
       check: { compiles: false },
     },
     {
-      kind: "predict", time: 12, prompt: IN_ORDER,
+      kind: "predict", hint: L("await pauses only its own function. What does the caller do meanwhile?", "await pausa solo su propia función. ¿Qué hace mientras tanto quien la llamó?", "await が止めるのは自分の関数だけ。その間、呼んだ側は？"), note: "recap-async", time: 12, prompt: IN_ORDER,
       code: code("async function f() {", '  console.log("b");', "  await null;", '  console.log("d");', "}", 'console.log("a");', "f();", 'console.log("c");'),
       options: ["a b c d", "a b d c", "a c b d"], answer: 0,
       explain: L("await pauses only f, not the program.", "await pausa solo a f, no al programa.", "await が止めるのは f だけ。"),
       check: { compiles: true, stdout: "a\nb\nc\nd" },
     },
     {
-      kind: "predict", time: 12, prompt: IN_ORDER,
+      kind: "predict", hint: L("Sync first, then the VIP microtask line, then timers.", "Primero lo síncrono, luego la fila VIP de microtareas, luego los timers.", "同期→VIP のマイクロタスク→タイマーの順。"), note: "recap-queues", time: 12, prompt: IN_ORDER,
       code: code("setTimeout(() => console.log(1), 0);", "Promise.resolve().then(() => console.log(2));", "console.log(3);"),
       options: ["1 2 3", "3 1 2", "3 2 1"], answer: 2,
       explain: L("Sync, then microtask, then timer.", "Síncrono, microtarea y luego timer.", "同期→マイクロ→タイマーの順。"),
       check: { compiles: true, stdout: "3\n2\n1" },
     },
     {
-      kind: "predict", time: 15, prompt: IN_ORDER,
+      kind: "predict", hint: L("A chained then is queued only after the previous step runs.", "Un then encadenado se encola solo cuando corre el paso anterior.", "つないだ then は前のステップが動いてから並ぶ。"), note: "recap-queues", time: 15, prompt: IN_ORDER,
       code: code(
         'Promise.resolve().then(() => console.log("a"))',
         '  .then(() => console.log("b"));',
@@ -850,7 +1343,7 @@ const boss: LessonDef = {
       check: { compiles: true, stdout: "a\nc\nb" },
     },
     {
-      kind: "predict", time: 15, prompt: IN_ORDER,
+      kind: "predict", hint: L("Sync logs first (the async arrow runs until await), then microtasks in queue order, then the timer.", "Primero los logs síncronos (la flecha async corre hasta el await), luego las microtareas en orden, luego el timer.", "まず同期のログ（async アローは await まで動く）、次にマイクロを並んだ順、最後にタイマー。"), note: "recap-queues", time: 15, prompt: IN_ORDER,
       code: code(
         "console.log(1);",
         "setTimeout(() => console.log(2));",
@@ -876,6 +1369,7 @@ const boss: LessonDef = {
       "ばかな…我が列を開いた巻物のように読むとは。塔はお前のものだ、ループの達人よ。",
     )),
   ],
+  notes: bossNotes,
 };
 
 export const eventLoopTower: RegionDef = {

@@ -1,4 +1,4 @@
-import type { Beat, LessonDef, RegionDef, Text } from "../../../lib/content/types.ts";
+import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
 
 // REGION 2 · GRAPH FOREST  (scene graph and local vs world space, Vector3, Matrix4, Euler and Quaternion)
@@ -11,6 +11,90 @@ const PRINT = L("What does it print?", "¿Qué imprime?", "何が表示される
 const COMPILES = L("Does it compile?", "¿Compila?", "コンパイルできる？");
 const YES = L("Yes", "Sí", "はい");
 const NO_TSC = L("No: tsc stops it", "No: tsc lo detiene", "いいえ：tsc が止める");
+
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example (three is imported for it); the validator checks `output` with the real runner. */
+const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code: IMP + code, output, caption });
+/** An example that must NOT compile (verified too). */
+const bad = (code: string, caption: Text): NoteBlock => ({ t: "code", code: IMP + code, caption, check: { compiles: false } });
+
+const sceneGraphNotes: NoteDef[] = [
+  note("family-tree", L("The scene graph: parents and children", "El grafo: padres e hijos", "シーングラフ：親と子"),
+    p(
+      "Every Object3D can hold other objects. parent.add(child) puts the child into parent.children and sets child.parent. A Scene is simply the root of this tree, and a Group is an empty object made for grouping. Move, turn or scale a parent and its whole family comes along.",
+      "Todo Object3D puede contener otros objetos. parent.add(child) mete al hijo en parent.children y fija child.parent. Una Scene es simplemente la raíz de este árbol, y un Group es un objeto vacío hecho para agrupar. Mueve, gira o escala a un padre y toda su familia lo acompaña.",
+      "Object3D はみな他の物体を持てる。parent.add(child) で子が parent.children に入り、child.parent が設定される。Scene はこの木の根っこ、Group はまとめるための空の物体。親を動かしたり回したり大きくすると、家族みんながついてくる。",
+    ),
+    p(
+      "An object has exactly one parent. add() first removes the child from its old parent and then adds it to the new one, so a child never appears in two lists. Adding the same child again to the same parent doesn't duplicate it either: it just leaves and comes back.",
+      "Un objeto tiene exactamente un padre. add() primero quita al hijo de su padre anterior y luego lo agrega al nuevo, así un hijo nunca aparece en dos listas. Agregar el mismo hijo otra vez al mismo padre tampoco lo duplica: solo sale y vuelve a entrar.",
+      "物体の親はちょうど1人。add() はまず前の親から子を外し、それから新しい親に加える。だから子が2つのリストに出ることはない。同じ親にもう一度 add しても増えない。いったん出て、また戻るだけだよ。",
+    ),
+    ex("const shelf = new THREE.Group();\nconst cart = new THREE.Group();\nconst jar = new THREE.Object3D();\nshelf.add(jar);\ncart.add(jar);\nconsole.log(jar.parent === cart, shelf.children.length);", "true 0",
+      L("Moving the jar to the cart takes it off the shelf", "Pasar el frasco al carro lo saca del estante", "びんをカートに移すと棚からは消える")),
+    p(
+      "traverse(callback) visits an object and every descendant, depth first: it calls the callback on a node, then walks that node's whole subtree, and only then moves on to the next sibling. It's the usual way to touch every mesh inside a loaded model.",
+      "traverse(callback) visita un objeto y todos sus descendientes en profundidad: llama al callback en un nodo, recorre todo el subárbol de ese nodo y solo entonces pasa al siguiente hermano. Es la forma habitual de tocar cada malla dentro de un modelo cargado.",
+      "traverse(callback) は物体とその子孫を全部、深さ優先でたどる。ある節で callback を呼んだら、その節の下を全部たどり、それから次の兄弟へ進む。読みこんだモデルの中のメッシュを全部さわる定番の方法だよ。",
+    ),
+    ex('const ship = new THREE.Group(); ship.name = "ship";\nconst sail = new THREE.Object3D(); sail.name = "sail";\nconst hull = new THREE.Object3D(); hull.name = "hull";\nconst rope = new THREE.Object3D(); rope.name = "rope";\nship.add(sail, hull);\nsail.add(rope);\nconst seen: string[] = [];\nship.traverse((o) => { seen.push(o.name); });\nconsole.log(seen.join(" > "));', "ship > sail > rope > hull",
+      L("rope belongs to sail, so it comes before hull", "rope es de sail, así que va antes que hull", "rope は sail の子なので hull より先")),
+    p(
+      "Common mistake: expecting traverse to go level by level (all children first, then grandchildren). It doesn't: it finishes each branch before starting the next one.",
+      "Error común: esperar que traverse vaya nivel por nivel (primero todos los hijos, luego los nietos). No lo hace: termina cada rama antes de empezar la siguiente.",
+      "よくあるミス：traverse が段ごと（子を全部、次に孫を全部）に進むと思うこと。実際は1本の枝を最後までたどってから次の枝に移るよ。",
+    ),
+  ),
+  note("local-world", L("Local space and world space", "Espacio local y espacio mundo", "ローカル座標とワールド座標"),
+    p(
+      "object.position is local: it's measured from the parent, not from the center of the world. The world position is where the object really ends up in the scene after every ancestor's transform is applied. getWorldPosition(target) computes it for you, updating the matrices along the way.",
+      "object.position es local: se mide desde el padre, no desde el centro del mundo. La posición en el mundo es donde el objeto termina de verdad en la escena tras aplicar la transformación de cada ancestro. getWorldPosition(target) la calcula por ti y de paso actualiza las matrices.",
+      "object.position はローカル座標。世界の中心ではなく親から測る。ワールド座標は、先祖みんなの変形をかけたあとに物体が本当にいる場所。getWorldPosition(target) が行列も更新しながら計算してくれる。",
+    ),
+    p(
+      "The parent's transform is applied to the child's offset in a fixed order: first the parent's scale stretches it, then the parent's rotation turns it, and finally the parent's position moves it. So a parent's scale changes how far away its children end up.",
+      "La transformación del padre se aplica a la distancia del hijo en un orden fijo: primero la escala del padre la estira, luego la rotación del padre la gira y al final la posición del padre la mueve. Por eso la escala de un padre cambia qué tan lejos quedan sus hijos.",
+      "親の変形は、決まった順番で子の距離にかかる。まず親の scale で伸び、次に親の rotation で回り、最後に親の position で移動する。だから親の scale を変えると、子がどれだけ離れるかも変わる。",
+    ),
+    ex("const crane = new THREE.Group();\ncrane.position.y = 1;\ncrane.scale.setScalar(3);\nconst hook = new THREE.Object3D();\nhook.position.y = 2;\ncrane.add(hook);\nconsole.log(hook.getWorldPosition(new THREE.Vector3()).y, hook.position.y);", "7 2",
+      L("2 × 3 = 6, then + 1 = 7; the local value stays 2", "2 × 3 = 6, luego + 1 = 7; el valor local sigue en 2", "2×3＝6、＋1で7。ローカルは2のまま")),
+    p(
+      "localToWorld(v) converts a point from the object's own space into world space, and worldToLocal(v) does the reverse. Both change the vector you pass and return it, so hand them a new vector or a clone.",
+      "localToWorld(v) convierte un punto del espacio propio del objeto al espacio del mundo, y worldToLocal(v) hace lo contrario. Ambos cambian el vector que pasas y lo devuelven, así que dales un vector nuevo o un clon.",
+      "localToWorld(v) は物体自身の空間の点をワールド空間へ、worldToLocal(v) はその逆へ変換する。どちらも渡したベクトルを書きかえて返すので、新しいベクトルかクローンを渡そう。",
+    ),
+    ex("const base = new THREE.Group();\nbase.position.set(0, 0, -4);\nconst a = base.localToWorld(new THREE.Vector3(0, 0, 1)).z;\nconst b = base.worldToLocal(new THREE.Vector3(0, 0, 0)).z;\nconsole.log(a, b);", "-3 4"),
+    p(
+      "The full world transform of an object is kept in object.matrixWorld. The renderer refreshes it before every frame, but if you read it directly in your own code, call scene.updateMatrixWorld() first, or you may get last frame's numbers. setFromMatrixPosition pulls the position out of it.",
+      "La transformación completa de un objeto en el mundo se guarda en object.matrixWorld. El renderer la refresca antes de cada cuadro, pero si la lees directo en tu código, llama antes a scene.updateMatrixWorld(), o puedes obtener los números del cuadro anterior. setFromMatrixPosition saca la posición de ella.",
+      "物体のワールド変形は object.matrixWorld に入っている。レンダラーは毎フレーム更新するけど、自分のコードで直接読むなら先に scene.updateMatrixWorld() を呼ぼう。でないと前のフレームの数かもしれない。setFromMatrixPosition で位置を取り出せる。",
+    ),
+  ),
+  note("attach", L("attach() keeps the world position", "attach() conserva la posición", "attach() はワールド位置を保つ"),
+    p(
+      "add() keeps the child's local numbers as they are. If an object stood free in the world and you add it to a parent that has moved, its old numbers are now measured from that parent, so it jumps to a new place in the world.",
+      "add() conserva los números locales del hijo tal cual. Si un objeto estaba suelto en el mundo y lo agregas a un padre que se ha movido, sus números viejos ahora se miden desde ese padre, así que salta a otro lugar del mundo.",
+      "add() は子のローカルの数をそのまま使う。世界にぽつんといた物体を、動いている親に add すると、古い数が親から測られることになり、ワールドの別の場所へ跳んでしまう。",
+    ),
+    ex("const shelf = new THREE.Group();\nshelf.position.y = 3;\nconst cup = new THREE.Object3D();\ncup.position.y = 5;\nshelf.add(cup);\nconsole.log(cup.getWorldPosition(new THREE.Vector3()).y);", "8",
+      L("With add, the cup's 5 now counts from the shelf at 3", "Con add, el 5 de la taza cuenta desde el estante en 3", "add だと、カップの5は高さ3の棚から数える")),
+    p(
+      "attach() keeps the world position instead. It works out the local numbers the child needs under its new parent so that it doesn't move at all. Use it when a character picks up an item, or whenever you move something to another parent without a visible jump.",
+      "attach() en cambio conserva la posición en el mundo. Calcula los números locales que el hijo necesita bajo su nuevo padre para no moverse en absoluto. Úsalo cuando un personaje recoge un objeto, o siempre que pases algo a otro padre sin un salto visible.",
+      "attach() はかわりにワールド位置を保つ。新しい親の下で動かずにいるために必要なローカルの数を計算してくれる。キャラクターが物を拾うときや、見た目は動かさずに親を変えたいときに使おう。",
+    ),
+    ex("const shelf = new THREE.Group();\nshelf.position.y = 3;\nshelf.updateMatrixWorld();\nconst cup = new THREE.Object3D();\ncup.position.y = 5;\nshelf.attach(cup);\nconsole.log(cup.position.y, cup.getWorldPosition(new THREE.Vector3()).y);", "2 5",
+      L("attach rewrites the local y to 2 so the cup stays at 5", "attach reescribe la y local a 2 y la taza sigue en 5", "attach はローカル y を2に直し、カップは5のまま")),
+    p(
+      "attach() reads the new parent's world matrix, so make sure it's up to date: if you just moved the parent, call parent.updateMatrixWorld() first. It also handles the parent's rotation and scale, not only its position.",
+      "attach() lee la matriz de mundo del nuevo padre, así que asegúrate de que esté al día: si acabas de mover al padre, llama antes a parent.updateMatrixWorld(). También tiene en cuenta la rotación y la escala del padre, no solo su posición.",
+      "attach() は新しい親のワールド行列を読むので、最新にしておこう。親を動かした直後なら先に parent.updateMatrixWorld() を呼ぶ。位置だけでなく、親の回転や大きさもちゃんと考えてくれるよ。",
+    ),
+  ),
+];
 
 // ─── 2.1 The family tree ───────────────────────────────────────────────────
 const sceneGraph: LessonDef = {
@@ -45,6 +129,8 @@ const sceneGraph: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("position is measured from the parent. Where does the parent stand in the world?", "position se mide desde el padre. ¿Dónde está el padre en el mundo?", "position は親から測る。親はワールドのどこにいる？"),
+      note: "local-world",
       code: IMP + "const p = new THREE.Group();\np.position.x = 10;\nconst kid = new THREE.Object3D();\nkid.position.x = 1;\np.add(kid);\nconsole.log(kid.getWorldPosition(new THREE.Vector3()).x, kid.position.x);",
       options: ["11 1", "1 1", "11 11"],
       answer: 0,
@@ -57,6 +143,8 @@ const sceneGraph: LessonDef = {
     {
       kind: "predict",
       prompt: L("Now the parent is 2x big. Print?", "Ahora el padre mide 2x. ¿Imprime?", "親が2倍に。何が表示される？"),
+      hint: L("Apply the parent's transform to the child's offset: scale it first, then move it.", "Aplica la transformación del padre a la distancia del hijo: primero escala, luego mueve.", "子の距離に親の変形をかけよう。先に拡大、それから移動。"),
+      note: "local-world",
       code: IMP + "const p = new THREE.Group();\np.position.x = 10;\np.scale.set(2, 2, 2);\nconst kid = new THREE.Object3D();\nkid.position.x = 1;\np.add(kid);\nconsole.log(kid.getWorldPosition(new THREE.Vector3()).x);",
       options: ["12", "11", "22"],
       answer: 0,
@@ -67,6 +155,8 @@ const sceneGraph: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Can an object have two parents at once? Think about what add() does to the old one.", "¿Puede un objeto tener dos padres a la vez? Piensa qué hace add() con el anterior.", "物体は親を2人持てる？add() は前の親に何をする？"),
+      note: "family-tree",
       code: IMP + "const p1 = new THREE.Group();\nconst p2 = new THREE.Group();\nconst c = new THREE.Object3D();\np1.add(c);\np2.add(c);\nconsole.log(p1.children.length, p2.children.length);",
       options: ["0 1", "1 1", "1 0"],
       answer: 0,
@@ -79,6 +169,8 @@ const sceneGraph: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("add() first removes the child from its current parent. Who is the current parent here?", "add() primero quita al hijo de su padre actual. ¿Quién es el padre actual aquí?", "add() はまず今の親から子を外す。ここでの今の親は？"),
+      note: "family-tree",
       code: IMP + "const p = new THREE.Group();\nconst c = new THREE.Object3D();\np.add(c);\np.add(c);\nconsole.log(p.children.length);",
       options: ["1", "2", "0"],
       answer: 0,
@@ -94,6 +186,8 @@ const sceneGraph: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Depth first: finish a child's whole family before moving on to its next sibling.", "En profundidad: termina toda la familia de un hijo antes de pasar a su hermano.", "深さ優先：子の家族を全部たどってから次の兄弟へ。"),
+      note: "family-tree",
       code: IMP + 'const root = new THREE.Group(); root.name = "root";\nconst a = new THREE.Object3D(); a.name = "a";\nconst b = new THREE.Object3D(); b.name = "b";\nconst c = new THREE.Object3D(); c.name = "c";\nroot.add(a, b);\na.add(c);\nconst names: string[] = [];\nroot.traverse((o) => { names.push(o.name); });\nconsole.log(names.join(","));',
       options: ["root,a,c,b", "root,a,b,c", "c,a,b,root"],
       answer: 0,
@@ -110,6 +204,8 @@ const sceneGraph: LessonDef = {
     {
       kind: "pick",
       prompt: L("Pick up the sword where it lies", "Recoge la espada donde está", "剣をその場で拾おう"),
+      hint: L("The sword must not move in the world. Which method keeps world position rather than local?", "La espada no debe moverse en el mundo. ¿Qué método conserva la posición del mundo y no la local?", "剣はワールドで動いてはダメ。ローカルではなくワールド位置を保つのは？"),
+      note: "attach",
       code: IMP + "const hero = new THREE.Group();\nhero.position.x = 10;\nhero.updateMatrixWorld();\nconst sword = new THREE.Object3D();\nsword.position.x = 12;\nhero.___(sword);\nconsole.log(sword.getWorldPosition(new THREE.Vector3()).x);",
       options: ["attach", "add"],
       answer: 0,
@@ -121,6 +217,8 @@ const sceneGraph: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("localToWorld adds the group's offset; worldToLocal takes it away.", "localToWorld suma el desplazamiento del grupo; worldToLocal lo quita.", "localToWorld はグループの位置を足し、worldToLocal は引く。"),
+      note: "local-world",
       code: IMP + "const g = new THREE.Group();\ng.position.set(10, 0, 0);\nconst w = g.localToWorld(new THREE.Vector3(1, 0, 0)).x;\nconst l = g.worldToLocal(new THREE.Vector3(11, 0, 0)).x;\nconsole.log(w, l);",
       options: ["11 1", "1 11", "11 11"],
       answer: 0,
@@ -136,6 +234,8 @@ const sceneGraph: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Apply the group's scale to the child's (1, 1) first, then add the group's position.", "Aplica primero la escala del grupo al (1, 1) del hijo y luego suma la posición del grupo.", "子の (1, 1) にまずグループの scale をかけ、それから位置を足そう。"),
+      note: "local-world",
       code: IMP + 'const scene = new THREE.Scene();\nconst group = new THREE.Group();\ngroup.position.y = 2;\ngroup.scale.setScalar(3);\nconst child = new THREE.Object3D();\nchild.position.set(1, 1, 0);\nscene.add(group);\ngroup.add(child);\nscene.updateMatrixWorld();\nconsole.log(new THREE.Vector3().setFromMatrixPosition(child.matrixWorld).toArray().join(","));',
       options: ["3,5,0", "1,3,0", "3,3,0"],
       answer: 0,
@@ -145,6 +245,8 @@ const sceneGraph: LessonDef = {
     },
     {
       kind: "run",
+      hint: L("add keeps the local numbers, so the sword jumps. Use the method that keeps world position.", "add conserva los números locales y la espada salta. Usa el método que conserva la posición del mundo.", "add はローカルの数を保つので剣が跳ぶ。ワールド位置を保つメソッドを使おう。"),
+      note: "attach",
       prompt: L("Grab the sword without moving it: sword world x: 12", "Toma la espada sin moverla: sword world x: 12", "剣を動かさず拾おう：sword world x: 12"),
       starter: IMP + "const hero = new THREE.Group();\nhero.position.x = 10;\nconst sword = new THREE.Object3D();\nsword.position.x = 12;\nhero.updateMatrixWorld();\nhero.add(sword);\nconst w = new THREE.Vector3();\nsword.getWorldPosition(w);\nconsole.log(\"sword world x: \" + w.x);\n",
       solution: IMP + "const hero = new THREE.Group();\nhero.position.x = 10;\nconst sword = new THREE.Object3D();\nsword.position.x = 12;\nhero.updateMatrixWorld();\nhero.attach(sword);\nconst w = new THREE.Vector3();\nsword.getWorldPosition(w);\nconsole.log(\"sword world x: \" + w.x);\n",
@@ -153,7 +255,104 @@ const sceneGraph: LessonDef = {
       explain: L("add keeps local x 12, so the sword lands at 22. attach converts it to local 2 and it stays put.", "add mantiene local x 12 y la espada cae en 22. attach la convierte a local 2 y no se mueve.", "add はローカル12のままで22に跳ぶ。attach はローカル2に直すので動かないよ。"),
     },
   ],
+  notes: sceneGraphNotes,
 };
+
+const vectorsNotes: NoteDef[] = [
+  note("references", L("Vectors are shared by reference", "Los vectores se comparten por referencia", "ベクトルは参照で共有される"),
+    p(
+      "A Vector3 is an object. Writing const b = a doesn't copy the arrow: it copies a reference, so both names now point to the same Vector3. Change b.x and a.x changes too, because there is only one vector with two labels.",
+      "Un Vector3 es un objeto. Escribir const b = a no copia la flecha: copia una referencia, así que ambos nombres apuntan al mismo Vector3. Cambia b.x y también cambia a.x, porque hay un solo vector con dos etiquetas.",
+      "Vector3 はオブジェクト。const b = a は矢をコピーせず、参照をコピーする。だから2つの名前が同じ Vector3 を指す。b.x を変えると a.x も変わる。ラベルが2枚の、ベクトル1本なんだ。",
+    ),
+    ex("const home = new THREE.Vector3(5, 5, 5);\nconst spot = home;\nspot.y = 0;\nconsole.log(home.y);", "0"),
+    p(
+      "clone() makes a brand-new Vector3 with the same numbers, and copy(v) copies the numbers of v into a vector you already have. Use clone() whenever you want a version you can change without touching the original.",
+      "clone() crea un Vector3 totalmente nuevo con los mismos números, y copy(v) copia los números de v en un vector que ya tienes. Usa clone() siempre que quieras una versión que puedas cambiar sin tocar el original.",
+      "clone() は同じ数を持つまったく新しい Vector3 を作り、copy(v) は v の数を手持ちのベクトルに写す。元を変えずにいじれる版が欲しいときは clone() を使おう。",
+    ),
+    ex("const home = new THREE.Vector3(5, 5, 5);\nconst spot = home.clone();\nspot.y = 0;\nconsole.log(home.y, spot.y);", "5 0"),
+    p(
+      "Comparing works the same way. === asks \"is it the very same object?\", so two vectors made with two separate new calls are never ===, even with equal numbers. equals(v) asks \"do they hold the same numbers?\"",
+      "Comparar funciona igual. === pregunta \"¿es exactamente el mismo objeto?\", así que dos vectores creados con dos new distintos nunca son ===, aunque tengan números iguales. equals(v) pregunta \"¿guardan los mismos números?\"",
+      "比べるときも同じ。=== は「まったく同じオブジェクト？」を調べるので、別々の new で作った2つのベクトルは、数が同じでも === にならない。equals(v) は「同じ数を持っている？」を調べる。",
+    ),
+    ex("const pin = new THREE.Vector3(2, 0, 0);\nconst copyOfPin = pin.clone();\nconsole.log(pin === copyOfPin, pin.equals(copyOfPin), pin === pin);", "false true true"),
+    p(
+      "Common mistake: forgetting that an object's position is also a vector. const pos = mesh.position; pos.x = 3; really moves the mesh. When you only want to preview a step, clone first.",
+      "Error común: olvidar que la posición de un objeto también es un vector. const pos = mesh.position; pos.x = 3; de verdad mueve la malla. Si solo quieres previsualizar un paso, clona primero.",
+      "よくあるミス：物体の position もベクトルだと忘れること。const pos = mesh.position; pos.x = 3; は本当にメッシュを動かす。一歩を試したいだけなら、まず clone しよう。",
+    ),
+  ),
+  note("mutating", L("Methods change the vector itself", "Los métodos cambian el propio vector", "メソッドは自分自身を変える"),
+    p(
+      "Most Vector3 methods (add, sub, multiplyScalar, normalize, lerp, cross and more) change the vector they are called on and return that same vector. They don't build a new one. This is on purpose: a game runs them thousands of times per second, and creating new objects each time would be slow.",
+      "La mayoría de los métodos de Vector3 (add, sub, multiplyScalar, normalize, lerp, cross y más) cambian el vector sobre el que se llaman y devuelven ese mismo vector. No crean uno nuevo. Es a propósito: un juego los ejecuta miles de veces por segundo, y crear objetos nuevos cada vez sería lento.",
+      "Vector3 のメソッドの多く（add・sub・multiplyScalar・normalize・lerp・cross など）は、呼ばれたベクトル自身を変えて、そのベクトルを返す。新しいベクトルは作らない。これはわざと。ゲームでは1秒に何千回も呼ぶので、毎回新しく作ると遅くなるんだ。",
+    ),
+    p(
+      "Because each method returns the vector, you can chain them. The chain runs left to right, and each step works on the result of the previous one.",
+      "Como cada método devuelve el vector, puedes encadenarlos. La cadena va de izquierda a derecha, y cada paso trabaja sobre el resultado del anterior.",
+      "どのメソッドもベクトルを返すので、つなげて書ける。左から右へ順に実行され、各ステップは前の結果に対して働く。",
+    ),
+    ex('const v = new THREE.Vector3(4, 0, 2).sub(new THREE.Vector3(1, 0, 1)).multiplyScalar(3);\nconsole.log(v.toArray().join(","));', "9,0,3",
+      L("(4,0,2) − (1,0,1) = (3,0,1), then × 3", "(4,0,2) − (1,0,1) = (3,0,1), luego × 3", "(4,0,2) − (1,0,1) = (3,0,1)、それから×3")),
+    p(
+      "The value a method returns is the same object it changed, so comparing it with === to the original gives true. If you need the original untouched, start the chain with clone(): then every step changes only the copy.",
+      "El valor que devuelve un método es el mismo objeto que cambió, así que compararlo con === con el original da true. Si necesitas el original intacto, empieza la cadena con clone(): así cada paso cambia solo la copia.",
+      "メソッドが返すのは変えたのと同じオブジェクトなので、元と === で比べると true。元をそのままにしたいなら clone() からつなげよう。そうすれば全ステップがコピーだけを変える。",
+    ),
+    ex("const start = new THREE.Vector3(1, 2, 3);\nconst moved = start.clone().addScalar(10);\nconsole.log(start.x, moved.x, moved === start);", "1 11 false"),
+    p(
+      "Common mistake: writing const next = pos.add(step). It reads like \"compute a new value\", but it moves pos itself, and next is just another name for pos.",
+      "Error común: escribir const next = pos.add(step). Se lee como \"calcula un valor nuevo\", pero mueve el propio pos, y next es solo otro nombre para pos.",
+      "よくあるミス：const next = pos.add(step) と書くこと。「新しい値を計算」に見えるけど、実際は pos 自身を動かし、next は pos の別名にすぎない。",
+    ),
+  ),
+  note("length-normalize", L("Length, distance and normalize", "Longitud, distancia y normalize", "長さ・距離・normalize"),
+    p(
+      "length() is how long the arrow is: √(x² + y² + z²), Pythagoras in 3D. distanceTo(other) is the length of the gap between two points. Both give a plain number and don't change the vector.",
+      "length() es cuánto mide la flecha: √(x² + y² + z²), Pitágoras en 3D. distanceTo(otro) es la longitud del hueco entre dos puntos. Ambos devuelven un número simple y no cambian el vector.",
+      "length() は矢の長さで、√(x² + y² + z²)。3Dの三平方の定理だよ。distanceTo(other) は2点のあいだの距離。どちらもただの数を返し、ベクトルは変えない。",
+    ),
+    ex("const v = new THREE.Vector3(2, 3, 6);\nconst gap = new THREE.Vector3(1, 1, 1).distanceTo(new THREE.Vector3(1, 7, 9));\nconsole.log(v.length(), gap);", "7 10",
+      L("√(4 + 9 + 36) = 7 and √(0 + 36 + 64) = 10", "√(4 + 9 + 36) = 7 y √(0 + 36 + 64) = 10", "√(4 + 9 + 36) = 7、√(0 + 36 + 64) = 10")),
+    p(
+      "normalize() keeps the direction but makes the length exactly 1, by dividing every component by the length. A length-1 vector is a pure direction: multiply it by a speed and you get a step of exactly that size.",
+      "normalize() mantiene la dirección pero deja la longitud en exactamente 1, dividiendo cada componente por la longitud. Un vector de longitud 1 es una dirección pura: multiplícalo por una velocidad y obtienes un paso de exactamente ese tamaño.",
+      "normalize() は向きはそのままで、各成分を長さで割って長さをちょうど1にする。長さ1のベクトルは純粋な向き。速さを掛ければ、ちょうどその大きさの一歩になる。",
+    ),
+    p(
+      "JavaScript numbers are binary floating point. Many decimals, like 0.1 or 3/5, can't be stored exactly, so results can end in ...0000001 or ...9999999. That's normal and not a bug in three. When you print 3D math, round it for display with toFixed(n).",
+      "Los números de JavaScript son de coma flotante binaria. Muchos decimales, como 0.1 o 3/5, no se pueden guardar exactos, así que los resultados pueden terminar en ...0000001 o ...9999999. Es normal y no es un bug de three. Cuando imprimas matemática 3D, redondéala con toFixed(n).",
+      "JavaScript の数は二進数の浮動小数点。0.1 や 3/5 のような小数の多くは正確に保存できず、結果が ...0000001 や ...9999999 で終わることがある。これは普通のことで three のバグではない。3D の計算を表示するときは toFixed(n) で丸めよう。",
+    ),
+    ex("console.log(0.1 + 0.2, (0.1 + 0.2).toFixed(2));", "0.30000000000000004 0.30"),
+    ex("const dir = new THREE.Vector3(0, 5, 12).normalize();\nconsole.log(dir.y.toFixed(2), dir.z.toFixed(2), dir.length().toFixed(2));", "0.38 0.92 1.00",
+      L("5/13 and 12/13, rounded; the length is now 1", "5/13 y 12/13, redondeados; la longitud ahora es 1", "5/13 と 12/13 を丸めた値。長さは1になった")),
+  ),
+  note("dot-cross-lerp", L("dot, cross and lerp", "dot, cross y lerp", "dot・cross・lerp"),
+    p(
+      "a.dot(b) multiplies matching components and adds them up, giving one number. For length-1 arrows it's the cosine of the angle between them: 1 means the same direction, 0 means perpendicular, -1 means opposite. Games use it to ask \"is that in front of me?\"",
+      "a.dot(b) multiplica los componentes que se corresponden y los suma, dando un número. Para flechas de longitud 1 es el coseno del ángulo entre ellas: 1 es la misma dirección, 0 perpendicular y -1 opuesta. Los juegos lo usan para preguntar \"¿eso está delante de mí?\"",
+      "a.dot(b) は対応する成分を掛けて足し、1つの数を返す。長さ1の矢なら2本のあいだの角度のコサインになる。1は同じ向き、0は直角、-1は反対向き。ゲームでは「それは自分の前にある？」を調べるのに使う。",
+    ),
+    ex("const fwd = new THREE.Vector3(0, 0, -1);\nconsole.log(fwd.dot(new THREE.Vector3(0, 0, -1)), fwd.dot(new THREE.Vector3(0, 0, 1)), fwd.dot(new THREE.Vector3(1, 0, 0)));", "1 -1 0"),
+    p(
+      "a.cross(b) builds a new direction perpendicular to both arrows, following the right-hand rule: point your fingers along a, curl them toward b, and your thumb shows the result. Order matters: b × a points the opposite way of a × b. cross also changes a, so clone first.",
+      "a.cross(b) crea una dirección perpendicular a ambas flechas según la regla de la mano derecha: apunta los dedos hacia a, dóblalos hacia b y el pulgar muestra el resultado. El orden importa: b × a apunta al revés que a × b. cross también cambia a, así que clona primero.",
+      "a.cross(b) は両方の矢に直角な新しい向きを、右手の法則で作る。指を a の方へ向けて b の方へ曲げると、親指が答えの向き。順番が大事で、b × a は a × b の逆向き。cross も a を変えるので、まず clone しよう。",
+    ),
+    ex("const up = new THREE.Vector3(0, 1, 0);\nconst out = new THREE.Vector3(0, 0, 1);\nconsole.log(up.clone().cross(out).x, out.clone().cross(up).x);", "1 -1",
+      L("Swapping the order flips the result", "Cambiar el orden invierte el resultado", "順番を入れかえると答えが反対になる")),
+    p(
+      "lerp(target, t) moves a vector a fraction t of the way toward target: t = 0 stays put, t = 1 arrives, and t = 0.5 lands halfway. Like the others, it changes the vector it's called on. Calling it every frame with a small t gives a smooth follow camera.",
+      "lerp(target, t) mueve un vector una fracción t del camino hacia target: t = 0 se queda, t = 1 llega y t = 0.5 queda a la mitad. Como los demás, cambia el vector sobre el que se llama. Llamarlo en cada cuadro con una t pequeña da una cámara que sigue con suavidad.",
+      "lerp(target, t) はベクトルを target へ t の割合だけ近づける。t = 0 なら動かず、t = 1 で到着、t = 0.5 でちょうど半分。ほかと同じく、呼ばれたベクトルを変える。毎フレーム小さな t で呼べば、なめらかに追いかけるカメラになる。",
+    ),
+    ex("const v = new THREE.Vector3(0, 0, 0).lerp(new THREE.Vector3(0, 8, 0), 0.75);\nconsole.log(v.y);", "6"),
+  ),
+];
 
 // ─── 2.2 Arrows in the quiver ──────────────────────────────────────────────
 const vectors: LessonDef = {
@@ -183,6 +382,8 @@ const vectors: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("b = a copies a reference, not the numbers. How many Vector3 objects exist here?", "b = a copia una referencia, no los números. ¿Cuántos Vector3 existen aquí?", "b = a は数ではなく参照をコピーする。Vector3 はいくつある？"),
+      note: "references",
       code: IMP + "const a = new THREE.Vector3(1, 2, 3);\nconst b = a;\nb.x = 9;\nconsole.log(a.x);",
       options: ["9", "1", "undefined"],
       answer: 0,
@@ -194,6 +395,8 @@ const vectors: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Does add() build a new vector, or change v and hand it back?", "¿add() crea un vector nuevo, o cambia v y lo devuelve?", "add() は新しいベクトルを作る？v を変えて返す？"),
+      note: "mutating",
       code: IMP + "const v = new THREE.Vector3(1, 1, 1);\nconst r = v.add(new THREE.Vector3(1, 0, 0));\nconsole.log(v.x, r === v);",
       options: ["2 true", "1 false", "2 false"],
       answer: 0,
@@ -204,6 +407,8 @@ const vectors: LessonDef = {
     {
       kind: "type",
       prompt: L("Copy the arrow before changing it", "Copia la flecha antes de cambiarla", "変える前に矢をコピーしよう"),
+      hint: L("You need a fresh Vector3 with the same numbers before add() changes anything.", "Necesitas un Vector3 nuevo con los mismos números antes de que add() cambie algo.", "add() が変える前に、同じ数の新しい Vector3 が必要。"),
+      note: "references",
       code: IMP + "const pos = new THREE.Vector3(0, 0, 0);\nconst next = pos.___().add(new THREE.Vector3(1, 0, 0));\nconsole.log(pos.x, next.x);",
       answer: "clone",
       check: { compiles: true, stdout: "0 1" },
@@ -213,6 +418,8 @@ const vectors: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Two separate new calls: same object or not? Then compare the numbers inside.", "Dos llamadas new distintas: ¿el mismo objeto o no? Luego compara los números de adentro.", "new を2回呼んだ。同じオブジェクト？次に中の数を比べよう。"),
+      note: "references",
       code: IMP + "const a = new THREE.Vector3(1, 1, 1);\nconst b = new THREE.Vector3(1, 1, 1);\nconsole.log(a === b, a.equals(b));",
       options: ["false true", "true true", "false false"],
       answer: 0,
@@ -228,6 +435,8 @@ const vectors: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Use Pythagoras: square each component, add them up, take the square root.", "Usa Pitágoras: eleva cada componente al cuadrado, súmalos y saca la raíz.", "三平方の定理：各成分を2乗して足し、平方根をとる。"),
+      note: "length-normalize",
       code: IMP + "const v = new THREE.Vector3(3, 4, 0);\nconst d = new THREE.Vector3(0, 0, 0).distanceTo(new THREE.Vector3(0, 3, 4));\nconsole.log(v.length(), d);",
       options: ["5 5", "7 7", "25 25"],
       answer: 0,
@@ -238,6 +447,8 @@ const vectors: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Divide each component by the length. Then recall how floats print without toFixed.", "Divide cada componente por la longitud. Luego recuerda cómo se imprimen los floats sin toFixed.", "各成分を長さで割る。toFixed なしで小数がどう表示されるかも思い出そう。"),
+      note: "length-normalize",
       code: IMP + 'const n = new THREE.Vector3(3, 4, 0).normalize();\nconsole.log(n.toArray().join(","));',
       options: ["0.6000000000000001,0.8,0", "0.6,0.8,0", "3,4,0"],
       answer: 0,
@@ -254,6 +465,8 @@ const vectors: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("X and Y meet at a right angle. For cross, use the right-hand rule: X first, then Y.", "X e Y forman un ángulo recto. Para cross, usa la regla de la mano derecha: primero X, luego Y.", "X と Y は直角。cross は右手の法則で、X のあとに Y。"),
+      note: "dot-cross-lerp",
       code: IMP + "const x = new THREE.Vector3(1, 0, 0);\nconst y = new THREE.Vector3(0, 1, 0);\nconst z = x.clone().cross(y);\nconsole.log(x.dot(y), z.toArray().join(\",\"));",
       options: ["0 0,0,1", "1 0,0,1", "0 0,0,-1"],
       answer: 0,
@@ -264,6 +477,8 @@ const vectors: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("lerp walks a fraction t of the way from the start toward the target.", "lerp avanza una fracción t del camino desde el inicio hacia el objetivo.", "lerp は始点から目標まで、t の割合だけ進む。"),
+      note: "dot-cross-lerp",
       code: IMP + "const v = new THREE.Vector3(0, 0, 0).lerp(new THREE.Vector3(10, 0, 0), 0.25);\nconsole.log(v.x);",
       options: ["2.5", "0.25", "7.5"],
       answer: 0,
@@ -274,6 +489,8 @@ const vectors: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Work left to right: each method changes the vector, then the next acts on the result.", "Ve de izquierda a derecha: cada método cambia el vector y el siguiente actúa sobre el resultado.", "左から順に。各メソッドがベクトルを変え、次はその結果に効く。"),
+      note: "mutating",
       code: IMP + 'const v = new THREE.Vector3(1, 2, 3).multiplyScalar(2).sub(new THREE.Vector3(1, 1, 1));\nconsole.log(v.toArray().join(","));',
       options: ["1,3,5", "2,4,6", "0,2,4"],
       answer: 0,
@@ -283,6 +500,8 @@ const vectors: LessonDef = {
     },
     {
       kind: "run",
+      hint: L("pos.add(step) changes pos itself. Make a copy first, so only the copy moves.", "pos.add(step) cambia el propio pos. Haz primero una copia para que solo se mueva la copia.", "pos.add(step) は pos 自身を変える。先にコピーして、コピーだけ動かそう。"),
+      note: "references",
       prompt: L("Preview the step: it must print pos 0 next 1", "Previsualiza el paso: debe imprimir pos 0 next 1", "一歩を試そう：pos 0 next 1 と表示"),
       starter: IMP + "const pos = new THREE.Vector3(0, 0, 0);\nconst step = new THREE.Vector3(1, 0, 0);\nconst next = pos.add(step);\nconsole.log(`pos ${pos.x} next ${next.x}`);\n",
       solution: IMP + "const pos = new THREE.Vector3(0, 0, 0);\nconst step = new THREE.Vector3(1, 0, 0);\nconst next = pos.clone().add(step);\nconsole.log(`pos ${pos.x} next ${next.x}`);\n",
@@ -291,7 +510,103 @@ const vectors: LessonDef = {
       explain: L("pos.add(step) moved the real position. Clone first so only the preview changes.", "pos.add(step) movió la posición real. Clona primero para que solo cambie la vista previa.", "pos.add(step) は本物の位置を動かす。先に clone() すれば試しの方だけ変わるよ。"),
     },
   ],
+  notes: vectorsNotes,
 };
+
+const rotationsNotes: NoteDef[] = [
+  note("matrix-order", L("Matrix order: the right one acts first", "Orden de matrices: la derecha primero", "行列の順番：右が先"),
+    p(
+      "A Matrix4 stores a whole transform (move, turn and scale) as 16 numbers. Multiplying two matrices gives a single matrix that does both transforms. Applying that product to a point gives the same result as applying the two matrices one after the other.",
+      "Una Matrix4 guarda una transformación completa (mover, girar y escalar) en 16 números. Multiplicar dos matrices da una sola matriz que hace ambas transformaciones. Aplicar ese producto a un punto da lo mismo que aplicar las dos matrices una tras otra.",
+      "Matrix4 は移動・回転・拡大のひとまとまりの変形を16個の数で持つ。2つの行列を掛けると、両方の変形をする1つの行列になる。その積を点にかけると、2つの行列を順番にかけたのと同じ結果になる。",
+    ),
+    p(
+      "Order matters. In A × B, B touches the point first and A second, so read a product from right to left. a.multiply(b) turns a into a × b (b acts first); a.premultiply(b) turns a into b × a (a acts first); target.multiplyMatrices(a, b) stores a × b in target.",
+      "El orden importa. En A × B, B toca el punto primero y A después, así que un producto se lee de derecha a izquierda. a.multiply(b) convierte a en a × b (b actúa primero); a.premultiply(b) convierte a en b × a (a actúa primero); destino.multiplyMatrices(a, b) guarda a × b en destino.",
+      "順番が大事。A × B では B が先に点にふれ、A があと。だから積は右から左へ読む。a.multiply(b) は a を a × b に（b が先）、a.premultiply(b) は a を b × a に（a が先）する。target.multiplyMatrices(a, b) は a × b を target に入れる。",
+    ),
+    ex("const T = new THREE.Matrix4().makeTranslation(0, 4, 0);\nconst S = new THREE.Matrix4().makeScale(3, 3, 3);\nconst y = (m: THREE.Matrix4) => new THREE.Vector3(0, 1, 0).applyMatrix4(m).y;\nconsole.log(y(new THREE.Matrix4().multiplyMatrices(T, S)), y(new THREE.Matrix4().multiplyMatrices(S, T)));", "7 15",
+      L("T × S: 1 × 3 + 4 = 7. S × T: (1 + 4) × 3 = 15", "T × S: 1 × 3 + 4 = 7. S × T: (1 + 4) × 3 = 15", "T × S：1×3＋4＝7。S × T：(1＋4)×3＝15")),
+    p(
+      "Rule of thumb: an object's pose is T × R × S, so it scales first, then rotates, then moves. Common mistake: multiply and premultiply change the matrix they are called on. If you still need the original, clone() it before multiplying.",
+      "Regla práctica: la pose de un objeto es T × R × S, así que primero escala, luego gira y al final se mueve. Error común: multiply y premultiply cambian la matriz sobre la que se llaman. Si aún necesitas la original, haz clone() antes de multiplicar.",
+      "目安：物体のポーズは T × R × S。まず拡大、次に回転、最後に移動。よくあるミス：multiply と premultiply は呼んだ行列自身を変える。元の行列がまだ必要なら、掛ける前に clone() しよう。",
+    ),
+  ),
+  note("matrix-layout", L("Inside a Matrix4", "Dentro de una Matrix4", "Matrix4 の中身"),
+    p(
+      "set(...) takes 16 numbers row by row, the way you'd write the matrix on paper. But matrix.elements stores them column by column (\"column-major\"), the format WebGL expects. So elements[1] is row 2 of column 1, not row 1 of column 2.",
+      "set(...) recibe 16 números fila por fila, como escribirías la matriz en papel. Pero matrix.elements los guarda columna por columna (\"column-major\"), el formato que espera WebGL. Así que elements[1] es la fila 2 de la columna 1, no la fila 1 de la columna 2.",
+      "set(...) は紙に書くのと同じく、16個の数を行ごとに受け取る。でも matrix.elements は WebGL が使う形式で、列ごと（列優先）に保存する。だから elements[1] は1列目の2行目で、1行目の2列目ではない。",
+    ),
+    ex('const m = new THREE.Matrix4().set(\n  1, 0, 0, 7,\n  0, 1, 0, 8,\n  0, 0, 1, 9,\n  0, 0, 0, 1,\n);\nconsole.log(m.elements.slice(12, 15).join(","));', "7,8,9",
+      L("The last column, written on the right, ends up at 12-14", "La última columna, escrita a la derecha, queda en 12-14", "右端に書いた最後の列は12〜14番に入る")),
+    p(
+      "A translation lives in the last column, which means elements 12, 13 and 14 hold x, y and z. determinant() tells how the matrix changes volume: for a scale matrix it's the product of the three scales, and a negative value means the shape is mirrored.",
+      "Una traslación vive en la última columna, es decir, los elementos 12, 13 y 14 guardan x, y y z. determinant() dice cómo la matriz cambia el volumen: en una matriz de escala es el producto de las tres escalas, y un valor negativo significa que la forma está reflejada.",
+      "移動は最後の列、つまり elements の12・13・14番に x・y・z が入る。determinant()（行列式）は体積が何倍になるかを表す。拡大行列なら3つの倍率の積で、マイナスなら形が鏡のように反転している。",
+    ),
+    ex("console.log(new THREE.Matrix4().makeScale(5, 1, 2).determinant(), new THREE.Matrix4().makeScale(-1, 1, 1).determinant());", "10 -1"),
+    p(
+      "compose(position, quaternion, scale) builds a matrix from those three parts; it's what updateMatrix() does with an object's pose. decompose(position, quaternion, scale) goes the other way and writes the parts into the objects you pass.",
+      "compose(position, quaternion, scale) construye una matriz a partir de esas tres partes; es lo que hace updateMatrix() con la pose de un objeto. decompose(position, quaternion, scale) hace el camino inverso y escribe las partes en los objetos que pasas.",
+      "compose(position, quaternion, scale) は3つの部品から行列を作る。updateMatrix() が物体のポーズでやっていることだよ。decompose(position, quaternion, scale) はその逆で、渡したオブジェクトに部品を書きこむ。",
+    ),
+    ex("const m = new THREE.Matrix4().compose(new THREE.Vector3(0, 3, 0), new THREE.Quaternion(), new THREE.Vector3(1, 4, 1));\nconst pos = new THREE.Vector3(), rot = new THREE.Quaternion(), size = new THREE.Vector3();\nm.decompose(pos, rot, size);\nconsole.log(pos.y, size.y, rot.w);", "3 4 1"),
+  ),
+  note("euler", L("Euler angles and gimbal lock", "Ángulos Euler y gimbal lock", "オイラー角とジンバルロック"),
+    p(
+      "object.rotation is a THREE.Euler: three angles (x, y and z, in radians) plus an order string that says which axis turns first. The default order is \"XYZ\". The same three angles in a different order can give a different final pose.",
+      "object.rotation es un THREE.Euler: tres ángulos (x, y y z, en radianes) más un string de orden que dice qué eje gira primero. El orden por defecto es \"XYZ\". Los mismos tres ángulos en otro orden pueden dar una pose final distinta.",
+      "object.rotation は THREE.Euler。3つの角度（x・y・z、ラジアン）と、どの軸から回すかを表す順番の文字列を持つ。初期の順番は \"XYZ\"。同じ3つの角度でも、順番がちがうと最後の向きが変わることがある。",
+    ),
+    ex('const e = new THREE.Euler(0.1, 0.2, 0.3, "ZXY");\nconsole.log(e.order, e.y);', "ZXY 0.2"),
+    p(
+      "The order is typed. EulerOrder accepts only the six real orders: \"XYZ\", \"YXZ\", \"ZXY\", \"ZYX\", \"YZX\" and \"XZY\", in capitals. Anything else is a type error. First-person cameras often use \"YXZ\": turn left or right first, then look up or down.",
+      "El orden tiene tipo. EulerOrder solo acepta los seis órdenes reales: \"XYZ\", \"YXZ\", \"ZXY\", \"ZYX\", \"YZX\" y \"XZY\", en mayúsculas. Cualquier otra cosa es un error de tipo. Las cámaras en primera persona suelen usar \"YXZ\": girar a los lados primero y luego mirar arriba o abajo.",
+      "順番には型がある。EulerOrder が受けつけるのは大文字の6通り \"XYZ\"・\"YXZ\"・\"ZXY\"・\"ZYX\"・\"YZX\"・\"XZY\" だけで、それ以外は型エラー。一人称カメラは \"YXZ\" をよく使う。先に左右を向き、それから上下を見るんだ。",
+    ),
+    bad('const look = new THREE.Euler();\nlook.order = "xyz";',
+      L("Does not compile: orders are written in capitals", "No compila: los órdenes van en mayúsculas", "コンパイル不可：順番は大文字で書く")),
+    p(
+      "Three angles applied one after another behave like three nested rings. When the middle rotation reaches 90°, the first and the last rings line up and turn around the same line, so one direction of movement is lost. That's gimbal lock: no error, but the motion gets stuck or suddenly flips.",
+      "Tres ángulos aplicados uno tras otro se comportan como tres anillos anidados. Cuando la rotación del medio llega a 90°, el primer y el último anillo se alinean y giran alrededor de la misma línea, así que se pierde una dirección de movimiento. Eso es el gimbal lock: no hay error, pero el movimiento se atasca o se voltea de golpe.",
+      "順番にかける3つの角度は、入れ子になった3つの輪のように動く。真ん中の回転が90°になると、最初と最後の輪が重なって同じ線のまわりを回り、動ける方向が1つ消える。これがジンバルロック。エラーは出ないけど、動きが止まったり急に反転したりする。",
+    ),
+    p(
+      "The usual fix is to let quaternions do the hard work, like smooth blending and stacking many turns, and keep Euler angles for simple, human-friendly input.",
+      "El arreglo habitual es dejar que los cuaterniones hagan el trabajo difícil, como mezclar con suavidad y acumular muchos giros, y usar los ángulos Euler para entradas simples y fáciles de leer.",
+      "ふつうの対策は、なめらかな補間や回転の積み重ねのような難しい仕事をクォータニオンにまかせ、オイラー角は人が読みやすい簡単な入力に使うことだよ。",
+    ),
+  ),
+  note("quaternions", L("Quaternions and slerp", "Cuaterniones y slerp", "クォータニオンと slerp"),
+    p(
+      "A Quaternion stores one rotation as four numbers: x, y, z and w. For a turn of angle θ around a length-1 axis, (x, y, z) is the axis times sin(θ/2) and w is cos(θ/2). No rotation at all is (0, 0, 0, 1), and a rotation quaternion always has length 1.",
+      "Un Quaternion guarda un giro en cuatro números: x, y, z y w. Para un giro de ángulo θ alrededor de un eje de longitud 1, (x, y, z) es el eje por sen(θ/2) y w es cos(θ/2). Ningún giro es (0, 0, 0, 1), y un cuaternión de rotación siempre tiene longitud 1.",
+      "クォータニオンは1つの回転を x・y・z・w の4つの数で持つ。長さ1の軸のまわりに角度 θ 回すなら、(x, y, z) は軸×sin(θ/2)、w は cos(θ/2)。回転なしは (0, 0, 0, 1)。回転のクォータニオンの長さはいつも1だよ。",
+    ),
+    ex("const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI);\nconsole.log(q.x.toFixed(3), q.w.toFixed(3));", "1.000 0.000",
+      L("Half a turn: sin(90°) = 1 and cos(90°) = 0", "Media vuelta: sen(90°) = 1 y cos(90°) = 0", "半回転：sin(90°) = 1、cos(90°) = 0")),
+    p(
+      "object.rotation and object.quaternion are linked: change one and three updates the other right away. So you can set an angle with rotation and read the quaternion, or the other way round.",
+      "object.rotation y object.quaternion están enlazados: cambia uno y three actualiza el otro al instante. Así puedes fijar un ángulo con rotation y leer el cuaternión, o al revés.",
+      "object.rotation と object.quaternion はつながっていて、片方を変えると three がすぐもう片方も更新する。rotation で角度を決めて quaternion を読むことも、その逆もできる。",
+    ),
+    ex("const o = new THREE.Object3D();\no.quaternion.setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 3);\nconsole.log(o.rotation.z.toFixed(3));", "1.047"),
+    p(
+      "slerp(target, t) blends from this rotation toward target along the shortest arc: t = 0 is the start, t = 1 the target, and t = 0.5 halfway. It turns at a steady speed and never hits gimbal lock. Like vector methods, it changes the quaternion it's called on, so clone first if you need the start again.",
+      "slerp(target, t) mezcla desde este giro hacia target por el arco más corto: t = 0 es el inicio, t = 1 el destino y t = 0.5 la mitad. Gira a velocidad constante y nunca cae en gimbal lock. Como los métodos de vectores, cambia el cuaternión sobre el que se llama, así que clona primero si necesitas el inicio otra vez.",
+      "slerp(target, t) は今の回転から target へ、最短の弧で近づける。t = 0 で始まり、t = 1 で目標、t = 0.5 で半分。一定の速さで回り、ジンバルロックも起きない。ベクトルのメソッドと同じく呼んだクォータニオン自身を変えるので、始まりがまた必要なら先に clone しよう。",
+    ),
+    ex("const from = new THREE.Quaternion();\nconst to = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);\nconst step = from.clone().slerp(to, 1 / 3);\nconsole.log((2 * Math.acos(step.w) * 180 / Math.PI).toFixed(1));", "60.0",
+      L("A third of the way from 0° to 180° is 60°", "Un tercio del camino de 0° a 180° son 60°", "0°から180°の3分の1は60°")),
+    p(
+      "Common mistake: using multiply to blend. q1.multiply(q2) stacks two rotations (do one, then the other), while slerp finds the rotations in between.",
+      "Error común: usar multiply para mezclar. q1.multiply(q2) acumula dos giros (uno y luego el otro), mientras que slerp encuentra los giros intermedios.",
+      "よくあるミス：補間に multiply を使うこと。q1.multiply(q2) は2つの回転を重ねる（片方のあともう片方）。slerp はそのあいだの回転を見つける。",
+    ),
+  ),
+];
 
 // ─── 2.3 Turning without tangles ───────────────────────────────────────────
 const rotations: LessonDef = {
@@ -326,6 +641,8 @@ const rotations: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("In a × b, the right-hand matrix touches the point first. Which is on the right in each call?", "En a × b, la matriz de la derecha toca el punto primero. ¿Cuál queda a la derecha en cada llamada?", "a × b では右の行列が先に点に効く。各呼び出しで右にあるのはどれ？"),
+      note: "matrix-order",
       code: IMP + "const T = new THREE.Matrix4().makeTranslation(10, 0, 0);\nconst S = new THREE.Matrix4().makeScale(2, 2, 2);\nconst p = (m: THREE.Matrix4) => new THREE.Vector3(1, 0, 0).applyMatrix4(m).x;\nconsole.log(p(T.clone().multiply(S)), p(T.clone().premultiply(S)));",
       options: ["12 22", "22 12", "12 12"],
       answer: 0,
@@ -337,6 +654,8 @@ const rotations: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("set() takes rows, but elements is stored in another order. Which numbers form the first column?", "set() recibe filas, pero elements se guarda en otro orden. ¿Qué números forman la primera columna?", "set() は行ごと。elements は別の順で保存される。1列目の数は？"),
+      note: "matrix-layout",
       code: IMP + "const m = new THREE.Matrix4().set(\n  1, 2, 3, 4,\n  5, 6, 7, 8,\n  9, 10, 11, 12,\n  13, 14, 15, 16,\n);\nconsole.log(m.elements.slice(0, 4).join(\",\"));",
       options: ["1,5,9,13", "1,2,3,4", "13,14,15,16"],
       answer: 0,
@@ -347,6 +666,8 @@ const rotations: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Where does a Matrix4 keep the move? For a scale matrix, the determinant multiplies the scales.", "¿Dónde guarda una Matrix4 el movimiento? En una escala, el determinante multiplica las escalas.", "Matrix4 は移動をどこに持つ？拡大行列の行列式は倍率の掛け算。"),
+      note: "matrix-layout",
       code: IMP + "const m = new THREE.Matrix4().makeTranslation(5, 0, 0);\nconsole.log(m.elements[12], new THREE.Matrix4().makeScale(2, 3, 4).determinant());",
       options: ["5 24", "0 9", "5 9"],
       answer: 0,
@@ -362,6 +683,8 @@ const rotations: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("One Euler gets no order and the other gets one explicitly. What's the default?", "Un Euler no recibe orden y el otro lo recibe explícito. ¿Cuál es el valor por defecto?", "片方は順番なし、もう片方は明示。初期値は？"),
+      note: "euler",
       code: IMP + 'console.log(new THREE.Euler().order, new THREE.Euler(0, 0, 0, "YXZ").order);',
       options: ["XYZ YXZ", "XYZ XYZ", "ZYX YXZ"],
       answer: 0,
@@ -372,6 +695,8 @@ const rotations: LessonDef = {
     {
       kind: "predict",
       prompt: COMPILES,
+      hint: L("Euler orders are a fixed set of axis letters. Is \"ABC\" one of them?", "Los órdenes Euler son un conjunto fijo de letras de ejes. ¿\"ABC\" es uno de ellos?", "Euler の順番は軸の文字の決まった組み合わせ。\"ABC\" は入っている？"),
+      note: "euler",
       code: IMP + 'const e = new THREE.Euler(0, 0, 0, "ABC");',
       options: [YES, NO_TSC],
       answer: 1,
@@ -382,6 +707,8 @@ const rotations: LessonDef = {
     {
       kind: "predict",
       prompt: L("Which describes gimbal lock?", "¿Qué describe el gimbal lock?", "ジンバルロックの説明は？"),
+      hint: L("With the middle angle at 90°, what happens to the other two rings?", "Con el ángulo del medio en 90°, ¿qué les pasa a los otros dos anillos?", "真ん中の角度が90°のとき、残り2つの輪はどうなる？"),
+      note: "euler",
       code: IMP + "const o = new THREE.Object3D();\no.rotation.set(0, Math.PI / 2, 0);\n// now X and Z turn around the same line",
       options: [L("Two axes align: one is lost", "Dos ejes se alinean: se pierde uno", "2軸が重なり1つ失う"), L("A WebGL error", "Un error de WebGL", "WebGL のエラー")],
       answer: 0,
@@ -396,6 +723,8 @@ const rotations: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Setting rotation also updates quaternion. For angle θ, y = sin(θ/2) and w = cos(θ/2).", "Cambiar rotation también actualiza quaternion. Para un ángulo θ, y = sen(θ/2) y w = cos(θ/2).", "rotation を変えると quaternion も変わる。角度 θ なら y = sin(θ/2)、w = cos(θ/2)。"),
+      note: "quaternions",
       code: IMP + "const o = new THREE.Object3D();\no.rotation.y = Math.PI / 2;\nconsole.log(o.quaternion.y.toFixed(3), o.quaternion.w.toFixed(3));",
       options: ["0.707 0.707", "1.571 0.000", "0.000 1.000"],
       answer: 0,
@@ -406,6 +735,8 @@ const rotations: LessonDef = {
     {
       kind: "type",
       prompt: L("Turn halfway, smoothly", "Gira a mitad de camino, suave", "なめらかに半分回そう"),
+      hint: L("You need the quaternion method that blends toward another along the shortest arc.", "Necesitas el método de cuaternión que mezcla hacia otro por el arco más corto.", "最短の弧でもう1つの回転へ近づける、クォータニオンのメソッドが必要。"),
+      note: "quaternions",
       code: IMP + "const a = new THREE.Quaternion();\nconst b = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);\nconst h = a.clone().___(b, 0.5);\nconsole.log((2 * Math.acos(h.w) * 180 / Math.PI).toFixed(1));",
       answer: "slerp",
       check: { compiles: true, stdout: "45.0" },
@@ -415,6 +746,8 @@ const rotations: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("decompose is the exact reverse of compose. What went in?", "decompose es exactamente lo contrario de compose. ¿Qué entró?", "decompose は compose のちょうど逆。何を入れた？"),
+      note: "matrix-layout",
       code: IMP + "const m = new THREE.Matrix4().compose(\n  new THREE.Vector3(1, 2, 3), new THREE.Quaternion(), new THREE.Vector3(2, 2, 2),\n);\nconst p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();\nm.decompose(p, q, s);\nconsole.log(p.toArray().join(\",\"), s.toArray().join(\",\"));",
       options: ["1,2,3 2,2,2", "2,4,6 2,2,2", "1,2,3 1,1,1"],
       answer: 0,
@@ -424,6 +757,8 @@ const rotations: LessonDef = {
     },
     {
       kind: "run",
+      hint: L("The matrix on the right acts first. Which one must touch the point first?", "La matriz de la derecha actúa primero. ¿Cuál debe tocar el punto primero?", "右の行列が先に効く。先に点にふれるべきなのはどっち？"),
+      note: "matrix-order",
       prompt: L("Scale first, then move: it must print x: 12", "Escala primero, luego mueve: debe imprimir x: 12", "拡大してから移動：x: 12 と表示"),
       starter: IMP + "const T = new THREE.Matrix4().makeTranslation(10, 0, 0);\nconst S = new THREE.Matrix4().makeScale(2, 2, 2);\nconst M = S.clone().multiply(T);\nconsole.log(\"x: \" + new THREE.Vector3(1, 0, 0).applyMatrix4(M).x);\n",
       solution: IMP + "const T = new THREE.Matrix4().makeTranslation(10, 0, 0);\nconst S = new THREE.Matrix4().makeScale(2, 2, 2);\nconst M = T.clone().multiply(S);\nconsole.log(\"x: \" + new THREE.Vector3(1, 0, 0).applyMatrix4(M).x);\n",
@@ -432,7 +767,53 @@ const rotations: LessonDef = {
       explain: L("The matrix on the right acts first. To scale first, S goes on the right: T × S.", "La matriz de la derecha actúa primero. Para escalar primero, S va a la derecha: T × S.", "右の行列が先に効く。先に拡大するなら S を右に置いて T × S。"),
     },
   ],
+  notes: rotationsNotes,
 };
+
+const bossNotes: NoteDef[] = [
+  note("recap-graph", L("Recap: parents, world and attach", "Repaso: padres, mundo y attach", "復習：親・ワールド・attach"),
+    p(
+      "A child's position is local, measured from its parent. Its world position is the parent's transform applied to that offset: scale, then rotation, then the parent's position. add() keeps the child's local numbers; attach() keeps its world position by working out new local numbers, which can even be negative.",
+      "La posición de un hijo es local, medida desde su padre. Su posición en el mundo es la transformación del padre aplicada a esa distancia: escala, luego rotación y luego la posición del padre. add() conserva los números locales del hijo; attach() conserva su posición en el mundo calculando números locales nuevos, que incluso pueden ser negativos.",
+      "子の position はローカルで、親から測る。ワールド座標は、その距離に親の変形（拡大→回転→親の位置）をかけたもの。add() は子のローカルの数を保ち、attach() は新しいローカルの数を計算してワールド位置を保つ。その数はマイナスになることもある。",
+    ),
+    ex("const dock = new THREE.Group();\ndock.position.x = 8;\ndock.updateMatrixWorld();\nconst boat = new THREE.Object3D();\nboat.position.x = 1;\ndock.attach(boat);\nconsole.log(boat.position.x);", "-7",
+      L("World 1 under a parent at 8 means local 1 − 8", "Mundo 1 bajo un padre en 8 es local 1 − 8", "親が8のときワールド1はローカル 1 − 8")),
+    p(
+      "traverse visits every node, depth first. traverseVisible does the same but skips any object whose visible is false, together with its whole subtree, because a hidden parent hides its children too, even if their own visible flags are still true.",
+      "traverse visita cada nodo en profundidad. traverseVisible hace lo mismo pero salta cualquier objeto con visible en false, junto con todo su subárbol, porque un padre oculto también oculta a sus hijos, aunque sus propias banderas visible sigan en true.",
+      "traverse は全部の節を深さ優先でたどる。traverseVisible も同じだけど、visible が false の物体はその下の枝ごととばす。親が隠れれば、子の visible が true のままでも子も隠れるからだよ。",
+    ),
+    ex("const root = new THREE.Group();\nconst lamp = new THREE.Object3D();\nconst bulb = new THREE.Object3D();\nroot.add(lamp);\nlamp.add(bulb);\nlamp.visible = false;\nlet count = 0;\nroot.traverseVisible(() => { count++; });\nconsole.log(count, bulb.visible);", "1 true"),
+  ),
+  note("recap-vectors", L("Recap: vectors", "Repaso: vectores", "復習：ベクトル"),
+    p(
+      "Vectors are objects. Assigning one to another name shares the same vector, and methods such as add or multiplyScalar change it in place and return it. Use clone() when you need a separate copy.",
+      "Los vectores son objetos. Asignar uno a otro nombre comparte el mismo vector, y métodos como add o multiplyScalar lo cambian en su lugar y lo devuelven. Usa clone() cuando necesites una copia aparte.",
+      "ベクトルはオブジェクト。別の名前に代入すると同じベクトルを共有し、add や multiplyScalar などのメソッドはその場で書きかえて返す。別のコピーが必要なら clone() を使おう。",
+    ),
+    ex("const speed = new THREE.Vector3(0, 1, 0);\nconst boost = speed;\nboost.addScalar(1);\nconsole.log(speed.y);", "2"),
+    p(
+      "dot is 0 for perpendicular arrows, positive when they point roughly the same way and negative when they point apart. cross gives an arrow perpendicular to both by the right-hand rule. Following the cycle X → Y → Z → X gives a positive axis (Y × Z = +X, Z × X = +Y); going backwards flips the sign.",
+      "dot es 0 para flechas perpendiculares, positivo cuando apuntan más o menos igual y negativo cuando se alejan. cross da una flecha perpendicular a ambas según la regla de la mano derecha. Seguir el ciclo X → Y → Z → X da un eje positivo (Y × Z = +X, Z × X = +Y); ir al revés invierte el signo.",
+      "dot は直角なら0、だいたい同じ向きならプラス、離れる向きならマイナス。cross は右手の法則で両方に直角な矢を作る。X → Y → Z → X の順ならプラスの軸（Y × Z = +X、Z × X = +Y）、逆順なら符号が反対になる。",
+    ),
+  ),
+  note("recap-rotations", L("Recap: matrices and quaternions", "Repaso: matrices y cuaterniones", "復習：行列とクォータニオン"),
+    p(
+      "In a × b the right-hand matrix acts first. a.multiply(b) stores a × b in a, premultiply reverses the order, and target.multiplyMatrices(a, b) stores a × b in target without touching a or b.",
+      "En a × b actúa primero la matriz de la derecha. a.multiply(b) guarda a × b en a, premultiply invierte el orden, y destino.multiplyMatrices(a, b) guarda a × b en destino sin tocar a ni b.",
+      "a × b では右の行列が先に効く。a.multiply(b) は a × b を a に入れ、premultiply は順番が逆。target.multiplyMatrices(a, b) は a も b も変えずに a × b を target に入れる。",
+    ),
+    p(
+      "A new Quaternion is the identity, meaning no turn, and every rotation quaternion has length 1. slerp blends between two turns along the shortest arc; multiply stacks them. applyAxisAngle(axis, angle) turns a vector around an axis; a positive angle turns counterclockwise when you look from the tip of the axis toward the origin.",
+      "Un Quaternion nuevo es la identidad, es decir, ningún giro, y todo cuaternión de rotación tiene longitud 1. slerp mezcla entre dos giros por el arco más corto; multiply los acumula. applyAxisAngle(eje, ángulo) gira un vector alrededor de un eje; un ángulo positivo gira en sentido antihorario si miras desde la punta del eje hacia el origen.",
+      "新しいクォータニオンは単位元、つまり回転なしで、回転のクォータニオンの長さはいつも1。slerp は2つの回転のあいだを最短の弧でつなぎ、multiply は重ねる。applyAxisAngle(軸, 角度) はベクトルを軸のまわりに回す。角度がプラスなら、軸の先から原点を見て反時計回りだよ。",
+    ),
+    ex("const v = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);\nconsole.log(v.y.toFixed(3), v.z.toFixed(3));", "-1.000 0.000",
+      L("A quarter turn around X swings +Z down to -Y", "Un cuarto de vuelta en X lleva +Z hasta -Y", "X 軸で4分の1回転すると +Z は -Y へ")),
+  ),
+];
 
 // ─── 2.4 Boss: Graph Wraith ────────────────────────────────────────────────
 const boss: LessonDef = {
@@ -449,22 +830,23 @@ const boss: LessonDef = {
       "Uuuuh... en mi bosque lo local y el mundo se mezclan, las flechas se comparten y cada giro se enreda. ¡Encuentra la salida!",
       "おおお…この森ではローカルもワールドも混ざり、矢は共有され、回転はからまる。出口を探してみろ！",
     )),
-    { kind: "predict", time: 12, prompt: PRINT, code: IMP + "const parent = new THREE.Group();\nparent.position.x = 5;\nconst child = new THREE.Object3D();\nchild.position.x = 2;\nparent.add(child);\nconsole.log(child.getWorldPosition(new THREE.Vector3()).x);", options: ["7", "2", "5"], answer: 0, output: "7", check: { compiles: true, stdout: "7" }, explain: L("World = parent's 5 + local 2.", "Mundo = el 5 del padre + el 2 local.", "ワールド＝親の5＋ローカル2。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: IMP + "const v = new THREE.Vector3(2, 0, 0);\nconst w = v;\nw.multiplyScalar(3);\nconsole.log(v.x);", options: ["6", "2", "3"], answer: 0, output: "6", check: { compiles: true, stdout: "6" }, explain: L("w and v are the same Vector3, and multiplyScalar mutates it.", "w y v son el mismo Vector3, y multiplyScalar lo modifica.", "w と v は同じ Vector3。multiplyScalar はそれを書きかえる。") },
-    { kind: "predict", time: 15, prompt: L("a.multiply(b) on a point: which acts first?", "a.multiply(b) sobre un punto: ¿cuál primero?", "a.multiply(b) を点に：先に効くのは？"), code: IMP + "const a = new THREE.Matrix4().makeTranslation(1, 0, 0);\nconst b = new THREE.Matrix4().makeScale(3, 3, 3);\na.multiply(b);", options: [L("b first, then a", "b primero, luego a", "b が先、次に a"), L("a first, then b", "a primero, luego b", "a が先、次に b")], answer: 0, explain: L("a.multiply(b) is a × b: the right-hand matrix touches the point first.", "a.multiply(b) es a × b: la matriz de la derecha toca el punto primero.", "a.multiply(b) は a × b。右の行列が先に点に効く。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: IMP + "const q = new THREE.Quaternion();\nconsole.log(q.w, q.length());", options: ["1 1", "0 0", "0 1"], answer: 0, output: "1 1", check: { compiles: true, stdout: "1 1" }, explain: L("The identity quaternion (no turn) is (0, 0, 0, 1), and its length is 1.", "El cuaternión identidad (sin giro) es (0, 0, 0, 1), y su longitud es 1.", "回転なしのクォータニオンは (0, 0, 0, 1)。長さは1。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: IMP + "const g = new THREE.Group();\nconst c = new THREE.Object3D();\nc.position.set(5, 0, 0);\ng.position.set(10, 0, 0);\ng.updateMatrixWorld();\ng.attach(c);\nconsole.log(c.position.x);", options: ["-5", "5", "15"], answer: 0, output: "-5", check: { compiles: true, stdout: "-5" }, explain: L("attach keeps world x 5, so relative to a parent at 10 the local x is -5.", "attach conserva x 5 en el mundo; respecto a un padre en 10, la x local es -5.", "attach はワールド x 5 を保つ。親が10なのでローカルは -5。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: IMP + "const v = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);\nconsole.log(v.y.toFixed(3));", options: ["1.000", "0.000", "-1.000"], answer: 0, output: "1.000", check: { compiles: true, stdout: "1.000" }, explain: L("A quarter turn around Z swings +X up to +Y.", "Un cuarto de vuelta en Z lleva +X hasta +Y.", "Z 軸で4分の1回転すると +X は +Y へ。") },
-    { kind: "pick", time: 12, prompt: L("Smoothly blend two orientations", "Mezcla suave dos orientaciones", "2つの向きをなめらかにつなぐ"), code: IMP + "const from = new THREE.Quaternion();\nconst to = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);\nconst mid = from.clone().___(to, 0.5);\nconsole.log(mid.w.toFixed(3));", options: ["slerp", "multiply"], answer: 0, check: { compiles: true, stdout: "0.707" }, explain: L("slerp follows the shortest arc. Lerping Euler angles one by one can wobble or lock.", "slerp sigue el arco más corto. Interpolar ángulos Euler uno a uno puede tambalear o bloquearse.", "slerp は最短の弧をたどる。Euler 角を別々に補間するとぶれたりロックしたりする。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: IMP + 'const root = new THREE.Group(); root.name = "root";\nconst a = new THREE.Object3D(); a.name = "a";\nconst b = new THREE.Object3D(); b.name = "b";\nconst c = new THREE.Object3D(); c.name = "c";\nroot.add(a, b);\nb.add(c);\nb.visible = false;\nconst names: string[] = [];\nroot.traverseVisible((o) => { names.push(o.name); });\nconsole.log(names.join(","));', options: ["root,a", "root,a,b,c", "root,a,c"], answer: 0, output: "root,a", check: { compiles: true, stdout: "root,a" }, explain: L("traverseVisible skips a hidden object AND its whole subtree.", "traverseVisible salta un objeto oculto Y todo su subárbol.", "traverseVisible は隠れた物体とその子孫を全部とばす。") },
-    { kind: "type", time: 15, prompt: L("Combine T and S into M = T × S", "Combina T y S en M = T × S", "T と S から M = T × S を作ろう"), code: IMP + "const T = new THREE.Matrix4().makeTranslation(10, 0, 0);\nconst S = new THREE.Matrix4().makeScale(2, 2, 2);\nconst M = new THREE.Matrix4().___(T, S);\nconsole.log(new THREE.Vector3(1, 0, 0).applyMatrix4(M).x);", answer: "multiplyMatrices", check: { compiles: true, stdout: "12" }, explain: L("multiplyMatrices(a, b) stores a × b. S acts first: 1 → 2 → 12.", "multiplyMatrices(a, b) guarda a × b. S actúa primero: 1 → 2 → 12.", "multiplyMatrices(a, b) は a × b。S が先に効いて 1 → 2 → 12。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: IMP + "const a = new THREE.Vector3(0, 1, 0);\nconst b = new THREE.Vector3(1, 0, 0);\nconst c = a.clone().cross(b);\nconsole.log(a.dot(b), c.z);", options: ["0 -1", "0 1", "1 0"], answer: 0, output: "0 -1", check: { compiles: true, stdout: "0 -1" }, explain: L("Perpendicular, so dot is 0. Y × X is -Z: cross order matters.", "Perpendiculares: dot es 0. Y × X es -Z: el orden en cross importa.", "直角なので dot は0。Y × X は -Z。cross は順番が大事。") },
+    { hint: L("child.position is local. Add what the parent contributes in the world.", "child.position es local. Suma lo que aporta el padre en el mundo.", "child.position はローカル。親がワールドで加える分を足そう。"), note: "recap-graph", kind: "predict", time: 12, prompt: PRINT, code: IMP + "const parent = new THREE.Group();\nparent.position.x = 5;\nconst child = new THREE.Object3D();\nchild.position.x = 2;\nparent.add(child);\nconsole.log(child.getWorldPosition(new THREE.Vector3()).x);", options: ["7", "2", "5"], answer: 0, output: "7", check: { compiles: true, stdout: "7" }, explain: L("World = parent's 5 + local 2.", "Mundo = el 5 del padre + el 2 local.", "ワールド＝親の5＋ローカル2。") },
+    { hint: L("w = v doesn't copy. How many vectors does multiplyScalar change here?", "w = v no copia. ¿Cuántos vectores cambia aquí multiplyScalar?", "w = v はコピーしない。multiplyScalar はいくつのベクトルを変える？"), note: "recap-vectors", kind: "predict", time: 12, prompt: PRINT, code: IMP + "const v = new THREE.Vector3(2, 0, 0);\nconst w = v;\nw.multiplyScalar(3);\nconsole.log(v.x);", options: ["6", "2", "3"], answer: 0, output: "6", check: { compiles: true, stdout: "6" }, explain: L("w and v are the same Vector3, and multiplyScalar mutates it.", "w y v son el mismo Vector3, y multiplyScalar lo modifica.", "w と v は同じ Vector3。multiplyScalar はそれを書きかえる。") },
+    { hint: L("Write a.multiply(b) as a product. Which matrix sits next to the point?", "Escribe a.multiply(b) como producto. ¿Qué matriz queda junto al punto?", "a.multiply(b) を掛け算で書こう。点のすぐ隣にある行列は？"), note: "recap-rotations", kind: "predict", time: 15, prompt: L("a.multiply(b) on a point: which acts first?", "a.multiply(b) sobre un punto: ¿cuál primero?", "a.multiply(b) を点に：先に効くのは？"), code: IMP + "const a = new THREE.Matrix4().makeTranslation(1, 0, 0);\nconst b = new THREE.Matrix4().makeScale(3, 3, 3);\na.multiply(b);", options: [L("b first, then a", "b primero, luego a", "b が先、次に a"), L("a first, then b", "a primero, luego b", "a が先、次に b")], answer: 0, explain: L("a.multiply(b) is a × b: the right-hand matrix touches the point first.", "a.multiply(b) es a × b: la matriz de la derecha toca el punto primero.", "a.multiply(b) は a × b。右の行列が先に点に効く。") },
+    { hint: L("A brand-new quaternion means no turn at all. Which component holds cos(0)?", "Un cuaternión nuevo significa ningún giro. ¿Qué componente guarda cos(0)?", "新しいクォータニオンは回転なし。cos(0) が入る成分は？"), note: "recap-rotations", kind: "predict", time: 12, prompt: PRINT, code: IMP + "const q = new THREE.Quaternion();\nconsole.log(q.w, q.length());", options: ["1 1", "0 0", "0 1"], answer: 0, output: "1 1", check: { compiles: true, stdout: "1 1" }, explain: L("The identity quaternion (no turn) is (0, 0, 0, 1), and its length is 1.", "El cuaternión identidad (sin giro) es (0, 0, 0, 1), y su longitud es 1.", "回転なしのクォータニオンは (0, 0, 0, 1)。長さは1。") },
+    { hint: L("attach keeps the world x. What local x puts it there under a parent at 10?", "attach conserva la x del mundo. ¿Qué x local la deja ahí bajo un padre en 10?", "attach はワールドの x を保つ。親が10のとき、そこに置くローカル x は？"), note: "recap-graph", kind: "predict", time: 15, prompt: PRINT, code: IMP + "const g = new THREE.Group();\nconst c = new THREE.Object3D();\nc.position.set(5, 0, 0);\ng.position.set(10, 0, 0);\ng.updateMatrixWorld();\ng.attach(c);\nconsole.log(c.position.x);", options: ["-5", "5", "15"], answer: 0, output: "-5", check: { compiles: true, stdout: "-5" }, explain: L("attach keeps world x 5, so relative to a parent at 10 the local x is -5.", "attach conserva x 5 en el mundo; respecto a un padre en 10, la x local es -5.", "attach はワールド x 5 を保つ。親が10なのでローカルは -5。") },
+    { hint: L("Turn counterclockwise around +Z, seen from the +Z side. Where does +X go?", "Gira en sentido antihorario alrededor de +Z, visto desde +Z. ¿A dónde va +X?", "+Z 側から見て Z 軸まわりに反時計回り。+X はどこへ？"), note: "recap-rotations", kind: "predict", time: 15, prompt: PRINT, code: IMP + "const v = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);\nconsole.log(v.y.toFixed(3));", options: ["1.000", "0.000", "-1.000"], answer: 0, output: "1.000", check: { compiles: true, stdout: "1.000" }, explain: L("A quarter turn around Z swings +X up to +Y.", "Un cuarto de vuelta en Z lleva +X hasta +Y.", "Z 軸で4分の1回転すると +X は +Y へ。") },
+    { hint: L("One option stacks turns; the other blends between them along the shortest arc.", "Una opción acumula giros; la otra mezcla entre ellos por el arco más corto.", "片方は回転を重ね、もう片方は最短の弧で間をつなぐ。"), note: "recap-rotations", kind: "pick", time: 12, prompt: L("Smoothly blend two orientations", "Mezcla suave dos orientaciones", "2つの向きをなめらかにつなぐ"), code: IMP + "const from = new THREE.Quaternion();\nconst to = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);\nconst mid = from.clone().___(to, 0.5);\nconsole.log(mid.w.toFixed(3));", options: ["slerp", "multiply"], answer: 0, check: { compiles: true, stdout: "0.707" }, explain: L("slerp follows the shortest arc. Lerping Euler angles one by one can wobble or lock.", "slerp sigue el arco más corto. Interpolar ángulos Euler uno a uno puede tambalear o bloquearse.", "slerp は最短の弧をたどる。Euler 角を別々に補間するとぶれたりロックしたりする。") },
+    { hint: L("A hidden object hides its children too. Which branch is skipped completely?", "Un objeto oculto también oculta a sus hijos. ¿Qué rama se salta por completo?", "隠れた物体は子も隠す。まるごととばされる枝は？"), note: "recap-graph", kind: "predict", time: 15, prompt: PRINT, code: IMP + 'const root = new THREE.Group(); root.name = "root";\nconst a = new THREE.Object3D(); a.name = "a";\nconst b = new THREE.Object3D(); b.name = "b";\nconst c = new THREE.Object3D(); c.name = "c";\nroot.add(a, b);\nb.add(c);\nb.visible = false;\nconst names: string[] = [];\nroot.traverseVisible((o) => { names.push(o.name); });\nconsole.log(names.join(","));', options: ["root,a", "root,a,b,c", "root,a,c"], answer: 0, output: "root,a", check: { compiles: true, stdout: "root,a" }, explain: L("traverseVisible skips a hidden object AND its whole subtree.", "traverseVisible salta un objeto oculto Y todo su subárbol.", "traverseVisible は隠れた物体とその子孫を全部とばす。") },
+    { hint: L("There's a method that stores a × b from two matrices in one call.", "Hay un método que guarda a × b a partir de dos matrices en una llamada.", "2つの行列から a × b を1回で作るメソッドがある。"), note: "recap-rotations", kind: "type", time: 15, prompt: L("Combine T and S into M = T × S", "Combina T y S en M = T × S", "T と S から M = T × S を作ろう"), code: IMP + "const T = new THREE.Matrix4().makeTranslation(10, 0, 0);\nconst S = new THREE.Matrix4().makeScale(2, 2, 2);\nconst M = new THREE.Matrix4().___(T, S);\nconsole.log(new THREE.Vector3(1, 0, 0).applyMatrix4(M).x);", answer: "multiplyMatrices", check: { compiles: true, stdout: "12" }, explain: L("multiplyMatrices(a, b) stores a × b. S acts first: 1 → 2 → 12.", "multiplyMatrices(a, b) guarda a × b. S actúa primero: 1 → 2 → 12.", "multiplyMatrices(a, b) は a × b。S が先に効いて 1 → 2 → 12。") },
+    { hint: L("Perpendicular arrows give what dot? And in cross the order matters: Y, then X.", "¿Qué dot dan flechas perpendiculares? Y en cross el orden importa: Y y luego X.", "直角な矢の dot は？cross は順番が大事：Y のあとに X。"), note: "recap-vectors", kind: "predict", time: 15, prompt: PRINT, code: IMP + "const a = new THREE.Vector3(0, 1, 0);\nconst b = new THREE.Vector3(1, 0, 0);\nconst c = a.clone().cross(b);\nconsole.log(a.dot(b), c.z);", options: ["0 -1", "0 1", "1 0"], answer: 0, output: "0 -1", check: { compiles: true, stdout: "0 -1" }, explain: L("Perpendicular, so dot is 0. Y × X is -Z: cross order matters.", "Perpendiculares: dot es 0. Y × X es -Z: el orden en cross importa.", "直角なので dot は0。Y × X は -Z。cross は順番が大事。") },
     enemySays(L(
       "Nooo... you kept every child in its place and every turn untangled. The Loop Tower ticks above. Mind the clock!",
       "Nooo... mantuviste a cada hijo en su lugar y cada giro sin enredos. La Torre del Bucle late arriba. ¡Cuidado con el reloj!",
       "うおお…子はみな元の場所、回転もからまない。上ではループの塔が時を刻む。時間に気をつけろ！",
     )),
   ],
+  notes: bossNotes,
 };
 
 export const graphForest: RegionDef = {

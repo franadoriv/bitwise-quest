@@ -1,4 +1,4 @@
-import type { Beat, LessonDef, RegionDef, Text } from "../../../lib/content/types.ts";
+import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
 
 // REGION 3 · MODULE CASTLE  (classes and objects, mixins and lookup, class-level state, equality and copies)
@@ -7,11 +7,111 @@ const say = (text: Text): Beat => ({ kind: "dialog", speaker: "master", text });
 const enemySays = (text: Text): Beat => ({ kind: "dialog", speaker: "enemy", text });
 const C = (...lines: string[]) => lines.join("\n");
 
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example; the validator checks `output` against real Ruby. */
+const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code, output, caption });
+/** An example that must raise the given exception at runtime (verified too). */
+const boom = (code: string, throws: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: true, throws } });
+/** An example that must NOT parse (SyntaxError, verified too). */
+const bad = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: false } });
+
 const PRINT = L("What does it print?", "¿Qué imprime?", "何が表示される？");
 const HAPPENS = L("What happens?", "¿Qué pasa?", "どうなる？");
 const VALID = L("Is this valid Ruby?", "¿Es Ruby válido?", "正しい Ruby？");
 
 // ─── 3.1 Blueprints of the castle: classes and objects ─────────────────────
+const classesNotes: NoteDef[] = [
+  note("classes-new", L("Classes, new and initialize", "Clases, new e initialize", "クラスと new と initialize"),
+    p(
+      "A class is a blueprint for objects. You write it between class Name and end, and inside you define methods with def. A class name is a constant, so it must start with a capital letter: Lamp works, lamp is a SyntaxError. Ruby reads the file top to bottom, so define the class before the line that uses it.",
+      "Una clase es un plano para crear objetos. Se escribe entre class Nombre y end, y adentro defines métodos con def. El nombre de una clase es una constante, así que debe empezar con mayúscula: Lamp funciona, lamp es un SyntaxError. Ruby lee el archivo de arriba abajo: define la clase antes de la línea que la usa.",
+      "クラスはオブジェクトの設計図。class 名前 と end の間に書き、中で def を使ってメソッドを定義する。クラス名は定数なので大文字で始める。Lamp はOK、lamp は SyntaxError。Ruby はファイルを上から読むので、使う行より前にクラスを書こう。",
+    ),
+    p(
+      "Name.new builds an object from the blueprint. new does two things: it creates an empty object, then calls its initialize method with the same arguments you gave to new. You never call initialize yourself; it is the setup step. Inside, @variables (instance variables) store data that each object keeps for itself.",
+      "Nombre.new construye un objeto a partir del plano. new hace dos cosas: crea un objeto vacío y luego llama a su método initialize con los mismos argumentos que le diste a new. Nunca llamas a initialize tú mismo: es el paso de preparación. Adentro, las @variables (variables de instancia) guardan datos propios de cada objeto.",
+      "名前.new で設計図からオブジェクトを作る。new は2つのことをする：空のオブジェクトを作り、new に渡したのと同じ引数で initialize を呼ぶ。initialize を自分で呼ぶことはない。準備のための場所だ。中の @変数（インスタンス変数）は、オブジェクトごとに自分のデータを持つ。",
+    ),
+    ex(C("class Lamp", "  def initialize(color)", "    @color = color", "  end", "  def describe", '    "a #{@color} lamp"', "  end", "end", 'puts Lamp.new("green").describe'), "a green lamp",
+      L("new passes \"green\" on to initialize", "new le pasa \"green\" a initialize", "new が \"green\" を initialize に渡す")),
+    p(
+      "puts and string interpolation \"#{...}\" turn an object into text by calling its to_s method. Define to_s in your class and your objects print exactly the way you want. Without it, you get a generic text with the class name and a memory address, which is not useful to read.",
+      "puts y la interpolación \"#{...}\" convierten un objeto en texto llamando a su método to_s. Define to_s en tu clase y tus objetos se imprimen justo como quieres. Sin él, obtienes un texto genérico con el nombre de la clase y una dirección de memoria, que no sirve de mucho.",
+      "puts と文字列の式展開 \"#{...}\" は、to_s メソッドを呼んでオブジェクトを文字にする。クラスで to_s を定義すれば、好きな形で表示できる。定義しないと、クラス名とメモリ番地の入った読みにくい文字になる。",
+    ),
+    ex(C("class Coin", "  def initialize(value)", "    @value = value", "  end", "  def to_s", '    "coin worth #{@value}"', "  end", "end", "c = Coin.new(3)", "puts c", 'puts "found a #{c}"'), "coin worth 3\nfound a coin worth 3"),
+    bad(C("class magic_box", "end"),
+      L("SyntaxError: a class name must start with a capital", "SyntaxError: el nombre de clase va con mayúscula", "SyntaxError：クラス名は大文字で始める")),
+  ),
+  note("attr-doors", L("Doors to @vars: attr_*", "Puertas a las @vars: attr_*", "@変数の扉：attr_*"),
+    p(
+      "Instance variables are private to their object: code outside can never touch @height directly. The only way in is to call a method. To let others read @height you need a method called height; to let them write it, a method called height= (with the equals sign in its name).",
+      "Las variables de instancia son privadas de su objeto: el código de afuera nunca puede tocar @height directamente. La única forma de entrar es llamar a un método. Para que otros lean @height necesitas un método llamado height; para que lo escriban, uno llamado height= (con el signo igual en el nombre).",
+      "インスタンス変数はそのオブジェクトだけのもの。外のコードは @height に直接さわれない。入る方法はメソッドを呼ぶことだけ。読ませるには height というメソッド、書かせるには height=（名前に = がつく）というメソッドが必要だ。",
+    ),
+    p(
+      "Writing those methods by hand is boring, so Ruby has shortcuts: attr_reader :x creates the reader x, attr_writer :x creates the writer x=, and attr_accessor :x creates both. Think of them as doors: a reader door, a writer door, or a door that works both ways.",
+      "Escribir esos métodos a mano es aburrido, así que Ruby tiene atajos: attr_reader :x crea el lector x, attr_writer :x crea el escritor x=, y attr_accessor :x crea los dos. Piénsalos como puertas: una de lectura, una de escritura, o una que sirve en ambos sentidos.",
+      "それを毎回手で書くのは面倒なので、Ruby には近道がある。attr_reader :x は読む x を、attr_writer :x は書く x= を、attr_accessor :x は両方を作る。読む扉、書く扉、両方通れる扉と考えよう。",
+    ),
+    ex(C("class Gate", "  attr_reader :height", "  attr_accessor :open", "  def initialize", "    @height = 3", "    @open = false", "  end", "end", "g = Gate.new", "g.open = true", "p g.height, g.open"), "3\ntrue"),
+    p(
+      "If a door is missing, Ruby raises NoMethodError and names the exact method it could not find, for example undefined method 'height='. Read that name: an = at the end means a writer is missing. Also remember that an instance variable never assigned is simply nil, with no error, so a typo like @hieght quietly gives nil.",
+      "Si falta una puerta, Ruby lanza NoMethodError y nombra el método exacto que no encontró, por ejemplo undefined method 'height='. Lee ese nombre: un = al final significa que falta un escritor. Recuerda también que una variable de instancia nunca asignada es simplemente nil, sin error, así que un error de tipeo como @hieght da nil en silencio.",
+      "扉がないと Ruby は NoMethodError を出し、見つからないメソッド名をそのまま教えてくれる（例：undefined method 'height='）。最後に = があれば書く扉がないということ。また、一度も代入していないインスタンス変数はエラーにならず nil。@hieght のような打ち間違いも黙って nil になる。",
+    ),
+    boom(C("class Gate", "  attr_reader :height", "  def initialize", "    @height = 3", "  end", "end", "Gate.new.height = 5"), "NoMethodError",
+      L("Only a reader exists, so height= is missing", "Solo hay lector, así que falta height=", "読む扉だけなので height= がない")),
+    ex(C("class Torch", "  def flame", "    @flame", "  end", "end", "p Torch.new.flame.nil?"), "true",
+      L("@flame was never set, so it reads as nil", "@flame nunca se asignó: se lee como nil", "@flame は未代入なので nil")),
+  ),
+  note("self-writer", L("self.x = and returning self", "self.x = y devolver self", "self.x = と self を返す"),
+    p(
+      "Inside a method, a bare name followed by = always creates a local variable. Ruby decides this while reading the code, before running it. So even if the class has attr_accessor :level, writing level = 0 inside a method does NOT call the writer: it makes a new local called level that disappears when the method ends.",
+      "Dentro de un método, un nombre suelto seguido de = siempre crea una variable local. Ruby lo decide al leer el código, antes de ejecutarlo. Así que aunque la clase tenga attr_accessor :level, escribir level = 0 dentro de un método NO llama al escritor: crea un local nuevo llamado level que desaparece al terminar el método.",
+      "メソッドの中で、名前のあとに = を書くと必ずローカル変数ができる。Ruby は実行前、コードを読む時点でそう決める。だからクラスに attr_accessor :level があっても、メソッド内の level = 0 は書く扉を呼ばない。level という新しいローカル変数ができ、メソッドが終わると消える。",
+    ),
+    ex(C("class Meter", "  attr_accessor :level", "  def initialize", "    @level = 1", "  end", "  def reset", "    level = 0", "  end", "end", "m = Meter.new", "m.reset", "p m.level"), "1",
+      L("level = 0 made a local; the object kept 1", "level = 0 creó un local; el objeto sigue con 1", "level = 0 はローカル。オブジェクトは 1 のまま")),
+    p(
+      "It gets worse: once Ruby has seen name = in a method, every later use of that name in the method, even on the right side of the same line, means the local. A fresh local starts as nil, so a line like total = total + 1 reads nil and crashes with NoMethodError. The fix is self.name = ..., which calls the writer, or @name = ..., which sets the variable directly.",
+      "Y empeora: cuando Ruby ve nombre = en un método, cada uso posterior de ese nombre, incluso a la derecha de la misma línea, es el local. Un local nuevo empieza en nil, así que una línea como total = total + 1 lee nil y falla con NoMethodError. La solución es self.nombre = ..., que llama al escritor, o @nombre = ..., que asigna la variable directo.",
+      "さらに、メソッド内で 名前 = を見たあとは、その名前はすべてローカルを指す。同じ行の右側でもだ。新しいローカルは nil から始まるので、total = total + 1 のような行は nil を読んで NoMethodError になる。直すには書く扉を呼ぶ self.名前 = ... か、変数を直接変える @名前 = ... を使う。",
+    ),
+    ex(C("class Meter", "  attr_accessor :level", "  def initialize", "    @level = 1", "  end", "  def raise_by(n)", "    self.level = level + n", "  end", "end", "m = Meter.new", "m.raise_by(4)", "p m.level"), "5"),
+    p(
+      "A method returns the value of its last line. If that last line is self, the caller gets the same object back and can call another method on it right away: obj.a.b.c. This is called chaining, and every call in the chain acts on the same object.",
+      "Un método devuelve el valor de su última línea. Si esa última línea es self, quien llama recibe el mismo objeto y puede llamar otro método enseguida: obj.a.b.c. Esto se llama encadenar, y cada llamada de la cadena actúa sobre el mismo objeto.",
+      "メソッドは最後の行の値を返す。最後の行が self なら、呼んだ側に同じオブジェクトが戻り、すぐ次のメソッドを呼べる：obj.a.b.c。これをチェーンといい、どの呼び出しも同じオブジェクトに効く。",
+    ),
+    ex(C("class Pot", "  attr_reader :items", "  def initialize", "    @items = []", "  end", "  def add(x)", "    @items << x", "    self", "  end", "end", 'pot = Pot.new.add("salt").add("leek")', "p pot.items"), '["salt", "leek"]'),
+  ),
+  note("private-methods", L("Private methods", "Métodos privados", "private メソッド"),
+    p(
+      "Every method written after the word private inside a class is private. A private method can be called only from inside the object, by its other methods, without writing a receiver in front. If outside code tries obj.helper, Ruby raises NoMethodError with the message private method 'helper' called.",
+      "Cada método escrito después de la palabra private dentro de una clase es privado. Un método privado solo puede llamarse desde dentro del objeto, por sus otros métodos, sin escribir un receptor delante. Si el código de afuera intenta obj.helper, Ruby lanza NoMethodError con el mensaje private method 'helper' called.",
+      "クラスの中で private と書いたあとのメソッドは、すべて private になる。private メソッドはオブジェクトの中から、ほかのメソッドが受け手を書かずに呼ぶときだけ使える。外から obj.helper と呼ぶと、Ruby は private method 'helper' called という NoMethodError を出す。",
+    ),
+    ex(C("class Oven", "  def bake", '    "baked at #{temperature}"', "  end", "  private", "  def temperature", "    180", "  end", "end", "puts Oven.new.bake"), "baked at 180",
+      L("bake is public and calls the private helper from inside", "bake es público y llama al ayudante privado desde adentro", "公開の bake が中から private を呼ぶ")),
+    p(
+      "Why hide methods? A class has a public side (what others may use) and an inner side (helpers that may change any time). Making helpers private keeps the public side small and stops other code from depending on details.",
+      "¿Por qué ocultar métodos? Una clase tiene un lado público (lo que otros pueden usar) y un lado interno (ayudantes que pueden cambiar en cualquier momento). Hacer privados a los ayudantes mantiene pequeño el lado público y evita que otro código dependa de detalles.",
+      "なぜ隠すのか？クラスには公開の面（ほかが使ってよいもの）と内側（いつ変わってもよい助っ人）がある。助っ人を private にすると公開の面が小さくなり、ほかのコードが細かい部分に頼らなくなる。",
+    ),
+    p(
+      "Remember that a program runs line by line: anything printed before an error stays on the screen, and then the error stops the program. So when a question shows a public call followed by a private one, think about each line in order.",
+      "Recuerda que un programa corre línea por línea: lo que se imprimió antes de un error queda en pantalla, y luego el error detiene el programa. Así que cuando una pregunta muestra una llamada pública seguida de una privada, piensa en cada línea en orden.",
+      "プログラムは1行ずつ動く。エラーの前に表示されたものは画面に残り、そのあとエラーでプログラムが止まる。公開の呼び出しのあとに private の呼び出しがあれば、1行ずつ順に考えよう。",
+    ),
+    boom(C("class Oven", "  private", "  def temperature", "    180", "  end", "end", "Oven.new.temperature"), "NoMethodError",
+      L("Called from outside: private method error", "Llamado desde afuera: error de método privado", "外から呼ぶと private エラー")),
+  ),
+];
+
 const classes: LessonDef = {
   slug: "classes-and-objects",
   title: L("Blueprints of the castle", "Planos del castillo", "城の設計図"),
@@ -20,6 +120,7 @@ const classes: LessonDef = {
   xp: 75,
   enemy: "ruby/nil-ghost",
   enemyName: L("NIL GHOST", "FANTASMA NIL", "nil ゴースト"),
+  notes: classesNotes,
   beats: [
     say(L(
       "Welcome to Module Castle! A CLASS is a blueprint. Hero.new builds an object from it, and initialize sets it up.",
@@ -48,6 +149,7 @@ const classes: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("puts and \"#{}\" both turn the object into text. Which method of the object do they call for that?", "puts y \"#{}\" convierten el objeto en texto. ¿Qué método del objeto llaman para eso?", "puts も \"#{}\" もオブジェクトを文字にする。そのとき呼ぶメソッドは？"), note: "classes-new",
       code: C("class Hero", "  attr_reader :name", "  def initialize(name)", "    @name = name", "  end", "  def to_s", '    "Hero #{@name}"', "  end", "end", 'h = Hero.new("Rubi")', "puts h.name", 'puts "Hi, #{h}"'),
       options: ["Rubi\nHi, Hero Rubi", "Rubi\nHi, h", "name\nHi, Hero Rubi"],
       answer: 0,
@@ -64,6 +166,7 @@ const classes: LessonDef = {
     {
       kind: "pick",
       prompt: L("Read AND write hp", "Leer Y escribir hp", "hp を読み書きしたい"),
+      hint: L("Count the doors used: h.hp = 4 writes and h.hp reads. Which shortcut covers everything the code needs?", "Cuenta las puertas usadas: h.hp = 4 escribe y h.hp lee. ¿Qué atajo cubre todo lo que el código necesita?", "h.hp = 4 は書く、h.hp は読む。使われる扉を全部まかなえるのはどれ？"), note: "attr-doors",
       code: C("class Hero", "  ___ :hp", "  def initialize", "    @hp = 10", "  end", "end", "h = Hero.new", "h.hp = 4", "puts h.hp"),
       options: ["attr_accessor", "attr_reader", "attr_writer"],
       answer: 0,
@@ -74,6 +177,7 @@ const classes: LessonDef = {
     {
       kind: "predict",
       prompt: HAPPENS,
+      hint: L("Assigning with obj.name = calls a method named name=. Did attr_reader create that one?", "Asignar con obj.name = llama a un método llamado name=. ¿Lo creó attr_reader?", "obj.name = は name= というメソッドを呼ぶ。attr_reader はそれを作った？"), note: "attr-doors",
       code: C("class Hero", "  attr_reader :name", "  def initialize(name)", "    @name = name", "  end", "end", 'Hero.new("Rubi").name = "X"'),
       options: [L("NoMethodError: no name= method", "NoMethodError: no hay método name=", "NoMethodError：name= がない"), L("name becomes X", "name pasa a ser X", "name が X になる"), "SyntaxError"],
       answer: 0,
@@ -84,6 +188,7 @@ const classes: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("@mana is read but never assigned anywhere. What does Ruby give for an unset instance variable?", "@mana se lee pero nunca se asigna. ¿Qué da Ruby para una variable de instancia sin asignar?", "@mana は読むだけで代入されていない。未代入のインスタンス変数の値は？"), note: "attr-doors",
       code: C("class Hero", "  def mana", "    @mana", "  end", "end", "p Hero.new.mana"),
       options: ["nil", "0", "NameError"],
       answer: 0,
@@ -100,6 +205,7 @@ const classes: LessonDef = {
     {
       kind: "predict",
       prompt: HAPPENS,
+      hint: L("Inside a method, name = ... makes a local. What is that local's value when the right side is read?", "Dentro de un método, nombre = ... crea un local. ¿Cuánto vale ese local cuando se lee el lado derecho?", "メソッド内の 名前 = ... はローカルを作る。右側を読むとき、その値は？"), note: "self-writer",
       code: C("class Hero", "  attr_accessor :hp", "  def initialize", "    @hp = 10", "  end", "  def heal", "    hp = hp + 5", "  end", "end", "Hero.new.heal"),
       options: [L("NoMethodError: + for nil", "NoMethodError: + para nil", "NoMethodError：nil に +"), L("hp becomes 15", "hp pasa a 15", "hp が 15 になる"), L("Runs, nothing changes", "Corre, nada cambia", "動くが何も変わらない")],
       answer: 0,
@@ -116,6 +222,7 @@ const classes: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Each hit returns self, so the next hit acts on the same hero. Follow hp through both calls.", "Cada hit devuelve self, así que el siguiente hit actúa sobre el mismo héroe. Sigue hp en ambas llamadas.", "hit は self を返すので次の hit も同じヒーローに効く。hp を2回追おう。"), note: "self-writer",
       code: C("class Hero", "  attr_accessor :hp", "  def initialize", "    @hp = 10", "  end", "  def hit(n)", "    self.hp -= n", "    self", "  end", "end", "h = Hero.new", "h.hit(2).hit(3)", "puts h.hp"),
       options: ["5", "8", "10"],
       answer: 0,
@@ -132,6 +239,7 @@ const classes: LessonDef = {
     {
       kind: "predict",
       prompt: HAPPENS,
+      hint: L("Check each call: is it made from inside the class, or from outside with a receiver? Lines run in order.", "Revisa cada llamada: ¿se hace desde dentro de la clase o desde afuera con un receptor? Las líneas corren en orden.", "それぞれの呼び出しは中から？外から受け手つきで？行は順に動く。"), note: "private-methods",
       code: C("class Vault", "  def open", '    "opened #{secret}"', "  end", "  private", "  def secret", '    "gold"', "  end", "end", "puts Vault.new.open", "Vault.new.secret"),
       options: [L("opened gold, then NoMethodError", "opened gold, luego NoMethodError", "opened gold の後 NoMethodError"), L("opened gold, then gold", "opened gold, luego gold", "opened gold と gold"), L("NoMethodError, nothing printed", "NoMethodError, nada impreso", "何も出ずに NoMethodError")],
       answer: 0,
@@ -142,6 +250,7 @@ const classes: LessonDef = {
     {
       kind: "predict",
       prompt: VALID,
+      hint: L("Look at the first letter of the class name. What kind of name must a class name be?", "Mira la primera letra del nombre de la clase. ¿Qué tipo de nombre debe ser el de una clase?", "クラス名の最初の文字を見よう。クラス名はどんな種類の名前？"), note: "classes-new",
       code: C("class hero", "end"),
       options: [L("Yes", "Sí", "はい"), L("No: class names are Constants", "No: los nombres de clase son Constantes", "いいえ：クラス名は定数")],
       answer: 1,
@@ -152,6 +261,7 @@ const classes: LessonDef = {
     {
       kind: "type",
       prompt: L("Name the setup method", "Nombra el método que prepara", "準備メソッドの名前は？"),
+      hint: L("new builds the object, then calls one special setup method with the same arguments.", "new construye el objeto y luego llama a un método especial de preparación con los mismos argumentos.", "new はオブジェクトを作り、同じ引数で特別な準備メソッドを呼ぶ。"), note: "classes-new",
       code: C("class Jewel", "  attr_reader :shine", "  def ___(shine)", "    @shine = shine", "  end", "end", "puts Jewel.new(7).shine"),
       answer: "initialize",
       check: { compiles: true, stdout: "7" },
@@ -161,6 +271,7 @@ const classes: LessonDef = {
     {
       kind: "order",
       prompt: L("Build the class, then use it", "Arma la clase y luego úsala", "クラスを作ってから使おう"),
+      hint: L("A class must be fully written, from class to end, before any line can call new on it.", "Una clase debe estar escrita completa, de class a end, antes de que una línea pueda llamar a new.", "new を呼ぶ前に、class から end までクラスを書き終えておこう。"), note: "classes-new",
       lines: ["class Jewel", "  attr_reader :shine", "  def initialize(s); @shine = s; end", "end", "puts Jewel.new(9).shine"],
       check: { compiles: true, stdout: "9" },
       explain: L("class opens the blueprint, the body adds a reader and initialize, end closes it. Only then call new.", "class abre el plano, el cuerpo agrega lector e initialize, end lo cierra. Solo entonces llamas a new.", "class で開き、読む扉と initialize を書き、end で閉じる。それから new。"),
@@ -168,6 +279,7 @@ const classes: LessonDef = {
     {
       kind: "run",
       prompt: L("Fix heal: it must print hp: 15", "Arregla heal: debe imprimir hp: 15", "heal を直して hp: 15 と表示させよう"),
+      hint: L("hp = ... inside heal makes a local. Make that line call the writer, or change the @variable directly.", "hp = ... dentro de heal crea un local. Haz que esa línea llame al escritor o cambie la @variable directo.", "heal の hp = ... はローカルになる。書く扉を呼ぶか、@変数を直接変えよう。"), note: "self-writer",
       starter: C("class Hero", "  attr_accessor :hp", "  def initialize", "    @hp = 10", "  end", "  def heal", "    hp = hp + 5", "  end", "end", "rubi = Hero.new", "rubi.heal", 'puts "hp: #{rubi.hp}"', ""),
       solution: C("class Hero", "  attr_accessor :hp", "  def initialize", "    @hp = 10", "  end", "  def heal", "    self.hp += 5", "  end", "end", "rubi = Hero.new", "rubi.heal", 'puts "hp: #{rubi.hp}"', ""),
       expect: "hp: 15",
@@ -178,6 +290,98 @@ const classes: LessonDef = {
 };
 
 // ─── 3.2 Shields and the line of answerers: mixins and lookup ──────────────
+const mixinsNotes: NoteDef[] = [
+  note("inheritance-super", L("Inheritance, lookup and super", "Herencia, búsqueda y super", "継承と探索と super"),
+    p(
+      "class Child < Parent makes Child inherit from Parent: every Parent method works on Child objects, and Child can add new methods or override old ones by defining a method with the same name. A Ruby class has exactly one parent.",
+      "class Hijo < Padre hace que Hijo herede de Padre: cada método de Padre funciona en los objetos de Hijo, y Hijo puede agregar métodos o reemplazar los viejos definiendo uno con el mismo nombre. Una clase de Ruby tiene exactamente un padre.",
+      "class 子 < 親 と書くと、子は親を継承する。親のメソッドはすべて子のオブジェクトで使え、子は新しいメソッドを足したり、同じ名前で定義して上書きしたりできる。Ruby のクラスの親はちょうど1つ。",
+    ),
+    p(
+      "When you call obj.m, Ruby looks for m in obj's own class first, then its parent, then the grandparent, and runs the first one it finds. This also happens for calls made inside a parent's method: self is still the child object, so the search starts again at the child's class.",
+      "Cuando llamas a obj.m, Ruby busca m primero en la clase propia de obj, luego en su padre, luego en el abuelo, y ejecuta el primero que encuentra. Esto pasa también con las llamadas hechas dentro de un método del padre: self sigue siendo el objeto hijo, así que la búsqueda vuelve a empezar en la clase del hijo.",
+      "obj.m を呼ぶと、Ruby はまず obj 自身のクラス、次に親、次に祖父母の順に m を探し、最初に見つけたものを動かす。親のメソッドの中から呼んだ場合も同じ。self は子のオブジェクトのままなので、探索はまた子のクラスから始まる。",
+    ),
+    ex(C("class Vehicle", "  def describe", '    "I have #{wheels} wheels"', "  end", "  def wheels", "    4", "  end", "end", "class Bike < Vehicle", "  def wheels", "    2", "  end", "end", "puts Bike.new.describe"), "I have 2 wheels",
+      L("describe is inherited, but wheels is found in Bike first", "describe se hereda, pero wheels se encuentra antes en Bike", "describe は継承、wheels は先に Bike で見つかる")),
+    p(
+      "Inside an overriding method, super calls the parent's version of the same method. Bare super (no parentheses) passes along exactly the arguments the current method received. super() passes no arguments at all, and super(a, b) passes the ones you list.",
+      "Dentro de un método que reemplaza a otro, super llama a la versión del padre del mismo método. super solo (sin paréntesis) reenvía exactamente los argumentos que recibió el método actual. super() no pasa ningún argumento, y super(a, b) pasa los que tú escribas.",
+      "上書きしたメソッドの中で super を呼ぶと、親の同じ名前のメソッドが動く。かっこなしの super は、今のメソッドが受け取った引数をそのまま渡す。super() は引数を何も渡さず、super(a, b) は書いたものを渡す。",
+    ),
+    ex(C("class Shape", "  def label(name)", '    "shape #{name}"', "  end", "end", "class Square < Shape", "  def label(name)", '    super + "!"', "  end", "end", 'puts Square.new.label("sq")'), "shape sq!",
+      L("Bare super forwarded \"sq\" to Shape#label", "super solo reenvió \"sq\" a Shape#label", "かっこなし super が \"sq\" を渡した")),
+    p(
+      "Common mistake: writing super() when the parent's method needs arguments. The parent receives zero and Ruby raises ArgumentError (wrong number of arguments). Read the parentheses carefully: they change what is sent.",
+      "Error común: escribir super() cuando el método del padre necesita argumentos. El padre recibe cero y Ruby lanza ArgumentError (wrong number of arguments). Lee con cuidado los paréntesis: cambian lo que se envía.",
+      "よくあるミス：親のメソッドが引数を必要とするのに super() と書くこと。親は0個を受け取り、Ruby は ArgumentError（wrong number of arguments）を出す。かっこの有無で渡すものが変わるので、よく見よう。",
+    ),
+  ),
+  note("include-prepend", L("Modules: include and prepend", "Módulos: include y prepend", "モジュール：include と prepend"),
+    p(
+      "A module is a named bundle of methods. You can't call new on it; instead you mix it into classes. include Mod inside a class makes the module's methods available to every object of that class. A class has one parent but can include many modules, so modules share skills between unrelated classes.",
+      "Un módulo es un paquete de métodos con nombre. No puedes llamar a new sobre él; en cambio, lo mezclas en clases. include Mod dentro de una clase hace que los métodos del módulo estén disponibles en cada objeto de esa clase. Una clase tiene un padre pero puede incluir muchos módulos, así que los módulos comparten habilidades entre clases no relacionadas.",
+      "モジュールは名前つきのメソッドのまとまり。new はできず、クラスに混ぜて使う。クラスの中で include Mod と書くと、そのクラスの全オブジェクトでモジュールのメソッドが使える。親は1つでもモジュールはいくつでも include できるので、関係のないクラス同士でスキルを分け合える。",
+    ),
+    p(
+      "Mixing in a module inserts it into the class's ancestors list, the line Ruby walks during lookup. include puts the module right AFTER the class, so a method defined in the class itself wins. prepend puts the module BEFORE the class, so the module answers first and its super reaches the class's method: a wrapper around it.",
+      "Mezclar un módulo lo inserta en la lista ancestors de la clase, la fila que Ruby recorre al buscar. include pone el módulo justo DESPUÉS de la clase, así que gana un método definido en la propia clase. prepend pone el módulo ANTES de la clase: el módulo responde primero y su super llega al método de la clase, como un envoltorio.",
+      "モジュールを混ぜると、そのクラスの ancestors（探索でたどる行列）に入る。include はクラスのすぐ後ろに置くので、クラス自身のメソッドが勝つ。prepend はクラスの前に置くので、モジュールが先に答え、その super がクラスのメソッドに届く。包みこむ形だ。",
+    ),
+    ex(C("module Tagged", "  def tag", '    "module"', "  end", "end", "class Crate", "  include Tagged", "  def tag", '    "class"', "  end", "end", "puts Crate.new.tag", "p Crate.ancestors.first(2)"), "class\n[Crate, Tagged]",
+      L("include: the class comes first in the line", "include: la clase va primero en la fila", "include：行列の先頭はクラス")),
+    ex(C("module Brackets", "  def show", '    "[" + super + "]"', "  end", "end", "class Memo", "  prepend Brackets", "  def show", '    "memo"', "  end", "end", "puts Memo.new.show"), "[memo]",
+      L("prepend: the module wraps the class's method", "prepend: el módulo envuelve el método de la clase", "prepend：モジュールがクラスのメソッドを包む")),
+    p(
+      "With several includes, each new one is inserted right after the class, pushing the earlier ones further down the line. So the module included LAST is checked FIRST. When in doubt, print Klass.ancestors: lookup always goes from left to right.",
+      "Con varios include, cada uno nuevo se inserta justo después de la clase y empuja a los anteriores más abajo en la fila. Así que el módulo incluido AL FINAL se revisa PRIMERO. Si dudas, imprime Clase.ancestors: la búsqueda siempre va de izquierda a derecha.",
+      "include を何回もすると、新しいものがクラスのすぐ後ろに入り、前のものは後ろへ押される。だから最後に include したモジュールが最初に探される。迷ったら クラス.ancestors を表示しよう。探索はいつも左から右だ。",
+    ),
+    ex(C("module Red; end", "module Blue; end", "class Flag", "  include Red", "  include Blue", "end", "p Flag.ancestors.first(3)"), "[Flag, Blue, Red]"),
+  ),
+  note("enumerable-comparable", L("Enumerable and Comparable", "Enumerable y Comparable", "Enumerable と Comparable"),
+    p(
+      "Ruby ships with mixins that build many methods out of one you write. Enumerable needs a method called each that hands every element to the block. Include Enumerable, define each, and your class gets map, select, sort, include?, min, max, sum, count, first and dozens more for free.",
+      "Ruby trae mixins que construyen muchos métodos a partir de uno que tú escribes. Enumerable necesita un método llamado each que entregue cada elemento al bloque. Incluye Enumerable, define each, y tu clase obtiene gratis map, select, sort, include?, min, max, sum, count, first y decenas más.",
+      "Ruby には、自分で書いた1つのメソッドから多くのメソッドを作ってくれる mixin がある。Enumerable に必要なのは、要素を1つずつブロックに渡す each だけ。Enumerable を include して each を定義すれば、map、select、sort、include?、min、max、sum など何十個もタダで使える。",
+    ),
+    ex(C("class Shelf", "  include Enumerable", "  def initialize(*books)", "    @books = books", "  end", "  def each", "    @books.each { |b| yield b }", "  end", "end", 's = Shelf.new("fig", "kiwi", "date")', "p s.select { |b| b.size == 4 }, s.min"), '["kiwi", "date"]\n"date"',
+      L("One each, then select and min come from Enumerable", "Un each, y select y min vienen de Enumerable", "each を1つ書けば select と min がもらえる")),
+    p(
+      "Your each must pass the block along. Either yield each element, or capture the block with &block and forward it: @list.each(&block). If each ignores its block, Enumerable's methods receive nothing and fall apart.",
+      "Tu each debe pasar el bloque. O haces yield de cada elemento, o capturas el bloque con &block y lo reenvías: @lista.each(&block). Si each ignora su bloque, los métodos de Enumerable no reciben nada y se rompen.",
+      "each はブロックを受け渡さなければならない。要素ごとに yield するか、&block で受け取って @list.each(&block) のように渡す。each がブロックを無視すると、Enumerable のメソッドには何も届かず壊れてしまう。",
+    ),
+    p(
+      "Comparable works the same way for ordering. Define <=> so it returns a negative number, 0 or a positive number (less, equal, greater), then include Comparable to get <, <=, ==, >, >=, between? and clamp. Defining <=> alone does not give you >. Arrays compare item by item with <=>, which is handy to compare several fields at once.",
+      "Comparable funciona igual para ordenar. Define <=> para que devuelva un número negativo, 0 o positivo (menor, igual, mayor) e incluye Comparable para tener <, <=, ==, >, >=, between? y clamp. Definir solo <=> no te da >. Los arrays se comparan elemento por elemento con <=>, útil para comparar varios campos a la vez.",
+      "Comparable は順番について同じしくみ。<=> を定義して負の数・0・正の数（小さい・同じ・大きい）を返し、Comparable を include すると <、<=、==、>、>=、between?、clamp が使える。<=> だけでは > は使えない。配列は <=> で要素を順に比べるので、複数の値をまとめて比べるのに便利。",
+    ),
+    ex(C("class Weight", "  include Comparable", "  attr_reader :kg", "  def initialize(kg)", "    @kg = kg", "  end", "  def <=>(other)", "    kg <=> other.kg", "  end", "end", "p Weight.new(5) < Weight.new(8), Weight.new(9).clamp(Weight.new(1), Weight.new(4)).kg"), "true\n4"),
+  ),
+  note("extend-duck", L("extend and duck typing", "extend y duck typing", "extend とダックタイピング"),
+    p(
+      "include gives a module's methods to the instances of a class. extend gives them to ONE object only. Written inside a class body, extend Mod applies to the class object itself, so the methods become class-level: Klass.m works, but Klass.new.m raises NoMethodError.",
+      "include da los métodos de un módulo a las instancias de una clase. extend se los da a UN solo objeto. Escrito dentro del cuerpo de una clase, extend Mod se aplica al objeto clase mismo, así que los métodos quedan a nivel de clase: Clase.m funciona, pero Clase.new.m lanza NoMethodError.",
+      "include はモジュールのメソッドをクラスのインスタンスに渡す。extend はひとつのオブジェクトだけに渡す。クラス本体で extend Mod と書くとクラス自身に効くので、クラスのメソッドになる。クラス.m は動くが、クラス.new.m は NoMethodError。",
+    ),
+    ex(C("module Counter", "  def count_up(n)", "    n + 1", "  end", "end", "class Clock", "  extend Counter", "end", "p Clock.count_up(9)", "p Clock.new.respond_to?(:count_up)"), "10\nfalse",
+      L("The class has count_up; its instances don't", "La clase tiene count_up; sus instancias no", "クラスは count_up を持つがインスタンスは持たない")),
+    p(
+      "Ruby never checks an object's class before calling a method. It just sends the message, and if the object has a method with that name, it runs. That's duck typing: if it quacks like a duck, treat it like a duck. Objects of unrelated classes can be used in the same loop as long as they answer the same messages.",
+      "Ruby nunca revisa la clase de un objeto antes de llamar a un método. Solo envía el mensaje, y si el objeto tiene un método con ese nombre, se ejecuta. Eso es duck typing: si grazna como pato, trátalo como pato. Objetos de clases no relacionadas sirven en el mismo bucle mientras respondan a los mismos mensajes.",
+      "Ruby はメソッドを呼ぶ前にクラスを確かめない。メッセージを送るだけで、その名前のメソッドがあれば動く。これがダックタイピング：アヒルのように鳴くならアヒルとして扱う。同じメッセージに答えるなら、関係のないクラスのオブジェクトも同じループで使える。",
+    ),
+    p(
+      "To ask first, use respond_to?(:name): it returns true or false without calling anything. Numbers, strings and arrays only answer the methods their classes define, so 42.respond_to?(:write) is false unless something added write to Integer.",
+      "Para preguntar antes, usa respond_to?(:nombre): devuelve true o false sin llamar a nada. Los números, strings y arrays solo responden los métodos que definen sus clases, así que 42.respond_to?(:write) es false a menos que alguien haya agregado write a Integer.",
+      "先に聞きたいときは respond_to?(:名前) を使う。何も呼ばずに true か false を返す。数字や文字列や配列は自分のクラスにあるメソッドにしか答えないので、だれかが Integer に write を足していなければ 42.respond_to?(:write) は false。",
+    ),
+    ex(C("class Pen", '  def write; "ink"; end', "end", "class Pencil", '  def write; "graphite"; end', "end", "[Pen.new, 42, Pencil.new].each do |t|", "  puts t.write if t.respond_to?(:write)", "end"), "ink\ngraphite",
+      L("42 doesn't answer write, so it is skipped", "42 no responde write, así que se salta", "42 は write に答えないので飛ばされる")),
+  ),
+];
+
 const mixins: LessonDef = {
   slug: "mixins-and-lookup",
   title: L("Shields and crests", "Escudos y blasones", "盾と紋章"),
@@ -186,6 +390,7 @@ const mixins: LessonDef = {
   xp: 80,
   enemy: "ruby/monkey-imp",
   enemyName: L("CREST IMP", "DIABLILLO BLASÓN", "紋章インプ"),
+  notes: mixinsNotes,
   beats: [
     say(L(
       "A class can inherit from ONE parent with <. The child gets every parent method and can override some.",
@@ -205,6 +410,7 @@ const mixins: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("In the first call self is a Dog. Where does lookup start when intro calls speak?", "En la primera llamada self es un Dog. ¿Dónde empieza la búsqueda cuando intro llama a speak?", "1回目の self は Dog。intro が speak を呼ぶと、探索はどこから始まる？"), note: "inheritance-super",
       code: C("class Animal", "  def intro", '    "I say #{speak}"', "  end", "  def speak", '    "..."', "  end", "end", "class Dog < Animal", "  def speak", '    "Woof"', "  end", "end", "puts Dog.new.intro", "puts Animal.new.intro"),
       options: ["I say Woof\nI say ...", "I say ...\nI say ...", "I say Woof\nI say Woof"],
       answer: 0,
@@ -221,6 +427,7 @@ const mixins: LessonDef = {
     {
       kind: "predict",
       prompt: HAPPENS,
+      hint: L("Compare super and super(): what do the empty parentheses send, and what does A#hi need?", "Compara super y super(): ¿qué envían los paréntesis vacíos y qué necesita A#hi?", "super と super() を比べよう。空のかっこは何を渡す？A#hi には何が必要？"), note: "inheritance-super",
       code: C("class A", "  def hi(x)", '    "A #{x}"', "  end", "end", "class B < A", "  def hi(x)", "    super()", "  end", "end", "B.new.hi(1)"),
       options: [L("ArgumentError: 0 given, 1 expected", "ArgumentError: 0 dados, 1 esperado", "ArgumentError：0個渡し1個必要"), '"A 1"', '"A "'],
       answer: 0,
@@ -236,6 +443,7 @@ const mixins: LessonDef = {
     {
       kind: "type",
       prompt: L("Mix the module into Bot", "Mezcla el módulo en Bot", "Bot にモジュールを混ぜよう"),
+      hint: L("Which keyword mixes a module's methods into every instance of a class?", "¿Qué palabra clave mezcla los métodos de un módulo en cada instancia de una clase?", "モジュールのメソッドをクラスの全インスタンスに混ぜるキーワードは？"), note: "include-prepend",
       code: C("module Greet", "  def hello", '    "hello from #{self.class}"', "  end", "end", "class Bot", "  ___ Greet", "end", "puts Bot.new.hello"),
       answer: "include",
       check: { compiles: true, stdout: "hello from Bot" },
@@ -250,6 +458,7 @@ const mixins: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("prepend places the module before the class in the line. Who answers first, and where does super go?", "prepend pone el módulo antes de la clase en la fila. ¿Quién responde primero y adónde va super?", "prepend はモジュールをクラスの前に置く。先に答えるのは？super の行き先は？"), note: "include-prepend",
       code: C("module Loud", "  def hello", "    super.upcase", "  end", "end", "class Bot", "  prepend Loud", "  def hello", '    "beep"', "  end", "end", "puts Bot.new.hello", "p Bot.ancestors.take(2)"),
       options: ["BEEP\n[Loud, Bot]", "beep\n[Bot, Loud]", "BEEP\n[Bot, Loud]"],
       answer: 0,
@@ -261,6 +470,7 @@ const mixins: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Each include is inserted right after the class. Which module ends up closest to Multi?", "Cada include se inserta justo después de la clase. ¿Qué módulo queda más cerca de Multi?", "include はクラスのすぐ後ろに入る。Multi に一番近いのはどっち？"), note: "include-prepend",
       code: C('module M1; def who; "M1"; end; end', 'module M2; def who; "M2"; end; end', "class Multi", "  include M1", "  include M2", "end", "p Multi.new.who"),
       options: ['"M2"', '"M1"', "NameError"],
       answer: 0,
@@ -276,6 +486,7 @@ const mixins: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Bag defines each and includes Enumerable. What does that give it? Does sort return a sorted result?", "Bag define each e incluye Enumerable. ¿Qué obtiene con eso? ¿sort devuelve un resultado ordenado?", "Bag は each を定義し Enumerable を include。何がもらえる？sort は並べた結果を返す？"), note: "enumerable-comparable",
       code: C("class Bag", "  include Enumerable", "  def initialize(*items)", "    @items = items", "  end", "  def each(&block)", "    @items.each(&block)", "  end", "end", "b = Bag.new(3, 1, 2)", "p b.sort, b.include?(2), b.max"),
       options: ["[1, 2, 3]\ntrue\n3", "[3, 1, 2]\ntrue\n3", "NoMethodError"],
       answer: 0,
@@ -292,6 +503,7 @@ const mixins: LessonDef = {
     {
       kind: "predict",
       prompt: HAPPENS,
+      hint: L("extend inside a class body gives the methods to the class object. Do its instances get them too?", "extend dentro del cuerpo de una clase da los métodos al objeto clase. ¿Sus instancias también los reciben?", "クラス本体の extend はクラス自身にメソッドを渡す。インスタンスにも渡る？"), note: "extend-duck",
       code: C("module Util", "  def helper", '    "h"', "  end", "end", "class Ext", "  extend Util", "end", "p Ext.helper", "Ext.new.helper"),
       options: [L('"h", then NoMethodError', '"h", luego NoMethodError', '"h" の後 NoMethodError'), L('"h" twice', '"h" dos veces', '"h" が2回'), L("NoMethodError right away", "NoMethodError de inmediato", "すぐに NoMethodError")],
       answer: 0,
@@ -307,6 +519,7 @@ const mixins: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Ruby only checks whether each object answers the message. Does an Integer have a quack method?", "Ruby solo revisa si cada objeto responde el mensaje. ¿Un Integer tiene un método quack?", "Ruby はメッセージに答えるかだけを見る。Integer に quack はある？"), note: "extend-duck",
       code: C("class Duck", '  def quack; "Quack"; end', "end", "class Robot", '  def quack; "beep"; end', "end", "[Duck.new, Robot.new].each { |d| puts d.quack }", "p 5.respond_to?(:quack)"),
       options: ["Quack\nbeep\nfalse", "Quack\nbeep\ntrue", "Quack\nNoMethodError"],
       answer: 0,
@@ -317,6 +530,7 @@ const mixins: LessonDef = {
     {
       kind: "run",
       prompt: L("Make versions comparable: newer: true", "Haz comparables las versiones: newer: true", "バージョンを比べられるように：newer: true"),
+      hint: L("<=> is already defined. Which built-in mixin turns it into <, > and friends?", "<=> ya está definido. ¿Qué mixin de Ruby lo convierte en <, > y compañía?", "<=> はもうある。それを < や > に変えてくれる標準の mixin は？"), note: "enumerable-comparable",
       starter: C("class Version", "  attr_reader :major, :minor", "  def initialize(major, minor)", "    @major, @minor = major, minor", "  end", "  def <=>(other)", "    [major, minor] <=> [other.major, other.minor]", "  end", "end", 'puts "newer: #{Version.new(1, 10) > Version.new(1, 9)}"', ""),
       solution: C("class Version", "  include Comparable", "  attr_reader :major, :minor", "  def initialize(major, minor)", "    @major, @minor = major, minor", "  end", "  def <=>(other)", "    [major, minor] <=> [other.major, other.minor]", "  end", "end", 'puts "newer: #{Version.new(1, 10) > Version.new(1, 9)}"', ""),
       expect: "newer: true",
@@ -327,6 +541,92 @@ const mixins: LessonDef = {
 };
 
 // ─── 3.3 The castle's shared ledger: class-level state ─────────────────────
+const classStateNotes: NoteDef[] = [
+  note("class-methods", L("Class methods and self", "Métodos de clase y self", "クラスメソッドと self"),
+    p(
+      "A class is an object too, and it can have its own methods. def self.name inside the class body defines a class method, called on the blueprint: Ticket.count. Instance methods (a plain def) belong to each object built with new. The two sides don't mix: an instance does not have the class's methods, so calling one on it raises NoMethodError.",
+      "Una clase también es un objeto y puede tener sus propios métodos. def self.nombre dentro del cuerpo define un método de clase, que se llama sobre el plano: Ticket.count. Los métodos de instancia (un def normal) pertenecen a cada objeto creado con new. Los dos lados no se mezclan: una instancia no tiene los métodos de la clase, y llamarlos sobre ella lanza NoMethodError.",
+      "クラスもオブジェクトで、自分のメソッドを持てる。クラス本体で def self.名前 と書くとクラスメソッドになり、Ticket.count のように設計図に呼ぶ。ふつうの def はインスタンスメソッドで、new で作った各オブジェクトのもの。2つは混ざらない。インスタンスはクラスのメソッドを持たないので、呼ぶと NoMethodError。",
+    ),
+    p(
+      "Inside a class method, self is the class itself. So a call with no receiver, like new(...), means Klass.new(...). That's how factory methods work: a class method that prepares the arguments and then builds the object.",
+      "Dentro de un método de clase, self es la clase misma. Así que una llamada sin receptor, como new(...), significa Clase.new(...). Así funcionan los métodos fábrica: un método de clase que prepara los argumentos y luego construye el objeto.",
+      "クラスメソッドの中の self はクラスそのもの。だから受け手なしの new(...) は クラス.new(...) の意味になる。これがファクトリーメソッドのしくみ。引数を整えてからオブジェクトを作るクラスメソッドだ。",
+    ),
+    ex(C("class Ticket", "  attr_reader :code", "  def self.from_number(n)", '    new("T-#{n}")', "  end", "  def initialize(code)", "    @code = code", "  end", "end", "puts Ticket.from_number(42).code"), "T-42",
+      L("new inside a class method means Ticket.new", "new dentro de un método de clase es Ticket.new", "クラスメソッド内の new は Ticket.new")),
+    p(
+      "class << self ... end opens the class's own space. Every def inside it is a class method, and attr_accessor inside it creates a reader and writer on the class, stored in the class's own @variable.",
+      "class << self ... end abre el espacio propio de la clase. Cada def adentro es un método de clase, y un attr_accessor adentro crea lector y escritor en la clase, guardados en una @variable propia de la clase.",
+      "class << self ... end はクラス自身の場所を開く。中の def はすべてクラスメソッドになり、中の attr_accessor はクラスに読み書きの扉を作る。値はクラス自身の @変数にしまわれる。",
+    ),
+    ex(C("class Settings", "  class << self", "    attr_accessor :theme", "    def describe", '      "theme: #{theme}"', "    end", "  end", "end", 'Settings.theme = "dark"', "puts Settings.describe"), "theme: dark"),
+  ),
+  note("class-variables", L("@@vars vs class @vars", "@@vars frente a @vars de clase", "@@変数とクラスの @変数"),
+    p(
+      "A class variable, written @@name, is ONE variable shared by the class, all of its instances AND all of its subclasses. There is no separate copy per subclass: if a subclass assigns @@name, it overwrites the value the parent sees too. Every object of every class in the family reads the same ledger.",
+      "Una variable de clase, escrita @@nombre, es UNA variable compartida por la clase, todas sus instancias Y todas sus subclases. No hay una copia por subclase: si una subclase asigna @@nombre, también sobrescribe el valor que ve el padre. Cada objeto de cada clase de la familia lee el mismo libro.",
+      "@@名前 と書くクラス変数は、クラスとその全インスタンス、さらに全サブクラスで共有する1つの変数。サブクラスごとのコピーはない。サブクラスが @@名前 に代入すると、親が見る値も上書きされる。家族のどのクラスのどのオブジェクトも同じ台帳を読む。",
+    ),
+    ex(C("class Shop", "  @@visits = 0", "  def initialize", "    @@visits += 1", "  end", "  def self.visits", "    @@visits", "  end", "end", "class Kiosk < Shop; end", "Shop.new", "Kiosk.new", "Kiosk.new", "p Shop.visits"), "3",
+      L("Kiosk objects count in the same @@visits", "Los objetos Kiosk cuentan en la misma @@visits", "Kiosk も同じ @@visits を数える")),
+    p(
+      "A class instance variable is a plain @name written directly in the class body (or used inside a class method). It belongs to the class object, so each class keeps its own: a subclass starts with nil until it sets its own value, and setting it never touches the parent. That's why style guides prefer it over @@.",
+      "Una variable de instancia de clase es un @nombre normal escrito directo en el cuerpo de la clase (o usado en un método de clase). Pertenece al objeto clase, así que cada clase tiene la suya: una subclase empieza en nil hasta asignar su propio valor, y asignarlo nunca toca al padre. Por eso las guías de estilo la prefieren a @@.",
+      "クラスインスタンス変数は、クラス本体に直接書く（またはクラスメソッドで使う）ふつうの @名前。クラスというオブジェクトのものなので、クラスごとに別々。サブクラスは自分で代入するまで nil で、代入しても親には影響しない。だからスタイルガイドは @@ よりこちらをすすめる。",
+    ),
+    ex(C("class Robot", '  @model = "R1"', "  def self.model", "    @model", "  end", "end", "class Drone < Robot", '  @model = "D7"', "end", "p Robot.model, Drone.model"), '"R1"\n"D7"'),
+    p(
+      "Careful: the same @name inside an instance method is a different variable, the one of that object. The class body's @watts belongs to the class; an object's @watts starts unset, so it reads nil. Same spelling, two separate boxes.",
+      "Cuidado: el mismo @nombre dentro de un método de instancia es otra variable, la de ese objeto. El @watts del cuerpo de la clase pertenece a la clase; el @watts de un objeto empieza sin asignar, así que se lee nil. Misma escritura, dos cajas separadas.",
+      "注意：インスタンスメソッドの中の同じ @名前 は別の変数で、そのオブジェクトのもの。クラス本体の @watts はクラスのもの。オブジェクトの @watts は未代入なので nil になる。つづりは同じでも箱は2つ。",
+    ),
+    ex(C("class Lamp", "  @watts = 60", "  def watts", "    @watts", "  end", "end", "p Lamp.new.watts.nil?"), "true",
+      L("The object's own @watts was never set", "El @watts propio del objeto nunca se asignó", "オブジェクト自身の @watts は未代入")),
+  ),
+  note("constants", L("Constants and ::", "Constantes y ::", "定数と ::"),
+    p(
+      "A name that starts with a capital letter is a constant; class names are constants too. Define one inside a class and use it there by name. From outside, reach in with the scope operator: Dice::SIDES.",
+      "Un nombre que empieza con mayúscula es una constante; los nombres de clase también lo son. Define una dentro de una clase y úsala ahí por su nombre. Desde afuera, entra con el operador de ámbito: Dice::SIDES.",
+      "大文字で始まる名前は定数。クラス名も定数だ。クラスの中で定義すれば、中では名前だけで使える。外からはスコープ演算子で取り出す：Dice::SIDES。",
+    ),
+    ex(C("class Dice", "  SIDES = 6", "  def self.max", "    SIDES", "  end", "end", "p Dice::SIDES, Dice.max"), "6\n6"),
+    p(
+      "A missing constant is not nil: Ruby raises NameError with uninitialized constant and the full name. This is different from instance variables, which quietly read as nil when unset.",
+      "Una constante que falta no es nil: Ruby lanza NameError con uninitialized constant y el nombre completo. Es distinto de las variables de instancia, que se leen como nil en silencio si no están asignadas.",
+      "ない定数は nil にならない。Ruby は uninitialized constant と名前を添えて NameError を出す。未代入でも黙って nil になるインスタンス変数とは違う。",
+    ),
+    boom(C("class Dice", "  SIDES = 6", "end", "p Dice::FACES"), "NameError",
+      L("FACES was never defined", "FACES nunca se definió", "FACES は定義されていない")),
+    p(
+      "A constant only protects the NAME: Ruby warns if you assign it again. The object it points to can still change through mutating methods like << or push. If the object itself must not change, call .freeze on it; then any mutation raises FrozenError.",
+      "Una constante solo protege el NOMBRE: Ruby avisa si la asignas otra vez. El objeto al que apunta aún puede cambiar con métodos que mutan, como << o push. Si el objeto mismo no debe cambiar, llama a .freeze; entonces cualquier mutación lanza FrozenError.",
+      "定数が守るのは名前だけ。もう一度代入すると Ruby は警告する。でも指しているオブジェクトは << や push のような変更メソッドで変えられる。オブジェクト自体を変えたくないなら .freeze を呼ぼう。そうすれば変更は FrozenError になる。",
+    ),
+    ex(C('COLORS = ["red"]', 'COLORS.push("blue")', "p COLORS", 'LOCKED = ["red"].freeze', "p LOCKED.frozen?"), '["red", "blue"]\ntrue'),
+  ),
+  note("struct-data", L("Struct and Data", "Struct y Data", "Struct と Data"),
+    p(
+      "Struct.new(:a, :b) builds a whole class in one line: initialize, a reader and a writer for each field, to_a, and == that compares the fields. Two structs of the same class with equal fields are ==, even if they are different objects.",
+      "Struct.new(:a, :b) construye una clase completa en una línea: initialize, un lector y un escritor por campo, to_a y un == que compara los campos. Dos structs de la misma clase con campos iguales son ==, aunque sean objetos distintos.",
+      "Struct.new(:a, :b) は1行でクラスを丸ごと作る。initialize、フィールドごとの読み書きの扉、to_a、フィールドを比べる == つき。同じクラスでフィールドが同じなら、別のオブジェクトでも == は true。",
+    ),
+    ex(C("Pair = Struct.new(:left, :right)", 'pr = Pair.new("a", "b")', 'pr.right = "z"', "p pr.to_a"), '["a", "z"]'),
+    p(
+      "Data.define(:a, :b) builds an immutable value class: readers only, no writers. Create objects with keywords, like Color.new(r: 1, g: 2), or positionally. Since you can't change a field, with(field: value) returns a NEW object with some fields changed and leaves the original as it was. Data objects with equal fields are == too.",
+      "Data.define(:a, :b) construye una clase de valor inmutable: solo lectores, sin escritores. Crea objetos con palabras clave, como Color.new(r: 1, g: 2), o por posición. Como no puedes cambiar un campo, with(campo: valor) devuelve un objeto NUEVO con algunos campos cambiados y deja el original como estaba. Los Data con campos iguales también son ==.",
+      "Data.define(:a, :b) は変更できない値のクラスを作る。読む扉だけで書く扉はない。Color.new(r: 1, g: 2) のようにキーワードか、位置で作る。フィールドは変えられないので、with(フィールド: 値) が一部を変えた新しいオブジェクトを返し、元はそのまま。フィールドが同じ Data も == は true。",
+    ),
+    ex(C("Color = Data.define(:r, :g)", "red = Color.new(r: 255, g: 0)", "orange = red.with(g: 128)", "p orange.r, orange.g"), "255\n128",
+      L("with copies r and changes only g", "with copia r y cambia solo g", "with は r を写し g だけ変える")),
+    p(
+      "Trying to assign a Data field fails with NoMethodError, because the writer method was never created. Use Struct for quick records you will edit, and Data for values that should never change, like coordinates or money.",
+      "Intentar asignar un campo de Data falla con NoMethodError, porque el método escritor nunca se creó. Usa Struct para registros rápidos que vas a editar, y Data para valores que nunca deben cambiar, como coordenadas o dinero.",
+      "Data のフィールドに代入しようとすると NoMethodError。書く扉のメソッドが作られていないからだ。あとで変える手軽な記録には Struct、座標やお金のように変わってはいけない値には Data を使おう。",
+    ),
+  ),
+];
+
 const classState: LessonDef = {
   slug: "class-level-state",
   title: L("The shared ledger", "El libro compartido", "共有の台帳"),
@@ -335,6 +635,7 @@ const classState: LessonDef = {
   xp: 80,
   enemy: "ruby/hash-mimic",
   enemyName: L("LEDGER MIMIC", "MÍMICO LIBRO", "台帳ミミック"),
+  notes: classStateNotes,
   beats: [
     say(L(
       "Methods can belong to the CLASS itself: def self.name. You call them on the blueprint, like Castle.guests.",
@@ -355,6 +656,7 @@ const classState: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Inside def self.create, self is the class. So what does a bare new build, and with which name?", "Dentro de def self.create, self es la clase. Entonces, ¿qué construye new solo, y con qué nombre?", "def self.create の中の self はクラス。new は何を作る？名前はどうなる？"), note: "class-methods",
       code: C("class Hero", "  attr_reader :name", "  def self.create(name)", "    new(name.upcase)", "  end", "  def initialize(name)", "    @name = name", "  end", "end", 'puts Hero.create("rubi").name'),
       options: ["RUBI", "rubi", "NoMethodError"],
       answer: 0,
@@ -366,6 +668,7 @@ const classState: LessonDef = {
     {
       kind: "predict",
       prompt: HAPPENS,
+      hint: L("def self.create belongs to one object only. Is that object the class, or each hero it builds?", "def self.create pertenece a un solo objeto. ¿Es la clase o cada héroe que construye?", "def self.create を持つのは1つだけ。クラス？それとも作られた各ヒーロー？"), note: "class-methods",
       code: C("class Hero", "  def self.create", '    "made"', "  end", "end", "p Hero.create", "Hero.new.create"),
       options: [L('"made", then NoMethodError', '"made", luego NoMethodError', '"made" の後 NoMethodError'), L('"made" twice', '"made" dos veces', '"made" が2回')],
       answer: 0,
@@ -381,6 +684,7 @@ const classState: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("How many @@setting variables exist here: one per class, or one shared by the whole family?", "¿Cuántas variables @@setting hay aquí: una por clase o una compartida por toda la familia?", "@@setting はクラスごとにある？それとも家族全体で1つ？"), note: "class-variables",
       code: C("class Base", '  @@setting = "base"', "  def self.setting", "    @@setting", "  end", "end", "class Child < Base", '  @@setting = "child"', "end", "p Base.setting"),
       options: ['"child"', '"base"', "nil"],
       answer: 0,
@@ -397,6 +701,7 @@ const classState: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("The @level in the class body and the @level in an instance method belong to different objects.", "El @level del cuerpo de la clase y el @level de un método de instancia pertenecen a objetos distintos.", "クラス本体の @level とインスタンスメソッドの @level は、別のオブジェクトのもの。"), note: "class-variables",
       code: C("class Cfg", "  @level = 1", "  def self.level", "    @level", "  end", "  def level", "    @level", "  end", "end", "p Cfg.level, Cfg.new.level"),
       options: ["1\nnil", "1\n1", "nil\n1"],
       answer: 0,
@@ -412,6 +717,7 @@ const classState: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("attr_accessor under class << self keeps the value in each class's own @sound. Is it shared?", "attr_accessor bajo class << self guarda el valor en el @sound propio de cada clase. ¿Se comparte?", "class << self の attr_accessor は各クラス自身の @sound に値を置く。共有する？"), note: "class-variables",
       code: C("class Monster", "  class << self", "    attr_accessor :sound", "  end", '  self.sound = "..."', "end", "class Slime < Monster", '  self.sound = "blub"', "end", "p Monster.sound, Slime.sound"),
       options: ['"..."\n"blub"', '"blub"\n"blub"', '"..."\n"..."'],
       answer: 0,
@@ -428,6 +734,7 @@ const classState: LessonDef = {
     {
       kind: "predict",
       prompt: HAPPENS,
+      hint: L("MIN was never defined. Is a missing constant nil like an unset @var, or an error?", "MIN nunca se definió. ¿Una constante que falta es nil como una @var sin asignar, o un error?", "MIN は定義されていない。ない定数は未代入の @変数のように nil？エラー？"), note: "constants",
       code: C("class Temp", "  MAX = 100", "end", "p Temp::MAX", "p Temp::MIN"),
       options: [L("100, then NameError", "100, luego NameError", "100 の後 NameError"), L("100, then nil", "100, luego nil", "100 の後 nil")],
       answer: 0,
@@ -438,6 +745,7 @@ const classState: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("A constant protects the name from reassignment. Does << reassign the name, or change the object?", "Una constante protege el nombre de una reasignación. ¿<< reasigna el nombre o cambia el objeto?", "定数が守るのは名前の再代入。<< は名前を代入しなおす？中身を変える？"), note: "constants",
       code: C('NAME = "x"', 'NAME << "y"', "p NAME"),
       options: ['"xy"', '"x"', "FrozenError"],
       answer: 0,
@@ -453,6 +761,7 @@ const classState: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Struct gives writers, so pt.x = 9 sticks. Then compare the fields of both points.", "Struct da escritores, así que pt.x = 9 se mantiene. Luego compara los campos de ambos puntos.", "Struct には書く扉があるので pt.x = 9 は残る。それから両方のフィールドを比べよう。"), note: "struct-data",
       code: C("Point = Struct.new(:x, :y)", "pt = Point.new(3, 4)", "pt.x = 9", "p pt.x + pt.y, pt == Point.new(9, 4)"),
       options: ["13\ntrue", "7\ntrue", "13\nfalse"],
       answer: 0,
@@ -463,6 +772,7 @@ const classState: LessonDef = {
     {
       kind: "predict",
       prompt: HAPPENS,
+      hint: L("with returns a changed copy. Does Data create writer methods like lat= at all?", "with devuelve una copia cambiada. ¿Data crea métodos escritores como lat=?", "with は変えたコピーを返す。Data は lat= のような書く扉をそもそも作る？"), note: "struct-data",
       code: C("Coord = Data.define(:lat, :lng)", "c = Coord.new(lat: 1, lng: 2)", "p c.with(lat: 5).lat", "c.lat = 3"),
       options: [L("5, then NoMethodError", "5, luego NoMethodError", "5 の後 NoMethodError"), L("5, then lat is 3", "5, luego lat es 3", "5 の後 lat が 3")],
       answer: 0,
@@ -473,6 +783,7 @@ const classState: LessonDef = {
     {
       kind: "type",
       prompt: L("Make an immutable value class", "Crea una clase de valor inmutable", "変更できない値クラスを作ろう"),
+      hint: L("Struct builds a class with new; Data uses a different word, as if declaring the fields.", "Struct construye una clase con new; Data usa otra palabra, como si declarara los campos.", "Struct は new でクラスを作る。Data はフィールドを宣言するような別の言葉を使う。"), note: "struct-data",
       code: C("Coin = Data.___(:value)", "p Coin.new(value: 5).value"),
       answer: "define",
       check: { compiles: true, stdout: "5" },
@@ -482,6 +793,7 @@ const classState: LessonDef = {
     {
       kind: "run",
       prompt: L("Give each monster its own sound: Slime: blub", "Dale a cada monstruo su sonido: Slime: blub", "モンスターごとに音を：Slime: blub"),
+      hint: L("All three classes share one @@sound, and Bat wrote it last. Switch to a variable each class keeps for itself.", "Las tres clases comparten una @@sound y Bat la escribió al final. Usa una variable propia de cada clase.", "3つのクラスは @@sound を共有し、最後に Bat が書いた。クラスごとの変数にしよう。"), note: "class-variables",
       starter: C("class Monster", '  @@sound = "..."', "  def self.sound", "    @@sound", "  end", "end", "class Slime < Monster", '  @@sound = "blub"', "end", "class Bat < Monster", '  @@sound = "screech"', "end", 'puts "Slime: #{Slime.sound}"', ""),
       solution: C("class Monster", '  @sound = "..."', "  def self.sound", "    @sound", "  end", "end", "class Slime < Monster", '  @sound = "blub"', "end", "class Bat < Monster", '  @sound = "screech"', "end", 'puts "Slime: #{Slime.sound}"', ""),
       expect: "Slime: blub",
@@ -492,6 +804,93 @@ const classState: LessonDef = {
 };
 
 // ─── 3.4 Twins, clones and ice: equality and copies ────────────────────────
+const equalityNotes: NoteDef[] = [
+  note("three-equals", L("==, eql? and equal?", "==, eql? y equal?", "==、eql?、equal?"),
+    p(
+      "Ruby has three ways to ask \"are these equal?\". == compares values, and it is relaxed about numbers: an Integer and a Float with the same value are ==. eql? is stricter: same value AND same type, so an Integer is never eql? to a Float. equal? asks about identity: is this the very same object?",
+      "Ruby tiene tres formas de preguntar \"¿son iguales?\". == compara valores y es flexible con los números: un Integer y un Float con el mismo valor son ==. eql? es más estricto: mismo valor Y mismo tipo, así que un Integer nunca es eql? a un Float. equal? pregunta por identidad: ¿es exactamente el mismo objeto?",
+      "Ruby には「等しい？」の聞き方が3つある。== は値を比べ、数には甘い。同じ値なら Integer と Float でも ==。eql? はもっと厳しく、値も型も同じでなければならないので、Integer と Float は eql? にならない。equal? は同一性、つまりまったく同じオブジェクトかを聞く。",
+    ),
+    ex(C("p 7 == 7.0, 7.eql?(7), 2.5.eql?(2.5)"), "true\ntrue\ntrue"),
+    p(
+      "Each string literal you write builds a new string object, so two strings with the same text are == but not equal?. Assigning one variable to another (z = x) does not copy anything: both names point to the same object, so they are equal?.",
+      "Cada literal de string que escribes construye un objeto string nuevo, así que dos strings con el mismo texto son == pero no equal?. Asignar una variable a otra (z = x) no copia nada: ambos nombres apuntan al mismo objeto, así que son equal?.",
+      "文字列リテラルは書くたびに新しい文字列オブジェクトを作る。だから同じ文字の2つの文字列は == でも equal? ではない。変数を別の変数に代入（z = x）しても何もコピーされず、両方の名前が同じオブジェクトを指すので equal? になる。",
+    ),
+    ex(C('x = "key"', 'y = "key"', "z = x", "p x == y, x.equal?(y), x.equal?(z)"), "true\nfalse\ntrue",
+      L("x and z are two labels on one object", "x y z son dos etiquetas de un objeto", "x と z は1つの物に貼った2枚のラベル")),
+    p(
+      "Symbols are different: Ruby keeps exactly one object per symbol name, so every :done in the whole program is the same object. That's why symbols make cheap, reliable Hash keys. Rule to remember: == for everyday value checks, eql? when the type matters too, equal? only when you truly mean the same object.",
+      "Los símbolos son distintos: Ruby guarda exactamente un objeto por nombre de símbolo, así que cada :done de todo el programa es el mismo objeto. Por eso los símbolos son claves de Hash baratas y confiables. Regla: == para comparar valores a diario, eql? cuando también importa el tipo, equal? solo cuando de verdad quieres decir el mismo objeto.",
+      "シンボルは別。Ruby はシンボル名ごとにオブジェクトを1つだけ持つので、プログラム中の :done はすべて同じオブジェクト。だからシンボルは軽くて確かな Hash のキーになる。ふだんの値の比較は ==、型も大事なら eql?、本当に同じ物かを知りたい時だけ equal?。",
+    ),
+  ),
+  note("eql-hash", L("eql? and hash: keys and uniq", "eql? y hash: claves y uniq", "eql? と hash：キーと uniq"),
+    p(
+      "Defining == in your class lets you compare your objects with ==. But Hash keys, uniq, Set and group_by don't use ==. They first call hash, which returns an integer used to pick a bucket, and then confirm matches with eql?. By default both are based on identity, so two different objects are never treated as the same key.",
+      "Definir == en tu clase te deja comparar tus objetos con ==. Pero las claves de Hash, uniq, Set y group_by no usan ==. Primero llaman a hash, que devuelve un entero para elegir un casillero, y luego confirman con eql?. Por defecto ambos se basan en la identidad, así que dos objetos distintos nunca se tratan como la misma clave.",
+      "クラスで == を定義すれば、オブジェクトを == で比べられる。でも Hash のキー、uniq、Set、group_by は == を使わない。まず hash を呼んで整数を受け取り、それで入れ場所を選び、eql? で確かめる。どちらも元は同一性で判断するので、別のオブジェクトは同じキーにならない。",
+    ),
+    ex(C("class Tag", "  attr_reader :name", "  def initialize(n); @name = n; end", "  def ==(o); o.is_a?(Tag) && name == o.name; end", "end", 'p Tag.new("x") == Tag.new("x")', 'p({ Tag.new("x") => 1 }.key?(Tag.new("x")))'), "true\nfalse",
+      L("== says equal, but the Hash still can't find the key", "== dice iguales, pero el Hash no encuentra la clave", "== は等しいのに Hash はキーを見つけない")),
+    p(
+      "The fix has two parts: make eql? agree with == (alias eql? == does it in one line) and define hash so that equal objects return the same number, usually by hashing the same fields that == compares: name.hash, or [a, b].hash for several fields. The rule: if a.eql?(b), then a.hash must equal b.hash.",
+      "La solución tiene dos partes: que eql? coincida con == (alias eql? == lo hace en una línea) y definir hash para que los objetos iguales devuelvan el mismo número, normalmente haciendo hash de los mismos campos que compara ==: name.hash, o [a, b].hash para varios campos. La regla: si a.eql?(b), entonces a.hash debe ser igual a b.hash.",
+      "直し方は2つ。eql? を == と一致させる（alias eql? == で1行）こと、そして等しいオブジェクトが同じ数を返すよう hash を定義すること。ふつうは == が比べるのと同じ値の hash を返す：name.hash、複数なら [a, b].hash。ルール：a.eql?(b) なら a.hash と b.hash は同じでなければならない。",
+    ),
+    ex(C("class Tag", "  attr_reader :name", "  def initialize(n); @name = n; end", "  def ==(o); o.is_a?(Tag) && name == o.name; end", "  alias eql? ==", "  def hash; name.hash; end", "end", 'p [Tag.new("x"), Tag.new("x"), Tag.new("y")].uniq.size'), "2"),
+    p(
+      "Common mistakes: defining hash but forgetting eql? (or the reverse), hashing a field that == ignores, or changing a key object after putting it in a Hash. Struct and Data already define ==, eql? and hash from their fields, which is one more reason to use them for value objects.",
+      "Errores comunes: definir hash pero olvidar eql? (o al revés), hacer hash de un campo que == ignora, o cambiar un objeto clave después de meterlo en un Hash. Struct y Data ya definen ==, eql? y hash a partir de sus campos, otra razón para usarlos con objetos de valor.",
+      "よくあるミス：hash だけ定義して eql? を忘れる（その逆も）、== が見ない値で hash を作る、Hash に入れたあとでキーのオブジェクトを変える。Struct と Data はフィールドから ==、eql?、hash を作ってくれるので、値オブジェクトにはこれらが便利。",
+    ),
+  ),
+  note("copies-freeze", L("dup, clone and freeze", "dup, clone y freeze", "dup、clone、freeze"),
+    p(
+      "dup and clone both make a new object with the same contents. The difference is the ice: clone also copies the frozen state, so a clone of a frozen object is frozen too. dup always gives an unfrozen copy, which makes it the usual way to get an editable version of a frozen object.",
+      "dup y clone hacen un objeto nuevo con el mismo contenido. La diferencia es el hielo: clone también copia el estado congelado, así que el clone de un objeto congelado también lo está. dup siempre da una copia sin congelar, por eso es la forma habitual de obtener una versión editable de un objeto congelado.",
+      "dup も clone も同じ中身の新しいオブジェクトを作る。違いは氷。clone は freeze 状態も写すので、凍ったオブジェクトの clone も凍っている。dup はいつも凍っていないコピーを作るので、凍ったものの編集用コピーにはふつう dup を使う。",
+    ),
+    ex(C('base = "draft".freeze', "edit = base.dup", 'edit << " v2"', "p edit, base.frozen?"), '"draft v2"\ntrue',
+      L("dup gives a copy you can change", "dup da una copia que puedes cambiar", "dup なら変えられるコピーができる")),
+    p(
+      "Both copies are shallow: only the outer object is new. The elements inside are the same objects, shared by the original and the copy. Mutating an inner element (for example with <<) shows up in both, while adding or removing elements of the outer copy doesn't affect the original.",
+      "Ambas copias son superficiales: solo el objeto de afuera es nuevo. Los elementos de adentro son los mismos objetos, compartidos por el original y la copia. Mutar un elemento interno (por ejemplo con <<) se ve en los dos, mientras que agregar o quitar elementos de la copia externa no afecta al original.",
+      "どちらのコピーも浅い。新しくなるのは外側だけで、中の要素は元とコピーで同じオブジェクトを共有する。中の要素を（<< などで）変えると両方に見えるが、外側のコピーに要素を足したり消したりしても元には影響しない。",
+    ),
+    ex(C("grid = [[0], [0]]", "copy = grid.dup", "copy[1] << 5", "copy.pop", "p grid"), "[[0], [0, 5]]",
+      L("pop changed only the copy; << changed a shared inner array", "pop cambió solo la copia; << cambió un array interno compartido", "pop はコピーだけ、<< は共有の中身を変えた")),
+    p(
+      "freeze makes an object immutable: any method that would change it raises FrozenError. freeze changes the object itself and returns that same object, not a copy. It is shallow as well, so the elements inside stay changeable. Non-mutating methods like +, map or upcase still work on frozen objects and return new, unfrozen results.",
+      "freeze hace inmutable un objeto: cualquier método que lo cambiaría lanza FrozenError. freeze cambia al objeto mismo y devuelve ese mismo objeto, no una copia. También es superficial, así que los elementos de adentro siguen siendo modificables. Los métodos que no mutan, como +, map o upcase, siguen funcionando y devuelven resultados nuevos sin congelar.",
+      "freeze はオブジェクトを変更できなくする。変えようとするメソッドは FrozenError になる。freeze はそのオブジェクト自身を凍らせ、コピーではなく同じオブジェクトを返す。これも浅いので、中の要素は変えられる。+、map、upcase のような変更しないメソッドは凍ったものにも使え、凍っていない新しい結果を返す。",
+    ),
+    ex(C('names = ["ana", "bo"].freeze', 'more = names + ["cy"]', "p more.frozen?, names.size"), "false\n2"),
+    boom(C('names = ["ana", "bo"].freeze', 'names << "cy"'), "FrozenError",
+      L("<< would change the frozen array", "<< cambiaría el array congelado", "<< は凍った配列を変えようとする")),
+  ),
+  note("pass-object", L("Methods get the same object", "Los métodos reciben el mismo objeto", "メソッドは同じ物を受け取る"),
+    p(
+      "When you pass a variable to a method, Ruby does not copy the object. The parameter becomes a second label stuck on the same object. If the method mutates it, with <<, push, []= or a method ending in !, the caller sees the change after the call.",
+      "Cuando pasas una variable a un método, Ruby no copia el objeto. El parámetro se vuelve una segunda etiqueta pegada al mismo objeto. Si el método lo muta, con <<, push, []= o un método que termina en !, quien llamó ve el cambio después de la llamada.",
+      "変数をメソッドに渡しても、Ruby はオブジェクトをコピーしない。引数は同じオブジェクトに貼られた2枚目のラベルになる。メソッドが <<、push、[]=、! で終わるメソッドなどで中身を変えると、呼んだ側にもその変化が見える。",
+    ),
+    p(
+      "But if the method assigns its parameter (list = something_else), it only moves its own local label to a new object. The caller's variable still points to the original, untouched. So mutation travels back to the caller; reassignment doesn't.",
+      "Pero si el método asigna su parámetro (lista = otra_cosa), solo mueve su propia etiqueta local a un objeto nuevo. La variable de quien llamó sigue apuntando al original, intacto. Así que la mutación vuelve a quien llama; la reasignación no.",
+      "でもメソッドが引数に代入（list = 別のもの）すると、自分のローカルなラベルを新しいオブジェクトに貼りかえるだけ。呼んだ側の変数は元のオブジェクトを指したまま。変更は呼んだ側に伝わるが、再代入は伝わらない。",
+    ),
+    ex(C("def add_tag(list)", '  list << "new"', "end", "def replace(list)", '  list = ["other"]', "end", 'items = ["old"]', "add_tag(items)", "replace(items)", "p items"), '["old", "new"]',
+      L("add_tag mutated the shared array; replace only moved its label", "add_tag mutó el array compartido; replace solo movió su etiqueta", "add_tag は共有の配列を変え、replace はラベルを移しただけ")),
+    p(
+      "Methods that return a new object, like upcase, + or map, leave the original alone. If you need to protect an argument from a method you don't trust, pass a copy (obj.dup) or freeze it.",
+      "Los métodos que devuelven un objeto nuevo, como upcase, + o map, dejan el original en paz. Si necesitas proteger un argumento de un método en el que no confías, pasa una copia (obj.dup) o congélalo.",
+      "upcase、+、map のように新しいオブジェクトを返すメソッドは、元を変えない。信用できないメソッドから引数を守りたいなら、コピー（obj.dup）を渡すか freeze しよう。",
+    ),
+    ex(C("def shout(word)", "  word.upcase", "end", 'w = "calm"', "loud = shout(w)", "p w, loud"), '"calm"\n"CALM"'),
+  ),
+];
+
 const equality: LessonDef = {
   slug: "equality-and-copies",
   title: L("Twins, clones and ice", "Gemelos, clones y hielo", "双子とクローンと氷"),
@@ -500,6 +899,7 @@ const equality: LessonDef = {
   xp: 80,
   enemy: "ruby/frozen-cube",
   enemyName: L("ICE CUBE", "CUBO DE HIELO", "アイスキューブ"),
+  notes: equalityNotes,
   beats: [
     say(L(
       "Three kinds of equal: == same value, eql? same value AND type, equal? the very same object.",
@@ -521,6 +921,7 @@ const equality: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("== compares values only; eql? also compares the type. What types are 1 and 1.0?", "== compara solo valores; eql? también compara el tipo. ¿De qué tipo son 1 y 1.0?", "== は値だけ、eql? は型も比べる。1 と 1.0 の型は？"), note: "three-equals",
       code: "p 1 == 1.0, 1.eql?(1.0)",
       options: ["true\nfalse", "true\ntrue", "false\nfalse"],
       answer: 0,
@@ -536,6 +937,7 @@ const equality: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("uniq doesn't use ==. Which two methods does it ask instead, and did Card define them?", "uniq no usa ==. ¿A qué dos métodos pregunta en su lugar, y Card los definió?", "uniq は == を使わない。代わりにどの2つのメソッドに聞く？Card は定義した？"), note: "eql-hash",
       code: C("class Card", "  attr_reader :rank", "  def initialize(r); @rank = r; end", "  def ==(o)", "    o.is_a?(Card) && rank == o.rank", "  end", "end", "p Card.new(1) == Card.new(1)", "p [Card.new(1), Card.new(1)].uniq.size"),
       options: ["true\n2", "true\n1", "false\n2"],
       answer: 0,
@@ -547,6 +949,7 @@ const equality: LessonDef = {
     {
       kind: "type",
       prompt: L("Teach uniq what equal means", "Enséñale a uniq qué es igual", "uniq に等しさを教えよう"),
+      hint: L("eql? already matches ==. uniq still needs one more method that returns a number for each card.", "eql? ya coincide con ==. uniq aún necesita otro método que devuelva un número por cada carta.", "eql? は == と同じになった。uniq にはカードごとに数を返すメソッドがもう1つ必要。"), note: "eql-hash",
       code: C("class Card", "  attr_reader :rank", "  def initialize(r); @rank = r; end", "  def ==(o)", "    o.is_a?(Card) && rank == o.rank", "  end", "  alias eql? ==", "  def ___", "    rank.hash", "  end", "end", "p [Card.new(1), Card.new(1)].uniq.size"),
       answer: "hash",
       check: { compiles: true, stdout: "1" },
@@ -561,6 +964,7 @@ const equality: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Both copy the contents. Only one of them also copies the frozen state. Which one?", "Ambos copian el contenido. Solo uno de ellos copia también el estado congelado. ¿Cuál?", "どちらも中身を写す。freeze 状態まで写すのは片方だけ。どっち？"), note: "copies-freeze",
       code: C('a = "x".freeze', "b = a.dup", "c = a.clone", "p b.frozen?, c.frozen?"),
       options: ["false\ntrue", "true\ntrue", "false\nfalse"],
       answer: 0,
@@ -578,6 +982,7 @@ const equality: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("dup makes a new outer array but shares the inner ones. Which line touched a shared inner array?", "dup crea un array externo nuevo pero comparte los internos. ¿Qué línea tocó un array interno compartido?", "dup は外側だけ新しく、中の配列は共有。共有の中身を変えたのはどの行？"), note: "copies-freeze",
       code: C('inv = [["sword"], ["potion"]]', "copy = inv.dup", 'copy[0] << "!"', 'copy << ["gem"]', "p inv"),
       options: ['[["sword", "!"], ["potion"]]', '[["sword"], ["potion"]]', '[["sword", "!"], ["potion"], ["gem"]]'],
       answer: 0,
@@ -589,6 +994,7 @@ const equality: LessonDef = {
     {
       kind: "predict",
       prompt: HAPPENS,
+      hint: L("freeze is shallow. Is the inner [2] frozen? Is the outer array? Lines run in order.", "freeze es superficial. ¿El [2] interno está congelado? ¿Y el array externo? Las líneas corren en orden.", "freeze は浅い。中の [2] は凍っている？外側は？行は順に動く。"), note: "copies-freeze",
       code: C("a = [1, [2]].freeze", "a[1] << 3", "p a", "a << 4"),
       options: [L("[1, [2, 3]], then FrozenError", "[1, [2, 3]], luego FrozenError", "[1, [2, 3]] の後 FrozenError"), L("FrozenError right away", "FrozenError de inmediato", "すぐに FrozenError"), "[1, [2, 3], 4]"],
       answer: 0,
@@ -605,6 +1011,7 @@ const equality: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("One method mutates the object it received; the other only reassigns its own parameter.", "Un método muta el objeto que recibió; el otro solo reasigna su propio parámetro.", "片方は受け取った物を変え、もう片方は自分の引数に代入しなおすだけ。"), note: "pass-object",
       code: C("def change(s)", '  s << "b"', "end", "def rebind(s)", '  s = "zzz"', "end", 'x = "a"', "change(x)", "rebind(x)", "p x"),
       options: ['"ab"', '"zzz"', '"a"'],
       answer: 0,
@@ -615,6 +1022,7 @@ const equality: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("equal? asks for the very same object. How many objects per symbol name? Per string literal?", "equal? pregunta por el mismo objeto. ¿Cuántos objetos hay por nombre de símbolo? ¿Y por literal de string?", "equal? は同じ物かを聞く。シンボルは名前ごとにいくつ？文字列リテラルは？"), note: "three-equals",
       code: 'p :a.equal?(:a), "a".equal?("a")',
       options: ["true\nfalse", "true\ntrue", "false\nfalse"],
       answer: 0,
@@ -625,6 +1033,7 @@ const equality: LessonDef = {
     {
       kind: "run",
       prompt: L("Make equal cards unique: unique: 1", "Haz únicas las cartas iguales: unique: 1", "同じカードを1枚に：unique: 1"),
+      hint: L("uniq groups by hash and confirms with eql?. Card defines neither yet: base both on rank.", "uniq agrupa por hash y confirma con eql?. Card aún no define ninguno: basa ambos en rank.", "uniq は hash で分け eql? で確かめる。Card はまだどちらもない。rank をもとにしよう。"), note: "eql-hash",
       starter: C("class Card", "  attr_reader :rank", "  def initialize(rank)", "    @rank = rank", "  end", "  def ==(other)", "    other.is_a?(Card) && rank == other.rank", "  end", "end", 'cards = [Card.new("A"), Card.new("A")]', 'puts "unique: #{cards.uniq.size}"', ""),
       solution: C("class Card", "  attr_reader :rank", "  def initialize(rank)", "    @rank = rank", "  end", "  def ==(other)", "    other.is_a?(Card) && rank == other.rank", "  end", "  alias eql? ==", "  def hash", "    rank.hash", "  end", "end", 'cards = [Card.new("A"), Card.new("A")]', 'puts "unique: #{cards.uniq.size}"', ""),
       expect: "unique: 1",
@@ -635,6 +1044,65 @@ const equality: LessonDef = {
 };
 
 // ─── Boss: The Frozen Cube ─────────────────────────────────────────────────
+// The boss recaps the whole region: one short note per idea it tests.
+const bossNotes: NoteDef[] = [
+  note("recap-lookup", L("Recap: lookup, modules, Enumerable", "Repaso: búsqueda, módulos, Enumerable", "復習：探索・モジュール・Enumerable"),
+    p(
+      "Lookup walks the ancestors line from left to right and runs the first match. include puts a module right after the class, and the last included module comes first among them. prepend puts a module before the class. super continues the walk to the next one in the line.",
+      "La búsqueda recorre la fila de ancestors de izquierda a derecha y ejecuta la primera coincidencia. include pone un módulo justo después de la clase, y el último incluido va primero entre ellos. prepend pone un módulo antes de la clase. super continúa el recorrido hacia el siguiente de la fila.",
+      "探索は ancestors の行列を左から右へたどり、最初に見つけたものを動かす。include はクラスのすぐ後ろに入れ、最後に include したものがその中で先頭。prepend はクラスの前に入れる。super は行列の次へ探索を続ける。",
+    ),
+    ex(C('module Inner; def hi; "inner"; end; end', 'module Outer; def hi; "outer>" + super; end; end', "class Stone", "  include Inner", "  prepend Outer", '  def hi; "stone>" + super; end', "end", "puts Stone.new.hi"), "outer>stone>inner",
+      L("Outer, then the class, then Inner: each super goes one step", "Outer, luego la clase, luego Inner: cada super avanza un paso", "Outer→クラス→Inner。super ごとに1歩進む")),
+    p(
+      "Enumerable builds map, select, sort and friends on top of your each, so each must hand every element to the block: yield it, or forward the block with &block.",
+      "Enumerable construye map, select, sort y compañía sobre tu each, así que each debe entregar cada elemento al bloque: con yield, o reenviando el bloque con &block.",
+      "Enumerable は each をもとに map、select、sort などを作る。だから each は要素を1つずつブロックに渡すこと。yield するか、&block でブロックを受け渡そう。",
+    ),
+    ex(C("class Trio", "  include Enumerable", "  def each", "    yield 1", "    yield 2", "    yield 3", "  end", "end", "p Trio.new.map { |n| n * 10 }"), "[10, 20, 30]"),
+  ),
+  note("recap-state", L("Recap: writers and @@vars", "Repaso: escritores y @@vars", "復習：書く扉と @@変数"),
+    p(
+      "Inside a method, name = value always makes a local variable, and from then on name means that local, which starts as nil. To call the writer, write self.name = value (or set @name directly).",
+      "Dentro de un método, nombre = valor siempre crea una variable local, y desde ahí nombre significa ese local, que empieza en nil. Para llamar al escritor, escribe self.nombre = valor (o asigna @nombre directo).",
+      "メソッドの中の 名前 = 値 は必ずローカル変数を作り、それ以降その名前は nil から始まるローカルを指す。書く扉を呼ぶなら self.名前 = 値（または @名前 に直接代入）。",
+    ),
+    ex(C("class Bar", "  attr_accessor :size", "  def initialize; @size = 1; end", "  def grow", "    self.size = size * 3", "  end", "end", "b = Bar.new", "b.grow", "p b.size"), "3"),
+    p(
+      "A @@var is a single variable shared by a class and every subclass; a subclass assigning it changes it for everyone. A plain @var in the class body is per class, so prefer it.",
+      "Una @@var es una sola variable compartida por la clase y cada subclase; si una subclase la asigna, cambia para todos. Un @var normal en el cuerpo de la clase es propio de cada clase: prefiérelo.",
+      "@@変数はクラスと全サブクラスで共有する1つの変数。サブクラスが代入すると全員の値が変わる。クラス本体のふつうの @変数はクラスごとなので、こちらを選ぼう。",
+    ),
+  ),
+  note("recap-equality", L("Recap: eql?, hash and Data", "Repaso: eql?, hash y Data", "復習：eql?・hash・Data"),
+    p(
+      "Hash keys and uniq find matches with hash first and eql? second. If your class defines ==, also alias eql? == and define hash from the same fields, so equal objects give equal hashes.",
+      "Las claves de Hash y uniq buscan coincidencias primero con hash y luego con eql?. Si tu clase define ==, también haz alias eql? == y define hash con los mismos campos, para que objetos iguales den hashes iguales.",
+      "Hash のキーと uniq は、まず hash、次に eql? で一致を探す。クラスで == を定義したら、alias eql? == と、同じ値から作る hash も用意しよう。等しい物は同じ hash になる。",
+    ),
+    p(
+      "Data.define gives readers only. with returns a new object with some fields changed, leaving the original untouched, and Data objects compare and hash by their fields, so they work as Hash keys right away.",
+      "Data.define da solo lectores. with devuelve un objeto nuevo con algunos campos cambiados y deja intacto el original, y los Data se comparan y hacen hash por sus campos, así que sirven como claves de Hash de inmediato.",
+      "Data.define は読む扉だけ。with は一部を変えた新しいオブジェクトを返し、元は変えない。Data はフィールドで比べて hash も作るので、そのまま Hash のキーに使える。",
+    ),
+    ex(C("Spot = Data.define(:row, :col)", 'seen = { Spot.new(row: 1, col: 1) => "start" }', "p seen[Spot.new(row: 1, col: 1)]"), '"start"',
+      L("A new but equal Spot finds the same key", "Un Spot nuevo pero igual encuentra la misma clave", "新しくても等しい Spot で同じキーが見つかる")),
+  ),
+  note("recap-ice", L("Recap: freeze and copies", "Repaso: freeze y copias", "復習：freeze とコピー"),
+    p(
+      "freeze freezes the object itself and returns that same object. Mutating methods like << then raise FrozenError, while methods like + build a new, unfrozen object.",
+      "freeze congela al objeto mismo y devuelve ese mismo objeto. Después, los métodos que mutan como << lanzan FrozenError, mientras que métodos como + construyen un objeto nuevo sin congelar.",
+      "freeze はそのオブジェクト自身を凍らせ、同じオブジェクトを返す。そのあと << のような変更メソッドは FrozenError になり、+ のようなメソッドは凍っていない新しいオブジェクトを作る。",
+    ),
+    ex(C("row = [1, 2].freeze", "bigger = row + [3]", "bigger << 4", "p bigger, row.frozen?"), "[1, 2, 3, 4]\ntrue"),
+    p(
+      "dup and clone are shallow: the outer object is new, but the elements inside are shared with the original. clone keeps the frozen state; dup does not.",
+      "dup y clone son superficiales: el objeto de afuera es nuevo, pero los elementos de adentro se comparten con el original. clone conserva el estado congelado; dup no.",
+      "dup と clone は浅い。外側は新しいが、中の要素は元と共有。clone は freeze 状態を写し、dup は写さない。",
+    ),
+  ),
+];
+
 const boss: LessonDef = {
   slug: "castle-boss",
   title: L("The Frozen Cube", "El Cubo Congelado", "凍れるキューブ"),
@@ -643,25 +1111,27 @@ const boss: LessonDef = {
   xp: 170,
   enemy: "ruby/frozen-cube",
   enemyName: L("FROZEN CUBE", "CUBO CONGELADO", "凍れるキューブ"),
+  notes: bossNotes,
   beats: [
     enemySays(L(
       "I AM THE FROZEN CUBE. I freeze your objects and twist your ancestors. Who answers, who is equal, who is ice?",
       "SOY EL CUBO CONGELADO. Congelo tus objetos y enredo tus ancestros. ¿Quién responde, quién es igual, quién es hielo?",
       "我は凍れるキューブ。オブジェクトを凍らせ、祖先をねじる。答えるのはだれ？等しいのは？氷は？",
     )),
-    { kind: "predict", time: 18, prompt: PRINT, code: C("module Greet", '  def hello; "hi from #{self.class}"; end', "end", "module Loud", "  def hello; super.upcase; end", "end", "class Bot", "  include Greet", "  include Loud", "end", "puts Bot.new.hello"), options: ["HI FROM BOT", "hi from Bot", "NoMethodError"], answer: 0, output: "HI FROM BOT", check: { compiles: true, stdout: "HI FROM BOT" }, explain: L("Loud was included last, so it answers first; its super reaches Greet.", "Loud se incluyó al final: responde primero y su super llega a Greet.", "最後に include した Loud が先に答え、super で Greet へ。") },
-    { kind: "predict", time: 15, prompt: HAPPENS, code: C("class Hero", "  attr_accessor :hp", "  def initialize; @hp = 3; end", "  def boost", "    hp = hp * 2", "  end", "end", "Hero.new.boost"), options: [L("NoMethodError on nil", "NoMethodError sobre nil", "nil に NoMethodError"), L("hp becomes 6", "hp pasa a 6", "hp が 6 になる")], answer: 0, check: { compiles: true, throws: "NoMethodError" }, explain: L("hp = makes a local; the hp on the right is that nil local. Use self.hp.", "hp = crea un local; el hp de la derecha es ese local nil. Usa self.hp.", "hp = でローカルができ、右の hp は nil。self.hp を使おう。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: C("class Tower", "  @@floors = 1", "  def self.floors; @@floors; end", "end", "class Spire < Tower", "  @@floors = 9", "end", "p Tower.floors"), options: ["9", "1", "nil"], answer: 0, output: "9", check: { compiles: true, stdout: "9" }, explain: L("One @@floors is shared with every subclass; Spire overwrote it.", "Una sola @@floors se comparte con cada subclase; Spire la sobrescribió.", "@@floors は全サブクラスで共有。Spire が上書きした。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: C("class Card", "  attr_reader :rank", "  def initialize(r); @rank = r; end", "  def ==(o); o.is_a?(Card) && rank == o.rank; end", "  alias eql? ==", "  def hash; rank.hash; end", "end", "h = { Card.new(1) => :ace }", "p h.key?(Card.new(1))"), options: ["true", "false"], answer: 0, output: "true", check: { compiles: true, stdout: "true" }, explain: L("With eql? and hash defined, a new equal Card finds the same Hash key.", "Con eql? y hash definidos, una Card igual nueva encuentra la misma clave.", "eql? と hash があるので、等しい新しい Card で同じキーが見つかる。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: C('s = "abc"', "f = s.freeze", "p f.equal?(s), s.frozen?"), options: ["true\ntrue", "false\ntrue", "false\nfalse"], answer: 0, output: "true\ntrue", check: { compiles: true, stdout: "true\ntrue" }, explain: L("freeze freezes the receiver itself and returns that same object.", "freeze congela al receptor mismo y devuelve ese mismo objeto.", "freeze は自分自身を凍らせ、その同じオブジェクトを返す。") },
-    { kind: "predict", time: 15, prompt: HAPPENS, code: C('s = "abc".freeze', 't = s + "d"', "p t.frozen?", 's << "d"'), options: [L("false, then FrozenError", "false, luego FrozenError", "false の後 FrozenError"), L("true, then FrozenError", "true, luego FrozenError", "true の後 FrozenError"), L("false, then abcd", "false, luego abcd", "false の後 abcd")], answer: 0, check: { compiles: true, throws: "FrozenError" }, explain: L("+ builds a new, unfrozen string. << mutates s, which is ice.", "+ crea un string nuevo sin congelar. << muta s, que es hielo.", "+ は凍っていない新しい文字列を作る。<< は凍った s を変えようとする。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: C("Pos = Data.define(:x, :y)", "a = Pos.new(x: 1, y: 2)", "b = a.with(y: 5)", "p a.y, b.y, a == Pos.new(x: 1, y: 2)"), options: ["2\n5\ntrue", "5\n5\ntrue", "2\n5\nfalse"], answer: 0, output: "2\n5\ntrue", check: { compiles: true, stdout: "2\n5\ntrue" }, explain: L("with returns a new Data; a is untouched. Data objects with equal fields are ==.", "with devuelve un Data nuevo; a no cambia. Los Data con campos iguales son ==.", "with は新しい Data を返し a はそのまま。フィールドが同じ Data は ==。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: C('team = [["Rubi"], ["Kira"]]', "twin = team.clone", 'twin[1] << "!"', "p team[1]"), options: ['["Kira", "!"]', '["Kira"]'], answer: 0, output: '["Kira", "!"]', check: { compiles: true, stdout: '["Kira", "!"]' }, explain: L("clone is shallow like dup: the inner arrays are shared.", "clone es superficial como dup: los arrays internos se comparten.", "clone も dup と同じく浅い。中の配列は共有。") },
-    { kind: "pick", time: 12, prompt: L("Wrap Shop's buy from the front", "Envuelve buy de Shop por delante", "Shop の buy を前から包もう"), code: C("module Log", '  def buy; "log+" + super; end', "end", "class Shop", '  def buy; "sold"; end', "end", "Shop.___ Log", "p Shop.new.buy"), options: ["prepend", "include", "extend"], answer: 0, check: { compiles: true, stdout: '"log+sold"' }, explain: L("prepend puts Log before Shop, so Log#buy runs first and super reaches Shop.", "prepend pone Log antes de Shop: Log#buy corre primero y super llega a Shop.", "prepend で Log が Shop の前に。Log#buy が先に動き super で Shop へ。") },
+    { kind: "predict", time: 18, prompt: PRINT, hint: L("Both modules are included. Which one is closer to Bot, and where does its super lead?", "Ambos módulos están incluidos. ¿Cuál queda más cerca de Bot y adónde lleva su super?", "どちらも include。Bot に近いのはどっち？その super はどこへ？"), note: "recap-lookup", code: C("module Greet", '  def hello; "hi from #{self.class}"; end', "end", "module Loud", "  def hello; super.upcase; end", "end", "class Bot", "  include Greet", "  include Loud", "end", "puts Bot.new.hello"), options: ["HI FROM BOT", "hi from Bot", "NoMethodError"], answer: 0, output: "HI FROM BOT", check: { compiles: true, stdout: "HI FROM BOT" }, explain: L("Loud was included last, so it answers first; its super reaches Greet.", "Loud se incluyó al final: responde primero y su super llega a Greet.", "最後に include した Loud が先に答え、super で Greet へ。") },
+    { kind: "predict", time: 15, prompt: HAPPENS, hint: L("hp = inside a method: is that the writer or a new local? What is it on the right side?", "hp = dentro de un método: ¿es el escritor o un local nuevo? ¿Qué vale en el lado derecho?", "メソッド内の hp = は書く扉？新しいローカル？右側では何？"), note: "recap-state", code: C("class Hero", "  attr_accessor :hp", "  def initialize; @hp = 3; end", "  def boost", "    hp = hp * 2", "  end", "end", "Hero.new.boost"), options: [L("NoMethodError on nil", "NoMethodError sobre nil", "nil に NoMethodError"), L("hp becomes 6", "hp pasa a 6", "hp が 6 になる")], answer: 0, check: { compiles: true, throws: "NoMethodError" }, explain: L("hp = makes a local; the hp on the right is that nil local. Use self.hp.", "hp = crea un local; el hp de la derecha es ese local nil. Usa self.hp.", "hp = でローカルができ、右の hp は nil。self.hp を使おう。") },
+    { kind: "predict", time: 15, prompt: PRINT, hint: L("Does Spire get its own @@floors, or share the one Tower has?", "¿Spire tiene su propia @@floors o comparte la de Tower?", "Spire は自分の @@floors を持つ？Tower と共有する？"), note: "recap-state", code: C("class Tower", "  @@floors = 1", "  def self.floors; @@floors; end", "end", "class Spire < Tower", "  @@floors = 9", "end", "p Tower.floors"), options: ["9", "1", "nil"], answer: 0, output: "9", check: { compiles: true, stdout: "9" }, explain: L("One @@floors is shared with every subclass; Spire overwrote it.", "Una sola @@floors se comparte con cada subclase; Spire la sobrescribió.", "@@floors は全サブクラスで共有。Spire が上書きした。") },
+    { kind: "predict", time: 15, prompt: PRINT, hint: L("List the methods a Hash uses to find a key. Does Card define every one of them?", "Enumera los métodos que usa un Hash para encontrar una clave. ¿Card los define todos?", "Hash がキーを探すのに使うメソッドは？Card はそれを全部定義している？"), note: "recap-equality", code: C("class Card", "  attr_reader :rank", "  def initialize(r); @rank = r; end", "  def ==(o); o.is_a?(Card) && rank == o.rank; end", "  alias eql? ==", "  def hash; rank.hash; end", "end", "h = { Card.new(1) => :ace }", "p h.key?(Card.new(1))"), options: ["true", "false"], answer: 0, output: "true", check: { compiles: true, stdout: "true" }, explain: L("With eql? and hash defined, a new equal Card finds the same Hash key.", "Con eql? y hash definidos, una Card igual nueva encuentra la misma clave.", "eql? と hash があるので、等しい新しい Card で同じキーが見つかる。") },
+    { kind: "predict", time: 12, prompt: PRINT, hint: L("Does freeze return a copy or the receiver itself? And which object ends up frozen?", "¿freeze devuelve una copia o al receptor mismo? ¿Y qué objeto queda congelado?", "freeze はコピーを返す？自分自身を返す？凍ったのはどれ？"), note: "recap-ice", code: C('s = "abc"', "f = s.freeze", "p f.equal?(s), s.frozen?"), options: ["true\ntrue", "false\ntrue", "false\nfalse"], answer: 0, output: "true\ntrue", check: { compiles: true, stdout: "true\ntrue" }, explain: L("freeze freezes the receiver itself and returns that same object.", "freeze congela al receptor mismo y devuelve ese mismo objeto.", "freeze は自分自身を凍らせ、その同じオブジェクトを返す。") },
+    { kind: "predict", time: 15, prompt: HAPPENS, hint: L("+ builds a new string; << changes the receiver. Which of the two strings is frozen?", "+ construye un string nuevo; << cambia al receptor. ¿Cuál de los dos strings está congelado?", "+ は新しい文字列を作り、<< は自分を変える。凍っているのはどっち？"), note: "recap-ice", code: C('s = "abc".freeze', 't = s + "d"', "p t.frozen?", 's << "d"'), options: [L("false, then FrozenError", "false, luego FrozenError", "false の後 FrozenError"), L("true, then FrozenError", "true, luego FrozenError", "true の後 FrozenError"), L("false, then abcd", "false, luego abcd", "false の後 abcd")], answer: 0, check: { compiles: true, throws: "FrozenError" }, explain: L("+ builds a new, unfrozen string. << mutates s, which is ice.", "+ crea un string nuevo sin congelar. << muta s, que es hielo.", "+ は凍っていない新しい文字列を作る。<< は凍った s を変えようとする。") },
+    { kind: "predict", time: 15, prompt: PRINT, hint: L("with never changes a; it returns a new object. And Data objects compare by their fields.", "with nunca cambia a; devuelve un objeto nuevo. Y los Data se comparan por sus campos.", "with は a を変えず新しい物を返す。Data はフィールドで比べる。"), note: "recap-equality", code: C("Pos = Data.define(:x, :y)", "a = Pos.new(x: 1, y: 2)", "b = a.with(y: 5)", "p a.y, b.y, a == Pos.new(x: 1, y: 2)"), options: ["2\n5\ntrue", "5\n5\ntrue", "2\n5\nfalse"], answer: 0, output: "2\n5\ntrue", check: { compiles: true, stdout: "2\n5\ntrue" }, explain: L("with returns a new Data; a is untouched. Data objects with equal fields are ==.", "with devuelve un Data nuevo; a no cambia. Los Data con campos iguales son ==.", "with は新しい Data を返し a はそのまま。フィールドが同じ Data は ==。") },
+    { kind: "predict", time: 15, prompt: PRINT, hint: L("clone copies only the outer array. Is twin[1] a new array, or the same one as team[1]?", "clone copia solo el array externo. ¿twin[1] es un array nuevo o el mismo que team[1]?", "clone は外側だけを写す。twin[1] は新しい配列？team[1] と同じ？"), note: "recap-ice", code: C('team = [["Rubi"], ["Kira"]]', "twin = team.clone", 'twin[1] << "!"', "p team[1]"), options: ['["Kira", "!"]', '["Kira"]'], answer: 0, output: '["Kira", "!"]', check: { compiles: true, stdout: '["Kira", "!"]' }, explain: L("clone is shallow like dup: the inner arrays are shared.", "clone es superficial como dup: los arrays internos se comparten.", "clone も dup と同じく浅い。中の配列は共有。") },
+    { kind: "pick", time: 12, prompt: L("Wrap Shop's buy from the front", "Envuelve buy de Shop por delante", "Shop の buy を前から包もう"), hint: L("Log must answer before Shop and reach Shop's buy with super. Which keyword puts it in front?", "Log debe responder antes que Shop y llegar al buy de Shop con super. ¿Qué palabra lo pone delante?", "Log が Shop より先に答え、super で Shop へ。前に置くキーワードは？"), note: "recap-lookup", code: C("module Log", '  def buy; "log+" + super; end', "end", "class Shop", '  def buy; "sold"; end', "end", "Shop.___ Log", "p Shop.new.buy"), options: ["prepend", "include", "extend"], answer: 0, check: { compiles: true, stdout: '"log+sold"' }, explain: L("prepend puts Log before Shop, so Log#buy runs first and super reaches Shop.", "prepend pone Log antes de Shop: Log#buy corre primero y super llega a Shop.", "prepend で Log が Shop の前に。Log#buy が先に動き super で Shop へ。") },
     {
       kind: "run",
       time: 90,
       prompt: L("Fix each so the party can map: [\"RUBI\", \"KIRA\"]", "Arregla each para que map funcione: [\"RUBI\", \"KIRA\"]", "each を直して map を動かそう"),
+      hint: L("Enumerable passes a block to each. Does each hand that block on to @names.each?", "Enumerable pasa un bloque a each. ¿each le entrega ese bloque a @names.each?", "Enumerable は each にブロックを渡す。each はそれを @names.each に渡している？"), note: "recap-lookup",
       starter: C("class Party", "  include Enumerable", "  def initialize(*names)", "    @names = names", "  end", "  def each(&block)", "    @names.each", "  end", "end", 'p Party.new("Rubi", "Kira").map(&:upcase)', ""),
       solution: C("class Party", "  include Enumerable", "  def initialize(*names)", "    @names = names", "  end", "  def each(&block)", "    @names.each(&block)", "  end", "end", 'p Party.new("Rubi", "Kira").map(&:upcase)', ""),
       expect: '["RUBI", "KIRA"]',

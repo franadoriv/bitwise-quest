@@ -6,7 +6,7 @@
 // - Unknown keys are preserved untouched (a newer content pack or an older game can round-trip a save).
 // - Any change to this shape bumps SAVE_VERSION and adds a migration in migrate.ts.
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 export const SLOT_COUNT = 15;
 export const NAME_MAX = 12;
 
@@ -44,12 +44,21 @@ export interface LangRecord {
   lastPlayedAt?: number;
 }
 
+import type { TimerMode } from "../game-rules.ts";
+
+/** Lesson timer chosen in the pre-lesson modal ("off": no speed bonus, no time pressure). */
+export type TimerPref = TimerMode;
+export const TIMER_PREFS: TimerPref[] = ["off", "relaxed", "normal", "fast"];
+/** Hint tickets a new player starts with. */
+export const START_TICKETS = 5;
+
 export interface SaveData {
   version: typeof SAVE_VERSION;
   /** Random id: identifies the same save across exports/imports. */
   id: string;
   player: { name: string; createdAt: number; updatedAt: number; playMs: number };
-  stats: { xp: number; coins: number; streak: number; bestStreak: number; lastDay: string | null };
+  stats: { xp: number; coins: number; streak: number; bestStreak: number; lastDay: string | null; tickets: number };
+  prefs: { timer: TimerPref };
   /** Last planet visited. */
   lastLang?: string;
   langs: Record<string, LangRecord>;
@@ -67,7 +76,8 @@ export function newSave(name: string, now = Date.now()): SaveData {
     version: SAVE_VERSION,
     id,
     player: { name: cleanName(name) || "HERO", createdAt: now, updatedAt: now, playMs: 0 },
-    stats: { xp: 0, coins: 0, streak: 0, bestStreak: 0, lastDay: null },
+    stats: { xp: 0, coins: 0, streak: 0, bestStreak: 0, lastDay: null, tickets: START_TICKETS },
+    prefs: { timer: "normal" },
     langs: {},
   };
 }

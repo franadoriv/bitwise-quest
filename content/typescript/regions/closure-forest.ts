@@ -1,4 +1,4 @@
-import type { Beat, LessonDef, RegionDef, Text } from "../../../lib/content/types.ts";
+import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
 
 // REGION 2 · CLOSURE FOREST  (functions and arrows, scope and hoisting, closures, this)
@@ -12,7 +12,104 @@ const COMPILES = L("Does it compile?", "¿Compila?", "コンパイルできる�
 const YES = L("Yes", "Sí", "はい");
 const NO_TSC = L("No: tsc stops it", "No: tsc lo detiene", "いいえ：tsc が止める");
 
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example; the validator type-checks it and checks `output` against the runner. */
+const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code, output, caption });
+/** An example that must NOT type-check (verified too). */
+const bad = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: false } });
+
 // ─── 2.1 Spells: functions ─────────────────────────────────────────────────
+const functionsNotes: NoteDef[] = [
+  note("functions-return", L("Functions, parameters, return", "Funciones, parámetros, return", "関数・引数・return"),
+    p(
+      "A function is a named piece of code you write once and run (call) many times. function name(params) { ... } defines it, and name(args) calls it. Parameters are labels for the inputs: on each call they're filled with the arguments you pass, in order, first argument to first parameter.",
+      "Una función es un trozo de código con nombre que escribes una vez y ejecutas (llamas) muchas. function nombre(params) { ... } la define y nombre(args) la llama. Los parámetros son etiquetas para las entradas: en cada llamada se llenan con los argumentos que pasas, en orden, el primero con el primero.",
+      "関数は、一度書いて何度も実行（呼び出し）できる名前つきのコード。function 名前(引数) { ... } で定義し、名前(値) で呼ぶ。引数は入力のラベルで、呼ぶたびに渡した値が順番に入る。1つ目の値は1つ目の引数へ。",
+    ),
+    ex("function triple(n: number) {\n  return n * 3;\n}\nconsole.log(triple(2), triple(7));", "6 21",
+      L("One definition, two calls with different inputs", "Una definición, dos llamadas con entradas distintas", "定義は1つ、入力のちがう呼び出しが2つ")),
+    p(
+      "return ends the function and sends a value back to the caller: the call is replaced by that value. Code after return in the same block never runs. That's why a call can sit anywhere a value fits: inside console.log, in a sum, or as the argument of another call.",
+      "return termina la función y envía un valor de vuelta a quien la llamó: la llamada se reemplaza por ese valor. El código después de return en el mismo bloque nunca se ejecuta. Por eso una llamada puede ir donde quepa un valor: dentro de console.log, en una suma o como argumento de otra llamada.",
+      "return は関数を終わらせ、呼んだ側に値を返す。呼び出しはその値に置きかわる。同じブロックの return より後ろは実行されない。だから呼び出しは値が置ける場所ならどこでも書ける：console.log の中、足し算の中、別の呼び出しの引数にもね。",
+    ),
+    p(
+      "If a function reaches its end without return, it hands back undefined. A common mistake is computing a value and forgetting to return it: the line runs, the result is thrown away, and the caller gets undefined. Printing inside a function is not the same as returning.",
+      "Si una función llega al final sin return, devuelve undefined. Un error común es calcular un valor y olvidar devolverlo: la línea se ejecuta, el resultado se tira y quien llama recibe undefined. Imprimir dentro de una función no es lo mismo que devolver.",
+      "return なしで最後まで行くと、関数は undefined を返す。よくあるミスは、値を計算したのに return し忘れること。行は実行されるけど結果は捨てられ、呼んだ側は undefined を受け取る。関数の中で表示するのと、返すのは別物だよ。",
+    ),
+    ex("function bonus(points: number) {\n  points * 2;\n}\nfunction bonusFixed(points: number) {\n  return points * 2;\n}\nconsole.log(bonus(4), bonusFixed(4));", "undefined 8",
+      L("Without return, the result is lost", "Sin return, el resultado se pierde", "return がないと結果は消える")),
+    p(
+      "Each call is independent: the parameters are fresh labels every time, so calling with new arguments never mixes in values from an earlier call.",
+      "Cada llamada es independiente: los parámetros son etiquetas nuevas cada vez, así que llamar con argumentos nuevos nunca mezcla valores de una llamada anterior.",
+      "呼び出しはそれぞれ独立。引数は毎回新しいラベルなので、前の呼び出しの値がまざることはないよ。",
+    ),
+  ),
+  note("arrow-functions", L("Arrow functions", "Funciones flecha", "アロー関数"),
+    p(
+      "An arrow function is a shorter way to write a function: (params) => result. It's usually stored in a const, like const half = (n: number) => n / 2; The arrow, an equals sign followed by a greater-than sign, separates the parameters from the body.",
+      "Una función flecha es una forma más corta de escribir una función: (params) => resultado. Suele guardarse en un const, como const half = (n: number) => n / 2; La flecha, un signo igual seguido de un signo mayor que, separa los parámetros del cuerpo.",
+      "アロー関数は関数を短く書く方法：(引数) => 結果。ふつうは const half = (n: number) => n / 2; のように const に入れる。イコールと大なり記号でできた矢印が、引数と本体を分けるよ。",
+    ),
+    ex("const half = (n: number) => n / 2;\nconsole.log(half(9));", "4.5"),
+    p(
+      "With an expression body (no braces), the value after the arrow is returned automatically. With a block body ({ }), the arrow behaves like a normal function: you must write return, or it returns undefined.",
+      "Con un cuerpo de expresión (sin llaves), el valor tras la flecha se devuelve solo. Con un cuerpo de bloque ({ }), la flecha se comporta como una función normal: debes escribir return o devolverá undefined.",
+      "式の本体（波かっこなし）なら、矢印のあとの値が自動で返る。ブロックの本体（{ }）だと、ふつうの関数と同じで return を書かないと undefined が返るよ。",
+    ),
+    ex("const plusOne = (n: number) => { n + 1 };\nconst plusTwo = (n: number) => { return n + 2; };\nconsole.log(plusOne(1), plusTwo(1));", "undefined 3",
+      L("Braces need return; without it you get undefined", "Las llaves necesitan return; sin él da undefined", "波かっこには return が必要。ないと undefined")),
+    p(
+      "Common trap: adding braces to tidy up a one-liner and losing the result. If you add braces, add return too. To return an object directly, wrap it in parentheses, like () => ({ hp: 1 }), because bare braces start a block.",
+      "Trampa común: añadir llaves para ordenar una línea y perder el resultado. Si añades llaves, añade también return. Para devolver un objeto directamente, envuélvelo en paréntesis, como () => ({ hp: 1 }), porque unas llaves sueltas empiezan un bloque.",
+      "よくあるワナ：1行の関数を整えようと波かっこをつけて、結果をなくすこと。波かっこをつけたら return もつけよう。オブジェクトをそのまま返すなら () => ({ hp: 1 }) のようにかっこで包む。波かっこだけだとブロックになるからね。",
+    ),
+  ),
+  note("typed-functions", L("Typing inputs and outputs", "Tipar entradas y salidas", "入力と出力の型"),
+    p(
+      "In TypeScript you annotate each parameter, like function f(name: string, age: number). You can also annotate the return type after the parentheses: function f(...): boolean { ... }. The return type describes the value the function sends back.",
+      "En TypeScript anotas cada parámetro, como function f(name: string, age: number). También puedes anotar el tipo de retorno después de los paréntesis: function f(...): boolean { ... }. El tipo de retorno describe el valor que la función devuelve.",
+      "TypeScript では function f(name: string, age: number) のように引数ごとに型を書く。かっこのあとに戻り値の型も書ける：function f(...): boolean { ... }。戻り値の型は関数が返す値の種類だよ。",
+    ),
+    ex("function isAdult(age: number): boolean {\n  return age >= 18;\n}\nconsole.log(isAdult(20));", "true"),
+    p(
+      "The checker uses these types at every call. Passing an argument of the wrong type is error TS2345, and returning a value that doesn't match the declared return type is TS2322. In plain JavaScript these mistakes run silently and give odd results later.",
+      "El verificador usa estos tipos en cada llamada. Pasar un argumento del tipo equivocado es el error TS2345, y devolver un valor que no coincide con el tipo de retorno declarado es TS2322. En JavaScript puro estos errores se ejecutan en silencio y dan resultados raros después.",
+      "型チェッカーは呼び出しのたびにこの型を使う。まちがった型の値を渡すとエラー TS2345、宣言した戻り値の型と合わない値を返すと TS2322。素の JavaScript だとこういうミスは黙って動き、あとで変な結果になるよ。",
+    ),
+    bad('function shout(word: string): string {\n  return word + "!";\n}\nshout(42);',
+      L("Does not compile: TS2345, 42 is not a string", "No compila: TS2345, 42 no es un string", "コンパイル不可：TS2345、42 は string じゃない")),
+    p(
+      "To choose a return type, ask what the returned expression produces: a comparison gives boolean, joining text gives string, arithmetic gives number. void means the function returns nothing useful.",
+      "Para elegir el tipo de retorno, pregúntate qué produce la expresión devuelta: una comparación da boolean, unir texto da string, la aritmética da number. void significa que la función no devuelve nada útil.",
+      "戻り値の型を決めるには、返す式が何を作るか考えよう。比較なら boolean、文字の連結なら string、計算なら number。void は役に立つ値を返さないという意味だよ。",
+    ),
+  ),
+  note("default-rest", L("Default and rest parameters", "Parámetros por defecto y rest", "デフォルト引数と rest"),
+    p(
+      "A default parameter has a value after =, like function hit(power = 1). When the caller leaves that argument out, or passes undefined, the default is used. When the caller passes a value, the value wins. TypeScript infers the parameter's type from the default.",
+      "Un parámetro por defecto tiene un valor tras =, como function hit(power = 1). Si quien llama omite ese argumento, o pasa undefined, se usa el valor por defecto. Si pasa un valor, gana el valor. TypeScript infiere el tipo del parámetro a partir del valor por defecto.",
+      "デフォルト引数は function hit(power = 1) のように = のあとに値を書く。その引数が省かれるか undefined が渡されるとデフォルトが使われ、値が渡されればその値が勝つ。引数の型はデフォルト値から推論されるよ。",
+    ),
+    ex('function hit(power = 1) {\n  return "hit x" + power;\n}\nconsole.log(hit(), hit(4));', "hit x1 hit x4"),
+    p(
+      "A rest parameter, written ...name, collects all the remaining arguments into a real array. It must be the last parameter. With no extra arguments it's an empty array, never undefined. In TypeScript you type it as an array, like ...scores: number[].",
+      "Un parámetro rest, escrito ...nombre, junta todos los argumentos restantes en un array real. Debe ser el último parámetro. Sin argumentos extra es un array vacío, nunca undefined. En TypeScript se tipa como array, como ...scores: number[].",
+      "rest 引数は ...名前 と書き、残りの引数を全部本物の配列にまとめる。最後の引数でないといけない。余りがなければ空の配列で、undefined にはならない。TypeScript では ...scores: number[] のように配列の型をつけるよ。",
+    ),
+    ex('function count(...words: string[]) {\n  return words.length + " words: " + words.join("-");\n}\nconsole.log(count("a", "b"));', "2 words: a-b"),
+    p(
+      "Common mistake: thinking a default kicks in for any empty-looking value. Only a missing argument or undefined triggers it; null, 0 and \"\" are real values and are used as given.",
+      "Error común: creer que el valor por defecto actúa ante cualquier valor que parezca vacío. Solo lo activa un argumento ausente o undefined; null, 0 y \"\" son valores reales y se usan tal cual.",
+      "よくある誤解：空っぽに見える値なら何でもデフォルトが使われると思うこと。使われるのは引数がないときと undefined だけ。null、0、\"\" は本当の値なのでそのまま使われるよ。",
+    ),
+  ),
+];
+
 const functions: LessonDef = {
   slug: "functions-and-arrows",
   title: L("Spells: functions", "Hechizos: funciones", "呪文：関数"),
@@ -21,6 +118,7 @@ const functions: LessonDef = {
   xp: 65,
   enemy: "typescript/callback-spaghetti",
   enemyName: L("SPAGHETTI BUG", "BUG ESPAGUETI", "スパゲティバグ"),
+  notes: functionsNotes,
   beats: [
     say(L(
       "Welcome to Closure Forest! A FUNCTION is a spell: write it once, cast it many times. Inputs go in, return sends a value out.",
@@ -45,6 +143,8 @@ const functions: LessonDef = {
       answer: 0,
       output: "5 7",
       check: { compiles: true, stdout: "5 7" },
+      hint: L("Each call fills a and b fresh, in order, and returns their sum. Work out each call separately.", "Cada llamada llena a y b de nuevo, en orden, y devuelve su suma. Calcula cada llamada por separado.", "呼ぶたびに a と b に順番に新しい値が入り、合計を返す。1回ずつ計算しよう。"),
+      note: "functions-return",
       explain: L("Each call fills a and b with new values: 4 + 1 and 10 + (-3).", "Cada llamada llena a y b con valores nuevos: 4 + 1 y 10 + (-3).", "呼ぶたびに a と b に新しい値が入る。4 + 1 と 10 + (-3) だよ。"),
       win: [{ t: "print", text: "5 7" }],
     },
@@ -61,6 +161,8 @@ const functions: LessonDef = {
       answer: 0,
       output: "undefined",
       check: { compiles: true, stdout: "undefined" },
+      hint: L("Look for the word return inside heal. What does a function give back without it?", "Busca la palabra return dentro de heal. ¿Qué devuelve una función sin ella?", "heal の中に return はある？ないと関数は何を返す？"),
+      note: "functions-return",
       explain: L("hp + 5 is computed and thrown away. Without return, a function gives undefined.", "hp + 5 se calcula y se tira. Sin return, una función devuelve undefined.", "hp + 5 は計算されて捨てられる。return がなければ undefined になるよ。"),
       setup: [{ t: "item", kind: "scroll", holder: "hero" }, { t: "tag", actor: "hero", text: "heal" }],
       win: [{ t: "value", actor: "hero", text: "undefined" }, { t: "say", actor: "hero", text: L("Nothing came out!", "¡No salió nada!", "何も出ない！") }],
@@ -76,6 +178,8 @@ const functions: LessonDef = {
       code: "const double = (n: number) ___ n * 2;\nconsole.log(double(4));",
       answer: "=>",
       check: { compiles: true, stdout: "8" },
+      hint: L("Arrow functions use a two-character symbol between the parameters and the body.", "Las funciones flecha usan un símbolo de dos caracteres entre los parámetros y el cuerpo.", "アロー関数は引数と本体の間に2文字の記号を書くよ。"),
+      note: "arrow-functions",
       explain: L("=> separates the parameters from the result.", "=> separa los parámetros del resultado.", "=> は引数と結果を分ける記号だよ。"),
       win: [{ t: "print", text: "8" }],
     },
@@ -87,6 +191,8 @@ const functions: LessonDef = {
       answer: 0,
       output: "undefined",
       check: { compiles: true, stdout: "undefined" },
+      hint: L("The braces turn the arrow's body into a block. Does that block ever return anything?", "Las llaves convierten el cuerpo de la flecha en un bloque. ¿Ese bloque devuelve algo?", "波かっこでアローの本体はブロックになる。そのブロックは何か返している？"),
+      note: "arrow-functions",
       explain: L("The braces trap! With { } the arrow is a block and needs return. Without it: undefined.", "¡La trampa de las llaves! Con { } la flecha es un bloque y necesita return. Sin él: undefined.", "波かっこのワナ！{ } があるとブロックになり return が必要。ないと undefined。"),
       win: [{ t: "shake" }, { t: "print", text: "undefined" }],
     },
@@ -102,6 +208,8 @@ const functions: LessonDef = {
       options: ["number", "string", "void"],
       answer: 0,
       check: { compiles: true, stdout: "3", wrongFail: true },
+      hint: L("What kind of value does s.length produce? The return type must match it.", "¿Qué clase de valor produce s.length? El tipo de retorno debe coincidir.", "s.length はどんな種類の値？戻り値の型はそれに合わせる。"),
+      note: "typed-functions",
       explain: L(".length is a number, so the return type is number. The others are error TS2322.", ".length es un number, así que el tipo de retorno es number. Los otros dan el error TS2322.", ".length は number だから戻り値も number。ほかはエラー TS2322 になるよ。"),
       win: [{ t: "print", text: "3" }],
     },
@@ -112,6 +220,8 @@ const functions: LessonDef = {
       options: [YES, NO_TSC],
       answer: 1,
       check: { compiles: false },
+      hint: L("Compare each argument with the type of its parameter. Look closely at the quotes.", "Compara cada argumento con el tipo de su parámetro. Mira bien las comillas.", "それぞれの値を引数の型とくらべよう。クォートに注目。"),
+      note: "typed-functions",
       explain: L("Error TS2345: \"2\" is a string, but b must be a number. In plain JS it would print 12!", "Error TS2345: \"2\" es un string, pero b debe ser number. ¡En JS puro imprimiría 12!", "エラー TS2345：\"2\" は string、b は number が必要。素の JS なら 12 になっちゃう！"),
       win: [{ t: "shake" }, { t: "say", actor: "hero", text: L("Blocked!", "¡Bloqueado!", "ブロック！") }],
     },
@@ -128,6 +238,8 @@ const functions: LessonDef = {
       answer: 0,
       output: "hi hero hi Ada",
       check: { compiles: true, stdout: "hi hero hi Ada" },
+      hint: L("The first call passes no argument; the second passes one. When is the default used?", "La primera llamada no pasa argumento; la segunda pasa uno. ¿Cuándo se usa el valor por defecto?", "1回目は引数なし、2回目はあり。デフォルトが使われるのはどっち？"),
+      note: "default-rest",
       explain: L("With no argument, name takes the default \"hero\". With one, the argument wins.", "Sin argumento, name toma el valor por defecto \"hero\". Con uno, gana el argumento.", "引数がなければ name はデフォルトの \"hero\"。渡せばその値が使われるよ。"),
     },
     {
@@ -138,6 +250,8 @@ const functions: LessonDef = {
       answer: 0,
       output: "6",
       check: { compiles: true, stdout: "6" },
+      hint: L("...nums gathers all the arguments into one array; reduce then combines them, starting from 0.", "...nums junta todos los argumentos en un array; luego reduce los combina, empezando en 0.", "...nums が引数を1つの配列にまとめ、reduce が 0 から順に合わせていく。"),
+      note: "default-rest",
       explain: L("...nums collects every argument into [1, 2, 3], and reduce adds them up.", "...nums junta todos los argumentos en [1, 2, 3], y reduce los suma.", "...nums が引数を [1, 2, 3] にまとめ、reduce で合計するよ。"),
     },
     {
@@ -147,12 +261,89 @@ const functions: LessonDef = {
       solution: "const area = (w: number, h: number) => w * h;\nconsole.log(area(3, 4));\n",
       expect: "12",
       fallback: [String.raw`=>\s*\(?\s*w\s*\*\s*h`, String.raw`return\s+w\s*\*\s*h`, String.raw`=>\s*\(?\s*h\s*\*\s*w`, String.raw`return\s+h\s*\*\s*w`],
+      hint: L("The body is in braces. What does a block body need to send its result back?", "El cuerpo está entre llaves. ¿Qué necesita un cuerpo de bloque para devolver su resultado?", "本体が波かっこの中。ブロックの本体が結果を返すには何が必要？"),
+      note: "arrow-functions",
       explain: L("Drop the braces, or keep them and add return: { return w * h; }.", "Quita las llaves, o déjalas y agrega return: { return w * h; }.", "波かっこを消すか、残して return を書こう：{ return w * h; }。"),
     },
   ],
 };
 
 // ─── 2.2 The fog of scope ──────────────────────────────────────────────────
+const scopeNotes: NoteDef[] = [
+  note("block-scope", L("Block scope and shadowing", "Scope de bloque y ocultamiento", "ブロックスコープと隠し"),
+    p(
+      "Scope is the part of the code where a name can be seen. let and const are block-scoped: they exist only from their line to the closing } of the block that contains them (an if, a loop, a function or plain braces). Outside that block the name doesn't exist, and TypeScript reports TS2304, \"Cannot find name\".",
+      "El scope es la parte del código donde se ve un nombre. let y const tienen scope de bloque: existen solo desde su línea hasta la } que cierra el bloque que las contiene (un if, un bucle, una función o llaves sueltas). Fuera de ese bloque el nombre no existe, y TypeScript informa TS2304, \"Cannot find name\".",
+      "スコープは名前が見える範囲。let と const はブロックスコープで、宣言した行から、それを囲むブロック（if、ループ、関数、ただの波かっこ）の } までしかない。外では名前がなく、TypeScript は TS2304「Cannot find name」を出すよ。",
+    ),
+    bad('if (true) {\n  const key = "gold";\n}\nconsole.log(key);',
+      L("Does not compile: key only exists inside the if", "No compila: key solo existe dentro del if", "コンパイル不可：key は if の中だけ")),
+    p(
+      "Inner blocks can see the names of outer blocks. Writing name = value inside a block, with no let, changes the outer variable, because it's the only variable with that name in sight.",
+      "Los bloques internos ven los nombres de los bloques externos. Escribir nombre = valor dentro de un bloque, sin let, cambia la variable de afuera, porque es la única con ese nombre a la vista.",
+      "内側のブロックからは外側の名前が見える。ブロックの中で let なしに 名前 = 値 と書くと、外の変数が変わる。見えるのはその名前の変数1つだけだからね。",
+    ),
+    ex('let torch = "off";\nif (true) {\n  torch = "on";\n}\nconsole.log(torch);', "on"),
+    p(
+      "Writing let name inside the block creates a NEW variable with the same name. It shadows (hides) the outer one while the block runs; the outer one is untouched, and when the block ends the inner one disappears. Same name, two separate labels.",
+      "Escribir let nombre dentro del bloque crea una variable NUEVA con el mismo nombre. Oculta a la de afuera mientras el bloque corre; la de afuera queda intacta, y al terminar el bloque la de adentro desaparece. Mismo nombre, dos etiquetas distintas.",
+      "ブロックの中で let 名前 と書くと、同じ名前の新しい変数ができる。ブロックの間だけ外の変数を隠し（シャドーイング）、外の変数はそのまま。ブロックが終わると中の変数は消える。同じ名前で別々のラベルだよ。",
+    ),
+    ex('const color = "red";\n{\n  const color = "blue";\n  console.log(color);\n}\nconsole.log(color);', "blue\nred",
+      L("The inner color hides the outer one, then vanishes", "El color de adentro oculta al de afuera y luego desaparece", "中の color が外を隠し、そのあと消える")),
+    p(
+      "To tell the cases apart, look for the keyword: with let or const it's a new label; without it, the outer variable is being changed.",
+      "Para distinguir los casos, busca la palabra clave: con let o const es una etiqueta nueva; sin ella, se está cambiando la variable de afuera.",
+      "見分けるにはキーワードを探そう。let や const があれば新しいラベル、なければ外の変数を変えているよ。",
+    ),
+  ),
+  note("var-scope", L("var ignores blocks", "var ignora los bloques", "var はブロックを無視"),
+    p(
+      "var is the old way to declare variables. It's function-scoped: a var belongs to the whole function it's in, no matter which { } block it was written in. So a var declared inside an if or a loop is still visible after that block ends.",
+      "var es la forma antigua de declarar variables. Tiene scope de función: un var pertenece a toda la función en la que está, sin importar en qué bloque { } se escribió. Así, un var declarado dentro de un if o un bucle sigue visible después de que ese bloque termina.",
+      "var は昔の変数の宣言方法。関数スコープなので、どの { } ブロックに書いても、その関数全体のものになる。だから if やループの中の var は、ブロックが終わったあとも見えるよ。",
+    ),
+    ex("function pick() {\n  for (var k = 0; k < 2; k++) {}\n  return k;\n}\nconsole.log(pick());", "2",
+      L("k outlives the loop because it's a var", "k sobrevive al bucle porque es un var", "var なので k はループのあとも残る")),
+    p(
+      "This surprised many programmers, which is why let and const were added in 2015: they respect blocks. Modern code uses let and const; you'll still meet var in older code and in interview questions.",
+      "Esto sorprendió a muchos programadores, y por eso en 2015 se añadieron let y const: respetan los bloques. El código moderno usa let y const; aún verás var en código viejo y en preguntas de entrevista.",
+      "これに多くのプログラマーが驚いたので、2015年にブロックを守る let と const が追加された。今のコードは let と const を使う。でも古いコードや面接の問題では var をまだ見かけるよ。",
+    ),
+    p(
+      "Common mistake: assuming var behaves like let. When a name is declared with var, look at the whole function, not just the block, to see where it's visible.",
+      "Error común: suponer que var se comporta como let. Cuando un nombre se declara con var, mira toda la función, no solo el bloque, para saber dónde es visible.",
+      "よくあるミス：var が let と同じように動くと思うこと。var で宣言された名前は、ブロックだけでなく関数全体を見て、どこで見えるか考えよう。",
+    ),
+  ),
+  note("hoisting-tdz", L("Hoisting and the TDZ", "Hoisting y la TDZ", "巻き上げと TDZ"),
+    p(
+      "Before running a scope, JavaScript registers every declaration in it. This is called hoisting, as if the declarations were lifted to the top. But each kind of declaration is hoisted differently, and that decides what happens when you use a name before its line.",
+      "Antes de ejecutar un scope, JavaScript registra todas sus declaraciones. A esto se le llama hoisting, como si las declaraciones subieran al inicio. Pero cada tipo de declaración se eleva de forma distinta, y eso decide qué pasa si usas un nombre antes de su línea.",
+      "スコープを実行する前に、JavaScript はその中の宣言を全部登録する。宣言が先頭へ持ち上がるようなので巻き上げ（hoisting）と呼ぶ。でも宣言の種類ごとに巻き上げ方がちがい、行より前に名前を使ったときの結果が決まるよ。",
+    ),
+    p(
+      "Function declarations (function name() {}) are hoisted whole, body included, so you can call them before the line where they're written. var is hoisted too, but only the name: it starts as undefined, and the value is assigned only when its line runs.",
+      "Las declaraciones de función (function nombre() {}) se elevan completas, con su cuerpo, así que puedes llamarlas antes de la línea donde se escriben. var también se eleva, pero solo el nombre: empieza como undefined, y el valor se asigna cuando corre su línea.",
+      "関数宣言（function 名前() {}）は本体ごと巻き上げられるので、書いた行より前で呼べる。var も巻き上げられるけど名前だけ。最初は undefined で、値はその行が実行されたときに入るよ。",
+    ),
+    ex('const peekLevel = () => level;\nconsole.log(early(), peekLevel());\nfunction early() {\n  return "ready";\n}\nvar level = 3;', "ready undefined",
+      L("The function is ready early; the var is still empty", "La función ya está lista; el var sigue vacío", "関数は先に使える。var はまだ空")),
+    p(
+      "let and const are hoisted as well, but they stay uninitialized in the Temporal Dead Zone (TDZ) from the start of the scope until their line runs. Touching them there throws ReferenceError: Cannot access 'name' before initialization. That's better than a silent undefined: the bug is loud.",
+      "let y const también se elevan, pero quedan sin inicializar en la Zona Muerta Temporal (TDZ) desde el inicio del scope hasta que corre su línea. Tocarlas ahí lanza ReferenceError: Cannot access 'nombre' before initialization. Es mejor que un undefined silencioso: el bug hace ruido.",
+      "let と const も巻き上げられるけど、スコープの最初からその行までは初期化されないまま TDZ（一時的デッドゾーン）にいる。そこでさわると ReferenceError: Cannot access '名前' before initialization。黙って undefined になるより、バグに気づきやすいよ。",
+    ),
+    ex("const peek = () => mana;\ntry {\n  peek();\n} catch (e) {\n  console.log((e as Error).name);\n}\nconst mana = 7;\nconsole.log(peek());", "ReferenceError\n7",
+      L("Same function: an error in the TDZ, fine after the line", "Misma función: error en la TDZ, bien tras la línea", "同じ関数：TDZ ではエラー、行のあとなら OK")),
+    p(
+      "What matters is WHEN the code runs, not where it's written. A function may mention a let variable declared below it; that's fine as long as the function is called after the declaration line has run. Rule: declare first, then use.",
+      "Lo que importa es CUÁNDO se ejecuta el código, no dónde está escrito. Una función puede mencionar una variable let declarada más abajo; no pasa nada si la función se llama después de que corra la línea de la declaración. Regla: primero declara, luego usa.",
+      "大事なのは、どこに書いたかより、いつ実行されるか。関数の中で下に宣言した let 変数を使ってもいい。宣言の行が実行されたあとで関数を呼べば大丈夫。ルール：先に宣言、それから使う。",
+    ),
+  ),
+];
+
 const scope: LessonDef = {
   slug: "scope-and-hoisting",
   title: L("The fog of scope", "La niebla del scope", "スコープの霧"),
@@ -161,6 +352,7 @@ const scope: LessonDef = {
   xp: 70,
   enemy: "typescript/undefined-ghost",
   enemyName: L("FOG GHOST", "FANTASMA DE NIEBLA", "キリゴースト"),
+  notes: scopeNotes,
   beats: [
     say(L(
       "SCOPE is where a name can be seen. let and const live only inside their { } block, like a clearing in the fog.",
@@ -186,6 +378,8 @@ const scope: LessonDef = {
       answer: 0,
       output: "1",
       check: { compiles: true, stdout: "1" },
+      hint: L("Is the n inside the block a new label or the outer one? Look for a keyword before it.", "¿El n dentro del bloque es una etiqueta nueva o la de afuera? Busca una palabra clave antes.", "ブロックの中の n は新しいラベル？外の n？前のキーワードを見よう。"),
+      note: "block-scope",
       explain: L("The inner let n is a NEW label that SHADOWS the outer one, and it vanishes with its block.", "El let n de adentro es una etiqueta NUEVA que OCULTA a la de afuera, y desaparece con su bloque.", "中の let n は外の n を隠す新しいラベル。ブロックを出ると消えるよ。"),
       win: [{ t: "print", text: "1" }],
     },
@@ -197,6 +391,8 @@ const scope: LessonDef = {
       answer: 0,
       output: "2",
       check: { compiles: true, stdout: "2" },
+      hint: L("There's no keyword before n inside the block. Which n is being changed?", "No hay palabra clave antes de n dentro del bloque. ¿Qué n se está cambiando?", "ブロックの中の n の前にキーワードはない。どの n が変わる？"),
+      note: "block-scope",
       explain: L("No let inside: the block reuses the outer n and changes it.", "Sin let adentro: el bloque usa el n de afuera y lo cambia.", "中に let がないから、外の n をそのまま書きかえるよ。"),
       setup: [{ t: "tag", actor: "hero", text: "n", value: "1" }],
       win: [{ t: "value", actor: "hero", text: "2" }, { t: "print", text: "2" }],
@@ -214,6 +410,8 @@ const scope: LessonDef = {
       answer: 0,
       output: "1",
       check: { compiles: true, stdout: "1" },
+      hint: L("var doesn't stop at block braces. Which scope does a really belong to?", "var no se detiene en las llaves de un bloque. ¿A qué scope pertenece a realmente?", "var はブロックの波かっこで止まらない。a は本当はどのスコープのもの？"),
+      note: "var-scope",
       explain: L("var leaks out of the if block: a belongs to all of f.", "var se escapa del bloque if: a pertenece a toda f.", "var は if ブロックから漏れ出す。a は f 全体のものだよ。"),
     },
     {
@@ -223,6 +421,8 @@ const scope: LessonDef = {
       options: [YES, NO_TSC],
       answer: 1,
       check: { compiles: false },
+      hint: L("Where does b's block end? Is the last line still inside it?", "¿Dónde termina el bloque de b? ¿La última línea sigue dentro?", "b のブロックはどこで終わる？最後の行はまだその中？"),
+      note: "block-scope",
       explain: L("Error TS2304: Cannot find name 'b'. Outside its block, b doesn't exist.", "Error TS2304: Cannot find name 'b'. Fuera de su bloque, b no existe.", "エラー TS2304：b が見つからない。ブロックの外に b はないんだ。"),
     },
     say(L(
@@ -257,6 +457,8 @@ const scope: LessonDef = {
       answer: 0,
       output: "hi",
       check: { compiles: true, stdout: "hi" },
+      hint: L("How are function declarations hoisted: just the name, or the whole function?", "¿Cómo se elevan las declaraciones de función: solo el nombre o la función completa?", "関数宣言の巻き上げは名前だけ？関数まるごと？"),
+      note: "hoisting-tdz",
       explain: L("Function declarations are hoisted WHOLE, so you can call them before their line.", "Las declaraciones de función se elevan COMPLETAS, así que puedes llamarlas antes de su línea.", "関数宣言はまるごと巻き上げられる。だから書く前に呼べるんだ。"),
       win: [{ t: "print", text: "hi" }],
     },
@@ -268,6 +470,8 @@ const scope: LessonDef = {
       answer: 0,
       output: "undefined",
       check: { compiles: true, stdout: "undefined" },
+      hint: L("var is hoisted, but when does its = 5 actually happen compared with the call?", "var se eleva, pero ¿cuándo ocurre de verdad su = 5 comparado con la llamada?", "var は巻き上げられる。でも = 5 が実際に起きるのは呼び出しの前？後？"),
+      note: "hoisting-tdz",
       explain: L("var x is hoisted but starts as undefined. The = 5 only happens on its own line.", "var x se eleva pero empieza como undefined. El = 5 solo ocurre en su propia línea.", "var x は巻き上げられるけど最初は undefined。= 5 はその行で起きるよ。"),
       setup: [{ t: "enter", actor: "enemy" }, { t: "tag", actor: "enemy", text: "x", value: "undefined" }],
       win: [{ t: "print", text: "undefined" }, { t: "say", actor: "enemy", text: L("Boo! Empty!", "¡Bu! ¡Vacío!", "ばあ！からっぽ！") }],
@@ -279,6 +483,8 @@ const scope: LessonDef = {
       options: ["ReferenceError", "undefined", "5"],
       answer: 0,
       check: { compiles: true, throws: "ReferenceError" },
+      hint: L("show runs before the let line. What state is a let variable in until its line runs?", "show corre antes de la línea let. ¿En qué estado está una variable let hasta que corre su línea?", "show は let の行より前に動く。let 変数はその行までどんな状態？"),
+      note: "hoisting-tdz",
       explain: L("let y is hoisted into the TDZ: touching it before its line throws ReferenceError.", "let y se eleva a la TDZ: tocarlo antes de su línea lanza ReferenceError.", "let y は TDZ に巻き上げられる。行より前にさわると ReferenceError だよ。"),
       setup: [{ t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: "y" }, { t: "dead", actor: "ally" }],
       win: [{ t: "shake" }],
@@ -288,6 +494,8 @@ const scope: LessonDef = {
       prompt: L("Order it so it prints 10", "Ordénalo para que imprima 10", "10 と表示される順に並べよう"),
       lines: ["const base = 5;", "const total = base * 2;", "console.log(total);"],
       check: { compiles: true, stdout: "10" },
+      hint: L("Each line needs the names it uses to exist already. Which line depends on nothing?", "Cada línea necesita que ya existan los nombres que usa. ¿Qué línea no depende de nada?", "各行は使う名前が先にないといけない。何にも頼らない行はどれ？"),
+      note: "hoisting-tdz",
       explain: L("Declare before you use: base, then total, then print.", "Declara antes de usar: base, luego total, luego imprime.", "使う前に宣言しよう：base、total、そして表示。"),
     },
     {
@@ -297,12 +505,84 @@ const scope: LessonDef = {
       solution: 'function report() {\n  console.log("total:", total);\n}\nconst total = 5 * 2;\nreport();\n',
       expect: "total: 10",
       fallback: [String.raw`(?:const|let|var)\s+total\s*=[\s\S]*report\s*\(\s*\)\s*;`],
+      hint: L("report reads total. Make sure total's line has run before report is called.", "report lee total. Asegúrate de que la línea de total corra antes de llamar a report.", "report は total を読む。report を呼ぶ前に total の行が実行されるようにしよう。"),
+      note: "hoisting-tdz",
       explain: L("Call report() only after const total has run, so total is out of the TDZ.", "Llama a report() solo después de que corra const total, así total sale de la TDZ.", "const total の行のあとで report() を呼ぼう。そうすれば TDZ を抜けているよ。"),
     },
   ],
 };
 
 // ─── 2.3 The backpack spell (closures) ─────────────────────────────────────
+const closuresNotes: NoteDef[] = [
+  note("closure-backpack", L("Closures: functions that remember", "Closures: funciones que recuerdan", "クロージャ：おぼえている関数"),
+    p(
+      "A function created inside another function can use the outer function's variables. The surprise: it keeps them even after the outer function has returned. The inner function carries those variables with it, like a backpack. A function plus its remembered variables is called a closure.",
+      "Una función creada dentro de otra puede usar las variables de la función de afuera. La sorpresa: las conserva incluso después de que la de afuera terminó. La función interna lleva esas variables consigo, como una mochila. Una función junto con sus variables recordadas se llama closure.",
+      "関数の中で作った関数は、外の関数の変数を使える。おどろくのは、外の関数が終わったあとも変数を持ちつづけること。内側の関数はリュックのように変数を持ち歩く。関数とおぼえている変数のセットをクロージャと呼ぶよ。",
+    ),
+    ex("function makeWallet() {\n  let coins = 10;\n  return () => {\n    coins -= 3;\n    return coins;\n  };\n}\nconst spend = makeWallet();\nspend();\nconsole.log(spend());", "4",
+      L("coins lives on in spend's backpack", "coins sigue vivo en la mochila de spend", "coins は spend のリュックで生きつづける")),
+    p(
+      "Every call of the outer function creates fresh variables, so every closure it returns gets its own backpack. Two closures made by separate calls never share state; using one never changes the other.",
+      "Cada llamada a la función de afuera crea variables nuevas, así que cada closure que devuelve recibe su propia mochila. Dos closures creados por llamadas distintas nunca comparten estado; usar uno nunca cambia el otro.",
+      "外の関数を呼ぶたびに新しい変数ができるので、返されるクロージャはそれぞれ自分のリュックを持つ。別々の呼び出しで作ったクロージャは状態を共有せず、片方を使ってももう片方は変わらないよ。",
+    ),
+    ex("function makeTally(start: number) {\n  let t = start;\n  return () => (t += 10);\n}\nconst red = makeTally(0);\nconst blue = makeTally(100);\nred();\nconsole.log(red(), blue());", "20 110",
+      L("Two calls, two separate backpacks", "Dos llamadas, dos mochilas separadas", "2回呼べばリュックも2つ")),
+    p(
+      "Closures give truly private state. The variables in the backpack aren't properties of anything you return, so outside code can't read or change them, and TypeScript reports TS2339 if you try. Only the functions created inside can touch them. That's how a helper can remember a flag like \"already done\".",
+      "Los closures dan estado privado de verdad. Las variables de la mochila no son propiedades de nada de lo que devuelves, así que el código de afuera no puede leerlas ni cambiarlas, y TypeScript informa TS2339 si lo intentas. Solo las funciones creadas adentro pueden tocarlas. Así una función auxiliar puede recordar una bandera como \"ya hecho\".",
+      "クロージャで本当にプライベートな状態が作れる。リュックの変数は返したもののプロパティではないので、外のコードからは読めず変えられない。やろうとすると TypeScript が TS2339 を出す。さわれるのは中で作った関数だけ。こうして「もう済んだ」のようなフラグをおぼえておけるよ。",
+    ),
+    p(
+      "Common mistake: thinking the variable resets every time the returned function is called. The let line runs once, when the outer function runs; later calls reuse the same remembered variable.",
+      "Error común: creer que la variable se reinicia cada vez que se llama a la función devuelta. La línea let corre una sola vez, cuando corre la función de afuera; las llamadas siguientes reutilizan la misma variable recordada.",
+      "よくある誤解：返された関数を呼ぶたびに変数がリセットされると思うこと。let の行は外の関数が動いたときに1回だけ実行され、そのあとの呼び出しは同じ変数を使いつづけるよ。",
+    ),
+  ),
+  note("live-capture", L("Closures see live variables", "Los closures ven variables vivas", "クロージャは今の変数を見る"),
+    p(
+      "A closure doesn't take a photo of a value when it's created. It keeps a link to the variable itself. When the function runs, it reads the variable's CURRENT value, whatever it is at that moment.",
+      "Un closure no toma una foto del valor cuando se crea. Guarda un enlace a la variable misma. Cuando la función se ejecuta, lee el valor ACTUAL de la variable, sea cual sea en ese momento.",
+      "クロージャは作られたときに値の写真をとるわけじゃない。変数そのものへのつながりを持つ。関数が実行されたとき、その瞬間の変数の今の値を読むんだ。",
+    ),
+    ex('let weather = "rain";\nconst report = () => weather;\nconsole.log(report());\nweather = "sun";\nconsole.log(report());', "rain\nsun",
+      L("Same function, two calls, two different readings", "Misma función, dos llamadas, dos lecturas", "同じ関数でも、呼ぶたびに今の値を読む")),
+    p(
+      "So the moment that matters is when the function is CALLED, not when it was written. Trace the code in order and ask: what does the variable hold at the moment of the call?",
+      "Así que el momento que importa es cuándo se LLAMA a la función, no cuándo se escribió. Sigue el código en orden y pregúntate: ¿qué guarda la variable en el momento de la llamada?",
+      "だから大事なのは、関数を書いたときではなく呼んだとき。コードを順番に追って、呼び出しの瞬間に変数が何を持っているか考えよう。",
+    ),
+    p(
+      "This is also how closures share state: if two functions capture the same variable, a change made through one is seen by the other.",
+      "Así también comparten estado los closures: si dos funciones capturan la misma variable, un cambio hecho a través de una lo ve la otra.",
+      "クロージャが状態を共有できるのもこのため。2つの関数が同じ変数をつかんでいれば、片方で変えた値がもう片方にも見えるよ。",
+    ),
+    ex("function makeDoor() {\n  let open = false;\n  return { toggle: () => (open = !open), isOpen: () => open };\n}\nconst door = makeDoor();\ndoor.toggle();\nconsole.log(door.isOpen());", "true"),
+  ),
+  note("loop-capture", L("Loops, var and let", "Bucles, var y let", "ループと var と let"),
+    p(
+      "Callbacks such as setTimeout run LATER, after the current code, including the whole loop, has finished. So when a callback reads the loop variable, it reads whatever that variable holds at that later moment.",
+      "Los callbacks como setTimeout se ejecutan DESPUÉS, cuando el código actual, incluido todo el bucle, ya terminó. Así que cuando un callback lee la variable del bucle, lee lo que esa variable guarde en ese momento posterior.",
+      "setTimeout などのコールバックは、今のコード（ループ全体も）が終わったあとで実行される。だからコールバックがループ変数を読むと、その「あとの時点」の値を読むよ。",
+    ),
+    p(
+      "With var, the whole loop shares ONE variable, and when the callbacks finally run, the loop has ended, so they all see its final value. With let, the loop creates a NEW variable for every lap, holding that lap's value, so each callback remembers its own.",
+      "Con var, todo el bucle comparte UNA variable, y cuando por fin corren los callbacks, el bucle ya terminó, así que todos ven su valor final. Con let, el bucle crea una variable NUEVA en cada vuelta, con el valor de esa vuelta, así que cada callback recuerda la suya.",
+      "var だとループ全体で変数は1つ。コールバックが動くころにはループは終わっていて、みんな最後の値を見る。let だと1周ごとに新しい変数ができてその周の値を持つので、コールバックはそれぞれ自分の値をおぼえるよ。",
+    ),
+    ex("var step = 0;\nconst seen: (() => number)[] = [];\nfor (step = 5; step < 7; step++) seen.push(() => step);\nconsole.log(seen[0](), seen[1]());", "7 7",
+      L("One shared var: both read its final value", "Un var compartido: ambos leen su valor final", "共有の var：どちらも最後の値を読む")),
+    ex('const later: (() => string)[] = [];\nfor (const pet of ["cat", "dog"]) {\n  later.push(() => pet);\n}\nconsole.log(later.map((f) => f()));', "[ 'cat', 'dog' ]",
+      L("A fresh binding per lap: each arrow keeps its own", "Un enlace nuevo por vuelta: cada flecha guarda el suyo", "1周ごとに新しい変数：それぞれ自分の値")),
+    p(
+      "Rule: in loops, use let (or const in for...of). If you see var in a loop whose callbacks run later, expect every callback to see the final value.",
+      "Regla: en bucles, usa let (o const en for...of). Si ves var en un bucle cuyos callbacks corren después, espera que todos vean el valor final.",
+      "ルール：ループでは let（for...of なら const）を使おう。あとで動くコールバックのあるループで var を見たら、全部が最後の値を見ると考えよう。",
+    ),
+  ),
+];
+
 const closures: LessonDef = {
   slug: "closures",
   title: L("The backpack spell", "El hechizo mochila", "リュックの呪文"),
@@ -311,6 +591,7 @@ const closures: LessonDef = {
   xp: 75,
   enemy: "typescript/any-shifter",
   enemyName: L("BACKPACK THIEF", "LADRÓN DE MOCHILAS", "リュックどろぼう"),
+  notes: closuresNotes,
   beats: [
     say(L(
       "A function REMEMBERS the variables around it, even after the outer function has ended. That memory is a CLOSURE.",
@@ -337,6 +618,8 @@ const closures: LessonDef = {
       answer: 0,
       output: "3",
       check: { compiles: true, stdout: "3" },
+      hint: L("makeCounter runs once, so there's one c. Count how many times next is called in total.", "makeCounter corre una vez, así que hay un solo c. Cuenta cuántas veces se llama a next en total.", "makeCounter は1回だけなので c も1つ。next は全部で何回呼ばれた？"),
+      note: "closure-backpack",
       explain: L("makeCounter ended, but next still carries c in its backpack: 1, 2, 3.", "makeCounter terminó, pero next sigue llevando c en su mochila: 1, 2, 3.", "makeCounter は終わったけど、next はリュックに c を持ったまま：1、2、3。"),
       setup: [{ t: "item", kind: "key", holder: "hero" }, { t: "tag", actor: "hero", text: "next", value: "c=0" }],
       win: [{ t: "value", actor: "hero", text: "c=3" }, { t: "print", text: "3" }],
@@ -354,6 +637,8 @@ const closures: LessonDef = {
       answer: 0,
       output: "3 1",
       check: { compiles: true, stdout: "3 1" },
+      hint: L("Each makeCounter call packs its own c. Count the calls of a and of b separately.", "Cada llamada a makeCounter prepara su propio c. Cuenta por separado las llamadas de a y de b.", "makeCounter を呼ぶたびに自分の c。a と b の呼び出し回数を別々に数えよう。"),
+      note: "closure-backpack",
       explain: L("a and b each got their own c. a counted to 3; b only once, so 1.", "a y b recibieron cada uno su propio c. a contó hasta 3; b solo una vez, así que 1.", "a と b はそれぞれ自分の c を持つ。a は 3 まで、b は1回だけだから 1。"),
       setup: [{ t: "item", kind: "key", holder: "hero" }, { t: "tag", actor: "hero", text: "a", value: "c=0" }, { t: "enter", actor: "ally" }, { t: "item", kind: "key", holder: "ally" }, { t: "tag", actor: "ally", text: "b", value: "c=0" }],
       win: [{ t: "value", actor: "hero", text: "c=3" }, { t: "value", actor: "ally", text: "c=1" }, { t: "print", text: "3 1" }],
@@ -371,6 +656,8 @@ const closures: LessonDef = {
       answer: 0,
       output: "2",
       check: { compiles: true, stdout: "2" },
+      hint: L("Does show read x when it's created or when it's called? Check x's value at the call.", "¿show lee x cuando se crea o cuando se llama? Revisa el valor de x en la llamada.", "show が x を読むのは作ったとき？呼んだとき？呼ぶ時点の x を見よう。"),
+      note: "live-capture",
       explain: L("show reads x when it runs, and by then x is 2.", "show lee x cuando se ejecuta, y para entonces x vale 2.", "show は実行したときに x を読む。そのとき x はもう 2 だよ。"),
     },
     say(L(
@@ -386,6 +673,8 @@ const closures: LessonDef = {
       answer: 0,
       output: "3\n3\n3",
       check: { compiles: true, stdout: "3\n3\n3" },
+      hint: L("The timers run after the loop ends. How many i variables does a var loop have?", "Los timers corren cuando el bucle termina. ¿Cuántas variables i tiene un bucle con var?", "タイマーはループが終わってから動く。var のループに i はいくつある？"),
+      note: "loop-capture",
       explain: L("The timers run after the loop. All three share one var i, which is 3 by then.", "Los timers corren después del bucle. Los tres comparten un solo var i, que ya vale 3.", "タイマーはループのあとで動く。3つとも同じ var i を見るから、もう 3 なんだ。"),
       win: [{ t: "print", text: "3" }, { t: "print", text: "3" }, { t: "print", text: "3" }],
     },
@@ -395,6 +684,8 @@ const closures: LessonDef = {
       code: "for (___ i = 0; i < 3; i++) {\n  setTimeout(() => console.log(i), 0);\n}",
       answer: "let",
       check: { compiles: true, stdout: "0\n1\n2" },
+      hint: L("Which keyword gives every lap of the loop its own fresh variable?", "¿Qué palabra clave da a cada vuelta del bucle su propia variable nueva?", "ループの1周ごとに新しい変数を作るキーワードは？"),
+      note: "loop-capture",
       explain: L("let creates a new i binding on every lap, so each timer remembers its own.", "let crea un nuevo i en cada vuelta, así cada timer recuerda el suyo.", "let は1周ごとに新しい i を作る。だからタイマーはそれぞれ自分の i をおぼえるよ。"),
       win: [{ t: "print", text: "0" }, { t: "print", text: "1" }, { t: "print", text: "2" }],
     },
@@ -405,6 +696,8 @@ const closures: LessonDef = {
       options: ["done = true", "done = false", "fn()"],
       answer: 0,
       check: { compiles: true, stdout: "ran undefined" },
+      hint: L("After the first run, later calls must stop at the if. What must change in the backpack?", "Tras la primera ejecución, las llamadas siguientes deben parar en el if. ¿Qué debe cambiar en la mochila?", "1回目のあと、次からは if で止まるべき。リュックの中の何を変える？"),
+      note: "closure-backpack",
       explain: L("The backpack keeps done. Set it to true on the first call, and later calls stop early.", "La mochila guarda done. Ponlo en true en la primera llamada y las siguientes se detienen.", "リュックに done が残る。最初の呼び出しで true にすれば、次からはすぐ終わるよ。"),
       win: [{ t: "print", text: "ran undefined" }],
     },
@@ -415,6 +708,8 @@ const closures: LessonDef = {
       options: [YES, NO_TSC],
       answer: 1,
       check: { compiles: false },
+      hint: L("What does the returned object contain? Is n one of its properties?", "¿Qué contiene el objeto devuelto? ¿Es n una de sus propiedades?", "返されたオブジェクトには何がある？n はそのプロパティ？"),
+      note: "closure-backpack",
       explain: L("Error TS2339: n is not a property. It's hidden in the backpack: truly private state.", "Error TS2339: n no es una propiedad. Está escondido en la mochila: estado privado de verdad.", "エラー TS2339：n はプロパティじゃない。リュックに隠れた本当のプライベートな状態だよ。"),
       win: [{ t: "say", actor: "hero", text: L("Can't touch n!", "¡n es intocable!", "n にはさわれない！") }],
     },
@@ -425,12 +720,86 @@ const closures: LessonDef = {
       solution: 'const fns: (() => number)[] = [];\nfor (let i = 0; i < 3; i++) {\n  fns.push(() => i);\n}\nconsole.log(fns.map((f) => f()).join(","));\n',
       expect: "0,1,2",
       fallback: [String.raw`for\s*\(\s*let\s+i\b`, String.raw`const\s+\w+\s*=\s*i\s*;`],
+      hint: L("All the arrows share one i declared with var. Use the keyword that gives each lap its own.", "Todas las flechas comparten un i declarado con var. Usa la palabra que da a cada vuelta el suyo.", "全部のアローが var の i を1つ共有している。1周ごとに別にするキーワードを使おう。"),
+      note: "loop-capture",
       explain: L("With let i, each arrow captures its own lap's i: 0, 1 and 2.", "Con let i, cada flecha captura el i de su propia vuelta: 0, 1 y 2.", "let i なら、各アロー関数がその周の i をつかむ：0、1、2。"),
     },
   ],
 };
 
 // ─── 2.4 Who is this? ──────────────────────────────────────────────────────
+const thisNotes: NoteDef[] = [
+  note("this-call-site", L("this depends on the call", "this depende de la llamada", "this は呼び方で決まる"),
+    p(
+      "Inside a method, this means the object the method was called ON. In owl.hoot(), what's left of the dot is owl, so this is owl during that call. A function doesn't own a fixed this: it's decided fresh at every call, by how the function is called.",
+      "Dentro de un método, this es el objeto SOBRE el que se llamó el método. En owl.hoot(), lo que está a la izquierda del punto es owl, así que this es owl durante esa llamada. Una función no tiene un this fijo: se decide de nuevo en cada llamada, según cómo se llama.",
+      "メソッドの中の this は、そのメソッドを呼んだオブジェクト。owl.hoot() ならドットの左は owl なので、その呼び出しの間 this は owl。関数は決まった this を持たず、呼ぶたびに呼び方で決まるよ。",
+    ),
+    ex('const owl = {\n  sound: "hoo",\n  hoot() { return this.sound + "!"; },\n};\nconsole.log(owl.hoot());', "hoo!"),
+    p(
+      "If you copy a method into a variable and call it alone, like const h = owl.hoot; h(), nothing is left of the dot. In strict mode (all modules and classes), this is then undefined, and reading a property from it throws TypeError: Cannot read properties of undefined.",
+      "Si copias un método en una variable y lo llamas solo, como const h = owl.hoot; h(), no hay nada a la izquierda del punto. En modo estricto (todos los módulos y clases), this es entonces undefined, y leer una propiedad de él lanza TypeError: Cannot read properties of undefined.",
+      "メソッドを変数にコピーして const h = owl.hoot; h() のように単独で呼ぶと、ドットの左に何もない。strict モード（モジュールとクラスは全部そう）では this は undefined になり、そのプロパティを読むと TypeError: Cannot read properties of undefined になるよ。",
+    ),
+    ex('class Lamp {\n  watts = 40;\n  power() { return this.watts; }\n}\nconst loose = new Lamp().power;\ntry {\n  loose();\n} catch (e) {\n  console.log((e as Error).name);\n}', "TypeError",
+      L("Detached from its object, the method loses this", "Separado de su objeto, el método pierde this", "オブジェクトから外すと this を失う")),
+    p(
+      "This often happens by accident when a method is passed as a callback, such as setTimeout(owl.hoot): the method is called later without its object. Rule: look at the call site, not the definition. Is there an object and a dot right before the call?",
+      "Esto suele pasar por accidente al pasar un método como callback, por ejemplo setTimeout(owl.hoot): el método se llama después sin su objeto. Regla: mira dónde se llama, no dónde se definió. ¿Hay un objeto y un punto justo antes de la llamada?",
+      "これはメソッドをコールバックとして渡したときにうっかり起きる。setTimeout(owl.hoot) だと、あとでオブジェクトなしで呼ばれる。ルール：定義ではなく呼び出し側を見よう。呼び出しの直前にオブジェクトとドットがある？",
+    ),
+  ),
+  note("bind-call-apply", L("bind, call and apply", "bind, call y apply", "bind・call・apply"),
+    p(
+      "call and apply run a function RIGHT NOW with the this you choose, given as the first argument. They differ only in how the other arguments are passed: call takes them one by one, apply takes them in a single array.",
+      "call y apply ejecutan una función AHORA MISMO con el this que elijas, dado como primer argumento. Solo difieren en cómo pasan los demás argumentos: call los recibe uno a uno, apply en un único array.",
+      "call と apply は、最初の引数で指定した this で関数をすぐに実行する。ちがいは残りの引数の渡し方だけ。call は1つずつ、apply は1つの配列で渡すよ。",
+    ),
+    ex('function tag(this: { id: number }, a: string, b: string) {\n  return a + this.id + b;\n}\nconsole.log(tag.call({ id: 4 }, "<", ">"));\nconsole.log(tag.apply({ id: 8 }, ["[", "]"]));', "<4>\n[8]"),
+    p(
+      "bind doesn't run anything. It returns a NEW function with this glued on permanently. You can call that function later, alone or as a callback, and this stays what you bound. Once a function is bound, even call or apply can't change its this again.",
+      "bind no ejecuta nada. Devuelve una función NUEVA con this pegado para siempre. Puedes llamar esa función después, sola o como callback, y this sigue siendo lo que fijaste. Una vez fijada, ni call ni apply pueden volver a cambiar su this.",
+      "bind は何も実行しない。this をずっと固定した新しい関数を返す。その関数はあとで単独でもコールバックでも呼べて、this は固定したまま。一度 bind したら、call や apply でも this は変えられないよ。",
+    ),
+    ex('function who(this: { tag: string }) {\n  return this.tag;\n}\nconst fixed = who.bind({ tag: "A" });\nconsole.log(fixed());', "A",
+      L("bind returns a function; calling it alone still works", "bind devuelve una función; llamarla sola funciona", "bind は関数を返す。単独で呼んでも OK")),
+    p(
+      "apply is handy with functions that take many separate arguments, like Math.min. Today the spread syntax does the same: Math.min(...list). TypeScript checks call's arguments against the parameters, so passing an array where numbers are expected is error TS2345.",
+      "apply es útil con funciones que reciben muchos argumentos separados, como Math.min. Hoy la sintaxis spread hace lo mismo: Math.min(...list). TypeScript compara los argumentos de call con los parámetros, así que pasar un array donde se esperan números es el error TS2345.",
+      "apply は Math.min のように引数をたくさん別々に受けとる関数で便利。今はスプレッド構文 Math.min(...list) でも同じことができる。TypeScript は call の引数を引数の型と比べるので、数を待つところに配列を渡すとエラー TS2345 だよ。",
+    ),
+    p(
+      "Memory trick: Call takes Commas, Apply takes an Array, Bind is Bound for later.",
+      "Truco para recordar: Call lleva Comas, Apply lleva un Array, Bind queda atado (Bound) para después.",
+      "おぼえ方：Call はカンマ（Comma）、Apply は配列（Array）、Bind はあとのために固定（Bound）。",
+    ),
+  ),
+  note("arrow-this", L("Arrows borrow this", "Las flechas toman prestado this", "アローは this を借りる"),
+    p(
+      "Arrow functions have no this of their own. Inside an arrow, this means whatever it means in the code around the arrow, decided where the arrow is written. call, apply and bind can't change an arrow's this.",
+      "Las funciones flecha no tienen this propio. Dentro de una flecha, this significa lo mismo que en el código que la rodea, según dónde se escribe la flecha. call, apply y bind no pueden cambiar el this de una flecha.",
+      "アロー関数は自分の this を持たない。アローの中の this は、アローを書いた場所のまわりのコードの this と同じ。call、apply、bind でもアローの this は変えられないよ。",
+    ),
+    p(
+      "That makes arrows perfect for callbacks inside methods. A plain function () {} callback gets its own this from how forEach or map calls it, which is undefined, so this.something fails. An arrow simply uses the method's this: the object.",
+      "Eso hace a las flechas perfectas para callbacks dentro de métodos. Un callback function () {} recibe su propio this según cómo lo llamen forEach o map, que es undefined, así que this.algo falla. Una flecha simplemente usa el this del método: el objeto.",
+      "だからアローはメソッド内のコールバックにぴったり。function () {} のコールバックは forEach や map の呼び方で自分の this が決まり、それは undefined なので this.何か は失敗する。アローならメソッドの this、つまりオブジェクトをそのまま使うよ。",
+    ),
+    ex('class Bag {\n  items = ["rope"];\n  tags() {\n    return [1, 2].map((n) => this.items[0] + n);\n  }\n}\nconsole.log(new Bag().tags());', "[ 'rope1', 'rope2' ]",
+      L("The arrow uses tags' this: the Bag", "La flecha usa el this de tags: la Bag", "アローは tags の this（Bag）を使う")),
+    p(
+      "The flip side: don't write an object's method as an arrow if it needs this. An arrow method doesn't get the object as this; it borrows the this from outside the object.",
+      "La otra cara: no escribas como flecha el método de un objeto si necesita this. Un método flecha no recibe el objeto como this; toma prestado el this de fuera del objeto.",
+      "反対に、this が必要なオブジェクトのメソッドはアローで書かないこと。アローのメソッドはオブジェクトを this にせず、オブジェクトの外の this を借りてしまうよ。",
+    ),
+    p(
+      "Other fixes for a lost this exist, such as storing const self = this or adding .bind(this) to the callback. They work, but an arrow is shorter and clearer.",
+      "Hay otras soluciones para un this perdido, como guardar const self = this o añadir .bind(this) al callback. Funcionan, pero una flecha es más corta y clara.",
+      "迷子の this の直し方はほかにもある。const self = this と保存したり、コールバックに .bind(this) をつけたり。どれも動くけど、アローのほうが短くてわかりやすいよ。",
+    ),
+  ),
+];
+
 const thisLesson: LessonDef = {
   slug: "this-and-binding",
   title: L("Who is this?", "¿Quién es this?", "this はだれ？"),
@@ -439,6 +808,7 @@ const thisLesson: LessonDef = {
   xp: 80,
   enemy: "typescript/nan-gremlin",
   enemyName: L("KEY GREMLIN", "GREMLIN DE LLAVES", "カギグレムリン"),
+  notes: thisNotes,
   beats: [
     say(L(
       "In a method, this is whoever HOLDS the key when it turns. What matters is HOW the function is called, not where it was written.",
@@ -472,6 +842,8 @@ const thisLesson: LessonDef = {
       answer: 0,
       output: "Tom says meow",
       check: { compiles: true, stdout: "Tom says meow" },
+      hint: L("Look at the call: what is written right before the dot?", "Mira la llamada: ¿qué está escrito justo antes del punto?", "呼び出しを見よう。ドットの直前に何が書いてある？"),
+      note: "this-call-site",
       explain: L("cat.meow(): cat holds the key, so this is cat.", "cat.meow(): cat tiene la llave, así que this es cat.", "cat.meow() は cat が鍵を持っているから、this は cat だよ。"),
       setup: [{ t: "tag", actor: "hero", text: "cat" }, { t: "item", kind: "key", holder: "hero" }],
       win: [{ t: "print", text: "Tom says meow" }],
@@ -483,6 +855,8 @@ const thisLesson: LessonDef = {
       options: ["TypeError", "Ada", "undefined"],
       answer: 0,
       check: { compiles: true, throws: "TypeError" },
+      hint: L("f is called with nothing before a dot. What is this in a plain call in strict mode?", "f se llama sin nada antes de un punto. ¿Qué es this en una llamada simple en modo estricto?", "f はドットなしで呼ばれる。strict モードのただの呼び出しで this は何？"),
+      note: "this-call-site",
       explain: L("f() is a plain call: this is undefined, and reading undefined.name throws TypeError.", "f() es una llamada simple: this es undefined, y leer undefined.name lanza TypeError.", "f() はただの呼び出しで this は undefined。undefined.name を読むと TypeError。"),
       setup: [{ t: "tag", actor: "hero", text: "h" }, { t: "item", kind: "key", holder: "hero" }],
       win: [{ t: "drop" }, { t: "shake" }],
@@ -499,6 +873,8 @@ const thisLesson: LessonDef = {
       options: ["bind", "call", "apply"],
       answer: 0,
       check: { compiles: true, stdout: "Ada", wrongFail: true },
+      hint: L("f is called later, on its own. Which method returns a new function instead of running now?", "f se llama después, sola. ¿Qué método devuelve una función nueva en vez de ejecutarla ya?", "f はあとで単独で呼ばれる。すぐ実行せず新しい関数を返すメソッドは？"),
+      note: "bind-call-apply",
       explain: L("bind returns a new function. call and apply run it NOW and return a string, so f() fails.", "bind devuelve una función nueva. call y apply la ejecutan YA y devuelven un string, así que f() falla.", "bind は新しい関数を返す。call と apply はすぐ実行して文字列を返すから f() は失敗するよ。"),
       setup: [{ t: "tag", actor: "hero", text: "h" }, { t: "item", kind: "key", holder: "hero" }],
       win: [{ t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: "f" }, { t: "lend", to: "ally" }, { t: "print", text: "Ada" }],
@@ -516,6 +892,8 @@ const thisLesson: LessonDef = {
       answer: 0,
       output: "Hey, Bo Yo, Cy",
       check: { compiles: true, stdout: "Hey, Bo Yo, Cy" },
+      hint: L("The first argument of call and apply becomes this. Pair each object with its own greeting.", "El primer argumento de call y apply pasa a ser this. Empareja cada objeto con su saludo.", "call と apply の最初の引数が this になる。それぞれのオブジェクトとあいさつを組み合わせよう。"),
+      note: "bind-call-apply",
       explain: L("The first argument becomes this. call passes \"Hey\" directly; apply unpacks [\"Yo\"].", "El primer argumento pasa a ser this. call pasa \"Hey\" directo; apply desempaca [\"Yo\"].", "最初の引数が this になる。call は \"Hey\" をそのまま、apply は [\"Yo\"] を展開して渡すよ。"),
     },
     {
@@ -524,6 +902,8 @@ const thisLesson: LessonDef = {
       code: "function f(this: { v: number }) {\n  return this.v;\n}\nconsole.log(f.___({ v: 7 }));",
       answer: "call",
       check: { compiles: true, stdout: "7" },
+      hint: L("Run f immediately with an object as this; there are no other arguments, so no array is needed.", "Ejecuta f enseguida con un objeto como this; no hay otros argumentos, así que no hace falta array.", "オブジェクトを this にして f をすぐ実行。ほかの引数はないので配列はいらない。"),
+      note: "bind-call-apply",
       explain: L("f.call(obj) runs f right away with this = obj.", "f.call(obj) ejecuta f enseguida con this = obj.", "f.call(obj) は this = obj で f をすぐ実行するよ。"),
       win: [{ t: "print", text: "7" }],
     },
@@ -534,6 +914,8 @@ const thisLesson: LessonDef = {
       options: ["apply", "call", "bind"],
       answer: 0,
       check: { compiles: true, stdout: "9", wrongFail: true },
+      hint: L("The numbers come in an array. Which method takes its arguments as an array?", "Los números vienen en un array. ¿Qué método recibe sus argumentos como array?", "数は配列で来ている。引数を配列で受けとるメソッドは？"),
+      note: "bind-call-apply",
       explain: L("apply takes the arguments as an array. call and bind expect them one by one: TS2345.", "apply recibe los argumentos como array. call y bind los esperan uno a uno: TS2345.", "apply は引数を配列で受け取る。call と bind は1つずつ渡すからエラー TS2345。"),
       win: [{ t: "print", text: "9" }],
     },
@@ -545,6 +927,8 @@ const thisLesson: LessonDef = {
       answer: 0,
       output: "1",
       check: { compiles: true, stdout: "1" },
+      hint: L("g was made with bind. Can a later call change a this that was bound?", "g se hizo con bind. ¿Puede un call posterior cambiar un this fijado?", "g は bind で作られた。あとの call で固定した this は変わる？"),
+      note: "bind-call-apply",
       explain: L("Once bound, this is glued: a later call can't change it.", "Una vez con bind, this queda pegado: un call posterior no puede cambiarlo.", "bind したら this は固定。あとで call しても変わらないよ。"),
     },
     say(L(
@@ -560,6 +944,8 @@ const thisLesson: LessonDef = {
       answer: 0,
       output: "Ada",
       check: { compiles: true, stdout: "Ada" },
+      hint: L("The callback is an arrow. Where does an arrow get its this from?", "El callback es una flecha. ¿De dónde saca una flecha su this?", "コールバックはアロー関数。アローの this はどこから来る？"),
+      note: "arrow-this",
       explain: L("The arrow uses later's this, which is team.", "La flecha usa el this de later, que es team.", "アロー関数は later の this、つまり team を使うよ。"),
       win: [{ t: "print", text: "Ada" }],
     },
@@ -570,12 +956,85 @@ const thisLesson: LessonDef = {
       solution: 'class Counter {\n  count = 0;\n  addAll(list: number[]) {\n    list.forEach((n) => {\n      this.count += n;\n    });\n  }\n}\nconst c = new Counter();\nc.addAll([1, 2, 3]);\nconsole.log("count:", c.count);\n',
       expect: "count: 6",
       fallback: [String.raw`forEach\s*\(\s*\(?\s*n\s*(?::\s*number\s*)?\)?\s*=>`, String.raw`\}\s*\.bind\s*\(\s*this\s*\)`, String.raw`for\s*\(\s*const\s+n\s+of\s+list\s*\)`],
+      hint: L("The forEach callback is a plain function with its own this. Make it borrow addAll's this.", "El callback de forEach es una function con su propio this. Haz que tome prestado el this de addAll.", "forEach のコールバックは自分の this を持つ function。addAll の this を借りるようにしよう。"),
+      note: "arrow-this",
       explain: L("A plain function callback loses this. An arrow borrows addAll's this, the counter.", "Un callback con function pierde this. Una flecha toma el this de addAll: el contador.", "function のコールバックは this を失う。アロー関数なら addAll の this を借りられるよ。"),
     },
   ],
 };
 
 // ─── 2.5 Boss: Closure Wraith ──────────────────────────────────────────────
+const bossNotes: NoteDef[] = [
+  note("hoisting-recap", L("Recap: hoisting and the TDZ", "Repaso: hoisting y la TDZ", "復習：巻き上げと TDZ"),
+    p(
+      "Function declarations are hoisted whole, so they're callable from the very top of their scope. var is hoisted as a name only and holds undefined until its line runs, even when the value it gets later is a function.",
+      "Las declaraciones de función se elevan completas, así que se pueden llamar desde el inicio de su scope. var se eleva solo como nombre y vale undefined hasta que corre su línea, aunque el valor que reciba después sea una función.",
+      "関数宣言は本体ごと巻き上げられ、スコープの先頭から呼べる。var は名前だけ巻き上げられ、その行まで undefined。あとで入る値が関数でも同じだよ。",
+    ),
+    p(
+      "let and const wait in the TDZ until their line runs. Reading them earlier, even from inside another function, throws ReferenceError. What counts is when the read happens, not where it's written.",
+      "let y const esperan en la TDZ hasta que corre su línea. Leerlas antes, incluso desde otra función, lanza ReferenceError. Lo que cuenta es cuándo ocurre la lectura, no dónde está escrita.",
+      "let と const はその行まで TDZ で待つ。それより前に読むと、別の関数の中からでも ReferenceError。大事なのは、どこで書いたかではなく、いつ読むかだよ。",
+    ),
+    ex("const read = () => rank;\ntry {\n  read();\n} catch (e) {\n  console.log((e as Error).name);\n}\nlet rank = 1;\nconsole.log(read());", "ReferenceError\n1"),
+    p(
+      "Quick guide: function declaration, usable early; var, undefined early; let and const, ReferenceError early. When in doubt, trace the code line by line and ask which declarations have already run.",
+      "Guía rápida: declaración de función, usable antes; var, undefined antes; let y const, ReferenceError antes. Ante la duda, sigue el código línea a línea y pregúntate qué declaraciones ya corrieron.",
+      "早見表：関数宣言は先に使える、var は先だと undefined、let と const は先だと ReferenceError。迷ったら1行ずつ追って、どの宣言がもう実行されたか考えよう。",
+    ),
+  ),
+  note("closure-recap", L("Recap: closures", "Repaso: closures", "復習：クロージャ"),
+    p(
+      "A function returned from another keeps the outer variables in its backpack. Each call of the outer function packs a new backpack, so each returned function remembers its own values.",
+      "Una función devuelta por otra guarda las variables de afuera en su mochila. Cada llamada a la función de afuera prepara una mochila nueva, así que cada función devuelta recuerda sus propios valores.",
+      "別の関数から返された関数は、外の変数をリュックに入れて持っている。外の関数を呼ぶたびに新しいリュックができるので、返された関数はそれぞれ自分の値をおぼえているよ。",
+    ),
+    ex("function makeMultiplier(k: number) {\n  return (n: number) => n * k;\n}\nconst triple = makeMultiplier(3);\nconsole.log(triple(5));", "15"),
+    p(
+      "A closure reads the live variable, not a snapshot. A var loop has one shared variable, so callbacks that run after the loop all see its final value; a let loop gives every lap its own.",
+      "Un closure lee la variable viva, no una foto. Un bucle con var tiene una sola variable compartida, así que los callbacks que corren tras el bucle ven todos su valor final; un bucle con let da a cada vuelta la suya.",
+      "クロージャが読むのは今の変数で、写真じゃない。var のループは変数が1つだけなので、ループ後に動くコールバックは全部最後の値を見る。let なら1周ごとに自分の変数があるよ。",
+    ),
+    p(
+      "Private flags work the same way: a let in the outer function is set once, survives between calls and can be flipped by the inner function to change what later calls do.",
+      "Las banderas privadas funcionan igual: un let en la función de afuera se crea una vez, sobrevive entre llamadas y la función interna puede cambiarlo para alterar lo que hagan las llamadas siguientes.",
+      "プライベートなフラグも同じしくみ。外の関数の let は1回だけ作られ、呼び出しの間も残る。内側の関数がそれを切りかえれば、次からの呼び出しの動きが変わるよ。",
+    ),
+  ),
+  note("this-recap", L("Recap: this", "Repaso: this", "復習：this"),
+    p(
+      "this is decided by the call: obj.method() gives this = obj, while a detached plain call gives undefined. call and apply choose this for one immediate run; bind returns a new function whose this is glued for good, and later calls can't re-glue it.",
+      "this lo decide la llamada: obj.metodo() da this = obj, y una llamada suelta da undefined. call y apply eligen this para una ejecución inmediata; bind devuelve una función nueva con this pegado para siempre, y las llamadas posteriores no pueden volver a pegarlo.",
+      "this は呼び方で決まる。obj.method() なら this は obj、外して単独で呼ぶと undefined。call と apply はその場の1回だけ this を選ぶ。bind は this をずっと固定した新しい関数を返し、あとから変えられないよ。",
+    ),
+    ex("function show(this: { n: number }) {\n  return this.n;\n}\nconsole.log(show.call({ n: 3 }));", "3"),
+    p(
+      "Arrow functions have no this of their own: they use the this of the code around them. A function () {} callback gets its own this from whoever calls it, which inside map or forEach is undefined.",
+      "Las funciones flecha no tienen this propio: usan el this del código que las rodea. Un callback function () {} recibe su propio this de quien lo llama, que dentro de map o forEach es undefined.",
+      "アロー関数は自分の this を持たず、まわりのコードの this を使う。function () {} のコールバックは呼んだ側から自分の this をもらい、map や forEach の中では undefined だよ。",
+    ),
+  ),
+  note("functions-recap", L("Recap: function details", "Repaso: detalles de funciones", "復習：関数のこまかい点"),
+    p(
+      "A default parameter is used only when the argument is missing or undefined. Any other value, null included, is used as given.",
+      "Un parámetro por defecto se usa solo cuando el argumento falta o es undefined. Cualquier otro valor, incluido null, se usa tal cual.",
+      "デフォルト引数が使われるのは、引数がないときか undefined のときだけ。null をふくむほかの値はそのまま使われるよ。",
+    ),
+    ex('function pad(text: string, fill = "*") {\n  return fill + text + fill;\n}\nconsole.log(pad("x"), pad("y", undefined), pad("z", "-"));', "*x* *y* -z-"),
+    p(
+      "A rest parameter (...items) is always an array: it holds every extra argument, and none at all makes it empty, never undefined.",
+      "Un parámetro rest (...items) siempre es un array: guarda cada argumento extra, y si no hay ninguno queda vacío, nunca undefined.",
+      "rest 引数（...items）はいつも配列。余った引数を全部持ち、1つもなければ空の配列で、undefined にはならないよ。",
+    ),
+    p(
+      "An arrow with a block body { } returns nothing unless it says return; without braces, the expression's value comes back automatically.",
+      "Una flecha con cuerpo de bloque { } no devuelve nada a menos que diga return; sin llaves, el valor de la expresión vuelve solo.",
+      "ブロックの本体 { } のアローは、return と書かないと何も返さない。波かっこなしなら式の値が自動で返るよ。",
+    ),
+    ex("const cube = (n: number) => {\n  return n * n * n;\n};\nconsole.log(cube(2));", "8"),
+  ),
+];
+
 const boss: LessonDef = {
   slug: "closure-wraith",
   title: L("Boss: Closure Wraith", "Jefe: Espectro Closure", "ボス：クロージャの亡霊"),
@@ -584,22 +1043,23 @@ const boss: LessonDef = {
   xp: 180,
   enemy: "ghost",
   enemyName: L("CLOSURE WRAITH", "ESPECTRO CLOSURE", "クロージャの亡霊"),
+  notes: bossNotes,
   beats: [
     enemySays(L(
       "I AM THE CLOSURE WRAITH. I hide in old scopes and steal lost this. Who sees what, and when?",
       "SOY EL ESPECTRO CLOSURE. Me escondo en scopes viejos y robo los this perdidos. ¿Quién ve qué, y cuándo?",
       "我はクロージャの亡霊。古いスコープに潜み、迷子の this を奪う。だれが、いつ、何を見る？",
     )),
-    { kind: "predict", time: 15, prompt: PRINT, code: "function check() {\n  console.log(typeof hoisted, typeof notHoisted);\n}\ncheck();\nfunction hoisted() {}\nvar notHoisted = () => {};", options: ["function undefined", "function function", "undefined undefined"], answer: 0, output: "function undefined", check: { compiles: true, stdout: "function undefined" }, explain: L("Declarations hoist whole; a var hoists as undefined.", "Las declaraciones se elevan enteras; un var, como undefined.", "関数宣言はまるごと、var は undefined で巻き上げ。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: "for (var i = 0; i < 3; i++) {\n  setTimeout(() => console.log(i), 0);\n}", options: ["3 3 3", "0 1 2"], answer: 0, output: "3\n3\n3", check: { compiles: true, stdout: "3\n3\n3" }, explain: L("One shared var i, already 3 when timers run.", "Un solo var i compartido, ya en 3 al correr los timers.", "共有の var i はタイマー実行時もう 3。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: "function makeAdder(x: number) {\n  return (y: number) => x + y;\n}\nconst add5 = makeAdder(5);\nconsole.log(add5(2), makeAdder(1)(1));", options: ["7 2", "7 7", "2 2"], answer: 0, output: "7 2", check: { compiles: true, stdout: "7 2" }, explain: L("Each adder remembers its own x.", "Cada sumador recuerda su propio x.", "それぞれが自分の x をおぼえている。") },
-    { kind: "predict", time: 12, prompt: HAPPENS, code: "function f() {\n  const peek = () => x;\n  console.log(peek());\n  const x = 2;\n}\nf();", options: ["ReferenceError", "2", "undefined"], answer: 0, check: { compiles: true, throws: "ReferenceError" }, explain: L("x is still in the TDZ when peek reads it.", "x sigue en la TDZ cuando peek lo lee.", "peek が読むとき x はまだ TDZ の中。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: "function f(this: { v: number }) {\n  return this.v;\n}\nconst g = f.bind({ v: 1 });\nconsole.log(g.call({ v: 2 }));", options: ["1", "2"], answer: 0, output: "1", check: { compiles: true, stdout: "1" }, explain: L("bind wins: call can't re-glue this.", "bind gana: call no puede volver a pegar this.", "bind が勝つ。call で this は変えられない。") },
-    { kind: "pick", time: 15, prompt: L("Which keeps this?", "¿Cuál conserva this?", "this を保てるのは？"), code: 'class Owl {\n  name = "Tyto";\n  later() { return [1].map(___)[0]; }\n}\nconsole.log(new Owl().later());', options: ["() => this.name", "function () { return this.name; }"], answer: 0, check: { compiles: true, stdout: "Tyto", wrongFail: true }, explain: L("The arrow borrows later's this; function has its own.", "La flecha toma el this de later; function tiene el suyo.", "アローは later の this を借りる。function は別の this。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: 'function greet(name: string | null = "hero") {\n  return "hi " + name;\n}\nconsole.log(greet(undefined), greet(null));', options: ["hi hero hi null", "hi hero hi hero", "hi undefined hi null"], answer: 0, output: "hi hero hi null", check: { compiles: true, stdout: "hi hero hi null" }, explain: L("Defaults apply only to undefined, not null.", "El valor por defecto solo aplica a undefined, no a null.", "デフォルトは undefined のときだけ。null には効かない。") },
-    { kind: "type", time: 12, prompt: L("Braces need it", "Las llaves lo necesitan", "波かっこには必要"), code: "const sq = (n: number) => { ___ n * n; };\nconsole.log(sq(3));", answer: "return", check: { compiles: true, stdout: "9" }, explain: L("A block body returns nothing without return.", "Un cuerpo con bloque no devuelve nada sin return.", "ブロックの本体は return がないと何も返さない。") },
-    { kind: "order", time: 15, prompt: L("Build once", "Arma once", "once を組み立てよう"), lines: ["function once(fn: () => void) {", "let done = false;", "return () => {", "if (done) return;", "done = true;", "return fn();", "};", "}"], check: { compiles: true }, explain: L("The backpack holds done; flip it before calling fn.", "La mochila guarda done; cámbialo antes de llamar a fn.", "リュックに done。fn を呼ぶ前に true にする。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: "function f(...nums: number[]) {\n  return nums.length;\n}\nconsole.log(f(), f(1, 2, 3));", options: ["0 3", "undefined 3", "1 3"], answer: 0, output: "0 3", check: { compiles: true, stdout: "0 3" }, explain: L("With no arguments, rest is an empty array.", "Sin argumentos, rest es un array vacío.", "引数なしなら rest は空の配列。") },
+    { kind: "predict", time: 15, prompt: PRINT, code: "function check() {\n  console.log(typeof hoisted, typeof notHoisted);\n}\ncheck();\nfunction hoisted() {}\nvar notHoisted = () => {};", options: ["function undefined", "function function", "undefined undefined"], answer: 0, output: "function undefined", check: { compiles: true, stdout: "function undefined" }, hint: L("Both names are hoisted, but differently. check runs before either line has run.", "Ambos nombres se elevan, pero de forma distinta. check corre antes de que corra cualquiera de las dos líneas.", "どちらも巻き上げられるけど方法がちがう。check はどちらの行よりも先に動く。"), note: "hoisting-recap", explain: L("Declarations hoist whole; a var hoists as undefined.", "Las declaraciones se elevan enteras; un var, como undefined.", "関数宣言はまるごと、var は undefined で巻き上げ。") },
+    { kind: "predict", time: 15, prompt: PRINT, code: "for (var i = 0; i < 3; i++) {\n  setTimeout(() => console.log(i), 0);\n}", options: ["3 3 3", "0 1 2"], answer: 0, output: "3\n3\n3", check: { compiles: true, stdout: "3\n3\n3" }, hint: L("One var i for the whole loop, and the timers run only after the loop finishes.", "Un solo var i para todo el bucle, y los timers corren solo cuando el bucle termina.", "ループ全体で var i は1つ。タイマーはループが終わってから動く。"), note: "closure-recap", explain: L("One shared var i, already 3 when timers run.", "Un solo var i compartido, ya en 3 al correr los timers.", "共有の var i はタイマー実行時もう 3。") },
+    { kind: "predict", time: 12, prompt: PRINT, code: "function makeAdder(x: number) {\n  return (y: number) => x + y;\n}\nconst add5 = makeAdder(5);\nconsole.log(add5(2), makeAdder(1)(1));", options: ["7 2", "7 7", "2 2"], answer: 0, output: "7 2", check: { compiles: true, stdout: "7 2" }, hint: L("Each makeAdder call remembers its own x. Add it to the y passed later.", "Cada llamada a makeAdder recuerda su propio x. Súmale el y que se pasa después.", "makeAdder を呼ぶたびに自分の x をおぼえる。あとで渡す y と足そう。"), note: "closure-recap", explain: L("Each adder remembers its own x.", "Cada sumador recuerda su propio x.", "それぞれが自分の x をおぼえている。") },
+    { kind: "predict", time: 12, prompt: HAPPENS, code: "function f() {\n  const peek = () => x;\n  console.log(peek());\n  const x = 2;\n}\nf();", options: ["ReferenceError", "2", "undefined"], answer: 0, check: { compiles: true, throws: "ReferenceError" }, hint: L("peek is called before the const x line runs. What state is x in at that moment?", "peek se llama antes de que corra la línea const x. ¿En qué estado está x en ese momento?", "peek は const x の行より前に呼ばれる。そのとき x はどんな状態？"), note: "hoisting-recap", explain: L("x is still in the TDZ when peek reads it.", "x sigue en la TDZ cuando peek lo lee.", "peek が読むとき x はまだ TDZ の中。") },
+    { kind: "predict", time: 12, prompt: PRINT, code: "function f(this: { v: number }) {\n  return this.v;\n}\nconst g = f.bind({ v: 1 });\nconsole.log(g.call({ v: 2 }));", options: ["1", "2"], answer: 0, output: "1", check: { compiles: true, stdout: "1" }, hint: L("g was made with bind. Can call re-glue its this?", "g se hizo con bind. ¿Puede call volver a pegar su this?", "g は bind で作られた。call で this をつけ直せる？"), note: "this-recap", explain: L("bind wins: call can't re-glue this.", "bind gana: call no puede volver a pegar this.", "bind が勝つ。call で this は変えられない。") },
+    { kind: "pick", time: 15, prompt: L("Which keeps this?", "¿Cuál conserva this?", "this を保てるのは？"), code: 'class Owl {\n  name = "Tyto";\n  later() { return [1].map(___)[0]; }\n}\nconsole.log(new Owl().later());', options: ["() => this.name", "function () { return this.name; }"], answer: 0, check: { compiles: true, stdout: "Tyto", wrongFail: true }, hint: L("Which kind of function borrows this from the method around it?", "¿Qué tipo de función toma prestado this del método que la rodea?", "まわりのメソッドから this を借りるのはどちらの関数？"), note: "this-recap", explain: L("The arrow borrows later's this; function has its own.", "La flecha toma el this de later; function tiene el suyo.", "アローは later の this を借りる。function は別の this。") },
+    { kind: "predict", time: 12, prompt: PRINT, code: 'function greet(name: string | null = "hero") {\n  return "hi " + name;\n}\nconsole.log(greet(undefined), greet(null));', options: ["hi hero hi null", "hi hero hi hero", "hi undefined hi null"], answer: 0, output: "hi hero hi null", check: { compiles: true, stdout: "hi hero hi null" }, hint: L("A default replaces only one specific kind of missing value. Is null that value?", "Un valor por defecto reemplaza solo un tipo concreto de valor faltante. ¿Es null ese valor?", "デフォルトが代わりになるのは特定の「ない」だけ。null はそれ？"), note: "functions-recap", explain: L("Defaults apply only to undefined, not null.", "El valor por defecto solo aplica a undefined, no a null.", "デフォルトは undefined のときだけ。null には効かない。") },
+    { kind: "type", time: 12, prompt: L("Braces need it", "Las llaves lo necesitan", "波かっこには必要"), code: "const sq = (n: number) => { ___ n * n; };\nconsole.log(sq(3));", answer: "return", check: { compiles: true, stdout: "9" }, hint: L("A block body needs a keyword to send its value out.", "Un cuerpo de bloque necesita una palabra clave para sacar su valor.", "ブロックの本体が値を返すにはキーワードが必要。"), note: "functions-recap", explain: L("A block body returns nothing without return.", "Un cuerpo con bloque no devuelve nada sin return.", "ブロックの本体は return がないと何も返さない。") },
+    { kind: "order", time: 15, prompt: L("Build once", "Arma once", "once を組み立てよう"), lines: ["function once(fn: () => void) {", "let done = false;", "return () => {", "if (done) return;", "done = true;", "return fn();", "};", "}"], check: { compiles: true }, hint: L("Declare the backpack variable before the inner function. Inside, guard first and call fn last.", "Declara la variable de la mochila antes de la función interna. Adentro, primero el guardia y fn al final.", "内側の関数より前にリュックの変数を宣言。中では先にチェック、fn は最後。"), note: "closure-recap", explain: L("The backpack holds done; flip it before calling fn.", "La mochila guarda done; cámbialo antes de llamar a fn.", "リュックに done。fn を呼ぶ前に true にする。") },
+    { kind: "predict", time: 12, prompt: PRINT, code: "function f(...nums: number[]) {\n  return nums.length;\n}\nconsole.log(f(), f(1, 2, 3));", options: ["0 3", "undefined 3", "1 3"], answer: 0, output: "0 3", check: { compiles: true, stdout: "0 3" }, hint: L("A rest parameter is always an array. How many items does it hold with no arguments?", "Un parámetro rest siempre es un array. ¿Cuántos elementos tiene sin argumentos?", "rest 引数はいつも配列。引数なしなら要素はいくつ？"), note: "functions-recap", explain: L("With no arguments, rest is an empty array.", "Sin argumentos, rest es un array vacío.", "引数なしなら rest は空の配列。") },
     enemySays(L(
       "No... every scope seen, every this found. Go on, then: the peaks of prototypes await.",
       "No... viste cada scope y hallaste cada this. Sigue, entonces: te esperan los picos de los prototipos.",

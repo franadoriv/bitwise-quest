@@ -1,4 +1,4 @@
-import type { LessonDef, RegionDef } from "../../../lib/content/types.ts";
+import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { enemySays, L, say } from "../helpers.ts";
 
 // REGION 4 · TRAIT CASTLE  (struct + impl, traits, default methods, generics and bounds,
@@ -6,6 +6,363 @@ import { enemySays, L, say } from "../helpers.ts";
 
 /** In-world text that mirrors code or program output: identical in every locale. */
 const same = (s: string) => L(s, s, s);
+
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example; the validator checks `output` against the real compiler. */
+const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code, output, caption });
+/** An example that must NOT compile (verified too). */
+const bad = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: false } });
+
+const contractNotes: NoteDef[] = [
+  note("methods-self", L("Methods: impl and &self", "Métodos: impl y &self", "メソッド：impl と &self"),
+    p(
+      "A struct groups related data under one name, like a card with labeled fields. struct Lamp { watts: u32 } says every Lamp has a field called watts that holds a whole number. You create one by naming the struct and filling every field: Lamp { watts: 60 }.",
+      "Un struct agrupa datos relacionados bajo un nombre, como una ficha con campos etiquetados. struct Lamp { watts: u32 } dice que cada Lamp tiene un campo watts que guarda un número entero. Creas uno nombrando el struct y llenando todos sus campos: Lamp { watts: 60 }.",
+      "構造体（struct）は、関係するデータを1つの名前にまとめる。項目つきのカードのようなものじゃ。struct Lamp { watts: u32 } は「どの Lamp にも整数の watts がある」という意味。作るときは名前を書いて全項目を埋める：Lamp { watts: 60 }。",
+    ),
+    p(
+      "An impl block gives the struct methods: functions that belong to it. Inside impl Lamp { ... } each fn whose first parameter is &self is a method. You call it with a dot: lamp.describe(). Rust passes the value before the dot as self, so inside the method self.watts reads that lamp's field.",
+      "Un bloque impl le da métodos al struct: funciones que le pertenecen. Dentro de impl Lamp { ... } cada fn cuyo primer parámetro es &self es un método. Se llama con un punto: lamp.describe(). Rust pasa el valor antes del punto como self, así que dentro del método self.watts lee el campo de esa lámpara.",
+      "impl ブロックは構造体にメソッド（その型に属する関数）を与える。impl Lamp { ... } の中で、最初の引数が &self の fn がメソッドじゃ。呼ぶときはドットを使う：lamp.describe()。ドットの前の値が self として渡されるので、中では self.watts でそのランプの項目が読める。",
+    ),
+    ex('struct Lamp { watts: u32 }\nimpl Lamp {\n    fn describe(&self) -> String { format!("{} watts", self.watts) }\n}\nlet lamp = Lamp { watts: 60 };\nprintln!("{}", lamp.describe());', "60 watts",
+      L("describe() reads the field through self", "describe() lee el campo a través de self", "describe() は self を通して項目を読む")),
+    p(
+      "Why &self and not self? The & means the method only borrows the value: it looks at it and gives it back, so you can keep using the lamp afterward. Rust has no this keyword like Java or JavaScript, and writing the type name (&Lamp) as the first parameter does not make a method callable with a dot.",
+      "¿Por qué &self y no self? El & indica que el método solo toma prestado el valor: lo mira y lo devuelve, así puedes seguir usando la lámpara después. Rust no tiene la palabra this como Java o JavaScript, y escribir el nombre del tipo (&Lamp) como primer parámetro no crea un método que se llame con punto.",
+      "なぜ self ではなく &self？& は「借りるだけ」という意味。値を見て返すので、そのあともランプを使い続けられる。Rustには Java や JavaScript の this はない。最初の引数に型名（&Lamp）を書いても、ドットで呼べるメソッドにはならない。",
+    ),
+    bad("struct Lamp { watts: u32 }\nimpl Lamp {\n    fn power() -> u32 { self.watts }\n}",
+      L("Does not compile: without a self parameter, there is no self", "No compila: sin parámetro self, no existe self", "コンパイル不可：self 引数がないと self は使えない")),
+    p(
+      "Common mistake: forgetting &self and then using self inside. Without it, the function is not a method of a value, so self does not exist there. Remember: the method's first parameter is &self, and you call it as value.method().",
+      "Error común: olvidar &self y luego usar self dentro. Sin él, la función no es un método de un valor, así que ahí self no existe. Recuerda: el primer parámetro del método es &self, y se llama como valor.metodo().",
+      "よくあるミス：&self を書き忘れたのに中で self を使うこと。&self がないと値のメソッドではないので、self は存在しない。メソッドの最初の引数は &self、呼び方は 値.メソッド() と覚えよう。",
+    ),
+  ),
+  note("traits-contract", L("Traits: a contract of methods", "Traits: un contrato de métodos", "トレイト：メソッドの契約"),
+    p(
+      "A trait is a list of methods that a type promises to have. trait Sound { fn sound(&self) -> String; } says: \"whoever has Sound can make a sound and returns it as a String\". Notice the semicolon instead of a body: the trait only says WHAT exists, not HOW it works.",
+      "Un trait es una lista de métodos que un tipo promete tener. trait Sound { fn sound(&self) -> String; } dice: \"quien tenga Sound sabe hacer un sonido y lo devuelve como String\". Fíjate en el punto y coma en vez de un cuerpo: el trait solo dice QUÉ existe, no CÓMO funciona.",
+      "トレイトは、型が「持つ」と約束するメソッドの一覧じゃ。trait Sound { fn sound(&self) -> String; } は「Sound を持つ者は音を出し、String で返せる」という意味。本体の代わりにセミコロンがある点に注目。トレイトは「何があるか」だけを決め、「どう動くか」は決めない。",
+    ),
+    p(
+      "A type signs the contract with impl TraitName for TypeName { ... } and writes the body of every method there. Each type writes its own version, so the same call can give different results depending on the type you call it on. The order is always trait first, then for, then the type.",
+      "Un tipo firma el contrato con impl NombreTrait for NombreTipo { ... } y escribe ahí el cuerpo de cada método. Cada tipo escribe su propia versión, así que la misma llamada puede dar resultados distintos según el tipo sobre el que llamas. El orden es siempre: el trait, luego for, luego el tipo.",
+      "型は impl トレイト名 for 型名 { ... } で契約にサインし、そこで各メソッドの本体を書く。型ごとに自分の版を書くので、同じ呼び出しでも型によって結果が変わる。順番はいつも「トレイト、for、型」じゃ。",
+    ),
+    ex('trait Sound { fn sound(&self) -> String; }\nstruct Cat;\nstruct Cow;\nimpl Sound for Cat { fn sound(&self) -> String { String::from("meow") } }\nimpl Sound for Cow { fn sound(&self) -> String { String::from("moo") } }\nprintln!("{} {}", Cat.sound(), Cow.sound());', "meow moo",
+      L("Same method name, one version per type", "El mismo método, una versión por tipo", "同じメソッド名でも型ごとに別の中身")),
+    p(
+      "struct Cat; is a struct with no fields. Its only value is written just Cat, which is why Cat.sound() works without braces. Two types can each have a method called sound without any clash: Rust picks the version that belongs to the type before the dot.",
+      "struct Cat; es un struct sin campos. Su único valor se escribe solo Cat, por eso Cat.sound() funciona sin llaves. Dos tipos pueden tener cada uno un método sound sin ningún choque: Rust elige la versión del tipo que va antes del punto.",
+      "struct Cat; は項目のない構造体。その値はただ Cat と書くので、波かっこなしで Cat.sound() と呼べる。2つの型がどちらも sound を持っても衝突しない。Rustはドットの前の型の版を選ぶのじゃ。",
+    ),
+    p(
+      "A contract must be fulfilled in full. If the impl leaves out a method that has no body in the trait, compilation fails with E0046, \"not all trait items implemented\". The fix is to write the missing method inside the impl, with exactly the same name, parameters and return type as in the trait.",
+      "Un contrato se cumple entero. Si el impl omite un método que no tiene cuerpo en el trait, la compilación falla con E0046, \"not all trait items implemented\". La solución es escribir el método que falta dentro del impl, con el mismo nombre, parámetros y tipo de retorno que en el trait.",
+      "契約は全部守らないといけない。トレイトで本体のないメソッドを impl が書き忘れると、E0046 \"not all trait items implemented\" でコンパイルが失敗する。直すには、足りないメソッドをトレイトと同じ名前・引数・戻り値の型で impl の中に書く。",
+    ),
+    bad("trait Sound { fn sound(&self) -> String; }\nstruct Cat;\nimpl Sound for Cat {}",
+      L("E0046: the impl is empty, sound() is missing", "E0046: el impl está vacío, falta sound()", "E0046：impl が空で sound() がない")),
+  ),
+  note("default-methods", L("Default methods in a trait", "Métodos por defecto en un trait", "トレイトのデフォルトメソッド"),
+    p(
+      "Some trait methods come with a body already written in the trait. That's a default method: every type that implements the trait gets it for free. The type can still write its own version inside its impl, and then its version wins over the default.",
+      "Algunos métodos de un trait ya traen un cuerpo escrito en el trait. Es un método por defecto: todo tipo que implementa el trait lo recibe gratis. El tipo aún puede escribir su propia versión dentro de su impl, y entonces su versión gana sobre la de por defecto.",
+      "トレイトのメソッドの中には、トレイト側にすでに本体があるものがある。これがデフォルトメソッドで、トレイトを実装した型はタダでもらえる。型は自分の impl で独自の版を書くこともでき、そのときは型の版が優先されるのじゃ。",
+    ),
+    ex('trait Greet { fn hello(&self) -> String { String::from("Hi") } }\nstruct Owl;\nstruct Fox;\nimpl Greet for Owl {}\nimpl Greet for Fox { fn hello(&self) -> String { String::from("Yip") } }\nprintln!("{} {}", Owl.hello(), Fox.hello());', "Hi Yip",
+      L("Owl inherits the default; Fox rewrites it", "Owl hereda el de por defecto; Fox lo reescribe", "Owl はデフォルトを継ぎ、Fox は書き直す")),
+    p(
+      "How to tell them apart: a method that ends in ; inside the trait is required, and every impl must write it. A method with { ... } inside the trait is optional. That's why an empty impl like impl Greet for Owl {} compiles when every method has a default, but fails when one is required.",
+      "Cómo distinguirlos: un método que termina en ; dentro del trait es obligatorio, y cada impl debe escribirlo. Un método con { ... } dentro del trait es opcional. Por eso un impl vacío como impl Greet for Owl {} compila cuando todos los métodos tienen uno por defecto, pero falla si alguno es obligatorio.",
+      "見分け方：トレイトの中で ; で終わるメソッドは必須で、どの impl も書かないといけない。{ ... } があるメソッドは任意じゃ。だから impl Greet for Owl {} のような空の impl は、全メソッドにデフォルトがあれば通るが、必須が1つでもあれば失敗する。",
+    ),
+    p(
+      "A default method can call the other methods of the trait, even required ones. Each type then only writes the small part that changes, and the shared part lives once in the trait. Common mistake: thinking a type without its own version has no such method; it does, it simply uses the trait's body.",
+      "Un método por defecto puede llamar a los otros métodos del trait, incluso a los obligatorios. Así cada tipo solo escribe la parte pequeña que cambia, y la parte común vive una sola vez en el trait. Error común: pensar que un tipo sin su propia versión no tiene ese método; sí lo tiene, simplemente usa el cuerpo del trait.",
+      "デフォルトメソッドは、トレイトのほかのメソッド（必須のものも）を呼べる。だから型は変わる小さな部分だけを書き、共通部分はトレイトに1回だけ置ける。よくあるミス：自分の版がない型にはそのメソッドがないと思うこと。ちゃんとあって、トレイトの本体を使うだけじゃ。",
+    ),
+    ex('trait Greet {\n    fn name(&self) -> String;\n    fn hello(&self) -> String { format!("Hello, {}", self.name()) }\n}\nstruct Bot;\nimpl Greet for Bot { fn name(&self) -> String { String::from("Bot") } }\nprintln!("{}", Bot.hello());', "Hello, Bot",
+      L("The default hello() uses the required name()", "El hello() por defecto usa el name() obligatorio", "デフォルトの hello() が必須の name() を使う")),
+  ),
+];
+
+const genericsNotes: NoteDef[] = [
+  note("trait-bounds", L("Generics and trait bounds", "Genéricos y trait bounds", "ジェネリクスとトレイト境界"),
+    p(
+      "A generic function works with many types. In fn show<T>(item: &T), the <T> introduces a type parameter: a placeholder name that becomes a real type at each call. show(&Star) uses T = Star, and another call can use a different type. One function, many types, no copy-pasting.",
+      "Una función genérica sirve para muchos tipos. En fn show<T>(item: &T), el <T> introduce un parámetro de tipo: un nombre comodín que se vuelve un tipo real en cada llamada. show(&Star) usa T = Star, y otra llamada puede usar otro tipo. Una función, muchos tipos, sin copiar y pegar.",
+      "ジェネリックな関数は、いろいろな型で使える。fn show<T>(item: &T) の <T> は型パラメータ、つまり呼び出しごとに本物の型になる仮の名前じゃ。show(&Star) なら T = Star。別の呼び出しでは別の型でもいい。関数1つで多くの型に対応でき、コピペは不要。",
+    ),
+    p(
+      "But a bare T could be anything, even a number, so Rust won't let you call methods on it: it can't promise they exist. Calling item.shine() on a plain T fails with E0599, \"no method named shine\". A trait bound fixes that: <T: Shine> means \"T can be any type, as long as it implements Shine\".",
+      "Pero un T sin más podría ser cualquier cosa, hasta un número, así que Rust no te deja llamar métodos sobre él: no puede asegurar que existan. Llamar item.shine() sobre un T simple falla con E0599, \"no method named shine\". Un trait bound lo arregla: <T: Shine> significa \"T puede ser cualquier tipo, siempre que implemente Shine\".",
+      "でも条件なしの T は何でもありうる（数でさえ）。だからRustはメソッドを呼ばせない。あるとは約束できないからじゃ。ただの T で item.shine() を呼ぶと E0599 \"no method named shine\" になる。トレイト境界で解決する：<T: Shine> は「Shine を実装していれば、T はどんな型でもいい」という意味。",
+    ),
+    ex('trait Shine { fn shine(&self) -> String; }\nstruct Star;\nimpl Shine for Star { fn shine(&self) -> String { String::from("twinkle") } }\nfn show<T: Shine>(item: &T) { println!("{}", item.shine()); }\nshow(&Star);', "twinkle",
+      L("The bound promises that every T has shine()", "El bound promete que todo T tiene shine()", "境界が「どの T にも shine() がある」と約束する")),
+    p(
+      "After the colon goes the name of a TRAIT, never a concrete type like Star: a concrete type would defeat the point of being generic. Rust checks the bound at every call, at compile time. Passing a type that doesn't implement the trait fails with E0277, \"the trait bound is not satisfied\", before the program ever runs.",
+      "Tras los dos puntos va el nombre de un TRAIT, nunca un tipo concreto como Star: un tipo concreto anularía la idea de ser genérico. Rust revisa el bound en cada llamada, al compilar. Pasar un tipo que no implementa el trait falla con E0277, \"the trait bound is not satisfied\", antes de que el programa llegue a ejecutarse.",
+      "コロンのあとに書くのはトレイト名で、Star のような具体的な型ではない。具体的な型ではジェネリクスの意味がなくなる。Rustは呼び出しのたびに、コンパイル時に境界を確かめる。トレイトを実装していない型を渡すと、実行より前に E0277 \"the trait bound is not satisfied\" で失敗する。",
+    ),
+    bad('trait Shine { fn shine(&self) -> String; }\nfn show<T>(item: &T) {\n    println!("{}", item.shine());\n}',
+      L("E0599: without a bound, T has no shine()", "E0599: sin bound, T no tiene shine()", "E0599：境界がないと T に shine() はない")),
+  ),
+  note("impl-and-where", L("Other spellings: impl and where", "Otras formas: impl y where", "別の書き方：impl と where"),
+    p(
+      "The same bound can be written in three ways, and all three mean the same thing. The long form puts it in the angle brackets: fn a<T: Shine>(x: &T). The shortcut skips the name T: fn a(x: &impl Shine). Read &impl Shine as \"a reference to something that implements Shine\".",
+      "El mismo bound se puede escribir de tres formas, y las tres significan lo mismo. La forma larga lo pone entre los ángulos: fn a<T: Shine>(x: &T). El atajo se salta el nombre T: fn a(x: &impl Shine). Lee &impl Shine como \"una referencia a algo que implementa Shine\".",
+      "同じ境界は3通りに書け、どれも意味は同じ。長い形は山かっこの中に書く：fn a<T: Shine>(x: &T)。近道は T という名前を省く：fn a(x: &impl Shine)。&impl Shine は「Shine を実装した何かへの参照」と読もう。",
+    ),
+    p(
+      "The third form moves the conditions after the signature with the keyword where: fn a<T>(x: &T) where T: Shine. It's handy when there are several type parameters or long bounds, because the first line stays short. Rust has no if or when for this; where is the only keyword that introduces bounds.",
+      "La tercera forma mueve las condiciones tras la firma con la palabra where: fn a<T>(x: &T) where T: Shine. Es útil cuando hay varios parámetros de tipo o bounds largos, porque la primera línea queda corta. Rust no usa if ni when para esto; where es la única palabra que introduce bounds.",
+      "3つめの形は、where というキーワードで条件をシグネチャのあとへ移す：fn a<T>(x: &T) where T: Shine。型パラメータが多いときや境界が長いときに、1行目が短くなって便利じゃ。ここで if や when は使わない。境界を書くキーワードは where だけ。",
+    ),
+    ex('trait Shine { fn shine(&self) -> String; }\nstruct Moon;\nimpl Shine for Moon { fn shine(&self) -> String { String::from("glow") } }\nfn one(x: &impl Shine) -> String { x.shine() }\nfn two<T>(x: &T) -> String where T: Shine { x.shine() }\nprintln!("{} {}", one(&Moon), two(&Moon));', "glow glow",
+      L("impl and where: two spellings, one meaning", "impl y where: dos formas, un significado", "impl と where：書き方は違っても意味は同じ")),
+    p(
+      "Which one to use? &impl Trait for short, simple parameters; <T: Trait> when you need to mention T again, for example in the return type; where when the list of conditions gets long. Common mistake: writing impl without the trait name, or a trait name without impl in front of it inside a parameter type.",
+      "¿Cuál usar? &impl Trait para parámetros cortos y simples; <T: Trait> cuando necesitas nombrar T otra vez, por ejemplo en el tipo de retorno; where cuando la lista de condiciones se alarga. Error común: escribir impl sin el nombre del trait, o un nombre de trait sin impl delante dentro del tipo de un parámetro.",
+      "どれを使う？短くシンプルな引数なら &impl トレイト。戻り値の型などで T をもう一度使うなら <T: トレイト>。条件が長くなったら where。よくあるミス：トレイト名なしで impl だけ書くこと、引数の型でトレイト名の前に impl を書き忘れること。",
+    ),
+  ),
+  note("multiple-bounds", L("Several bounds joined with +", "Varios bounds unidos con +", "+ でつなぐ複数の境界"),
+    p(
+      "Sometimes one trait is not enough. If a function both calls shine() and makes a copy with clone(), T needs both abilities. Join the traits with +: T: Shine + Clone reads \"T implements Shine AND Clone\". You can chain as many as you need: T: Shine + Clone + Debug.",
+      "A veces un trait no basta. Si una función llama a shine() y además hace una copia con clone(), T necesita ambas capacidades. Une los traits con +: T: Shine + Clone se lee \"T implementa Shine Y Clone\". Puedes encadenar los que necesites: T: Shine + Clone + Debug.",
+      "トレイト1つでは足りないこともある。関数が shine() を呼び、さらに clone() で複製するなら、T には両方の能力が必要じゃ。トレイトを + でつなぐ：T: Shine + Clone は「T は Shine と Clone の両方を実装する」と読む。必要なだけつなげられる：T: Shine + Clone + Debug。",
+    ),
+    ex('trait Shine { fn shine(&self) -> String; }\n#[derive(Clone)]\nstruct Lamp;\nimpl Shine for Lamp { fn shine(&self) -> String { String::from("on") } }\nfn spare<T: Shine + Clone>(x: &T) -> T { x.clone() }\nlet extra = spare(&Lamp);\nprintln!("{}", extra.shine());', "on",
+      L("Lamp has both badges, so it passes the double bound", "Lamp tiene las dos insignias y pasa el doble bound", "Lamp は両方のバッジを持つので二重の境界を通る")),
+    p(
+      "The + is the only way to combine bounds. A comma would start a new type parameter, and words like and or & mean something else in Rust. With +, ALL the traits are required: a type that has only some of them is rejected with E0277, and the message names the trait that is missing.",
+      "El + es la única forma de combinar bounds. Una coma empezaría un nuevo parámetro de tipo, y palabras como and o & significan otra cosa en Rust. Con +, se exigen TODOS los traits: un tipo que solo tiene algunos se rechaza con E0277, y el mensaje nombra el trait que falta.",
+      "境界を組み合わせる方法は + だけ。カンマは新しい型パラメータの始まりになり、and や & はRustでは別の意味じゃ。+ のときは「すべての」トレイトが必要。一部しか持たない型は E0277 で拒否され、メッセージに足りないトレイトの名前が出る。",
+    ),
+    bad('trait Shine { fn shine(&self) -> String; }\nstruct Lamp;\nimpl Shine for Lamp { fn shine(&self) -> String { String::from("on") } }\nfn spare<T: Shine + Clone>(x: &T) -> T { x.clone() }\nspare(&Lamp);',
+      L("E0277: Lamp has Shine but not Clone", "E0277: Lamp tiene Shine pero no Clone", "E0277：Lamp は Shine はあるが Clone がない")),
+    p(
+      "To fix that error, give the type the missing trait: write an impl, or add it with #[derive(Clone)] above the struct (more on derive in the next lesson). Don't remove the bound from the function: it is there because the body really uses that ability.",
+      "Para arreglar ese error, dale al tipo el trait que falta: escribe un impl o añádelo con #[derive(Clone)] encima del struct (más sobre derive en la próxima lección). No quites el bound de la función: está ahí porque el cuerpo de verdad usa esa capacidad.",
+      "このエラーを直すには、足りないトレイトを型に与える。impl を書くか、構造体の上に #[derive(Clone)] を書く（derive は次のレッスンで）。関数の境界を消してはいけない。本体がその能力を本当に使うから境界があるのじゃ。",
+    ),
+  ),
+];
+
+const armoryNotes: NoteDef[] = [
+  note("derive-debug", L("derive and {:?} (Debug)", "derive y {:?} (Debug)", "derive と {:?}（Debug）"),
+    p(
+      "Rust ships standard traits such as Debug, Clone and PartialEq, but a struct you write has none of them until you ask. Writing #[derive(Debug)] on the line above the struct tells the compiler to write the impl for you. It's an attribute: it decorates the item right below it.",
+      "Rust trae traits estándar como Debug, Clone y PartialEq, pero un struct que escribes no tiene ninguno hasta que lo pides. Escribir #[derive(Debug)] en la línea de arriba del struct le dice al compilador que escriba el impl por ti. Es un atributo: decora el elemento que tiene justo debajo.",
+      "Rustには Debug・Clone・PartialEq などの標準トレイトがあるが、自分で書いた構造体は頼むまでどれも持たない。構造体の上の行に #[derive(Debug)] と書くと、コンパイラが impl を代わりに書いてくれる。これは属性で、すぐ下の要素を飾るのじゃ。",
+    ),
+    p(
+      "Debug is the trait behind the {:?} slot in println!. A derived Debug prints the struct's name, then its fields inside braces with their names and values, separated by commas. It's meant for programmers checking what's inside a value, not for nice messages to players.",
+      "Debug es el trait detrás del hueco {:?} de println!. Un Debug derivado imprime el nombre del struct y luego sus campos entre llaves, con nombre y valor, separados por comas. Está pensado para que los programadores vean qué hay dentro de un valor, no para mensajes bonitos a los jugadores.",
+      "Debug は println! の {:?} の裏にあるトレイト。derive した Debug は、構造体の名前のあとに、波かっこの中に項目の名前と値をカンマ区切りで表示する。値の中身を確かめるプログラマ向けで、プレイヤー向けのきれいな文ではない。",
+    ),
+    ex('#[derive(Debug)]\nstruct Coin { year: u32, shiny: bool }\nlet c = Coin { year: 1999, shiny: true };\nprintln!("{:?}", c);', "Coin { year: 1999, shiny: true }",
+      L("Name, then each field with its value", "El nombre y luego cada campo con su valor", "名前のあとに各項目と値")),
+    p(
+      "Without the derive, {:?} fails with E0277, \"Coin doesn't implement Debug\". The compiler even suggests the fix: add #[derive(Debug)]. A struct with no fields prints just its name. Common mistake: using {} instead of {:?}; {} needs a different trait, Display, which you'll meet later in this lesson.",
+      "Sin el derive, {:?} falla con E0277, \"Coin doesn't implement Debug\". El compilador hasta sugiere la solución: añade #[derive(Debug)]. Un struct sin campos imprime solo su nombre. Error común: usar {} en vez de {:?}; {} necesita otro trait, Display, que verás más adelante en esta lección.",
+      "derive がないと、{:?} は E0277 \"Coin doesn't implement Debug\" で失敗する。コンパイラは #[derive(Debug)] を足すよう教えてくれる。項目のない構造体は名前だけを表示する。よくあるミス：{:?} の代わりに {} を使うこと。{} には別のトレイト Display が必要で、このレッスンの後半で出てくる。",
+    ),
+    bad('struct Coin { year: u32 }\nlet c = Coin { year: 1999 };\nprintln!("{:?}", c);',
+      L("E0277: Coin doesn't implement Debug", "E0277: Coin no implementa Debug", "E0277：Coin は Debug を実装していない")),
+  ),
+  note("clone-partialeq", L("Clone and PartialEq", "Clone y PartialEq", "Clone と PartialEq"),
+    p(
+      "The method .clone() comes from the Clone trait. It makes a brand-new, independent copy of a value, so both the original and the copy can be used afterward. A struct gets it with #[derive(Clone)]; the derived version clones each field one by one. Debug only prints, and gives you no clone().",
+      "El método .clone() viene del trait Clone. Hace una copia nueva e independiente de un valor, así que después se pueden usar tanto el original como la copia. Un struct lo obtiene con #[derive(Clone)]; la versión derivada clona cada campo uno por uno. Debug solo imprime y no te da clone().",
+      ".clone() は Clone トレイトのメソッド。値の新しい独立したコピーを作るので、そのあと元とコピーの両方を使える。構造体は #[derive(Clone)] で手に入れ、derive 版は項目を1つずつ複製する。Debug は表示するだけで、clone() はくれない。",
+    ),
+    p(
+      "The == and != operators come from PartialEq. Rust doesn't guess what \"equal\" means for your struct: without PartialEq, comparing two values fails with E0369, \"binary operation == cannot be applied\". A derived PartialEq compares field by field, and two values are equal only if every field is equal.",
+      "Los operadores == y != vienen de PartialEq. Rust no adivina qué significa \"igual\" para tu struct: sin PartialEq, comparar dos valores falla con E0369, \"binary operation == cannot be applied\". Un PartialEq derivado compara campo a campo, y dos valores son iguales solo si todos sus campos lo son.",
+      "== と != は PartialEq から来る。Rustは自作の構造体の「等しい」の意味を推測しない。PartialEq がないと、2つの値を比べたとき E0369 \"binary operation == cannot be applied\" で失敗する。derive した PartialEq は項目ごとに比べ、全項目が等しいときだけ等しいとみなす。",
+    ),
+    ex('#[derive(Clone, PartialEq)]\nstruct Ticket { seat: u32 }\nlet a = Ticket { seat: 12 };\nlet b = a.clone();\nlet c = Ticket { seat: 40 };\nprintln!("{} {}", a == b, a == c);', "true false",
+      L("A clone has the same fields, so it compares equal", "Un clon tiene los mismos campos, así que es igual", "複製は項目が同じなので等しくなる")),
+    p(
+      "Several traits go in one derive, separated by commas: #[derive(Debug, Clone, PartialEq)]. Common mistake: thinking that two values built with the same fields are automatically comparable. They are only once the type has PartialEq; until then, == does not even compile.",
+      "Varios traits van en un solo derive, separados por comas: #[derive(Debug, Clone, PartialEq)]. Error común: creer que dos valores creados con los mismos campos se pueden comparar automáticamente. Solo se puede cuando el tipo tiene PartialEq; hasta entonces, == ni siquiera compila.",
+      "1つの derive に複数のトレイトをカンマで並べられる：#[derive(Debug, Clone, PartialEq)]。よくあるミス：同じ項目で作った2つの値は自動で比べられると思うこと。比べられるのは型が PartialEq を持ってから。それまでは == はコンパイルすらできない。",
+    ),
+    bad("struct Ticket { seat: u32 }\nlet a = Ticket { seat: 12 };\nlet b = Ticket { seat: 12 };\nlet same = a != b;",
+      L("E0369: no PartialEq, so no == or !=", "E0369: sin PartialEq no hay == ni !=", "E0369：PartialEq がないので == も != もない")),
+  ),
+  note("copy-needs-clone", L("Copy: copied instead of moved", "Copy: se copia en vez de moverse", "Copy：ムーブせずコピー"),
+    p(
+      "Normally let b = a; MOVES a struct: b becomes the owner and a can no longer be used (E0382 if you try). Simple numbers like i32 behave differently: they are copied, and both names stay usable. That behavior comes from the Copy trait, and small structs can have it too.",
+      "Normalmente let b = a; MUEVE un struct: b pasa a ser el dueño y a ya no se puede usar (E0382 si lo intentas). Los números simples como i32 se comportan distinto: se copian y ambos nombres siguen usables. Ese comportamiento viene del trait Copy, y los structs pequeños también pueden tenerlo.",
+      "ふつう let b = a; は構造体をムーブする。b が持ち主になり、a はもう使えない（使うと E0382）。i32 のような単純な数は違って、コピーされて両方の名前を使い続けられる。この動きは Copy トレイトによるもので、小さな構造体も持てるのじゃ。",
+    ),
+    bad("struct Pixel { x: u8 }\nlet a = Pixel { x: 4 };\nlet b = a;\nprintln!(\"{}\", a.x);",
+      L("E0382: without Copy, a was moved into b", "E0382: sin Copy, a se movió a b", "E0382：Copy がないと a は b へムーブ済み")),
+    p(
+      "Copy depends on Clone: anything Rust copies silently must also be clonable on purpose with .clone(). So Copy is never derived alone; #[derive(Copy)] by itself fails with E0277 because Clone is missing. Write both together: #[derive(Clone, Copy)].",
+      "Copy depende de Clone: todo lo que Rust copia en silencio también debe poder clonarse a propósito con .clone(). Por eso Copy nunca se deriva solo; #[derive(Copy)] por sí solo falla con E0277 porque falta Clone. Escribe ambos juntos: #[derive(Clone, Copy)].",
+      "Copy は Clone に依存する。Rustが黙ってコピーするものは、.clone() でわざと複製もできないといけない。だから Copy だけを derive することはなく、#[derive(Copy)] 単独では Clone がないため E0277 で失敗する。両方そろえて #[derive(Clone, Copy)] と書こう。",
+    ),
+    ex('#[derive(Clone, Copy)]\nstruct Pixel { x: u8, y: u8 }\nlet a = Pixel { x: 4, y: 9 };\nlet b = a;\nprintln!("{} {}", a.x, b.y);', "4 9",
+      L("With Clone + Copy, a is still usable after let b = a;", "Con Clone + Copy, a sigue usable tras let b = a;", "Clone + Copy なら let b = a; のあとも a が使える")),
+    p(
+      "Not every struct can be Copy: all of its fields must be Copy too. Numbers, bool and char are; String and Vec are not, because they own memory that a quick bit-for-bit copy would duplicate. For those, use Clone and call .clone() when you really want a second copy.",
+      "No todo struct puede ser Copy: todos sus campos deben ser Copy también. Los números, bool y char lo son; String y Vec no, porque poseen memoria que una copia rápida bit a bit duplicaría. Para esos, usa Clone y llama a .clone() cuando de verdad quieras una segunda copia.",
+      "どの構造体も Copy になれるわけではない。全項目が Copy である必要がある。数・bool・char は Copy だが、String や Vec は違う。メモリを所有していて、ビット単位のコピーでは二重になってしまうからじゃ。そういう型は Clone を使い、本当に複製したいときに .clone() を呼ぼう。",
+    ),
+  ),
+  note("display", L("Display: your own {} text", "Display: tu propio texto para {}", "Display：{} 用の自分の文"),
+    p(
+      "The plain {} slot in println! uses the Display trait. Numbers and strings already have it, but your structs don't, and it can't be derived: Rust can't guess what text players should see. So you implement it by hand with impl fmt::Display for YourType, after use std::fmt; at the top.",
+      "El hueco {} normal de println! usa el trait Display. Los números y textos ya lo tienen, pero tus structs no, y no se puede derivar: Rust no puede adivinar qué texto deben ver los jugadores. Así que lo implementas a mano con impl fmt::Display for TuTipo, tras use std::fmt; al principio.",
+      "println! のふつうの {} は Display トレイトを使う。数や文字列はすでに持っているが、自作の構造体は持っていない。しかも derive できない。プレイヤーにどんな文を見せるか、Rustには推測できないからじゃ。だから先頭に use std::fmt; を書き、impl fmt::Display for 自分の型 で手で実装する。",
+    ),
+    ex('use std::fmt;\nstruct Temp { celsius: i32 }\nimpl fmt::Display for Temp {\n    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {\n        write!(f, "{} degrees", self.celsius)\n    }\n}\nprintln!("{}", Temp { celsius: 21 });', "21 degrees",
+      L("You decide the text that {} shows", "Tú decides el texto que muestra {}", "{} で見せる文は自分で決める")),
+    p(
+      "The trait requires one method, fmt, with this exact signature: fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result. Inside, write!(f, ...) works like println! but writes into f instead of the screen. Don't put a semicolon after write!: its result is what fmt returns.",
+      "El trait exige un método, fmt, con esta firma exacta: fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result. Dentro, write!(f, ...) funciona como println! pero escribe en f en vez de en la pantalla. No pongas punto y coma tras write!: su resultado es lo que devuelve fmt.",
+      "このトレイトに必要なメソッドは fmt の1つで、シグネチャはこの通り：fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result。中では write!(f, ...) が println! のように働くが、画面ではなく f に書く。write! のあとにセミコロンをつけないこと。その結果が fmt の戻り値になる。",
+    ),
+    p(
+      "Remember the pair: {} uses Display (a friendly text you write by hand) and {:?} uses Debug (a programmer's view, usually derived). A type can have both. Common mistake: implementing Debug by hand and then printing with {}; the {} slot ignores Debug and fails with E0277. There is no Print trait.",
+      "Recuerda la pareja: {} usa Display (un texto amable que escribes a mano) y {:?} usa Debug (una vista para programadores, casi siempre derivada). Un tipo puede tener ambos. Error común: implementar Debug a mano y luego imprimir con {}; el hueco {} ignora Debug y falla con E0277. No existe un trait Print.",
+      "ペアで覚えよう：{} は Display（手で書くやさしい文）、{:?} は Debug（ふつうは derive するプログラマ向けの表示）。1つの型が両方持ってもいい。よくあるミス：Debug を手で実装して {} で表示すること。{} は Debug を見ないので E0277 で失敗する。Print というトレイトはない。",
+    ),
+    ex('use std::fmt;\n#[derive(Debug)]\nstruct Temp { celsius: i32 }\nimpl fmt::Display for Temp {\n    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "{} degrees", self.celsius) }\n}\nlet t = Temp { celsius: 8 };\nprintln!("{}", t);\nprintln!("{:?}", t);', "8 degrees\nTemp { celsius: 8 }",
+      L("The same value through Display, then Debug", "El mismo valor con Display y luego con Debug", "同じ値を Display と Debug で表示")),
+  ),
+];
+
+const squadNotes: NoteDef[] = [
+  note("vec-for", L("Vec and for: one type, in order", "Vec y for: un tipo, en orden", "Vec と for：型は1つ、順番どおり"),
+    p(
+      "vec![a, b, c] creates a Vec, a growable list. for item in &list { ... } walks it from the first element to the last, running the body once per element. The & means the loop only borrows the list, so you can still use it after the loop ends.",
+      "vec![a, b, c] crea un Vec, una lista que puede crecer. for item in &lista { ... } la recorre del primer elemento al último y ejecuta el cuerpo una vez por elemento. El & indica que el bucle solo toma prestada la lista, así que puedes seguir usándola cuando el bucle termina.",
+      "vec![a, b, c] は Vec（伸び縮みするリスト）を作る。for item in &list { ... } は最初の要素から最後まで順に回り、要素ごとに本体を1回実行する。& はリストを借りるだけという意味なので、ループのあともリストを使える。",
+    ),
+    ex('let scores = vec![7, 3, 9];\nfor s in &scores {\n    println!("{}", s);\n}\nprintln!("{}", scores.len());', "7\n3\n9\n3",
+      L("Elements come out in the order they were written", "Los elementos salen en el orden en que se escribieron", "要素は書いた順に出てくる")),
+    p(
+      "A Vec holds a single type: every element must be the same type, because Rust needs to know the exact size and methods of each one. That's why a Vec can't mix a number and a text, nor two different structs, even if both implement the same trait. Rust infers the element type from the first element.",
+      "Un Vec guarda un solo tipo: todos los elementos deben ser del mismo tipo, porque Rust necesita conocer el tamaño exacto y los métodos de cada uno. Por eso un Vec no puede mezclar un número y un texto, ni dos structs distintos, aunque ambos implementen el mismo trait. Rust deduce el tipo de los elementos a partir del primero.",
+      "Vec に入る型は1つだけ。Rustは各要素の正確な大きさとメソッドを知る必要があるので、全要素が同じ型でなければならない。だから数と文字は混ぜられないし、同じトレイトを実装していても別々の構造体は混ぜられない。要素の型は最初の要素から推測される。",
+    ),
+    bad('let mixed = vec![1, "two"];',
+      L("E0308: a number and a text in the same Vec", "E0308: un número y un texto en el mismo Vec", "E0308：同じ Vec に数と文字")),
+    p(
+      "To predict what a loop prints, go through the Vec from left to right and run the body for each element, in that order. Common mistake: assuming the loop sorts or groups the elements; it never does, it just follows the order of the Vec.",
+      "Para predecir lo que imprime un bucle, recorre el Vec de izquierda a derecha y ejecuta el cuerpo para cada elemento, en ese orden. Error común: suponer que el bucle ordena o agrupa los elementos; nunca lo hace, simplemente sigue el orden del Vec.",
+      "ループの出力を予想するには、Vec を左から右へたどり、要素ごとにその順で本体を実行しよう。よくあるミス：ループが要素を並べ替えたりまとめたりすると思うこと。そんなことはせず、Vec の順番に従うだけじゃ。",
+    ),
+  ),
+  note("trait-objects", L("Box<dyn Trait>: mixing types", "Box<dyn Trait>: mezclar tipos", "Box<dyn Trait>：型を混ぜる"),
+    p(
+      "To keep different types in one Vec, hide each one behind the trait they share. dyn Speak means \"some type that implements Speak, I don't care which\". It's called a trait object. Since different types have different sizes, a trait object lives inside a Box: Box<dyn Speak>.",
+      "Para guardar tipos distintos en un Vec, esconde cada uno detrás del trait que comparten. dyn Speak significa \"algún tipo que implementa Speak, no importa cuál\". Se llama objeto de trait. Como los tipos distintos tienen tamaños distintos, un objeto de trait vive dentro de un Box: Box<dyn Speak>.",
+      "違う型を1つの Vec に入れるには、共通のトレイトの裏にそれぞれを隠す。dyn Speak は「Speak を実装した何かの型。どれでもいい」という意味で、トレイトオブジェクトと呼ぶ。型によって大きさが違うので、トレイトオブジェクトは Box の中に入れる：Box<dyn Speak>。",
+    ),
+    p(
+      "Box::new(value) puts a value in a box on the heap and gives you the box, which always has the same small size. A Vec<Box<dyn Speak>> is then a list of same-sized boxes, and each box can hold a different type. The keyword is dyn, short for dynamic; impl does not work inside Box<...> or Vec<...>.",
+      "Box::new(valor) mete un valor en una caja en el heap y te da la caja, que siempre tiene el mismo tamaño pequeño. Un Vec<Box<dyn Speak>> es entonces una lista de cajas del mismo tamaño, y cada caja puede guardar un tipo distinto. La palabra es dyn, de dynamic (dinámico); impl no sirve dentro de Box<...> ni de Vec<...>.",
+      "Box::new(値) は値をヒープ上の箱に入れ、その箱をくれる。箱はいつも同じ小さな大きさじゃ。だから Vec<Box<dyn Speak>> は同じ大きさの箱のリストで、箱ごとに違う型を入れられる。キーワードは dynamic（動的）の略の dyn。Box<...> や Vec<...> の中では impl は使えない。",
+    ),
+    ex('trait Speak { fn speak(&self) -> String; }\nstruct Dog;\nstruct Duck;\nimpl Speak for Dog { fn speak(&self) -> String { String::from("woof") } }\nimpl Speak for Duck { fn speak(&self) -> String { String::from("quack") } }\nlet farm: Vec<Box<dyn Speak>> = vec![Box::new(Duck), Box::new(Dog)];\nfor a in &farm { println!("{}", a.speak()); }', "quack\nwoof",
+      L("Each box answers with its own type's method, in Vec order", "Cada caja responde con el método de su tipo, en el orden del Vec", "箱ごとに中身の型のメソッドが Vec の順で答える")),
+    p(
+      "The type annotation is essential. Without it, Rust infers the Vec's type from the first element, for example Box<Duck>, and the next box of another type doesn't fit: E0308, mismatched types. Writing let farm: Vec<Box<dyn Speak>> = ... tells Rust to treat every box as a box of dyn Speak.",
+      "La anotación de tipo es esencial. Sin ella, Rust deduce el tipo del Vec a partir del primer elemento, por ejemplo Box<Duck>, y la siguiente caja de otro tipo no cabe: E0308, mismatched types. Escribir let farm: Vec<Box<dyn Speak>> = ... le dice a Rust que trate cada caja como una caja de dyn Speak.",
+      "型注釈が欠かせない。注釈がないと、Rustは最初の要素から Vec の型を推測し（たとえば Box<Duck>）、別の型の箱は入らない：E0308 mismatched types。let farm: Vec<Box<dyn Speak>> = ... と書けば、どの箱も dyn Speak の箱として扱うよう伝えられる。",
+    ),
+    ex("let boxed: Box<i32> = Box::new(41);\nprintln!(\"{}\", *boxed + 1);", "42",
+      L("Box::new works with any value; * reaches what's inside", "Box::new sirve con cualquier valor; * llega al contenido", "Box::new はどんな値にも使え、* で中身に届く")),
+  ),
+  note("static-vs-dynamic", L("Static vs dynamic dispatch", "Despacho estático vs dinámico", "静的ディスパッチと動的ディスパッチ"),
+    p(
+      "Dispatch means choosing which version of a method runs. With a generic <T: Speak>, Rust knows the exact type at each call, so at compile time it builds a separate copy of the function for each type used. That's static dispatch: the choice is made before the program runs, and calls are as fast as possible.",
+      "Despachar significa elegir qué versión de un método se ejecuta. Con un genérico <T: Speak>, Rust conoce el tipo exacto en cada llamada, así que al compilar crea una copia aparte de la función para cada tipo usado. Eso es despacho estático: la elección se hace antes de ejecutar y las llamadas son lo más rápidas posible.",
+      "ディスパッチとは、メソッドのどの版を動かすか選ぶこと。ジェネリクス <T: Speak> なら、Rustは呼び出しごとに正確な型を知っているので、コンパイル時に使われた型ごとに関数の別コピーを作る。これが静的ディスパッチ。選択は実行前に済み、呼び出しは最速じゃ。",
+    ),
+    p(
+      "With dyn Speak, the exact type is hidden until the program runs. Each trait object carries a small table of its methods, and at each call the program looks up the right one. That's dynamic dispatch: a tiny cost per call, in exchange for being able to mix different types in one collection.",
+      "Con dyn Speak, el tipo exacto queda oculto hasta que el programa se ejecuta. Cada objeto de trait lleva una pequeña tabla con sus métodos, y en cada llamada el programa busca el correcto. Eso es despacho dinámico: un costo mínimo por llamada, a cambio de poder mezclar tipos distintos en una colección.",
+      "dyn Speak では、正確な型は実行するまで隠れている。トレイトオブジェクトはメソッドの小さな表を持ち、呼び出しのたびに正しいものを探す。これが動的ディスパッチ。呼び出しごとにわずかなコストがかかる代わりに、違う型を1つのコレクションに混ぜられる。",
+    ),
+    ex('trait Speak { fn speak(&self) -> String; }\nstruct Dog;\nimpl Speak for Dog { fn speak(&self) -> String { String::from("woof") } }\nfn fixed<T: Speak>(x: &T) -> String { x.speak() }\nfn any(x: &dyn Speak) -> String { x.speak() }\nprintln!("{} {}", fixed(&Dog), any(&Dog));', "woof woof",
+      L("Same result: fixed is static, any is dynamic", "Mismo resultado: fixed es estático, any es dinámico", "結果は同じ：fixed は静的、any は動的")),
+    p(
+      "Rule to remember: generics (<T: Trait> or impl Trait) mean ONE concrete type per call, chosen at compile time. dyn Trait means the type is chosen at run time, so many types can live together. Prefer generics by default; reach for dyn when you need a mixed list.",
+      "Regla para recordar: los genéricos (<T: Trait> o impl Trait) significan UN tipo concreto por llamada, elegido al compilar. dyn Trait significa que el tipo se elige al ejecutar, así que muchos tipos pueden convivir. Usa genéricos por defecto; recurre a dyn cuando necesites una lista mezclada.",
+      "覚えるルール：ジェネリクス（<T: トレイト> や impl トレイト）は呼び出しごとに具体的な型が「1つ」で、コンパイル時に決まる。dyn トレイトは型が実行時に決まるので、多くの型が共存できる。ふだんはジェネリクス、混ぜたリストが必要なら dyn を使おう。",
+    ),
+  ),
+];
+
+// The boss recaps the whole region: one short note per idea it tests.
+const bossNotes: NoteDef[] = [
+  note("recap-traits", L("Recap: traits and impl", "Repaso: traits e impl", "復習：トレイトと impl"),
+    p(
+      "A trait lists methods; a type signs it with impl Trait for Type { ... }, trait first. Every method that ends in ; inside the trait must be written in the impl, or compilation fails with E0046.",
+      "Un trait lista métodos; un tipo lo firma con impl Trait for Tipo { ... }, primero el trait. Todo método que termina en ; dentro del trait debe escribirse en el impl, o la compilación falla con E0046.",
+      "トレイトはメソッドの一覧。型は impl トレイト for 型 { ... } でサインする（トレイトが先）。トレイトで ; で終わるメソッドは impl に必ず書く。書かないと E0046 で失敗する。",
+    ),
+    p(
+      "A method with a body inside the trait is a default: types that don't write their own version inherit it, so even an empty impl can compile.",
+      "Un método con cuerpo dentro del trait es por defecto: los tipos que no escriben su versión lo heredan, así que hasta un impl vacío puede compilar.",
+      "トレイトの中で本体のあるメソッドはデフォルト。自分の版を書かない型はそれを受け継ぐので、空の impl でも通ることがある。",
+    ),
+    ex('trait Swim {\n    fn speed(&self) -> u32;\n    fn style(&self) -> String { String::from("crawl") }\n}\nstruct Seal;\nimpl Swim for Seal { fn speed(&self) -> u32 { 8 } }\nprintln!("{} {}", Seal.speed(), Seal.style());', "8 crawl",
+      L("speed() is required; style() comes from the default", "speed() es obligatorio; style() viene por defecto", "speed() は必須、style() はデフォルトから")),
+  ),
+  note("recap-generics", L("Recap: generics and bounds", "Repaso: genéricos y bounds", "復習：ジェネリクスと境界"),
+    p(
+      "<T: Trait> accepts any type that implements the trait; the bound names a trait, never a concrete type. A type without the trait is rejected at compile time with E0277.",
+      "<T: Trait> acepta cualquier tipo que implemente el trait; el bound nombra un trait, nunca un tipo concreto. Un tipo sin el trait se rechaza al compilar con E0277.",
+      "<T: トレイト> はそのトレイトを実装したどんな型も受け入れる。境界に書くのはトレイト名で、具体的な型ではない。トレイトのない型はコンパイル時に E0277 で拒否される。",
+    ),
+    p(
+      "&impl Trait is a shortcut for the same bound, and where T: Trait moves it after the signature. Several bounds are joined with +.",
+      "&impl Trait es un atajo para el mismo bound, y where T: Trait lo mueve tras la firma. Varios bounds se unen con +.",
+      "&impl トレイト は同じ境界の近道で、where T: トレイト はそれをシグネチャのあとへ移す。複数の境界は + でつなぐ。",
+    ),
+    ex('trait Swim { fn speed(&self) -> u32; }\nstruct Seal;\nimpl Swim for Seal { fn speed(&self) -> u32 { 8 } }\nfn race(x: &impl Swim) -> u32 { x.speed() * 2 }\nprintln!("{}", race(&Seal));', "16"),
+  ),
+  note("recap-derive", L("Recap: derive", "Repaso: derive", "復習：derive"),
+    p(
+      "#[derive(...)] writes standard impls for you: Debug for {:?}, Clone for .clone(), PartialEq for == and !=. Without PartialEq, == on your struct fails with E0369.",
+      "#[derive(...)] escribe impls estándar por ti: Debug para {:?}, Clone para .clone(), PartialEq para == y !=. Sin PartialEq, == sobre tu struct falla con E0369.",
+      "#[derive(...)] は標準の impl を代わりに書く：{:?} には Debug、.clone() には Clone、== と != には PartialEq。PartialEq がないと、構造体の == は E0369 で失敗する。",
+    ),
+    p(
+      "Copy makes let b = a; copy instead of move, but it requires Clone, so they are always derived together: #[derive(Clone, Copy)].",
+      "Copy hace que let b = a; copie en vez de mover, pero exige Clone, así que siempre se derivan juntos: #[derive(Clone, Copy)].",
+      "Copy は let b = a; をムーブではなくコピーにするが、Clone が必要。だからいつも一緒に derive する：#[derive(Clone, Copy)]。",
+    ),
+    ex('#[derive(Debug, Clone, Copy, PartialEq)]\nstruct Shell { size: u8 }\nlet a = Shell { size: 2 };\nlet b = a;\nprintln!("{:?} {}", a, a == b);', "Shell { size: 2 } true"),
+  ),
+  note("recap-dyn", L("Recap: dyn and dispatch", "Repaso: dyn y despacho", "復習：dyn とディスパッチ"),
+    p(
+      "A Vec holds one type. To mix types that share a trait, store trait objects: Vec<Box<dyn Trait>>, with each value wrapped in Box::new(...). The annotation is required.",
+      "Un Vec guarda un tipo. Para mezclar tipos que comparten un trait, guarda objetos de trait: Vec<Box<dyn Trait>>, con cada valor envuelto en Box::new(...). La anotación es obligatoria.",
+      "Vec に入る型は1つ。トレイトを共有する型を混ぜるには、トレイトオブジェクトを入れる：Vec<Box<dyn トレイト>>。値はそれぞれ Box::new(...) で包む。型注釈は必須じゃ。",
+    ),
+    p(
+      "Generics use static dispatch: the method is chosen at compile time, one version per type. dyn uses dynamic dispatch: the method is looked up at run time.",
+      "Los genéricos usan despacho estático: el método se elige al compilar, una versión por tipo. dyn usa despacho dinámico: el método se busca al ejecutar.",
+      "ジェネリクスは静的ディスパッチ。メソッドはコンパイル時に型ごとに決まる。dyn は動的ディスパッチで、実行時にメソッドを探す。",
+    ),
+    ex('trait Swim { fn speed(&self) -> u32; }\nstruct Seal;\nstruct Otter;\nimpl Swim for Seal { fn speed(&self) -> u32 { 8 } }\nimpl Swim for Otter { fn speed(&self) -> u32 { 5 } }\nlet pool: Vec<Box<dyn Swim>> = vec![Box::new(Otter), Box::new(Seal)];\nfor s in &pool { println!("{}", s.speed()); }', "5\n8"),
+  ),
+];
 
 // Contract and characters shared by lessons 2 and 4 (and the boss).
 const SKILL =
@@ -25,6 +382,7 @@ const contract: LessonDef = {
   xp: 70,
   enemy: "rust/mite",
   enemyName: L("IMPOSTOR BUG", "BUG IMPOSTOR", "なりすましバグ"),
+  notes: contractNotes,
   beats: [
     say(L(
       "Welcome to Trait Castle. Here every character learns SKILLS, and each one uses them in its own way.",
@@ -53,6 +411,7 @@ const contract: LessonDef = {
       kind: "pick",
       prompt: L("The method borrows the Mage", "El método toma prestado al Mage", "メソッドは Mage を借用する"),
       code: 'struct Mage { name: String }\nimpl Mage {\n    fn greet(___) -> String { format!("I am {}", self.name) }\n}\nlet m = Mage { name: String::from("Ada") };\nprintln!("{}", m.greet());',
+      hint: L("The method reads self.name, so its first parameter must be the special one that borrows the value before the dot.", "El método lee self.name: su primer parámetro debe ser el especial que presta el valor que va antes del punto.", "中で self.name を読んでいる。ドットの前の値を借りる、特別な最初の引数はどれ？"), note: "methods-self",
       options: ["&self", "&Mage", "this"],
       answer: 0,
       explain: L(
@@ -90,6 +449,7 @@ const contract: LessonDef = {
       kind: "predict",
       prompt: L("What does it print?", "¿Qué imprime?", "何が出力される？"),
       code: 'impl Skill for Mage { fn use_skill(&self) -> String { String::from("Fire!") } }\nimpl Skill for Archer { fn use_skill(&self) -> String { String::from("Arrow!") } }\nprintln!("{}", Archer.use_skill());',
+      hint: L("Each type wrote its own body for the method. Look at which type comes before the dot.", "Cada tipo escribió su propio cuerpo para el método. Mira qué tipo va antes del punto.", "型ごとにメソッドの本体を書いている。ドットの前にあるのはどの型？"), note: "traits-contract",
       options: ["Arrow!", "Fire!", L("Error: two use_skill()", "Error: hay dos use_skill()", "エラー：use_skill() が2つ")],
       answer: 0,
       output: "Arrow!",
@@ -106,6 +466,7 @@ const contract: LessonDef = {
       kind: "predict",
       prompt: L("The Mage signs but doesn't deliver. Compiles?", "El Mage firma pero no cumple. ¿Compila?", "サインしたけど中身なし。コンパイルできる？"),
       code: "trait Skill { fn use_skill(&self) -> String; }\nstruct Mage;\nimpl Skill for Mage {}",
+      hint: L("In the trait, use_skill ends in ; with no body. What must every impl of that trait contain?", "En el trait, use_skill termina en ; sin cuerpo. ¿Qué debe contener todo impl de ese trait?", "トレイトの use_skill は ; で終わり本体がない。impl には何が必要？"), note: "traits-contract",
       options: [L("Yes", "Sí", "はい"), L("No: use_skill is missing", "No: falta implementar use_skill", "いいえ：use_skill がない")],
       answer: 1,
       explain: L(
@@ -121,6 +482,7 @@ const contract: LessonDef = {
       kind: "type",
       prompt: L("Sign the contract for the Mage", "Firma el contrato para el Mage", "Mage の契約にサインしよう"),
       code: 'trait Skill { fn use_skill(&self) -> String; }\nstruct Mage;\nimpl ___ for Mage {\n    fn use_skill(&self) -> String { String::from("Fire!") }\n}\nprintln!("{}", Mage.use_skill());',
+      hint: L("The pattern is impl, then the contract's name, then for, then the type that signs it.", "El patrón es impl, luego el nombre del contrato, luego for y al final el tipo que firma.", "形は impl、契約の名前、for、サインする型の順じゃ。"), note: "traits-contract",
       answer: "Skill",
       explain: L("impl TraitName for Type { ... }", "impl NombreDelTrait for Tipo { ... }", "impl トレイト名 for 型 { ... }"),
       check: { compiles: true, stdout: "Fire!" },
@@ -135,6 +497,7 @@ const contract: LessonDef = {
       kind: "predict",
       prompt: L("Mage doesn't write battle_cry(). Output?", "Mage no escribe battle_cry(). ¿Qué imprime?", "Mage は battle_cry() なし。出力は？"),
       code: 'trait Skill {\n    fn use_skill(&self) -> String;\n    fn battle_cry(&self) -> String { String::from("Charge!") }\n}\nstruct Mage;\nimpl Skill for Mage {\n    fn use_skill(&self) -> String { String::from("Fire!") }\n}\nprintln!("{}", Mage.battle_cry());',
+      hint: L("Mage never writes battle_cry. Does the trait give that method a body of its own?", "Mage nunca escribe battle_cry. ¿Le da el trait a ese método un cuerpo propio?", "Mage は battle_cry を書いていない。トレイト側にその本体はある？"), note: "default-methods",
       options: ["Charge!", "Fire!", L("Error: Mage has no battle_cry", "Error: Mage no tiene battle_cry", "エラー：battle_cry がない")],
       answer: 0,
       output: "Charge!",
@@ -151,6 +514,7 @@ const contract: LessonDef = {
       kind: "order",
       prompt: L("Order: create the Archer, use it, print", "Ordena: crear al Archer, usar y mostrar", "並べよう：Archer を作り、使い、表示"),
       lines: ["let a = Archer;", "let phrase = a.use_skill();", 'println!("Cry: {}", phrase);'],
+      hint: L("A value must exist before you call its method, and a result must exist before you print it.", "Un valor debe existir antes de llamar a su método, y un resultado antes de imprimirlo.", "メソッドを呼ぶ前に値が、表示する前に結果が必要じゃ。"), note: "traits-contract",
       explain: L(
         "First the Archer exists, then it uses its skill, and finally it's printed.",
         "Primero existe el Archer, luego usa su habilidad y al final se imprime.",
@@ -163,6 +527,7 @@ const contract: LessonDef = {
       kind: "run",
       prompt: L("Fix it: it must print Shields up!", "Arréglalo: debe imprimir Shields up!", "直そう：Shields up! と出力させて"),
       starter: 'trait Skill {\n    fn use_skill(&self) -> String;\n}\n\nstruct Knight;\n\nimpl Skill for Knight {}\n\nfn main() {\n    let k = Knight;\n    println!("{}", k.use_skill());\n}\n',
+      hint: L("The Knight's impl is empty, but the trait's method has no body. Write it inside the impl, same signature.", "El impl de Knight está vacío, pero el método del trait no tiene cuerpo. Escríbelo en el impl, con la misma firma.", "Knight の impl は空だが、トレイトのメソッドに本体はない。同じ形で impl に書こう。"), note: "traits-contract",
       expect: "Shields up!",
       solution: 'trait Skill {\n    fn use_skill(&self) -> String;\n}\n\nstruct Knight;\n\nimpl Skill for Knight {\n    fn use_skill(&self) -> String { String::from("Shields up!") }\n}\n\nfn main() {\n    let k = Knight;\n    println!("{}", k.use_skill());\n}\n',
       fallback: [
@@ -186,6 +551,7 @@ const generics: LessonDef = {
   xp: 75,
   enemy: "rust/dangler",
   enemyName: L("BADGELESS BUG", "BUG SIN INSIGNIA", "バッジなしバグ"),
+  notes: genericsNotes,
   beats: [
     say(L(
       "One function for ANYONE with the Skill badge? That's what generics are for.",
@@ -226,6 +592,7 @@ const generics: LessonDef = {
       kind: "pick",
       prompt: L("Require the badge from T", "Exige la insignia a T", "T にバッジを要求しよう"),
       code: 'fn present<T: ___>(x: &T) {\n    println!("{}", x.use_skill());\n}\npresent(&Mage);\npresent(&Archer);',
+      hint: L("It must work for Mage and for Archer. What do both share: a type, or the contract they signed?", "Debe servir para Mage y para Archer. ¿Qué comparten ambos: un tipo o el contrato que firmaron?", "Mage にも Archer にも使える必要がある。2人の共通点は型？それとも契約？"), note: "trait-bounds",
       options: ["Skill", "Mage", "String"],
       answer: 0,
       explain: L(
@@ -241,6 +608,7 @@ const generics: LessonDef = {
       kind: "predict",
       prompt: L("Rock doesn't implement Skill. Compiles?", "Rock no implementa Skill. ¿Compila?", "Rock は Skill なし。コンパイルできる？"),
       code: "struct Rock;\npresent(&Rock);",
+      hint: L("present requires T: Skill, and Rust checks that at compile time. Does Rock meet the condition?", "present exige T: Skill, y Rust lo revisa al compilar. ¿Cumple Rock la condición?", "present は T: Skill を求め、コンパイル時に確かめる。Rock は条件を満たす？"), note: "trait-bounds",
       options: [L("Yes: prints nothing", "Sí: no imprime nada", "はい：何も出ない"), L("No: Rock fails T: Skill", "No: Rock no cumple T: Skill", "いいえ：T: Skill を満たさない")],
       answer: 1,
       explain: L(
@@ -261,6 +629,7 @@ const generics: LessonDef = {
       kind: "type",
       prompt: L("Use the impl shortcut", "Usa el atajo impl", "impl の近道を使おう"),
       code: 'fn present(x: &impl ___) {\n    println!("{}", x.use_skill());\n}\npresent(&Archer);',
+      hint: L("After impl goes the trait the parameter must implement: the same one the bound named before.", "Tras impl va el trait que el parámetro debe implementar: el mismo que nombraba el bound antes.", "impl のあとには引数が実装すべきトレイトを書く。前の境界と同じものじゃ。"), note: "impl-and-where",
       answer: "Skill",
       explain: L(
         "&impl Skill: any type with the badge, without writing <T>.",
@@ -279,6 +648,7 @@ const generics: LessonDef = {
       kind: "pick",
       prompt: L("Move the condition to the end", "Mueve la condición al final", "条件を最後に移そう"),
       code: 'fn present<T>(x: &T)\n___ T: Skill {\n    println!("{}", x.use_skill());\n}\npresent(&Mage);',
+      hint: L("Rust has a special keyword that introduces bounds after the signature, just before the body.", "Rust tiene una palabra especial que introduce bounds tras la firma, justo antes del cuerpo.", "シグネチャのあと、本体の直前で境界を書き始める専用のキーワードがある。"), note: "impl-and-where",
       options: ["where", "if", "when", "for"],
       answer: 0,
       explain: L("where T: Skill is the same as <T: Skill>.", "where T: Skill equivale a <T: Skill>.", "where T: Skill は <T: Skill> と同じだよ。"),
@@ -293,6 +663,7 @@ const generics: LessonDef = {
       kind: "pick",
       prompt: L("Require both badges", "Exige las dos insignias", "両方のバッジを要求"),
       code: "fn recruit<T: Skill ___ Clone>(x: &T) -> T {\n    x.clone()\n}",
+      hint: L("Bounds are combined with one symbol meaning 'this AND that'. A comma would start a new type parameter.", "Los bounds se combinan con un símbolo que significa 'esto Y aquello'. Una coma empezaría otro parámetro.", "境界は「これとあれ」を表す記号でつなぐ。カンマだと新しい型パラメータになる。"), note: "multiple-bounds",
       options: ["+", ",", "&", "and"],
       answer: 0,
       explain: L("Bounds are combined with +: T: Skill + Clone.", "Los bounds se combinan con +: T: Skill + Clone.", "トレイト境界は + で組み合わせるよ：T: Skill + Clone。"),
@@ -309,6 +680,7 @@ const generics: LessonDef = {
       kind: "predict",
       prompt: L("Mage has Skill but NOT Clone. Compiles?", "Mage tiene Skill pero NO Clone. ¿Compila?", "Skill はあるが Clone なし。通る？"),
       code: "fn recruit<T: Skill + Clone>(x: &T) -> T {\n    x.clone()\n}\nrecruit(&Mage);",
+      hint: L("With +, how many of the bounds must the type meet? Check which traits Mage implements.", "Con +, ¿cuántos bounds debe cumplir el tipo? Revisa qué traits implementa Mage.", "+ のとき、型はいくつの境界を満たす必要がある？Mage の実装を確かめよう。"), note: "multiple-bounds",
       options: [L("Yes", "Sí", "はい"), L("No: Mage doesn't implement Clone", "No: Mage no implementa Clone", "いいえ：Clone がない")],
       answer: 1,
       explain: L(
@@ -324,6 +696,7 @@ const generics: LessonDef = {
       kind: "run",
       prompt: L("Fix it: it must print Arrives: Fire!", "Arréglalo: debe imprimir Arrives: Fire!", "直そう：Arrives: Fire! と出力させて"),
       starter: 'trait Skill { fn use_skill(&self) -> String; }\n\nstruct Mage;\nimpl Skill for Mage {\n    fn use_skill(&self) -> String { String::from("Fire!") }\n}\n\nfn announce<T>(x: &T) {\n    println!("Arrives: {}", x.use_skill());\n}\n\nfn main() { announce(&Mage); }\n',
+      hint: L("announce calls use_skill() on a bare T. Rust can't know T has it until you add a condition on T.", "announce llama a use_skill() sobre un T sin más. Rust no sabe que T lo tiene hasta que le pongas una condición.", "announce は条件なしの T で use_skill() を呼ぶ。T に条件をつけないと分からない。"), note: "trait-bounds",
       expect: "Arrives: Fire!",
       solution: 'trait Skill { fn use_skill(&self) -> String; }\n\nstruct Mage;\nimpl Skill for Mage {\n    fn use_skill(&self) -> String { String::from("Fire!") }\n}\n\nfn announce<T: Skill>(x: &T) {\n    println!("Arrives: {}", x.use_skill());\n}\n\nfn main() { announce(&Mage); }\n',
       fallback: [
@@ -349,6 +722,7 @@ const armory: LessonDef = {
   xp: 75,
   enemy: "rust/cog-golem",
   enemyName: L("UNREADABLE BUG", "BUG ILEGIBLE", "読めないバグ"),
+  notes: armoryNotes,
   beats: [
     say(L(
       "Rust ships ready-made traits: Debug, Clone, PartialEq, Display... But your struct doesn't have them out of the box.",
@@ -384,6 +758,7 @@ const armory: LessonDef = {
       kind: "predict",
       prompt: L("What does it print?", "¿Qué imprime?", "何が出力される？"),
       code: '#[derive(Debug)]\nstruct Gem { value: u32 }\nlet g = Gem { value: 9 };\nprintln!("{:?}", g);',
+      hint: L("Gem has #[derive(Debug)] and the slot is {:?}. What does a derived Debug print for a struct?", "Gem tiene #[derive(Debug)] y el hueco es {:?}. ¿Qué imprime un Debug derivado para un struct?", "Gem は Debug を derive し、穴は {:?}。derive した Debug は構造体をどう表示する？"), note: "derive-debug",
       options: ["Gem { value: 9 }", "9", L("Error: Debug is missing", "Error: falta Debug", "エラー：Debug がない")],
       answer: 0,
       output: "Gem { value: 9 }",
@@ -400,6 +775,7 @@ const armory: LessonDef = {
       kind: "pick",
       prompt: L("Make the potion duplicable", "Que la poción se pueda duplicar", "ポーションを複製できるように"),
       code: '#[derive(___)]\nstruct Potion { uses: u32 }\nlet p = Potion { uses: 2 };\nlet q = p.clone();\nprintln!("{} {}", p.uses, q.uses);',
+      hint: L("Look at the method the code calls on p. Which standard trait gives a struct the ability to make copies?", "Mira el método que el código llama sobre p. ¿Qué trait estándar le da a un struct la capacidad de copiarse?", "p に対して呼んでいるメソッドを見よう。複製する能力をくれる標準トレイトは？"), note: "clone-partialeq",
       options: ["Clone", "Debug", "Copy"],
       answer: 0,
       explain: L(
@@ -420,6 +796,7 @@ const armory: LessonDef = {
       kind: "predict",
       prompt: L("What does it print?", "¿Qué imprime?", "何が出力される？"),
       code: '#[derive(PartialEq)]\nstruct Gem { value: u32 }\nlet a = Gem { value: 3 };\nlet b = Gem { value: 3 };\nprintln!("{}", a == b);',
+      hint: L("A derived PartialEq compares the structs field by field. Compare the value field of a and b.", "Un PartialEq derivado compara los structs campo a campo. Compara el campo value de a y b.", "derive した PartialEq は項目ごとに比べる。a と b の value を比べよう。"), note: "clone-partialeq",
       options: ["true", "false", L("Error: can't compare them", "Error: no se pueden comparar", "エラー：比較できない")],
       answer: 0,
       output: "true",
@@ -432,6 +809,7 @@ const armory: LessonDef = {
       kind: "predict",
       prompt: L("No derive. Does it compile?", "Sin derive. ¿Compila?", "derive なし。コンパイルできる？"),
       code: 'struct Gem { value: u32 }\nlet a = Gem { value: 3 };\nlet b = Gem { value: 3 };\nprintln!("{}", a == b);',
+      hint: L("== needs a trait to work on a struct. Is there any derive above this Gem?", "== necesita un trait para funcionar con un struct. ¿Hay algún derive encima de este Gem?", "構造体で == を使うにはトレイトが必要。この Gem の上に derive はある？"), note: "clone-partialeq",
       options: [L("Yes: prints true", "Sí: imprime true", "はい：true と出る"), L("No: Gem lacks PartialEq", "No: Gem no implementa PartialEq", "いいえ：PartialEq がない")],
       answer: 1,
       explain: L("Without PartialEq there's no == for Gem: error E0369.", "Sin PartialEq no existe == para Gem: error E0369.", "PartialEq がないと Gem に == は使えない。エラー E0369 だよ。"),
@@ -447,6 +825,7 @@ const armory: LessonDef = {
       kind: "predict",
       prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"),
       code: "#[derive(Copy)]\nstruct Point { x: i32 }",
+      hint: L("Copy depends on another trait. Is that trait in the derive list too?", "Copy depende de otro trait. ¿Está ese trait también en la lista del derive?", "Copy は別のトレイトに依存する。そのトレイトも derive にある？"), note: "copy-needs-clone",
       options: [L("Yes", "Sí", "はい"), L("No: Copy needs Clone", "No: Copy necesita Clone", "いいえ：Copy には Clone が必要")],
       answer: 1,
       explain: L("Copy depends on Clone: write #[derive(Clone, Copy)].", "Copy depende de Clone: escribe #[derive(Clone, Copy)].", "Copy は Clone に依存するよ。#[derive(Clone, Copy)] と書こう。"),
@@ -456,6 +835,7 @@ const armory: LessonDef = {
       kind: "type",
       prompt: L("Make Point copy like an i32", "Que Point se copie como un i32", "Point を i32 のようにコピー"),
       code: '#[derive(Clone, ___)]\nstruct Point { x: i32 }\nlet a = Point { x: 1 };\nlet b = a;\nprintln!("{} {}", a.x, b.x);',
+      hint: L("After let b = a; the code still uses a. Which trait makes it a copy instead of a move, like with i32?", "Tras let b = a; el código aún usa a. ¿Qué trait hace que sea una copia y no un move, como con i32?", "let b = a; のあとも a を使う。i32 のようにムーブでなくコピーにするトレイトは？"), note: "copy-needs-clone",
       answer: "Copy",
       explain: L(
         "With Clone + Copy, let b = a; copies instead of moving: a stays alive.",
@@ -488,6 +868,7 @@ const armory: LessonDef = {
       kind: "pick",
       prompt: L("{} needs this trait", "{} necesita este trait", "{} に必要なトレイト"),
       code: 'use std::fmt;\nstruct Gem { value: u32 }\nimpl fmt::___ for Gem {\n    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {\n        write!(f, "{}-carat gem", self.value)\n    }\n}\nprintln!("{}", Gem { value: 5 });',
+      hint: L("The slot is a plain {}, not {:?}. Each slot uses its own formatting trait.", "El hueco es un {} normal, no {:?}. Cada hueco usa su propio trait de formato.", "穴はふつうの {} で {:?} ではない。穴ごとに使う書式トレイトが違う。"), note: "display",
       options: ["Display", "Debug", "Print"],
       answer: 0,
       explain: L("{} uses Display and {:?} uses Debug. Print doesn't exist.", "{} usa Display y {:?} usa Debug. Print no existe.", "{} は Display、{:?} は Debug を使うよ。Print は存在しない。"),
@@ -498,6 +879,7 @@ const armory: LessonDef = {
       kind: "run",
       prompt: L("Fix it: it must print Ferro (level 3)", "Arréglalo: debe imprimir Ferro (level 3)", "直そう：Ferro (level 3) と出力させて"),
       starter: 'use std::fmt;\nstruct Hero { name: String, level: u32 }\n\nimpl fmt::Debug for Hero {\n    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {\n        write!(f, "{} (level {})", self.name, self.level)\n    }\n}\n\nfn main() {\n    let h = Hero { name: String::from("Ferro"), level: 3 };\n    println!("{}", h);\n}\n',
+      hint: L("println! uses a plain {} slot. Which trait does {} need, and which one does the impl write?", "println! usa un hueco {} normal. ¿Qué trait necesita {}, y cuál escribe el impl?", "println! はふつうの {} を使う。{} に必要なトレイトと、impl が書いているトレイトは？"), note: "display",
       expect: "Ferro (level 3)",
       solution: 'use std::fmt;\nstruct Hero { name: String, level: u32 }\n\nimpl fmt::Display for Hero {\n    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {\n        write!(f, "{} (level {})", self.name, self.level)\n    }\n}\n\nfn main() {\n    let h = Hero { name: String::from("Ferro"), level: 3 };\n    println!("{}", h);\n}\n',
       fallback: [
@@ -522,6 +904,7 @@ const squad: LessonDef = {
   xp: 75,
   enemy: "rust/mite",
   enemyName: L("UNIFORM BUG", "BUG UNIFORME", "そっくりバグ"),
+  notes: squadNotes,
   beats: [
     say(L(
       "vec![a, b] creates a list (Vec) and for x in &list walks each element. But a Vec holds only ONE type.",
@@ -567,6 +950,7 @@ const squad: LessonDef = {
       kind: "pick",
       prompt: L("A box for any Skill", "Una caja para cualquier Skill", "どんな Skill も入る箱"),
       code: 'let squad: Vec<Box<___ Skill>> = vec![Box::new(Mage), Box::new(Archer)];\nfor p in &squad {\n    println!("{}", p.use_skill());\n}',
+      hint: L("Inside Box<...>, which keyword turns a trait into a type meaning 'any type with this trait'?", "Dentro de Box<...>, ¿qué palabra convierte un trait en un tipo que significa 'cualquier tipo con este trait'?", "Box<...> の中で、トレイトを「それを持つ何かの型」に変えるキーワードは？"), note: "trait-objects",
       options: ["dyn", "impl", "&", "mut"],
       answer: 0,
       explain: L(
@@ -582,6 +966,7 @@ const squad: LessonDef = {
       kind: "predict",
       prompt: L("What does it print?", "¿Qué imprime?", "何が出力される？"),
       code: 'let squad: Vec<Box<dyn Skill>> =\n    vec![Box::new(Archer), Box::new(Mage), Box::new(Archer)];\nfor p in &squad {\n    println!("{}", p.use_skill());\n}',
+      hint: L("The loop walks the Vec in order, and each box runs the method of the type it holds.", "El bucle recorre el Vec en orden, y cada caja ejecuta el método del tipo que guarda.", "ループは Vec を順に回り、箱ごとに中身の型のメソッドが動く。"), note: "trait-objects",
       options: [
         L("Arrow! Fire! Arrow! (one per line)", "Arrow! Fire! Arrow! (en líneas)", "Arrow! Fire! Arrow!（各行）"),
         L("Fire! Fire! Fire! (one per line)", "Fire! Fire! Fire! (en líneas)", "Fire! Fire! Fire!（各行）"),
@@ -600,6 +985,7 @@ const squad: LessonDef = {
       kind: "predict",
       prompt: L("Without writing dyn. Compiles?", "Sin escribir dyn. ¿Compila?", "dyn を書かないと？コンパイルできる？"),
       code: "let squad = vec![Box::new(Mage), Box::new(Archer)];",
+      hint: L("With no annotation, Rust takes the Vec's type from the first element. Does the second one match it?", "Sin anotación, Rust toma el tipo del Vec del primer elemento. ¿Coincide el segundo con él?", "注釈がないと Vec の型は最初の要素で決まる。2つめはその型と合う？"), note: "trait-objects",
       options: [L("Yes", "Sí", "はい"), L("No: Box<Mage> and Box<Archer> differ", "No: Box<Mage> y Box<Archer> son tipos distintos", "いいえ：Box<Mage> と Box<Archer> は別の型")],
       answer: 1,
       explain: L(
@@ -614,6 +1000,7 @@ const squad: LessonDef = {
       kind: "type",
       prompt: L("Put the Mage in the box", "Mete al Mage en la caja", "Mage を箱に入れよう"),
       code: 'let boxed: Box<dyn Skill> = Box::___(Mage);\nprintln!("{}", boxed.use_skill());',
+      hint: L("It's the same function the squad used to put each character in a box.", "Es la misma función que usó la tropa para meter a cada personaje en una caja.", "部隊で各キャラを箱に入れたのと同じ関数じゃ。"), note: "trait-objects",
       answer: "new",
       explain: L("Box::new(value) stores the value in a box.", "Box::new(valor) guarda el valor en una caja.", "Box::new(値) で値を箱にしまうよ。"),
       check: { program: withSkill('let boxed: Box<dyn Skill> = Box::new(Mage);\nprintln!("{}", boxed.use_skill());'), compiles: true, stdout: "Fire!" },
@@ -633,6 +1020,7 @@ const squad: LessonDef = {
       kind: "predict",
       prompt: L("Which path lets you mix types in a Vec?", "¿Qué camino permite mezclar tipos en un Vec?", "Vec で型を混ぜられるのはどっち？"),
       code: "// A: fn present<T: Skill>(x: &T)\n// B: Vec<Box<dyn Skill>>",
+      hint: L("Think about how many concrete types T can be in one call, and what a box of dyn can hold.", "Piensa cuántos tipos concretos puede ser T en una llamada, y qué puede guardar una caja de dyn.", "1回の呼び出しで T は何種類の型になれる？dyn の箱には何が入る？"), note: "static-vs-dynamic",
       options: [L("A: generics", "A: genéricos", "A：ジェネリクス"), same("B: dyn")],
       answer: 1,
       explain: L(
@@ -646,6 +1034,7 @@ const squad: LessonDef = {
       kind: "predict",
       prompt: L("present(&Mage) with <T: Skill>: when is use_skill() chosen?", "present(&Mage) con <T: Skill>: ¿cuándo se elige use_skill()?", "<T: Skill> の use_skill() はいつ決まる？"),
       code: `${PRESENT}\npresent(&Mage);`,
+      hint: L("With <T: Skill>, the exact type is known at the call. Does Rust need to wait until running to pick?", "Con <T: Skill>, el tipo exacto se conoce en la llamada. ¿Necesita Rust esperar a ejecutar para elegir?", "<T: Skill> なら呼び出しで型が分かる。選ぶのに実行まで待つ必要はある？"), note: "static-vs-dynamic",
       options: [L("At compile time (static)", "Al compilar (estático)", "コンパイル時（静的）"), L("At run time (dynamic)", "Al ejecutar (dinámico)", "実行時（動的）")],
       answer: 0,
       explain: L(
@@ -659,6 +1048,7 @@ const squad: LessonDef = {
       kind: "order",
       prompt: L("Order: build the squad and everyone attacks", "Ordena: arma la tropa y que todos ataquen", "並べよう：部隊を作って全員攻撃"),
       lines: ["let squad: Vec<Box<dyn Skill>> = vec![Box::new(Mage), Box::new(Archer)];", "for p in &squad {", '    println!("{}", p.use_skill());', "}"],
+      hint: L("The squad has to exist before the loop can walk it, and the loop body goes between its braces.", "La tropa debe existir antes de que el bucle la recorra, y el cuerpo del bucle va entre sus llaves.", "ループで回す前に部隊が必要。ループの本体は波かっこの間に入る。"), note: "trait-objects",
       explain: L(
         "First the squad exists; then the for loop walks each box and calls use_skill().",
         "Primero existe la tropa; luego el for recorre cada caja y llama a use_skill().",
@@ -671,6 +1061,7 @@ const squad: LessonDef = {
       kind: "run",
       prompt: L("Fix it: it must print Attacks: Arrow!", "Arréglalo: debe imprimir Attacks: Arrow!", "直そう：Attacks: Arrow! と出力させて"),
       starter: 'trait Skill { fn use_skill(&self) -> String; }\nstruct Mage;\nstruct Archer;\nimpl Skill for Mage { fn use_skill(&self) -> String { String::from("Fire!") } }\nimpl Skill for Archer { fn use_skill(&self) -> String { String::from("Arrow!") } }\n\nfn main() {\n    let squad = vec![Box::new(Mage), Box::new(Archer)];\n    for p in &squad {\n        println!("Attacks: {}", p.use_skill());\n    }\n}\n',
+      hint: L("The Vec takes its type from the first box. Annotate it so every box holds 'some type with Skill'.", "El Vec toma su tipo de la primera caja. Anótalo para que cada caja guarde 'algún tipo con Skill'.", "Vec の型は最初の箱で決まる。どの箱も「Skill を持つ何か」になるよう型を書こう。"), note: "trait-objects",
       expect: "Attacks: Arrow!",
       solution: 'trait Skill { fn use_skill(&self) -> String; }\nstruct Mage;\nstruct Archer;\nimpl Skill for Mage { fn use_skill(&self) -> String { String::from("Fire!") } }\nimpl Skill for Archer { fn use_skill(&self) -> String { String::from("Arrow!") } }\n\nfn main() {\n    let squad: Vec<Box<dyn Skill>> = vec![Box::new(Mage), Box::new(Archer)];\n    for p in &squad {\n        println!("Attacks: {}", p.use_skill());\n    }\n}\n',
       fallback: [
@@ -693,22 +1084,23 @@ const boss4: LessonDef = {
   xp: 180,
   enemy: "rust/borrow-dragon",
   enemyName: L("GENERIC DRAGON", "DRAGÓN GENÉRICO", "ジェネリック竜"),
+  notes: bossNotes,
   beats: [
     enemySays(L(
       "I AM THE CASTLE DRAGON. Only those who honor their contracts may pass. Do you have the badge?",
       "SOY EL DRAGÓN DEL CASTILLO. Solo cruza quien cumple sus contratos. ¿Tienes la insignia?",
       "我こそ城の竜。契約を守る者だけが通れる。バッジは持っているか？",
     )),
-    { kind: "predict", time: 12, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: "trait Fly { fn fly(&self); }\nstruct Bird;\nimpl Fly for Bird {}", options: [L("Yes", "Sí", "はい"), L("No", "No", "いいえ")], answer: 1, explain: L("fly() is not implemented.", "Falta implementar fly().", "fly() が実装されていないよ。"), check: { compiles: false } },
-    { kind: "pick", time: 12, prompt: L("Sign the contract", "Firma el contrato", "契約にサインしよう"), code: 'trait Fly { fn fly(&self) -> u32; }\nstruct Bird;\nimpl ___ for Bird { fn fly(&self) -> u32 { 3 } }\nprintln!("{}", Bird.fly());', options: ["Fly", "Bird", "trait"], answer: 0, explain: L("impl Trait for Type.", "impl Trait for Tipo.", "impl トレイト for 型。"), check: { compiles: true, stdout: "3", wrongFail: true } },
-    { kind: "predict", time: 12, prompt: L("What does it print?", "¿Qué imprime?", "何が出力される？"), code: 'trait Roar { fn roar(&self) -> u32 { 1 } }\nstruct Dragon;\nimpl Roar for Dragon {}\nprintln!("{}", Dragon.roar());', options: ["1", L("Error", "Error", "エラー")], answer: 0, explain: L("Default method: it's inherited.", "Método por defecto: se hereda.", "デフォルトメソッドは受け継がれるよ。"), check: { compiles: true, stdout: "1" } },
-    { kind: "pick", time: 12, prompt: L("Require the badge", "Exige la insignia", "バッジを要求しよう"), code: "fn f<T: ___>(x: &T) -> String { x.use_skill() }", options: ["Skill", "Mage", "dyn"], answer: 0, explain: same("T: Skill"), check: { program: withSkill("println!(\"{}\", f(&Mage));", "\nfn f<T: Skill>(x: &T) -> String { x.use_skill() }\n"), compiles: true, stdout: "Fire!" } },
-    { kind: "predict", time: 12, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: "fn present<T: Skill>(x: &T) {}\npresent(&3);", options: [L("Yes", "Sí", "はい"), L("No", "No", "いいえ")], answer: 1, explain: L("3 doesn't implement Skill: E0277.", "3 no implementa Skill: E0277.", "3 は Skill を実装していない：E0277。"), check: { program: withSkill("present(&3);", "\nfn present<T: Skill>(x: &T) {}\n"), compiles: false } },
-    { kind: "type", time: 12, prompt: L("The generic shortcut", "El atajo del genérico", "ジェネリクスの近道"), code: "fn f(x: &___ Skill) -> String { x.use_skill() }", answer: "impl", explain: same("&impl Skill"), check: { program: withSkill("println!(\"{}\", f(&Archer));", "\nfn f(x: &impl Skill) -> String { x.use_skill() }\n"), compiles: true, stdout: "Arrow!" } },
-    { kind: "pick", time: 12, prompt: L("To use ==", "Para usar ==", "== を使うには"), code: '#[derive(___)]\nstruct Gold { n: u32 }\nprintln!("{}", Gold { n: 1 } == Gold { n: 1 });', options: ["PartialEq", "Debug", "Clone"], answer: 0, explain: L("== comes from PartialEq.", "== viene de PartialEq.", "== は PartialEq から来るよ。"), check: { compiles: true, stdout: "true", wrongFail: true } },
-    { kind: "predict", time: 12, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: "#[derive(Copy)]\nstruct Scale;", options: [L("Yes", "Sí", "はい"), L("No", "No", "いいえ")], answer: 1, explain: L("Copy requires Clone.", "Copy exige Clone.", "Copy には Clone が必要。"), check: { compiles: false } },
-    { kind: "type", time: 15, prompt: L("Squad with mixed types", "Tropa con tipos mezclados", "型をまぜた部隊"), code: "let v: Vec<Box<___ Skill>> = vec![Box::new(Mage), Box::new(Archer)];", answer: "dyn", explain: same("Box<dyn Skill>"), check: { program: withSkill("let v: Vec<Box<dyn Skill>> = vec![Box::new(Mage), Box::new(Archer)];\nprintln!(\"{}\", v.len());"), compiles: true, stdout: "2" } },
-    { kind: "predict", time: 15, prompt: L("<T: Skill> uses which dispatch?", "<T: Skill> usa despacho...", "<T: Skill> のディスパッチは？"), code: "fn present<T: Skill>(x: &T)", options: [L("Static (at compile time)", "Estático (al compilar)", "静的（コンパイル時）"), L("Dynamic (at run time)", "Dinámico (al ejecutar)", "動的（実行時）")], answer: 0, explain: L("Generics = static. dyn = dynamic.", "Genéricos = estático. dyn = dinámico.", "ジェネリクス＝静的、dyn＝動的。"), check: { program: withSkill("present(&Mage);", `\n${PRESENT}`), compiles: true, stdout: "Fire!" } },
+    { kind: "predict", time: 12, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: "trait Fly { fn fly(&self); }\nstruct Bird;\nimpl Fly for Bird {}", hint: L("Check the trait: does fly have a body? Then check what the impl contains.", "Revisa el trait: ¿tiene cuerpo fly? Luego mira qué contiene el impl.", "トレイトの fly に本体はある？次に impl の中身を見よう。"), note: "recap-traits", options: [L("Yes", "Sí", "はい"), L("No", "No", "いいえ")], answer: 1, explain: L("fly() is not implemented.", "Falta implementar fly().", "fly() が実装されていないよ。"), check: { compiles: false } },
+    { kind: "pick", time: 12, prompt: L("Sign the contract", "Firma el contrato", "契約にサインしよう"), code: 'trait Fly { fn fly(&self) -> u32; }\nstruct Bird;\nimpl ___ for Bird { fn fly(&self) -> u32 { 3 } }\nprintln!("{}", Bird.fly());', hint: L("The impl line names the contract first, then for, then the type that signs it.", "La línea impl nombra primero el contrato, luego for y luego el tipo que firma.", "impl の行は契約の名前、for、サインする型の順じゃ。"), note: "recap-traits", options: ["Fly", "Bird", "trait"], answer: 0, explain: L("impl Trait for Type.", "impl Trait for Tipo.", "impl トレイト for 型。"), check: { compiles: true, stdout: "3", wrongFail: true } },
+    { kind: "predict", time: 12, prompt: L("What does it print?", "¿Qué imprime?", "何が出力される？"), code: 'trait Roar { fn roar(&self) -> u32 { 1 } }\nstruct Dragon;\nimpl Roar for Dragon {}\nprintln!("{}", Dragon.roar());', hint: L("Dragon's impl is empty. Does roar have a body in the trait?", "El impl de Dragon está vacío. ¿Tiene roar un cuerpo en el trait?", "Dragon の impl は空。roar はトレイト側に本体がある？"), note: "recap-traits", options: ["1", L("Error", "Error", "エラー")], answer: 0, explain: L("Default method: it's inherited.", "Método por defecto: se hereda.", "デフォルトメソッドは受け継がれるよ。"), check: { compiles: true, stdout: "1" } },
+    { kind: "pick", time: 12, prompt: L("Require the badge", "Exige la insignia", "バッジを要求しよう"), code: "fn f<T: ___>(x: &T) -> String { x.use_skill() }", hint: L("The bound must guarantee that T has use_skill(). What kind of name goes in a bound?", "El bound debe garantizar que T tiene use_skill(). ¿Qué clase de nombre va en un bound?", "境界は T に use_skill() があると保証する。境界に書く名前の種類は？"), note: "recap-generics", options: ["Skill", "Mage", "dyn"], answer: 0, explain: same("T: Skill"), check: { program: withSkill("println!(\"{}\", f(&Mage));", "\nfn f<T: Skill>(x: &T) -> String { x.use_skill() }\n"), compiles: true, stdout: "Fire!" } },
+    { kind: "predict", time: 12, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: "fn present<T: Skill>(x: &T) {}\npresent(&3);", hint: L("present requires T: Skill. Check whether a plain integer has that trait.", "present exige T: Skill. Comprueba si un entero normal tiene ese trait.", "present は T: Skill を求める。ただの整数はそのトレイトを持っている？"), note: "recap-generics", options: [L("Yes", "Sí", "はい"), L("No", "No", "いいえ")], answer: 1, explain: L("3 doesn't implement Skill: E0277.", "3 no implementa Skill: E0277.", "3 は Skill を実装していない：E0277。"), check: { program: withSkill("present(&3);", "\nfn present<T: Skill>(x: &T) {}\n"), compiles: false } },
+    { kind: "type", time: 12, prompt: L("The generic shortcut", "El atajo del genérico", "ジェネリクスの近道"), code: "fn f(x: &___ Skill) -> String { x.use_skill() }", hint: L("It's the shorthand for <T: Skill>, written right in the parameter's type.", "Es la forma corta de <T: Skill>, escrita directamente en el tipo del parámetro.", "<T: Skill> の近道で、引数の型に直接書くものじゃ。"), note: "recap-generics", answer: "impl", explain: same("&impl Skill"), check: { program: withSkill("println!(\"{}\", f(&Archer));", "\nfn f(x: &impl Skill) -> String { x.use_skill() }\n"), compiles: true, stdout: "Arrow!" } },
+    { kind: "pick", time: 12, prompt: L("To use ==", "Para usar ==", "== を使うには"), code: '#[derive(___)]\nstruct Gold { n: u32 }\nprintln!("{}", Gold { n: 1 } == Gold { n: 1 });', hint: L("The code compares with ==. Which standard trait gives a struct that operator?", "El código compara con ==. ¿Qué trait estándar le da ese operador a un struct?", "== で比べている。構造体にその演算子をくれる標準トレイトは？"), note: "recap-derive", options: ["PartialEq", "Debug", "Clone"], answer: 0, explain: L("== comes from PartialEq.", "== viene de PartialEq.", "== は PartialEq から来るよ。"), check: { compiles: true, stdout: "true", wrongFail: true } },
+    { kind: "predict", time: 12, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: "#[derive(Copy)]\nstruct Scale;", hint: L("Copy has a requirement. Is it in the derive list?", "Copy tiene un requisito. ¿Está en la lista del derive?", "Copy には条件がある。それは derive に入っている？"), note: "recap-derive", options: [L("Yes", "Sí", "はい"), L("No", "No", "いいえ")], answer: 1, explain: L("Copy requires Clone.", "Copy exige Clone.", "Copy には Clone が必要。"), check: { compiles: false } },
+    { kind: "type", time: 15, prompt: L("Squad with mixed types", "Tropa con tipos mezclados", "型をまぜた部隊"), code: "let v: Vec<Box<___ Skill>> = vec![Box::new(Mage), Box::new(Archer)];", hint: L("To mix types in a Vec, each box holds a trait object. Which keyword marks one?", "Para mezclar tipos en un Vec, cada caja guarda un objeto de trait. ¿Qué palabra lo marca?", "Vec で型を混ぜるには箱にトレイトオブジェクトを入れる。それを示すキーワードは？"), note: "recap-dyn", answer: "dyn", explain: same("Box<dyn Skill>"), check: { program: withSkill("let v: Vec<Box<dyn Skill>> = vec![Box::new(Mage), Box::new(Archer)];\nprintln!(\"{}\", v.len());"), compiles: true, stdout: "2" } },
+    { kind: "predict", time: 15, prompt: L("<T: Skill> uses which dispatch?", "<T: Skill> usa despacho...", "<T: Skill> のディスパッチは？"), code: "fn present<T: Skill>(x: &T)", hint: L("Generic or trait object? Recall which kind of dispatch each one uses.", "¿Genérico u objeto de trait? Recuerda qué tipo de despacho usa cada uno.", "ジェネリクスかトレイトオブジェクトか？それぞれのディスパッチを思い出そう。"), note: "recap-dyn", options: [L("Static (at compile time)", "Estático (al compilar)", "静的（コンパイル時）"), L("Dynamic (at run time)", "Dinámico (al ejecutar)", "動的（実行時）")], answer: 0, explain: L("Generics = static. dyn = dynamic.", "Genéricos = estático. dyn = dinámico.", "ジェネリクス＝静的、dyn＝動的。"), check: { program: withSkill("present(&Mage);", `\n${PRESENT}`), compiles: true, stdout: "Fire!" } },
     enemySays(L(
       "Grrr... every type honored its contract. The castle is yours, Rustacean. The tower awaits.",
       "Grrr... cada tipo cumplió su contrato. El castillo es tuyo, rustáceo. La torre te espera.",

@@ -84,7 +84,7 @@ Every field typed `Text` accepts either:
 
 Fields that are **always plain strings** (never translated): `code`, `line`, `starter`, `solution`, `expect`, `fallback`, `output`, `lines`, `type` `answer`, `error.compiler`, `tag`/`value`/`print` effect text, slugs and ids.
 
-Fields that **must be `L(...)`**: dialog `text`, every `prompt`, `explain`, act step `label`, `error.plain`, `say`/`banner` effect text, lesson `title`/`enemyName`, region `name`/`subtitle`, topic `name`, exam `title`/`description`, pack `tagline`, planet `name`/`story`, guide `name`/`title`. `hint` is typed `Text` too and should be `L(...)`.
+Fields that **must be `L(...)`**: dialog `text`, every `prompt`, `explain`, `hint`, act step `label`, `error.plain`, `say`/`banner` effect text, lesson `title`/`enemyName`, note `title`, note paragraph `text` and code `caption`, region `name`/`subtitle`, topic `name`, exam `title`/`description`, pack `tagline`, planet `name`/`story`, guide `name`/`title`.
 
 Options in `pick`/`predict` may be either: plain strings for code tokens (`"b"`, `"&mut x"`), `L(...)` for prose answers (`L("No: s1 moved to s2", ...)`).
 
@@ -101,6 +101,7 @@ Code in exercises uses **English identifiers** for every locale (`let sword = ..
 | `xp` | number | 40–85 for lessons (more in advanced regions), 120–200 for bosses |
 | `enemy` | `EnemyKind` (= `SpriteId`) | Sprite of the lesson's bug: a built-in id (`slime`, `ghost`, `golem`, `dragon`) or a pack sprite such as `"rust/mite"`. Prefer the planet's own bugs. The validator rejects unknown ids |
 | `enemyName` | `L(...)` | Upper case, budget 20: `L("THIEF BUG", "BUG LADRÓN", "ドロボウバグ")` |
+| `notes` | `NoteDef[]`? | The lesson's guidebook: long explanations of the ideas its questions test, opened from the 📖 button. Required for new lessons; see [Lesson notes and hints](#lesson-notes-and-hints) |
 
 The lesson's bug has as many hit points as there are questions. Each correct answer removes one and each mistake heals one, because the question comes back at the end.
 
@@ -167,7 +168,7 @@ Sprites are text grids, one string per row, one character per pixel. Legend (`co
 
 Every color is a palette CSS variable (`lib/palette.ts`, which defines `purple` and `cyan` in each palette), so sprites recolor with the chosen palette.
 
-- **Built-in sprites** (`hero`, `ally`, `master`, `slime`, `ghost`, `golem`, `dragon`, items...) live in `components/pixel/sprites.ts`.
+- **Built-in sprites** (`hero`, `ally`, `master`, `slime`, `ghost`, `golem`, `dragon`, items, and UI icons such as `clock`, `timerOff`, `turtle`, `runner` and `bolt` for the timer modes, `book` for the guidebook, `bulb` for hints and `ticket` for hint tickets...) live in `components/pixel/sprites.ts`.
 - **Pack sprites** live in `content/<lang>/sprites.ts` as `Record<string, string[]>` (e.g. `RUST_SPRITES`) and are registered in `content/sprites.ts` (`PACK_SPRITES`). That registry is client-safe: it only imports sprite files, never lesson content.
 - **Ids are namespaced** `<lang>/<name>` in kebab-case (`rust/borrow-dragon`).
 - Draw them as **16×16** grids, like the built-in characters.
@@ -177,7 +178,7 @@ Every color is a palette CSS variable (`lib/palette.ts`, which defines `purple` 
 
 ## Beats
 
-Common fields (`BeatBase`): `setup` (effects before the beat; if present, the scene is reset), `win` (effects on success), `time` (seconds for the speed bonus; in bosses and exams, the time limit), `check` (proof for the validator), `hint` and `concept`.
+Common fields (`BeatBase`): `setup` (effects before the beat; if present, the scene is reset), `win` (effects on success), `time` (overrides the question's base seconds at the "normal" timer, which are otherwise computed from its kind and code length by `questionSeconds` in `lib/game-rules.ts`; in exams, the time limit), `check` (proof for the validator), `hint` (a nudge the player buys with a hint ticket, budget 120), `note` (id of the lesson note that explains the question; defaults to the lesson's first note) and `concept`. See [Lesson notes and hints](#lesson-notes-and-hints).
 
 | kind | Purpose | Key fields |
 | --- | --- | --- |
@@ -301,6 +302,93 @@ The runner (`lib/runners/js-core.ts`) compiles TS/TSX with sucrase and runs it i
 - **React renders are static.** Render with `renderToStaticMarkup` from `react-dom/server` and print the HTML string. Effects (`useEffect`, `useLayoutEffect`) never run, event handlers are never called and state never updates after the first render; test that logic as plain functions with `console.log`.
 - **React 19 static-render quirks.** `javascript:` URLs are replaced by a URL that throws; a component that suspends inside `<Suspense>` renders the fallback and one without a boundary throws; `ref` is a regular prop; `<Context value>` works as a provider. Prove each such claim with `check.stdout` rather than from memory.
 
+## Lesson notes and hints
+
+Every lesson carries help for a player who is stuck, so a hard question never leaves them without a way back to the explanation:
+
+- **Notes (the guidebook).** `LessonDef.notes` is a list of `NoteDef`: long explanations of the ideas the lesson's questions test. The player opens them from the 📖 button at any time during the lesson, and from the "read more" button in the wrong-answer box. Each question's `note` picks the note that opens first; the others are tabs.
+- **Hints.** `BeatBase.hint` is a short nudge on a question beat (`pick`, `predict`, `type`, `order`, `run`). The player spends a hint ticket to see it; on `pick` and `predict` the engine also strikes out one wrong option. Game rules (ticket economy, the 25% guidebook cost) are in [game-design.md](game-design.md#learning-help-guidebook-and-hints).
+
+```ts
+export type NoteBlock =
+  | { t: "p"; text: Text }                                                          // a paragraph
+  | { t: "code"; code: string; output?: string; caption?: Text; check?: SnippetCheck }; // a code example
+
+export interface NoteDef { id: string; title: Text; blocks: NoteBlock[] }
+```
+
+Notes reach the client in `LessonPlay.notes`, keyed by lesson slug (reviews mix beats from several lessons, so they carry the notes of each). Exams never get notes. A lesson without `notes` falls back to a single note built from its teaching dialogs (`notesOf` in `lib/repo.ts`), so the 📖 button always has something to show; that fallback is only a stopgap until the lesson gets real notes.
+
+### What to write
+
+For **every lesson** (new lessons always; older ones as they are revisited):
+
+1. **`notes`: one note per distinct idea the questions test**, usually 1–3 per lesson. Bosses usually have 2–4 short recap notes covering the region's ideas. Questions that test the same idea share a note. Ids are kebab-case and unique within the lesson.
+2. **A note is a real explanation for a beginner who just got the question wrong**, built as **concept → example → rule → why → common mistakes**: what the idea is, a short example, the rule to remember, why the language works that way, and a typical mistake. 3–6 paragraphs (`t: "p"`) plus 1–3 code examples.
+3. **Code examples use different names and values from the lesson's questions**, so a note never gives an answer away. Keep them short (≤ 10 lines). When an example prints, include its exact `output`: the validator runs it with the real compiler or runner, with the same snippet wrapping as questions. A "this does not compile" example has `check: { compiles: false }` and no `output`; use `check.program` when a full program is needed. An optional `caption` says what the example shows.
+4. **Every question beat gets a `hint`** that points toward the reasoning (which rule applies, what to look at) **without revealing the answer or quoting an option**. Remember that on `pick`/`predict` a wrong option is already struck out alongside it.
+5. **Every question gets `note: "<id>"`** when the lesson has more than one note.
+6. All prose is `L(en, es, ja)`; code and program output are never translated.
+
+| Field | Budget (en/es) | Budget (ja) |
+| --- | --- | --- |
+| Note `title` | 40 | 26 |
+| Note paragraph `text` | 420 | 273 |
+| Code example `caption` | 90 | 59 |
+| `hint` | 120 | 78 |
+
+**Never insert, remove or reorder beats in an existing lesson** to make room for help: saved reviews reference questions by `"<lessonSlug>#<beatIndex>"`, so shifting beats points every player's due reviews at the wrong question. Add `notes` to the lesson and `hint`/`note` to existing question beats only.
+
+### What the validator checks
+
+`checkNotes` in `scripts/validate-content.ts` (`npm run content:check`):
+
+- Note ids are kebab-case and unique within the lesson; budgets above (warnings when over).
+- A note without any code example is a warning.
+- **A lesson that has `notes` is held to the full standard:** every question beat (everything except `dialog` and `act`) must have a `hint`, and every `note` must name one of the lesson's notes. Both are errors.
+- `npm run content:verify` runs every code example that has an `output` or a `check`, exactly like a question's `check`: `output` must match the program's stdout, `compiles: false` must fail to compile.
+
+### Example
+
+The reference implementation is `content/rust/regions/let-village.ts`; copy its small local helpers and style:
+
+```ts
+import type { LessonDef, NoteBlock, NoteDef, Text } from "../../../lib/content/types.ts";
+import { L } from "../helpers.ts";
+
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example; the validator checks `output` against the real compiler. */
+const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code, output, caption });
+/** An example that must NOT compile (verified too). */
+const bad = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: false } });
+
+const mutNotes: NoteDef[] = [
+  note("mut", L("Changing a variable with mut", "Cambiar una variable con mut", "mut で変数を変える"),
+    p("In Rust a variable can't change after it's created ...", "En Rust una variable no puede cambiar ...", "Rustの変数は、作ったあと変えられない ..."),
+    ex("let mut steps = 1;\nsteps = 4;\nprintln!(\"{}\", steps);", "4",
+      L("mut allows a new value later", "mut permite un valor nuevo después", "mut があればあとで値を変えられる")),
+    bad("let lamps = 2;\nlamps = 3;",
+      L("Does not compile: lamps is not mut", "No compila: lamps no es mut", "コンパイル不可：lamps は mut じゃない")),
+    p("Common mistake: ...", "Error común: ...", "よくあるミス：..."),
+  ),
+];
+
+// On a question beat (the question uses hp and gold, the note uses steps and lamps):
+{
+  kind: "pick",
+  // prompt, code, options, answer, explain, check ...
+  hint: L(
+    "The second line changes hp. What does a variable need when it's created to be allowed to change?",
+    "La segunda línea cambia hp. ¿Qué necesita una variable al crearse para poder cambiar?",
+    "2行目で hp が変わる。変われるようにするには、作るときに何が必要？",
+  ),
+  note: "mut",
+}
+
+const lesson: LessonDef = { /* slug, title, ..., beats */ notes: mutNotes };
+```
+
 ## Visual effects
 
 Actors are `hero`, `ally` and `enemy`. Items are `sword`, `potion`, `gem`, `shield`, `scroll` and `key`.
@@ -336,6 +424,7 @@ See [exams.md](exams.md).
 - [ ] Every prose field is `L(en, es, ja)`; code fields are plain strings.
 - [ ] Every `enemy`, guide sprite and bug is a known sprite id; pack sprites are namespaced `<lang>/<name>`.
 - [ ] Every compiler-dependent question has `check`; every `run` has `solution` and `fallback`.
+- [ ] Every lesson has `notes`, every question beat a `hint` that does not give the answer away, and a `note` when the lesson has several notes; note examples use names and values different from the questions.
 - [ ] TS/TSX packs set `codeLang`; snippets are module bodies, TSX snippets import React, and nothing relies on Node globals, the DOM or effects running.
 - [ ] A moon has `parent` set to an existing planet (never to another moon).
 - [ ] `npm run content:check` reports 0 errors.

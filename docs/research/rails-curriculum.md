@@ -74,7 +74,7 @@ most ~12 visible lines; longer setup goes into the shared helper.
 
 ### Shared helper code
 
-Two hidden helpers are prepended to the verification programs of `[R+H]` questions (and may be shown in a "codex"
+Two hidden helpers are prepended to the verification programs of `[R+H]` questions (and may be shown in a "guidebook"
 side panel). Both verified on Ruby 3.4.7.
 
 **`MiniRecord`** (regions 1-2): an in-memory DB that counts queries, a lazy chainable `Relation`, and a `Model` base

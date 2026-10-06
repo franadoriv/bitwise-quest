@@ -1,4 +1,4 @@
-import type { Beat, LessonDef, RegionDef, Text } from "../../../lib/content/types.ts";
+import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
 
 // REGION 1 · PIPELINE VILLAGE  (clip space, the GPU state machine, shaders and GLSL)
@@ -13,7 +13,128 @@ const YES = L("Yes", "Sí", "はい");
 const NO_TSC = L("No: tsc stops it", "No: tsc lo detiene", "いいえ：tsc が止める");
 const GLSL_OK = L("Valid GLSL?", "¿GLSL válido?", "正しい GLSL？");
 
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable pure-logic example; the validator checks `output` against the real runner. */
+const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code, output, caption });
+/** A WebGL API example: type-checked with tsc --strict, never run (no GPU). */
+const tc = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: true } });
+/** An example that must NOT type-check (verified too). */
+const bad = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: false } });
+/** GLSL shown for reading only: no runner can check it. */
+const show = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption });
+
 // ─── 1.1 The -1 to +1 world ────────────────────────────────────────────────
+const clipSpaceNotes: NoteDef[] = [
+  note("clip-space", L("Clip space: the -1 to +1 box", "Clip space: la caja de -1 a +1", "クリップ空間：-1 から +1 の箱"),
+    p(
+      "WebGL doesn't think in pixels. The vertex shader places every point in clip space, a fixed box where x and y both go from -1 to +1. The center of the canvas is (0, 0), the left edge is x = -1 and the right edge is x = +1. A tiny canvas and a 4K canvas use exactly the same range.",
+      "WebGL no piensa en píxeles. El vertex shader ubica cada punto en clip space, una caja fija donde x e y van de -1 a +1. El centro del canvas es (0, 0), el borde izquierdo es x = -1 y el derecho es x = +1. Un canvas diminuto y uno 4K usan exactamente el mismo rango.",
+      "WebGL はピクセルで考えない。頂点シェーダーはすべての点をクリップ空間に置く。x も y も -1 から +1 の決まった箱だ。キャンバスの中心は (0, 0)、左はしは x = -1、右はしは x = +1。小さなキャンバスでも 4K でも範囲はまったく同じだよ。",
+    ),
+    p(
+      "To turn a pixel x into clip x: divide by the width (giving 0..1), multiply by 2 (0..2) and subtract 1 (-1..+1). So the left edge becomes -1, the middle becomes 0 and the right edge becomes +1.",
+      "Para pasar una x en píxeles a x de clip: divide entre el ancho (da 0..1), multiplica por 2 (0..2) y resta 1 (-1..+1). Así el borde izquierdo queda en -1, el medio en 0 y el borde derecho en +1.",
+      "ピクセルの x をクリップの x にするには、幅で割って（0..1）、2 倍して（0..2）、1 を引く（-1..+1）。すると左はしは -1、まんなかは 0、右はしは +1 になる。",
+    ),
+    ex("const w = 640;\nconst clip = (px: number) => (px / w) * 2 - 1;\nconsole.log(clip(0), clip(160), clip(640));", "-1 -0.5 1",
+      L("A 640-pixel-wide canvas: left edge, a quarter in, right edge", "Canvas de 640 px: borde izquierdo, un cuarto, borde derecho", "幅 640：左はし、4 分の 1、右はし")),
+    p(
+      "Why a fixed range? The GPU works the same on any screen: you describe shapes once in -1..+1, and the viewport stretches them to the real pixels at the end. 3D engines do this conversion with matrices for you, but underneath it is always clip space.",
+      "¿Por qué un rango fijo? La GPU funciona igual en cualquier pantalla: describes las formas una vez en -1..+1 y el viewport las estira a los píxeles reales al final. Los motores 3D hacen esta conversión con matrices por ti, pero debajo siempre hay clip space.",
+      "なぜ決まった範囲なのか？どんな画面でも GPU が同じように動けるからだ。形は -1..+1 で一度だけ書き、最後に viewport が本物のピクセルへ引きのばす。3D エンジンは行列でこの変換をしてくれるけど、その下はいつもクリップ空間だよ。",
+    ),
+    p(
+      "Common mistakes: thinking clip space starts at 0 like pixels do (0 is the CENTER), and forgetting the - 1, which squeezes everything into the right half of the screen.",
+      "Errores comunes: creer que clip space empieza en 0 como los píxeles (0 es el CENTRO) y olvidar el - 1, que aprieta todo en la mitad derecha de la pantalla.",
+      "よくあるミス：ピクセルと同じくクリップ空間も 0 から始まると思うこと（0 は「中心」）。それと - 1 を忘れて、全部を画面の右半分に押しこんでしまうこと。",
+    ),
+    ex("const noShift = (px: number) => (px / 640) * 2;\nconsole.log(noShift(0), noShift(320));", "0 1",
+      L("Without - 1, the left edge lands on the center", "Sin - 1, el borde izquierdo cae en el centro", "- 1 がないと左はしが中心に来る")),
+  ),
+  note("y-flip", L("Flipping y: pixels down, clip up", "Invertir y: píxeles abajo, clip arriba", "y の反転：ピクセルは下、クリップは上"),
+    p(
+      "Screens count pixel rows from the top: row 0 is the top line and y grows downward. Clip space works like a math graph: +1 is the top and -1 is the bottom, so y grows upward. The two y axes point in opposite directions.",
+      "Las pantallas cuentan las filas de píxeles desde arriba: la fila 0 es la línea superior y la y crece hacia abajo. Clip space funciona como un gráfico de matemáticas: +1 es arriba y -1 es abajo, así que la y crece hacia arriba. Los dos ejes y apuntan en sentidos opuestos.",
+      "画面はピクセルの行を上から数える。0 行目が一番上で、y は下へ増える。クリップ空間は数学のグラフと同じで、+1 が上、-1 が下。y は上へ増える。2 つの y 軸は逆向きなんだ。",
+    ),
+    p(
+      "So the y formula is flipped: clipY = 1 - (py / h) * 2. Row 0 gives 1 (top), the middle row gives 0 and the last row gives -1 (bottom). Compare it with x, where you subtract 1 at the end instead.",
+      "Por eso la fórmula de y está invertida: clipY = 1 - (py / h) * 2. La fila 0 da 1 (arriba), la del medio da 0 y la última da -1 (abajo). Compárala con la de x, donde en cambio restas 1 al final.",
+      "だから y の式は反転する：clipY = 1 - (py / h) * 2。0 行目は 1（上）、まんなかは 0、最後の行は -1（下）。最後に 1 を引く x の式とくらべてみよう。",
+    ),
+    ex("const h = 480;\nconst clipY = (py: number) => 1 - (py / h) * 2;\nconsole.log(clipY(120), clipY(240), clipY(360));", "0.5 0 -0.5",
+      L("A quarter down is +0.5; three quarters down is -0.5", "Un cuarto hacia abajo es +0.5; tres cuartos, -0.5", "4 分の 1 下は +0.5、4 分の 3 下は -0.5")),
+    p(
+      "If you use the x formula for y, the picture comes out upside down: a click near the top lands near the bottom. It's the most common bug when converting mouse positions to WebGL coordinates.",
+      "Si usas la fórmula de x para la y, la imagen sale al revés: un clic cerca de arriba cae cerca de abajo. Es el bug más común al convertir posiciones del mouse a coordenadas de WebGL.",
+      "y に x の式を使うと絵が上下さかさまになる。上のほうのクリックが下のほうに行ってしまう。マウス位置を WebGL の座標に変えるときに一番多いバグだよ。",
+    ),
+    ex("const sameAsX = (py: number) => (py / 480) * 2 - 1;\nconsole.log(sameAsX(0));", "-1",
+      L("With the x formula, the top row ends up at the bottom", "Con la fórmula de x, la fila de arriba acaba abajo", "x の式だと一番上の行が下に行く")),
+    p(
+      "Rule: x becomes (px / w) * 2 - 1 and y becomes 1 - (py / h) * 2. Test yourself with a corner: the top-left pixel (0, 0) must become (-1, +1), and the bottom-right must become (+1, -1).",
+      "Regla: x pasa a ser (px / w) * 2 - 1 e y pasa a ser 1 - (py / h) * 2. Pruébate con una esquina: el píxel de arriba a la izquierda (0, 0) debe dar (-1, +1) y el de abajo a la derecha, (+1, -1).",
+      "ルール：x は (px / w) * 2 - 1、y は 1 - (py / h) * 2。角でたしかめよう。左上のピクセル (0, 0) は (-1, +1)、右下は (+1, -1) になるはずだよ。",
+    ),
+  ),
+  note("clipping-viewport", L("Clipping and the viewport", "Recorte y viewport", "クリップと viewport"),
+    p(
+      "After the vertex shader, anything outside -1..+1 is clipped: cut away and never drawn. A vertex at x = 2 is off screen, and a triangle that is partly outside gets trimmed at the edge, so only its inside part is drawn. Nothing wraps around to the other side.",
+      "Después del vertex shader, todo lo que está fuera de -1..+1 se recorta: se corta y nunca se dibuja. Un vértice en x = 2 queda fuera de la pantalla, y un triángulo que sale en parte se recorta en el borde, así que solo se dibuja su parte interior. Nada da la vuelta al otro lado.",
+      "頂点シェーダーのあと、-1..+1 の外にあるものはクリップされる。切り取られて描かれない。x = 2 の頂点は画面の外で、一部がはみ出た三角形ははしで切られ、内側だけが描かれる。反対側に回りこむことはないよ。",
+    ),
+    ex("const inside = (x: number, y: number) => Math.abs(x) <= 1 && Math.abs(y) <= 1;\nconsole.log(inside(0.9, -0.2), inside(-1.3, 0));", "true false",
+      L("A point is visible only inside the box on both axes", "Un punto se ve solo si está dentro en ambos ejes", "両方の軸で箱の中なら見える")),
+    p(
+      "Then the viewport maps clip space onto pixels. gl.viewport(x, y, width, height) tells WebGL which rectangle of the canvas the -1..+1 box should fill. Usually that's the whole drawing buffer, but you can also draw into just a part of it, like a split screen.",
+      "Luego el viewport mapea clip space a píxeles. gl.viewport(x, y, ancho, alto) le dice a WebGL qué rectángulo del canvas debe llenar la caja -1..+1. Casi siempre es todo el drawing buffer, pero también puedes dibujar solo en una parte, como en una pantalla dividida.",
+      "次に viewport がクリップ空間をピクセルに対応させる。gl.viewport(x, y, 幅, 高さ) で、-1..+1 の箱がキャンバスのどの長方形を埋めるかを WebGL に伝える。ふつうは描画バッファ全体だけど、画面分割のように一部だけに描くこともできるよ。",
+    ),
+    tc("declare const gl: WebGL2RenderingContext;\n// draw only into the left half of the canvas\ngl.viewport(0, 0, gl.drawingBufferWidth / 2, gl.drawingBufferHeight);",
+      L("Type-checked only: a split-screen viewport", "Solo se verifica el tipo: viewport de pantalla dividida", "型チェックのみ：画面分割の viewport")),
+    p(
+      "The viewport math is the clip formula run backwards: px = ((x + 1) / 2) * width. Add 1 (0..2), halve it (0..1), multiply by the width. Clip 0 lands in the middle, -1 at pixel 0 and +1 at the full width.",
+      "La cuenta del viewport es la fórmula de clip al revés: px = ((x + 1) / 2) * ancho. Suma 1 (0..2), divide entre 2 (0..1) y multiplica por el ancho. Clip 0 cae en el medio, -1 en el píxel 0 y +1 en el ancho completo.",
+      "viewport の計算はクリップの式の逆：px = ((x + 1) / 2) * 幅。1 を足して（0..2）、半分にして（0..1）、幅をかける。クリップの 0 はまんなか、-1 はピクセル 0、+1 は幅いっぱいだよ。",
+    ),
+    ex("const toPx = (x: number) => ((x + 1) / 2) * 1000;\nconsole.log(toPx(-0.5), toPx(0.5));", "250 750"),
+    p(
+      "Common mistake: resizing the canvas but not calling gl.viewport again. The old viewport stays (it's state!), so the drawing fills only part of the canvas or looks stretched. Call it after every resize, with the drawing buffer size.",
+      "Error común: cambiar el tamaño del canvas sin volver a llamar a gl.viewport. El viewport viejo se queda (¡es estado!), así que el dibujo llena solo parte del canvas o se ve estirado. Llámalo tras cada cambio de tamaño, con el tamaño del drawing buffer.",
+      "よくあるミス：キャンバスの大きさを変えたのに gl.viewport を呼び直さないこと。古い viewport が残る（状態だからね！）ので、絵が一部しか埋まらなかったり、のびて見えたりする。大きさを変えたら毎回、描画バッファのサイズで呼ぼう。",
+    ),
+  ),
+  note("pipeline-stages", L("The stages of the pipeline", "Las etapas del pipeline", "パイプラインの段階"),
+    p(
+      "Every draw call goes through the same assembly line. First, the vertex shader runs once per vertex and outputs its clip-space position. Next, primitive assembly joins the vertices into triangles, lines or points. Then rasterization finds which pixels each triangle covers; each covered pixel becomes a fragment.",
+      "Cada draw call pasa por la misma línea de montaje. Primero, el vertex shader corre una vez por vértice y da su posición en clip space. Después, el ensamblado de primitivas une los vértices en triángulos, líneas o puntos. Luego la rasterización busca qué píxeles cubre cada triángulo; cada píxel cubierto es un fragmento.",
+      "描画のたびに同じ流れ作業を通る。まず頂点シェーダーが頂点ごとに動き、クリップ空間の位置を出す。次にプリミティブ組み立てが頂点を三角形・線・点につなぐ。そしてラスタライズが、三角形がおおうピクセルを見つける。おおわれたピクセル 1 つ 1 つがフラグメントだよ。",
+    ),
+    p(
+      "After that, the fragment shader runs once per fragment and outputs its color. Finally, per-fragment tests decide what reaches the screen: the depth test hides fragments that are behind closer ones, and blending mixes colors for transparency.",
+      "Después, el fragment shader corre una vez por fragmento y da su color. Al final, las pruebas por fragmento deciden qué llega a la pantalla: la prueba de profundidad oculta los fragmentos que quedan detrás de otros más cercanos, y la mezcla (blending) combina colores para la transparencia.",
+      "そのあとフラグメントシェーダーがフラグメントごとに動き、色を出す。最後にフラグメントごとのテストで画面に届くものを決める。深度テストは手前のものの後ろにあるフラグメントをかくし、ブレンドは透明のために色をまぜるよ。",
+    ),
+    ex("const vertexRuns = 3; // one triangle\nconst fragmentRuns = (50 * 40) / 2; // it covers half of a 50x40 box\nconsole.log(vertexRuns, fragmentRuns);", "3 1000",
+      L("One triangle: 3 vertex runs, about 1000 fragment runs", "Un triángulo: 3 vértices, unos 1000 fragmentos", "三角形 1 つ：頂点 3 回、フラグメント約 1000 回")),
+    p(
+      "Why this order? Each stage needs the previous result: there are no triangles until vertices have positions, no pixels to find until there are triangles, and nothing to color until you know which pixels exist. Tests come last because they compare finished fragments with what's already on screen.",
+      "¿Por qué este orden? Cada etapa necesita el resultado anterior: no hay triángulos hasta que los vértices tienen posición, no hay píxeles que buscar hasta que hay triángulos y nada que colorear hasta saber qué píxeles existen. Las pruebas van al final porque comparan fragmentos terminados con lo que ya está en pantalla.",
+      "なぜこの順番？どの段階も前の結果が必要だからだ。頂点に位置がなければ三角形はできず、三角形がなければピクセルは探せず、どのピクセルかわからなければ色はぬれない。テストが最後なのは、できあがったフラグメントを画面にあるものとくらべるからだよ。",
+    ),
+    p(
+      "You only program two stages: the vertex and fragment shaders. The others are fixed hardware that you configure with state calls, like gl.enable(gl.DEPTH_TEST). Remember the line: place, join, find pixels, color, test.",
+      "Solo programas dos etapas: el vertex shader y el fragment shader. Las demás son hardware fijo que configuras con llamadas de estado, como gl.enable(gl.DEPTH_TEST). Recuerda la línea: ubicar, unir, buscar píxeles, colorear, probar.",
+      "自分でプログラムするのは頂点シェーダーとフラグメントシェーダーの 2 つだけ。ほかは決まったハードウェアで、gl.enable(gl.DEPTH_TEST) のような状態の命令で設定する。流れは「置く、つなぐ、ピクセルを探す、ぬる、テスト」と覚えよう。",
+    ),
+    tc("declare const gl: WebGL2RenderingContext;\ngl.enable(gl.DEPTH_TEST);\ngl.enable(gl.BLEND);\ngl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);",
+      L("Type-checked only: configuring the fixed test stages", "Solo se verifica el tipo: configurar las pruebas fijas", "型チェックのみ：決まったテスト段階の設定")),
+  ),
+];
+
 const clipSpace: LessonDef = {
   slug: "clip-space",
   title: L("The -1 to +1 world", "El mundo de -1 a +1", "-1 から +1 の世界"),
@@ -40,6 +161,8 @@ const clipSpace: LessonDef = {
     },
     {
       kind: "pick",
+      hint: L("Clip space is the same box on every canvas. Where is its center, and how far does it reach each way?", "Clip space es la misma caja en todo canvas. ¿Dónde está su centro y hasta dónde llega a cada lado?", "クリップ空間はどのキャンバスでも同じ箱。中心はどこ？左右にどこまで広がる？"),
+      note: "clip-space",
       prompt: L("Clip-space x starts at…", "Clip space x empieza en…", "クリップ空間の x の最小は？"),
       code: "// visible clip-space x range\nconst minX = ___;\nconst maxX = 1;",
       options: ["-1", "0", "0.5"],
@@ -49,6 +172,8 @@ const clipSpace: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("Plug the numbers in step by step: divide by the width, double it, then subtract 1.", "Pon los números paso a paso: divide entre el ancho, duplica y luego resta 1.", "1 歩ずつ数を入れよう。幅で割って、2 倍して、1 を引く。"),
+      note: "clip-space",
       prompt: PRINT,
       code: "const toClipX = (px: number, w: number) => (px / w) * 2 - 1;\nconsole.log(toClipX(400, 800), toClipX(800, 800));",
       options: ["0 1", "400 800", "0.5 1"],
@@ -65,6 +190,8 @@ const clipSpace: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("Row 0 is the top of the screen. Is clip y at the top positive or negative?", "La fila 0 es la parte de arriba de la pantalla. ¿La y de clip arriba es positiva o negativa?", "0 行目は画面の一番上。上のクリップ y はプラス？マイナス？"),
+      note: "y-flip",
       prompt: PRINT,
       code: "const toClipY = (py: number, h: number) => 1 - (py / h) * 2;\nconsole.log(toClipY(0, 600), toClipY(600, 600));",
       options: ["1 -1", "-1 1", "0 600"],
@@ -76,6 +203,8 @@ const clipSpace: LessonDef = {
     },
     {
       kind: "pick",
+      hint: L("Clip space works like a math graph, not like screen pixels. Which way does +y point on a graph?", "Clip space funciona como un gráfico de matemáticas, no como los píxeles. ¿Hacia dónde apunta +y en un gráfico?", "クリップ空間はピクセルではなく数学のグラフと同じ。グラフの +y はどっち向き？"),
+      note: "y-flip",
       prompt: L("Where is clip y = +1?", "¿Dónde está clip y = +1?", "クリップ y = +1 はどこ？"),
       code: "// clip space: y = +1 is the ___ edge",
       options: [L("top", "superior", "上"), L("bottom", "inferior", "下")],
@@ -89,6 +218,8 @@ const clipSpace: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("Is 1.5 inside the -1..+1 box? Think about what happens to geometry outside it.", "¿1.5 está dentro de la caja -1..+1? Piensa qué le pasa a la geometría que queda fuera.", "1.5 は -1..+1 の箱の中？外にある形がどうなるか考えよう。"),
+      note: "clipping-viewport",
       prompt: L("Where does this vertex go?", "¿Adónde va este vértice?", "この頂点はどうなる？"),
       code: "// vertex shader output (GLSL)\n// gl_Position = vec4(1.5, 0.0, 0.0, 1.0);",
       options: [L("Clipped: off screen", "Recortado: fuera", "クリップされて消える"), L("Drawn at the right edge", "En el borde derecho", "右のはしに描かれる"), L("Wraps to -0.5", "Vuelve a -0.5", "-0.5 に回りこむ")],
@@ -98,6 +229,8 @@ const clipSpace: LessonDef = {
     },
     {
       kind: "type",
+      hint: L("Which gl call tells WebGL what pixel rectangle -1..+1 should fill? Trix named it in the dialog.", "¿Qué llamada de gl le dice a WebGL qué rectángulo de píxeles llena -1..+1? Trix la nombró en el diálogo.", "-1..+1 がうめるピクセルの長方形を決める gl の命令は？会話でトリックスが言ってたよ。"),
+      note: "clipping-viewport",
       prompt: L("Map clip space to the canvas", "Mapea el clip space al canvas", "クリップ空間をキャンバスへ"),
       code: "declare const gl: WebGL2RenderingContext;\ngl.___(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);",
       answer: "viewport",
@@ -106,6 +239,8 @@ const clipSpace: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("Go step by step: add 1, divide by 2, multiply by the width. Try each value on its own.", "Ve paso a paso: suma 1, divide entre 2 y multiplica por el ancho. Prueba cada valor por separado.", "1 歩ずつ：1 を足して、2 で割って、幅をかける。値を 1 つずつためそう。"),
+      note: "clipping-viewport",
       prompt: PRINT,
       code: "const ndcToPx = (x: number, w: number) => ((x + 1) / 2) * w;\nconsole.log(ndcToPx(0, 800), ndcToPx(-1, 800), ndcToPx(1, 800));",
       options: ["400 0 800", "0 -800 800", "400 800 0"],
@@ -122,12 +257,16 @@ const clipSpace: LessonDef = {
     )),
     {
       kind: "order",
+      hint: L("Each stage needs the previous one's result. What must exist before triangles? Before pixels?", "Cada etapa necesita el resultado de la anterior. ¿Qué debe existir antes que los triángulos? ¿Y antes que los píxeles?", "どの段階も前の結果が必要。三角形の前に何がいる？ピクセルの前には？"),
+      note: "pipeline-stages",
       prompt: L("Order the pipeline", "Ordena el pipeline", "パイプラインを並べよう"),
       lines: ["vertexShader();", "assemblePrimitives();", "rasterize();", "fragmentShader();", "depthAndBlendTests();"],
       explain: L("Vertices are placed, joined into triangles, turned into fragments, colored, then tested.", "Se ubican los vértices, se unen en triángulos, se vuelven fragmentos, se colorean y se prueban.", "頂点を置き、三角形につなぎ、フラグメントにして色をぬり、最後にテストする。"),
     },
     {
       kind: "run",
+      hint: L("Check the corner: pixel row 0 must become +1. Which part of the formula should change, only for y?", "Revisa la esquina: la fila 0 debe dar +1. ¿Qué parte de la fórmula debe cambiar, solo para la y?", "角でたしかめよう。0 行目は +1 になるはず。y だけ、式のどこを変える？"),
+      note: "y-flip",
       prompt: L("Fix the Y flip: top-left must be -1,1", "Arregla la y: arriba a la izq. debe ser -1,1", "y を反転しよう：左上は -1,1"),
       starter: 'function pixelToClip(x: number, y: number, w: number, h: number): [number, number] {\n  return [(x / w) * 2 - 1, (y / h) * 2 - 1];\n}\nconsole.log("clip " + pixelToClip(0, 0, 400, 300).join(","));\n',
       solution: 'function pixelToClip(x: number, y: number, w: number, h: number): [number, number] {\n  return [(x / w) * 2 - 1, 1 - (y / h) * 2];\n}\nconsole.log("clip " + pixelToClip(0, 0, 400, 300).join(","));\n',
@@ -136,9 +275,98 @@ const clipSpace: LessonDef = {
       explain: L("Pixel y grows down, clip y grows up: use 1 - (y / h) * 2 so row 0 becomes +1.", "La y de píxel crece hacia abajo y la de clip hacia arriba: usa 1 - (y / h) * 2 para que la fila 0 sea +1.", "ピクセルの y は下へ、クリップの y は上へ。1 - (y / h) * 2 で 0 行目が +1 になる。"),
     },
   ],
+  notes: clipSpaceNotes,
 };
 
 // ─── 1.2 The bound slot ────────────────────────────────────────────────────
+const stateMachineNotes: NoteDef[] = [
+  note("getting-context", L("Getting a WebGL2 context", "Obtener un contexto WebGL2", "WebGL2 コンテキストをもらう"),
+    p(
+      "WebGL starts from a canvas: canvas.getContext(\"webgl2\") returns a WebGL2RenderingContext, the object that holds every drawing function. If the browser or GPU can't do WebGL2, it returns null instead. TypeScript knows this, so the type is WebGL2RenderingContext | null.",
+      "WebGL empieza en un canvas: canvas.getContext(\"webgl2\") devuelve un WebGL2RenderingContext, el objeto con todas las funciones de dibujo. Si el navegador o la GPU no soportan WebGL2, devuelve null. TypeScript lo sabe, así que el tipo es WebGL2RenderingContext | null.",
+      "WebGL はキャンバスから始まる。canvas.getContext(\"webgl2\") は、描画の関数を全部もつ WebGL2RenderingContext を返す。ブラウザや GPU が WebGL2 に対応していなければ、代わりに null を返す。TypeScript はそれを知っているので、型は WebGL2RenderingContext | null だよ。",
+    ),
+    bad('declare const view: HTMLCanvasElement;\nconst ctx = view.getContext("webgl2");\nctx.viewport(0, 0, 10, 10);',
+      L("Does not compile: ctx may be null", "No compila: ctx puede ser null", "コンパイル不可：ctx は null かもしれない")),
+    p(
+      "Under strict null checks, TypeScript won't let you call methods on something that may be null (error TS18047). Narrow it first: compare it with null and throw, or return early. After that check, TypeScript knows it's a real context for the rest of the code.",
+      "Con la verificación estricta de null, TypeScript no te deja llamar métodos sobre algo que puede ser null (error TS18047). Estréchalo primero: compáralo con null y lanza un error, o sal antes. Tras esa comprobación, TypeScript sabe que es un contexto real en el resto del código.",
+      "null の厳しいチェックがあると、null かもしれないもののメソッドは呼べない（エラー TS18047）。先に絞りこもう。null とくらべて throw するか、早めに return する。そのチェックのあとは、残りのコードで本物のコンテキストだと TypeScript がわかるよ。",
+    ),
+    tc('declare const view: HTMLCanvasElement;\nconst ctx = view.getContext("webgl2");\nif (ctx === null) {\n  throw new Error("WebGL2 unavailable");\n}\nctx.viewport(0, 0, 10, 10);',
+      L("Type-checked only: after the null check, ctx is safe", "Solo se verifica el tipo: tras comprobar null, ctx es seguro", "型チェックのみ：null チェック後の ctx は安全")),
+    p(
+      "\"webgl2\" and \"webgl\" give different types. WebGLRenderingContext (WebGL1) lacks many features built into WebGL2RenderingContext, such as vertex array objects, instancing, 3D textures and immutable texture storage. Using a WebGL2-only method on a WebGL1 context is a missing-property error in TypeScript.",
+      "\"webgl2\" y \"webgl\" dan tipos distintos. WebGLRenderingContext (WebGL1) no tiene muchas funciones que WebGL2RenderingContext trae de serie, como los vertex array objects, el instancing, las texturas 3D y el almacenamiento inmutable de texturas. Usar un método solo de WebGL2 en un contexto WebGL1 es un error de propiedad inexistente en TypeScript.",
+      "\"webgl2\" と \"webgl\" では型がちがう。WebGLRenderingContext（WebGL1）には、WebGL2RenderingContext に最初からある機能の多くがない。頂点配列オブジェクト、インスタンシング、3D テクスチャ、不変テクスチャストレージなどだ。WebGL1 のコンテキストで WebGL2 専用のメソッドを使うと、TypeScript で「プロパティがない」エラーになるよ。",
+    ),
+    bad("declare const old: WebGLRenderingContext;\nold.texStorage2D(old.TEXTURE_2D, 1, old.RGBA, 4, 4);",
+      L("Does not compile: texStorage2D exists only in WebGL2", "No compila: texStorage2D solo existe en WebGL2", "コンパイル不可：texStorage2D は WebGL2 だけ")),
+    p(
+      "Common mistakes: comparing with undefined (getContext returns null, so that check doesn't remove null from the type), and checking inside an if block but then using the context outside it. Show a friendly message when WebGL2 is missing instead of a blank page.",
+      "Errores comunes: comparar con undefined (getContext devuelve null, así que esa comprobación no quita null del tipo) y comprobar dentro de un bloque if pero luego usar el contexto fuera de él. Si falta WebGL2, muestra un mensaje amable en vez de una página en blanco.",
+      "よくあるミス：undefined とくらべること（getContext が返すのは null なので、型から null が消えない）。それと if ブロックの中でチェックしたのに、外でコンテキストを使うこと。WebGL2 がないときは、まっ白なページではなくやさしいメッセージを出そう。",
+    ),
+  ),
+  note("state-machine", L("A state machine with bind points", "Una máquina de estados con ranuras", "席（バインド先）のある状態機械"),
+    p(
+      "The WebGL context is a state machine: it remembers settings between calls. Many functions don't take the object they act on. Instead, you first bind the object to a slot (a bind point) such as gl.ARRAY_BUFFER, and later calls work on whatever is in that slot at that moment.",
+      "El contexto de WebGL es una máquina de estados: recuerda configuraciones entre llamadas. Muchas funciones no reciben el objeto sobre el que actúan. En cambio, primero enlazas el objeto a una ranura (bind point) como gl.ARRAY_BUFFER, y las llamadas siguientes trabajan con lo que haya en esa ranura en ese momento.",
+      "WebGL のコンテキストは状態機械で、呼び出しの間も設定を覚えている。多くの関数は、作用する相手を引数で受け取らない。代わりに、まず gl.ARRAY_BUFFER のような席（バインド先）にオブジェクトをバインドする。後の命令は、その時点でその席にいるものに効くんだ。",
+    ),
+    p(
+      "A slot holds one thing at a time. Binding a new buffer replaces the old one, and the old one is no longer touched by calls on that slot. So bufferData, which uploads data, goes into the buffer bound most recently, not the one you had in mind.",
+      "Una ranura guarda una sola cosa a la vez. Enlazar un buffer nuevo reemplaza al anterior, y las llamadas sobre esa ranura ya no tocan al viejo. Así que bufferData, que sube datos, va al buffer enlazado más recientemente, no al que tenías en mente.",
+      "席に座れるのは一度に 1 つだけ。新しいバッファをバインドすると古いものと入れかわり、その席への命令はもう古いものに届かない。だからデータを送る bufferData は、考えていたバッファではなく、最後にバインドしたバッファに入るよ。",
+    ),
+    tc("declare const gl: WebGL2RenderingContext;\nconst grassBuf = gl.createBuffer();\ngl.bindBuffer(gl.ARRAY_BUFFER, grassBuf);\ngl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 1, 2]), gl.STATIC_DRAW);",
+      L("Type-checked only: bind first, then upload into grassBuf", "Solo se verifica el tipo: enlaza y luego sube a grassBuf", "型チェックのみ：バインドしてから grassBuf へ送る")),
+    p(
+      "Setters work the same way. gl.clearColor, gl.useProgram and gl.viewport don't draw anything: they store a value that later calls use. clearColor only shows up when gl.clear runs, and a program set by useProgram stays current until another useProgram.",
+      "Los setters funcionan igual. gl.clearColor, gl.useProgram y gl.viewport no dibujan nada: guardan un valor que usan las llamadas siguientes. clearColor solo se ve cuando corre gl.clear, y el programa de useProgram sigue activo hasta otro useProgram.",
+      "設定の命令も同じ。gl.clearColor、gl.useProgram、gl.viewport は何も描かない。後の命令が使う値をしまうだけだ。clearColor は gl.clear が動いて初めて見え、useProgram で決めたプログラムは次の useProgram まで使われつづけるよ。",
+    ),
+    ex('const ctx = { clearColor: "black", painted: "none" };\nconst setClear = (c: string) => { ctx.clearColor = c; };\nconst clear = () => { ctx.painted = ctx.clearColor; };\nsetClear("blue");\nconsole.log(ctx.painted);\nclear();\nconsole.log(ctx.painted);', "none\nblue",
+      L("A toy context: setting a color paints nothing until clear", "Un contexto de juguete: fijar el color no pinta hasta clear", "おもちゃのコンテキスト：clear まで何もぬられない")),
+    p(
+      "Common mistake: reading WebGL code as if every call named its target. Read it like a story with a memory and keep asking: what is bound right now? When a draw looks wrong, the culprit is often a binding or setting left over from earlier code.",
+      "Error común: leer el código WebGL como si cada llamada nombrara su objetivo. Léelo como una historia con memoria y pregúntate siempre: ¿qué está enlazado ahora? Cuando un dibujo sale mal, el culpable suele ser un enlace o un ajuste que quedó de código anterior.",
+      "よくあるミス：どの命令も相手を名指ししていると思って WebGL のコードを読むこと。記憶のある物語として読み、「今バインドされているのは何？」と問いつづけよう。描画がおかしいとき、犯人は前のコードから残ったバインドや設定であることが多いよ。",
+    ),
+  ),
+  note("enums-bits", L("Enums and bit flags", "Enums y flags de bits", "列挙値とビットフラグ"),
+    p(
+      "WebGL constants such as gl.TRIANGLES, gl.ARRAY_BUFFER or gl.FLOAT are plain numbers stored on the context (gl.TRIANGLES is 4). The functions expect those numbers. A string like \"LINES\" is just text, so TypeScript rejects it: the parameter type is GLenum, which is a number.",
+      "Las constantes de WebGL como gl.TRIANGLES, gl.ARRAY_BUFFER o gl.FLOAT son números simples guardados en el contexto (gl.TRIANGLES vale 4). Las funciones esperan esos números. Un string como \"LINES\" es solo texto, así que TypeScript lo rechaza: el tipo del parámetro es GLenum, que es un number.",
+      "gl.TRIANGLES、gl.ARRAY_BUFFER、gl.FLOAT のような WebGL の定数は、コンテキストにあるただの数値（gl.TRIANGLES は 4）。関数はその数値を待っている。\"LINES\" のような文字列はただの文字なので TypeScript は拒否する。引数の型は GLenum、つまり number だよ。",
+    ),
+    tc("declare const gl: WebGL2RenderingContext;\nconst mode: number = gl.LINES;\ngl.drawArrays(mode, 0, 2);",
+      L("Type-checked only: the constant really is a number", "Solo se verifica el tipo: la constante es un number", "型チェックのみ：定数は本当に number")),
+    bad('declare const gl: WebGL2RenderingContext;\ngl.bindBuffer("ARRAY_BUFFER", null);',
+      L("Does not compile: a string is not a GLenum", "No compila: un string no es un GLenum", "コンパイル不可：文字列は GLenum ではない")),
+    p(
+      "Some constants are bit flags: numbers with a single bit set. gl.COLOR_BUFFER_BIT is 0x4000, gl.DEPTH_BUFFER_BIT is 0x100 and gl.STENCIL_BUFFER_BIT is 0x400 (1024). The bitwise OR operator | combines flags into one number with all their bits set, so one call can clear several buffers.",
+      "Algunas constantes son flags de bits: números con un solo bit encendido. gl.COLOR_BUFFER_BIT es 0x4000, gl.DEPTH_BUFFER_BIT es 0x100 y gl.STENCIL_BUFFER_BIT es 0x400 (1024). El operador OR bit a bit | combina flags en un solo número con todos sus bits encendidos, así una sola llamada puede borrar varios buffers.",
+      "定数の中にはビットフラグがある。ビットが 1 つだけ立った数値だ。gl.COLOR_BUFFER_BIT は 0x4000、gl.DEPTH_BUFFER_BIT は 0x100、gl.STENCIL_BUFFER_BIT は 0x400（1024）。ビット OR 演算子 | はフラグを、全部のビットが立った 1 つの数にまとめる。だから 1 回の呼び出しで複数のバッファをクリアできるよ。",
+    ),
+    ex("const STENCIL = 0x400;\nconst DEPTH = 0x100;\nconsole.log(STENCIL | DEPTH, (STENCIL | DEPTH).toString(2));", "1280 10100000000",
+      L("The binary form shows both bits switched on", "La forma binaria muestra los dos bits encendidos", "2 進数で見ると 2 つのビットが立っている")),
+    p(
+      "Why | and not +? For different flags they give the same number, but | is safe when a flag repeats (F | F is still F, while F + F is a different number), and it reads as \"switch these on\". To test whether a flag is inside a mask, use &.",
+      "¿Por qué | y no +? Con flags distintos dan el mismo número, pero | es seguro si un flag se repite (F | F sigue siendo F, mientras que F + F es otro número), y se lee como \"enciende estos\". Para comprobar si un flag está en una máscara, usa &.",
+      "なぜ + でなく | なのか？ちがうフラグどうしなら同じ数になるけど、| はフラグが重なっても安全（F | F は F のままだが、F + F は別の数）。それに「これをオンに」と読める。フラグがマスクに入っているか調べるには & を使うよ。",
+    ),
+    ex("const F = 0x100;\nconsole.log(F | F, F + F, (0x500 & F) !== 0);", "256 512 true"),
+    p(
+      "Common mistakes: passing the name as a string, using || (logical OR, which returns the first truthy value, not the combined bits), and typing a comma instead of |, which passes an extra argument.",
+      "Errores comunes: pasar el nombre como string, usar || (OR lógico, que devuelve el primer valor verdadero, no los bits combinados) y escribir una coma en vez de |, que pasa un argumento de más.",
+      "よくあるミス：名前を文字列で渡すこと。|| （論理 OR。ビットをまとめず、最初の真の値を返す）を使うこと。| の代わりにカンマを書いて、余分な引数を渡してしまうこと。",
+    ),
+    ex("const COLOR: number = 0x4000;\nconst DEPTH: number = 0x100;\nconsole.log(COLOR || DEPTH);", "16384",
+      L("|| keeps only the first flag", "|| se queda solo con el primer flag", "|| は最初のフラグしか残さない")),
+  ),
+];
+
 const stateMachine: LessonDef = {
   slug: "gpu-state-machine",
   title: L("The bound slot", "La ranura enlazada", "バインドされた席"),
@@ -155,6 +383,8 @@ const stateMachine: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("What does getContext return when WebGL2 isn't available? Can strict TS call methods on that?", "¿Qué devuelve getContext cuando no hay WebGL2? ¿TS estricto deja llamar métodos sobre eso?", "WebGL2 がないとき getContext は何を返す？strict な TS でそのメソッドを呼べる？"),
+      note: "getting-context",
       prompt: COMPILES,
       code: 'declare const canvas: HTMLCanvasElement;\nconst gl = canvas.getContext("webgl2");\ngl.clearColor(0, 0, 0, 1);',
       options: [YES, NO_TSC],
@@ -165,6 +395,8 @@ const stateMachine: LessonDef = {
     },
     {
       kind: "pick",
+      hint: L("You want to throw when there is NO context. Which condition is true for null and narrows the type?", "Quieres lanzar un error cuando NO hay contexto. ¿Qué condición es true para null y estrecha el tipo?", "コンテキストが「ない」ときに throw したい。null で true になり、型を絞る条件は？"),
+      note: "getting-context",
       prompt: L("Guard against null", "Protégete del null", "null をガードしよう"),
       code: 'declare const canvas: HTMLCanvasElement;\nconst gl = canvas.getContext("webgl2");\nif (___) throw new Error("no WebGL2");\ngl.clearColor(0, 0, 0, 1);',
       options: ["!gl", "gl", "gl === undefined"],
@@ -190,6 +422,8 @@ const stateMachine: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("A slot holds one buffer at a time. What is sitting in ARRAY_BUFFER when bufferData runs?", "Una ranura guarda un buffer a la vez. ¿Qué hay en ARRAY_BUFFER cuando corre bufferData?", "席に座れるバッファは 1 つだけ。bufferData のとき ARRAY_BUFFER にいるのは？"),
+      note: "state-machine",
       prompt: L("Which buffer gets the data?", "¿Qué buffer recibe los datos?", "データが入るバッファは？"),
       code: "gl.bindBuffer(gl.ARRAY_BUFFER, a);\ngl.bindBuffer(gl.ARRAY_BUFFER, b);\ngl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);",
       options: ["a", "b", L("Both", "Ambos", "両方")],
@@ -199,6 +433,8 @@ const stateMachine: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("State stays until something changes it. Which call changed it last?", "El estado se queda hasta que algo lo cambia. ¿Qué llamada lo cambió por última vez?", "状態は変えられるまで残る。最後に変えた呼び出しはどれ？"),
+      note: "state-machine",
       prompt: PRINT,
       code: 'const state = { program: "none" };\nconst use = (p: string) => { state.program = p; };\nuse("sky");\nuse("hero");\nconsole.log("drawing with " + state.program);',
       options: ["drawing with hero", "drawing with sky", "drawing with none"],
@@ -215,6 +451,8 @@ const stateMachine: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("What type does drawArrays expect as its first argument? Is a string that type?", "¿Qué tipo espera drawArrays como primer argumento? ¿Un string es de ese tipo?", "drawArrays の最初の引数の型は？文字列はその型？"),
+      note: "enums-bits",
       prompt: COMPILES,
       code: 'declare const gl: WebGL2RenderingContext;\ngl.drawArrays("TRIANGLES", 0, 3);',
       options: [YES, NO_TSC],
@@ -224,6 +462,8 @@ const stateMachine: LessonDef = {
     },
     {
       kind: "type",
+      hint: L("The two flags must become one number with both bits set. Which bitwise operator combines bits?", "Los dos flags deben ser un solo número con ambos bits encendidos. ¿Qué operador de bits los combina?", "2 つのフラグを、両方のビットが立った 1 つの数に。ビットをまとめる演算子は？"),
+      note: "enums-bits",
       prompt: L("Clear color AND depth", "Borra color Y profundidad", "色と深度を両方クリア"),
       code: "declare const gl: WebGL2RenderingContext;\ngl.clear(gl.COLOR_BUFFER_BIT ___ gl.DEPTH_BUFFER_BIT);",
       answer: "|",
@@ -232,6 +472,8 @@ const stateMachine: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("In decimal, 0x4000 is 16384 and 0x100 is 256. Do they share any bit? Then what does | give?", "En decimal, 0x4000 es 16384 y 0x100 es 256. ¿Comparten algún bit? Entonces, ¿qué da |?", "10 進数で 0x4000 は 16384、0x100 は 256。同じビットはある？なら | の結果は？"),
+      note: "enums-bits",
       prompt: PRINT,
       code: "const COLOR_BUFFER_BIT = 0x4000;\nconst DEPTH_BUFFER_BIT = 0x100;\nconsole.log(COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT);",
       options: ["16640", "16384", "0"],
@@ -243,6 +485,8 @@ const stateMachine: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("Is clearColor a drawing call, or a setting the context remembers? Which call actually clears?", "¿clearColor es una llamada de dibujo o un ajuste que el contexto recuerda? ¿Qué llamada borra de verdad?", "clearColor は描く命令？それとも覚えておく設定？本当にクリアするのはどの命令？"),
+      note: "state-machine",
       prompt: L("What does this line do?", "¿Qué hace esta línea?", "この行は何をする？"),
       code: "gl.clearColor(1, 0, 0, 1);",
       options: [L("Sets the color for the next clear", "Fija el color del próximo clear", "次の clear の色を決める"), L("Paints the canvas red now", "Pinta el canvas de rojo ya", "今すぐ赤くぬる")],
@@ -251,6 +495,8 @@ const stateMachine: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("Look at the type: WebGLRenderingContext, not WebGL2. Are vertex arrays built into WebGL1?", "Mira el tipo: WebGLRenderingContext, no WebGL2. ¿Los vertex arrays vienen de serie en WebGL1?", "型を見て。WebGL2 ではなく WebGLRenderingContext。WebGL1 に頂点配列は標準である？"),
+      note: "getting-context",
       prompt: COMPILES,
       code: "declare const gl1: WebGLRenderingContext;\ngl1.createVertexArray();",
       options: [YES, NO_TSC],
@@ -260,6 +506,8 @@ const stateMachine: LessonDef = {
     },
     {
       kind: "run",
+      hint: L("bufferData goes to whatever is bound at that moment. What should be bound when the data goes in?", "bufferData va a lo que esté enlazado en ese momento. ¿Qué debería estar enlazado cuando entran los datos?", "bufferData はその時点でバインド中のものへ行く。データを送るとき何がバインドされているべき？"),
+      note: "state-machine",
       prompt: L("Upload to A before binding B", "Sube a A antes de enlazar B", "B をバインドする前に A へ"),
       starter: 'class FakeGL {\n  bound = "";\n  sizes: Record<string, number> = { A: 0, B: 0 };\n  bindBuffer(name: string) { this.bound = name; }\n  bufferData(data: number[]) { this.sizes[this.bound] = data.length; }\n}\nconst gl = new FakeGL();\ngl.bindBuffer("A");\ngl.bindBuffer("B");\ngl.bufferData([1, 2, 3]); // meant for A\nconsole.log(`A=${gl.sizes.A} B=${gl.sizes.B}`);\n',
       solution: 'class FakeGL {\n  bound = "";\n  sizes: Record<string, number> = { A: 0, B: 0 };\n  bindBuffer(name: string) { this.bound = name; }\n  bufferData(data: number[]) { this.sizes[this.bound] = data.length; }\n}\nconst gl = new FakeGL();\ngl.bindBuffer("A");\ngl.bufferData([1, 2, 3]); // meant for A\ngl.bindBuffer("B");\nconsole.log(`A=${gl.sizes.A} B=${gl.sizes.B}`);\n',
@@ -268,9 +516,141 @@ const stateMachine: LessonDef = {
       explain: L("bufferData hits whatever is bound. Upload right after binding A, then bind B.", "bufferData afecta a lo enlazado. Sube justo después de enlazar A y luego enlaza B.", "bufferData はバインド中のものに効く。A をバインドした直後にアップロードし、それから B。"),
     },
   ],
+  notes: stateMachineNotes,
 };
 
 // ─── 1.3 Two spellbooks ────────────────────────────────────────────────────
+const shadersNotes: NoteDef[] = [
+  note("two-shaders", L("Vertex and fragment shaders", "Vertex shader y fragment shader", "頂点シェーダーとフラグメントシェーダー"),
+    p(
+      "Shaders are small programs that run on the GPU, written in GLSL, a C-like language. You hand WebGL their source code as JavaScript strings. Every WebGL program needs exactly two of them: a vertex shader and a fragment shader.",
+      "Los shaders son programas pequeños que corren en la GPU, escritos en GLSL, un lenguaje parecido a C. Le das a WebGL su código fuente como strings de JavaScript. Todo programa de WebGL necesita exactamente dos: un vertex shader y un fragment shader.",
+      "シェーダーは GPU で動く小さなプログラムで、C に似た GLSL という言語で書く。ソースコードは JavaScript の文字列として WebGL に渡す。WebGL のプログラムには、頂点シェーダーとフラグメントシェーダーのちょうど 2 つが必要だよ。",
+    ),
+    p(
+      "The vertex shader runs once for every vertex. Its job is to say where that vertex goes, by writing a vec4 clip-space position to the built-in output variable. If it never writes that position, the vertex has nowhere to go and nothing is drawn.",
+      "El vertex shader corre una vez por cada vértice. Su trabajo es decir adónde va ese vértice, escribiendo una posición vec4 en clip space en la variable de salida integrada. Si nunca escribe esa posición, el vértice no tiene adónde ir y no se dibuja nada.",
+      "頂点シェーダーは頂点ごとに 1 回動く。仕事は、その頂点の行き先を決めること。組みこみの出力変数に、クリップ空間の vec4 の位置を書きこむんだ。位置を書かなければ頂点は行き場がなく、何も描かれないよ。",
+    ),
+    ex("const vsSrc = `#version 300 es\nin vec2 a_pos;\nvoid main() {\n  gl_Position = vec4(a_pos * 0.5, 0.0, 1.0);\n}`;\nconsole.log(vsSrc.split(\"\\n\").length + \" lines\");", "5 lines",
+      L("A vertex shader that shrinks the shape to half size", "Un vertex shader que encoge la forma a la mitad", "形を半分に縮める頂点シェーダー")),
+    p(
+      "The fragment shader runs once for every fragment, each pixel a triangle covers, and decides its color by writing an out vec4 variable: red, green, blue and alpha, each from 0.0 to 1.0. There are usually far more fragments than vertices, so it runs many more times.",
+      "El fragment shader corre una vez por cada fragmento, cada píxel que cubre un triángulo, y decide su color escribiendo una variable out vec4: rojo, verde, azul y alfa, cada uno de 0.0 a 1.0. Casi siempre hay muchos más fragmentos que vértices, así que corre muchas más veces.",
+      "フラグメントシェーダーはフラグメント（三角形がおおうピクセル）ごとに 1 回動き、out vec4 の変数に色を書く。赤・緑・青・アルファで、どれも 0.0 から 1.0。ふつうフラグメントは頂点よりずっと多いので、こちらのほうがたくさん動くよ。",
+    ),
+    show("#version 300 es\nprecision highp float;\nout vec4 outColor;\nvoid main() {\n  outColor = vec4(0.2, 0.6, 1.0, 1.0); // sky blue\n}",
+      L("GLSL: a fragment shader that paints everything sky blue", "GLSL: un fragment shader que pinta todo celeste", "GLSL：全部を空色にぬるフラグメントシェーダー")),
+    p(
+      "Rule: vertex shader = WHERE (positions), fragment shader = WHAT COLOR (pixels). Common mistake: expecting the vertex shader to paint pixels. Colors reach the screen only through the fragment shader; the vertex shader can pass values along to it, as you'll see with in and out.",
+      "Regla: vertex shader = DÓNDE (posiciones), fragment shader = QUÉ COLOR (píxeles). Error común: esperar que el vertex shader pinte píxeles. Los colores llegan a la pantalla solo a través del fragment shader; el vertex shader puede pasarle valores, como verás con in y out.",
+      "ルール：頂点シェーダーは「どこ」（位置）、フラグメントシェーダーは「何色」（ピクセル）。よくあるミス：頂点シェーダーがピクセルをぬると思うこと。色が画面に届くのはフラグメントシェーダーからだけ。頂点シェーダーは値を渡せるだけで、それは in と out で見るよ。",
+    ),
+  ),
+  note("vectors-swizzle", L("Vectors and swizzling", "Vectores y swizzling", "ベクトルとスウィズル"),
+    p(
+      "GLSL has vector types: vec2, vec3 and vec4 hold 2, 3 or 4 floats. They're used for positions (x, y, z, w), colors (r, g, b, a) and texture coordinates (s, t, p, q). Each component can be read with its letter, like pos.y or color.a.",
+      "GLSL tiene tipos vector: vec2, vec3 y vec4 guardan 2, 3 o 4 floats. Se usan para posiciones (x, y, z, w), colores (r, g, b, a) y coordenadas de textura (s, t, p, q). Cada componente se lee con su letra, como pos.y o color.a.",
+      "GLSL にはベクトル型がある。vec2、vec3、vec4 は float を 2、3、4 個もつ。位置（x, y, z, w）、色（r, g, b, a）、テクスチャ座標（s, t, p, q）に使う。成分は pos.y や color.a のように文字で読めるよ。",
+    ),
+    p(
+      "Swizzling reads several components at once, in any order, by writing their letters together: pos.yx swaps x and y, color.rgb takes the first three, and letters can repeat, as in pos.xxx. The result is a new vector with one component per letter, in the letters' order.",
+      "El swizzling lee varios componentes a la vez, en cualquier orden, escribiendo sus letras juntas: pos.yx intercambia x e y, color.rgb toma los tres primeros, y las letras se pueden repetir, como en pos.xxx. El resultado es un vector nuevo con un componente por letra, en el orden de las letras.",
+      "スウィズルは文字を並べて書くことで、複数の成分を好きな順でいっぺんに読む。pos.yx は x と y を入れかえ、color.rgb は最初の 3 つを取り、pos.xxx のように同じ文字もくり返せる。結果は文字 1 つにつき成分 1 つの、文字の順に並んだ新しいベクトルだよ。",
+    ),
+    ex('const pos = [10, 20, 30, 40];\nconst swz = (s: string) => [...s].map((c) => pos["xyzw".indexOf(c)]);\nconsole.log(swz("wx"), swz("yyy"));', "[ 40, 10 ] [ 20, 20, 20 ]",
+      L("Simulating swizzles in TypeScript: order and repeats", "Swizzles simulados en TypeScript: orden y repeticiones", "TypeScript でスウィズルをまねる：順番とくり返し")),
+    p(
+      "The letter sets are just names for positions: x, r and s all mean component 0; y, g and t mean component 1; and so on. But a single swizzle must use letters from one set only. pos.xy and pos.rg read the same values, while mixing sets in one swizzle is a shader compile error.",
+      "Los grupos de letras son solo nombres de posiciones: x, r y s significan el componente 0; y, g y t, el componente 1; y así. Pero un mismo swizzle debe usar letras de un solo grupo. pos.xy y pos.rg leen los mismos valores, mientras que mezclar grupos en un swizzle es un error de compilación del shader.",
+      "文字の組は位置の呼び名にすぎない。x・r・s はどれも成分 0、y・g・t は成分 1、という具合。でも 1 つのスウィズルでは 1 つの組の文字だけを使うこと。pos.xy と pos.rg は同じ値を読むけど、1 つのスウィズルで組を混ぜるとシェーダーのコンパイルエラーになるよ。",
+    ),
+    show("vec4 c = vec4(0.1, 0.2, 0.3, 1.0);\nvec3 tint = c.rgb;  // ok: (0.1, 0.2, 0.3)\nvec2 tail = c.ba;   // ok: (0.3, 1.0)\nvec2 same = c.zw;   // ok: also (0.3, 1.0)",
+      L("GLSL: different sets, but each swizzle sticks to one", "GLSL: grupos distintos, pero cada swizzle usa uno solo", "GLSL：組はちがっても、各スウィズルは 1 組だけ")),
+    p(
+      "Rule: pick the set that matches the meaning (xyzw for positions, rgba for colors) and keep to it inside each swizzle. The order of the letters is the order of the result.",
+      "Regla: elige el grupo que coincide con el significado (xyzw para posiciones, rgba para colores) y mantenlo dentro de cada swizzle. El orden de las letras es el orden del resultado.",
+      "ルール：意味に合う組を選び（位置なら xyzw、色なら rgba）、1 つのスウィズルの中ではそれを守ろう。文字の順番がそのまま結果の順番になるよ。",
+    ),
+  ),
+  note("glsl-strict", L("GLSL is strict", "GLSL es estricto", "GLSL はきびしい"),
+    p(
+      "GLSL ES is much stricter than JavaScript. There's no automatic conversion between int and float: 3 is an int and 3.0 is a float, and putting one where the other is expected is a compile error. Write float literals with a dot, like 2.0 or 0.5, and convert explicitly with float(n) when needed.",
+      "GLSL ES es mucho más estricto que JavaScript. No hay conversión automática entre int y float: 3 es un int y 3.0 es un float, y poner uno donde se espera el otro es un error de compilación. Escribe los literales float con punto, como 2.0 o 0.5, y convierte explícitamente con float(n) cuando haga falta.",
+      "GLSL ES は JavaScript よりずっときびしい。int と float の自動変換はない。3 は int、3.0 は float で、片方が必要な場所にもう片方を置くとコンパイルエラー。float の値は 2.0 や 0.5 のように点をつけて書き、必要なら float(n) で明示的に変えよう。",
+    ),
+    show("float speed = 2.0;               // ok\nint count = 3;                   // ok\nfloat half = float(count) / 2.0; // explicit conversion",
+      L("GLSL: floats with a dot, conversions written out", "GLSL: floats con punto y conversiones explícitas", "GLSL：float は点つき、変換は明示的に")),
+    p(
+      "Fragment shaders have no default precision for floats, so they must declare one near the top: precision highp float; (or mediump). Without it, the shader fails to compile as soon as it uses a float. Vertex shaders do have a default, so the line is optional there.",
+      "Los fragment shaders no tienen precisión por defecto para los floats, así que deben declarar una cerca del inicio: precision highp float; (o mediump). Sin ella, el shader no compila en cuanto usa un float. Los vertex shaders sí tienen una por defecto, así que ahí la línea es opcional.",
+      "フラグメントシェーダーには float の既定の精度がないので、最初のほうで precision highp float;（か mediump）と宣言する。ないと float を使ったとたんにコンパイルに失敗する。頂点シェーダーには既定があるので、そちらでは省略できるよ。",
+    ),
+    p(
+      "WebGL2 shaders start with #version 300 es, and it must be the very first line of the string: not even an empty line or a comment may come before it. Without it the GPU reads the code as old GLSL ES 1.00, where in, out and other WebGL2 words don't exist.",
+      "Los shaders de WebGL2 empiezan con #version 300 es, y debe ser la primerísima línea del string: ni siquiera una línea vacía o un comentario pueden ir antes. Sin ella, la GPU lee el código como el viejo GLSL ES 1.00, donde no existen in, out ni otras palabras de WebGL2.",
+      "WebGL2 のシェーダーは #version 300 es で始まり、それは文字列の一番最初の行でなければならない。空行もコメントも前に置けない。ないと GPU は古い GLSL ES 1.00 として読み、in や out などの WebGL2 の言葉が使えなくなるよ。",
+    ),
+    ex('const a = "#version 300 es\\nvoid main() {}";\nconst b = "// my shader\\n#version 300 es";\nconst firstLine = (s: string) => s.split("\\n")[0];\nconsole.log(firstLine(a) === "#version 300 es", firstLine(b) === "#version 300 es");', "true false",
+      L("A comment before #version pushes it to line 2", "Un comentario antes de #version la empuja a la línea 2", "#version の前のコメントで 2 行目にずれる")),
+    p(
+      "Common mistakes: an int where a float is expected, a missing precision line, and anything before #version. When a shader fails, gl.getShaderInfoLog tells you why, and it usually names the line.",
+      "Errores comunes: un int donde se espera un float, una línea de precisión que falta y cualquier cosa antes de #version. Cuando un shader falla, gl.getShaderInfoLog te dice por qué, y casi siempre nombra la línea.",
+      "よくあるミス：float が必要な場所の int、精度の行の書き忘れ、#version の前に何かがあること。シェーダーが失敗したら gl.getShaderInfoLog が理由を教えてくれる。たいてい行番号も書いてあるよ。",
+    ),
+  ),
+  note("shader-io", L("in, out and uniform", "in, out y uniform", "in・out・uniform"),
+    p(
+      "Data reaches shaders in three ways. An in variable in the vertex shader (an attribute) gets a different value for each vertex, read from a buffer: positions, per-vertex colors, texture coordinates.",
+      "Los datos llegan a los shaders de tres formas. Una variable in en el vertex shader (un atributo) recibe un valor distinto por cada vértice, leído de un buffer: posiciones, colores por vértice, coordenadas de textura.",
+      "データがシェーダーに届く道は 3 つ。頂点シェーダーの in 変数（アトリビュート）は、バッファから読んだ頂点ごとにちがう値を受け取る。位置、頂点ごとの色、テクスチャ座標などだ。",
+    ),
+    p(
+      "A uniform is one value for the whole draw call: every vertex and every fragment sees the same number. Use it for things like the time, a tint color or a transformation matrix. You set it from JavaScript with a gl.uniform* call before drawing.",
+      "Un uniform es un valor para todo el draw call: cada vértice y cada fragmento ven el mismo número. Úsalo para cosas como el tiempo, un color de tinte o una matriz de transformación. Lo fijas desde JavaScript con una llamada gl.uniform* antes de dibujar.",
+      "uniform は描画 1 回ぶん全体で 1 つの値。どの頂点もどのフラグメントも同じ数を見る。時間、色合い、変換行列などに使う。描く前に JavaScript から gl.uniform* の呼び出しで設定するよ。",
+    ),
+    tc('declare const gl: WebGL2RenderingContext;\ndeclare const prog: WebGLProgram;\nconst tintLoc = gl.getUniformLocation(prog, "u_tint");\ngl.uniform4f(tintLoc, 1, 0.5, 0, 1);',
+      L("Type-checked only: one orange tint for the whole draw", "Solo se verifica el tipo: un tinte naranja para todo el dibujo", "型チェックのみ：描画全体にオレンジの色合い")),
+    p(
+      "To pass a value from the vertex shader to the fragment shader, the vertex shader declares it with out and the fragment shader declares the same name and type with in. The GPU interpolates it across the triangle, so each fragment gets a blend of the three vertices' values. WebGL1 used varying on both sides.",
+      "Para pasar un valor del vertex shader al fragment shader, el vertex shader lo declara con out y el fragment shader declara el mismo nombre y tipo con in. La GPU lo interpola sobre el triángulo, así que cada fragmento recibe una mezcla de los valores de los tres vértices. WebGL1 usaba varying en ambos lados.",
+      "頂点シェーダーからフラグメントシェーダーへ値を渡すには、頂点側で out、フラグメント側で同じ名前と型を in で宣言する。GPU は三角形の上でそれを補間するので、各フラグメントは 3 つの頂点の値をまぜたものを受け取る。WebGL1 では両側とも varying だったよ。",
+    ),
+    ex("const lerp = (a: number, b: number, t: number) => a + (b - a) * t;\nconsole.log(lerp(0, 8, 0.25), lerp(0, 8, 0.5));", "2 4",
+      L("Interpolation: a fragment between two vertices gets a blend", "Interpolación: un fragmento entre dos vértices recibe una mezcla", "補間：2 つの頂点の間のフラグメントはまざった値")),
+    p(
+      "Rule: per vertex means in (attribute); the whole draw means uniform; vertex to fragment means out, then in. Common mistake: using a uniform for data that should change per vertex, so every vertex gets the same value.",
+      "Regla: por vértice es in (atributo); todo el dibujo es uniform; de vértice a fragmento es out y luego in. Error común: usar un uniform para datos que deberían cambiar por vértice, así que todos los vértices reciben el mismo valor.",
+      "ルール：頂点ごとなら in（アトリビュート）、描画全体なら uniform、頂点からフラグメントへは out から in。よくあるミス：頂点ごとに変わるべきデータに uniform を使い、全部の頂点が同じ値になってしまうこと。",
+    ),
+  ),
+  note("build-program", L("Building a shader program", "Armar un programa de shaders", "シェーダープログラムを組み立てる"),
+    p(
+      "Turning GLSL strings into something the GPU can run takes two phases. For each shader: create it with its type, give it its source, compile it. Then for the program: create it, attach the vertex and fragment shaders, link it. Finally useProgram makes it the current program for draws.",
+      "Convertir strings GLSL en algo que la GPU pueda correr lleva dos fases. Para cada shader: créalo con su tipo, dale su código fuente y compílalo. Luego, para el programa: créalo, adjunta el vertex shader y el fragment shader, y enlázalo. Al final useProgram lo vuelve el programa actual para dibujar.",
+      "GLSL の文字列を GPU で動くものにするには 2 段階ある。シェーダーごとに：種類を指定して作り、ソースを渡し、コンパイル。次にプログラム：作って、頂点とフラグメントのシェーダーをつけ、リンク。最後に useProgram で描画に使うプログラムにするよ。",
+    ),
+    p(
+      "createShader and createProgram can return null (for example when the context is lost), so their types are WebGLShader | null and WebGLProgram | null. Passing a maybe-null value to a function that needs a real shader is a type error. Check for null and throw, or use ! only when you're sure.",
+      "createShader y createProgram pueden devolver null (por ejemplo, si se pierde el contexto), así que sus tipos son WebGLShader | null y WebGLProgram | null. Pasar un valor que puede ser null a una función que necesita un shader real es un error de tipos. Comprueba el null y lanza un error, o usa ! solo cuando estés seguro.",
+      "createShader と createProgram は null を返すことがある（コンテキストを失ったときなど）。だから型は WebGLShader | null と WebGLProgram | null。本物のシェーダーが必要な関数に、null かもしれない値を渡すと型エラー。null をチェックして throw するか、確実なときだけ ! を使おう。",
+    ),
+    tc('declare const gl: WebGL2RenderingContext;\nconst frag = gl.createShader(gl.FRAGMENT_SHADER);\nif (!frag) throw new Error("no shader");\ngl.shaderSource(frag, "void main() {}");',
+      L("Type-checked only: after the check, frag is a WebGLShader", "Solo se verifica el tipo: tras comprobarlo, frag es un WebGLShader", "型チェックのみ：チェック後の frag は WebGLShader")),
+    p(
+      "Compiling doesn't throw when the GLSL is wrong: it fails silently. You have to ask. gl.getShaderParameter with the compile status is false on a GLSL error, and gl.getShaderInfoLog explains why. After linking, ask the program the same way with its link status and gl.getProgramInfoLog.",
+      "Compilar no lanza un error cuando el GLSL está mal: falla en silencio. Tienes que preguntar. gl.getShaderParameter con el estado de compilación da false si hay un error de GLSL, y gl.getShaderInfoLog explica por qué. Tras enlazar, pregúntale al programa igual, con su estado de enlace y gl.getProgramInfoLog.",
+      "GLSL がまちがっていても、コンパイルは throw しない。だまって失敗する。だから自分で聞くこと。コンパイル状態を gl.getShaderParameter で聞くと GLSL エラーなら false で、理由は gl.getShaderInfoLog が教えてくれる。リンクのあとも同じく、リンク状態と gl.getProgramInfoLog でプログラムに聞こう。",
+    ),
+    p(
+      "Common mistakes: compiling before setting the source, linking before both shaders are attached, and skipping the status checks, then staring at a black screen. When a status is false, log the info log: it's the only place WebGL explains itself.",
+      "Errores comunes: compilar antes de poner el código fuente, enlazar antes de adjuntar ambos shaders y saltarse las comprobaciones de estado, para luego quedarse mirando una pantalla negra. Cuando un estado da false, muestra el info log: es el único lugar donde WebGL se explica.",
+      "よくあるミス：ソースを渡す前にコンパイルすること、2 つのシェーダーをつける前にリンクすること、状態の確認をとばして黒い画面を見つめること。状態が false なら info log を表示しよう。WebGL が理由を話してくれるのはそこだけだよ。",
+    ),
+  ),
+];
+
 const shaders: LessonDef = {
   slug: "shaders-and-glsl",
   title: L("Two spellbooks", "Dos libros de hechizos", "2 冊の呪文書"),
@@ -296,6 +676,8 @@ const shaders: LessonDef = {
     },
     {
       kind: "pick",
+      hint: L("One shader works on points, the other on pixels. Which one places each point?", "Un shader trabaja con puntos y el otro con píxeles. ¿Cuál ubica cada punto?", "片方は点、もう片方はピクセルを担当。点を置くのはどっち？"),
+      note: "two-shaders",
       prompt: L("Which shader runs per vertex?", "¿Qué shader corre por vértice?", "頂点ごとに動くのは？"),
       code: "// runs once per vertex:\n// the ___ shader",
       options: ["vertex", "fragment"],
@@ -304,6 +686,8 @@ const shaders: LessonDef = {
     },
     {
       kind: "type",
+      hint: L("It's a built-in GLSL output variable. Trix named it in the first dialog of this lesson.", "Es una variable de salida integrada de GLSL. Trix la nombró en el primer diálogo de esta lección.", "GLSL の組みこみ出力変数だよ。このレッスンの最初の会話でトリックスが言ってた。"),
+      note: "two-shaders",
       prompt: L("What must the vertex shader set?", "¿Qué debe fijar el vertex shader?", "頂点シェーダーが決めるのは？"),
       code: "const vs = `#version 300 es\nin vec4 a_position;\nvoid main() { ___ = a_position; }`;",
       answer: "gl_Position",
@@ -321,6 +705,8 @@ const shaders: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("Each letter picks one component, and the result keeps the letters' order. What does z hold?", "Cada letra toma un componente y el resultado sigue el orden de las letras. ¿Qué guarda z?", "文字ごとに成分を 1 つ選び、結果は文字の順。z には何が入ってる？"),
+      note: "vectors-swizzle",
       prompt: PRINT,
       code: 'const v = { x: 1, y: 2, z: 3, w: 4 };\n// like GLSL v.zyx\nconsole.log([..."zyx"].map((c) => v[c as keyof typeof v]).join(","));',
       options: ["3,2,1", "1,2,3", "4,3,2"],
@@ -332,6 +718,8 @@ const shaders: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("Check which letter set each letter belongs to: xyzw or rgba. Can one swizzle use both?", "Revisa a qué grupo pertenece cada letra: xyzw o rgba. ¿Un swizzle puede usar ambos?", "それぞれの文字は xyzw と rgba のどちらの組？1 つのスウィズルで両方使える？"),
+      note: "vectors-swizzle",
       prompt: GLSL_OK,
       code: "// GLSL\nvec4 v = vec4(1.0, 2.0, 3.0, 4.0);\nvec2 a = v.xg;",
       options: [L("No: mixes xyzw and rgba", "No: mezcla xyzw y rgba", "いいえ：xyzw と rgba が混在"), L("Yes: gives vec2(1.0, 2.0)", "Sí: da vec2(1.0, 2.0)", "はい：vec2(1.0, 2.0)")],
@@ -345,6 +733,8 @@ const shaders: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("What type is the literal 1 in GLSL? Does GLSL ES convert types for you?", "¿De qué tipo es el literal 1 en GLSL? ¿GLSL ES convierte tipos por ti?", "GLSL で 1 という値の型は？GLSL ES は型を自動で変えてくれる？"),
+      note: "glsl-strict",
       prompt: GLSL_OK,
       code: "// GLSL ES 3.00\nfloat x = 1;",
       options: [L("No: 1 is an int", "No: 1 es un int", "いいえ：1 は int"), L("Yes: x is 1.0", "Sí: x vale 1.0", "はい：x は 1.0")],
@@ -353,6 +743,8 @@ const shaders: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("This is a fragment shader that uses floats. Which line do fragment shaders need that's missing here?", "Es un fragment shader que usa floats. ¿Qué línea necesitan los fragment shaders y aquí falta?", "float を使うフラグメントシェーダー。フラグメントに必要なのに、ここにない行は？"),
+      note: "glsl-strict",
       prompt: GLSL_OK,
       code: "#version 300 es\n// no precision line\nout vec4 outColor;\nvoid main() { outColor = vec4(1.0); }",
       options: [L("No: no float precision", "No: falta la precisión", "いいえ：精度の指定がない"), L("Yes: it's a white fragment", "Sí: un fragmento blanco", "はい：白いフラグメント")],
@@ -366,6 +758,8 @@ const shaders: LessonDef = {
     )),
     {
       kind: "pick",
+      hint: L("In WebGL2, the vertex side SENDS a value to the fragment side. Which keyword means sending?", "En WebGL2, el lado del vértice ENVÍA un valor al lado del fragmento. ¿Qué palabra significa enviar?", "WebGL2 では頂点側がフラグメント側へ値を「送る」。送るを意味するキーワードは？"),
+      note: "shader-io",
       prompt: L("WebGL2 word for varying (vertex)", "Palabra WebGL2 para varying (vértice)", "WebGL2 で varying の代わり"),
       code: "// WebGL1: varying vec2 v_uv;\n// WebGL2 vertex shader:\n___ vec2 v_uv;",
       options: ["out", "in", "uniform"],
@@ -374,6 +768,8 @@ const shaders: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("Does a uniform change from vertex to vertex, or stay fixed for one draw call?", "¿Un uniform cambia de vértice en vértice, o se mantiene fijo durante un draw call?", "uniform は頂点ごとに変わる？それとも 1 回の描画の間ずっと同じ？"),
+      note: "shader-io",
       prompt: L("What is a uniform?", "¿Qué es un uniform?", "uniform とは？"),
       code: "// GLSL\nuniform vec4 u_color;",
       options: [L("Same value for the whole draw", "El mismo valor en todo el dibujo", "描画全体で同じ値"), L("A different value per vertex", "Un valor distinto por vértice", "頂点ごとにちがう値")],
@@ -387,6 +783,8 @@ const shaders: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("What type does createShader return? Can it be null, and does shaderSource accept that?", "¿Qué tipo devuelve createShader? ¿Puede ser null, y shaderSource lo acepta?", "createShader の戻り値の型は？null になりうる？shaderSource はそれを受け取れる？"),
+      note: "build-program",
       prompt: COMPILES,
       code: "declare const gl: WebGL2RenderingContext;\ndeclare const src: string;\nconst vs = gl.createShader(gl.VERTEX_SHADER);\ngl.shaderSource(vs, src);",
       options: [YES, NO_TSC],
@@ -396,6 +794,8 @@ const shaders: LessonDef = {
     },
     {
       kind: "order",
+      hint: L("Think in two phases: first finish the shader, then build the program around it.", "Piensa en dos fases: primero termina el shader y luego arma el programa alrededor.", "2 段階で考えよう。まずシェーダーを仕上げ、それからプログラムを組む。"),
+      note: "build-program",
       prompt: L("Build and use a program", "Arma y usa un programa", "プログラムを作って使おう"),
       lines: [
         "const sh = gl.createShader(gl.VERTEX_SHADER)!;",
@@ -414,6 +814,8 @@ const shaders: LessonDef = {
     },
     {
       kind: "type",
+      hint: L("You want to know whether compiling worked. Which shader parameter reports that status?", "Quieres saber si la compilación funcionó. ¿Qué parámetro del shader informa ese estado?", "コンパイルが成功したか知りたい。その状態を教えるシェーダーのパラメーターは？"),
+      note: "build-program",
       prompt: L("Did it compile?", "¿Se compiló?", "コンパイルできた？"),
       code: "declare const gl: WebGL2RenderingContext;\ndeclare const sh: WebGLShader;\nif (!gl.getShaderParameter(sh, gl.___)) {\n  console.log(gl.getShaderInfoLog(sh));\n}",
       answer: "COMPILE_STATUS",
@@ -423,6 +825,8 @@ const shaders: LessonDef = {
     },
     {
       kind: "run",
+      hint: L("Look closely at what comes right after the opening backtick. What is on line 1 of the string?", "Mira bien qué viene justo después del backtick de apertura. ¿Qué hay en la línea 1 del string?", "開きバッククォートの直後をよく見て。文字列の 1 行目には何がある？"),
+      note: "glsl-strict",
       prompt: L("Make #version the very first line", "Haz que #version sea la primera línea", "#version を 1 行目にしよう"),
       starter: 'const vs = `\n#version 300 es\nin vec4 a_position;\nvoid main() { gl_Position = a_position; }`;\nfunction firstLineOk(src: string): boolean {\n  return src.split("\\n")[0] === "#version 300 es";\n}\nconsole.log("valid: " + firstLineOk(vs));\n',
       solution: 'const vs = `#version 300 es\nin vec4 a_position;\nvoid main() { gl_Position = a_position; }`;\nfunction firstLineOk(src: string): boolean {\n  return src.split("\\n")[0] === "#version 300 es";\n}\nconsole.log("valid: " + firstLineOk(vs));\n',
@@ -431,9 +835,44 @@ const shaders: LessonDef = {
       explain: L("The backtick is followed by a newline, so line 1 is empty. Start the text right after the backtick.", "Tras el backtick hay un salto de línea, así que la línea 1 está vacía. Empieza el texto justo tras el backtick.", "バッククォートの後に改行があるので 1 行目が空。バッククォートの直後から書こう。"),
     },
   ],
+  notes: shadersNotes,
 };
 
 // ─── 1.4 Boss: Pipeline Golem ──────────────────────────────────────────────
+const bossNotes: NoteDef[] = [
+  note("recap-clip", L("Recap: clip space", "Repaso: clip space", "復習：クリップ空間"),
+    p(
+      "Clip space runs from -1 to +1 on both axes, with 0 in the center. Pixel x to clip: (px / w) * 2 - 1. Pixel y to clip is flipped, because clip y points up: 1 - (py / h) * 2. The viewport goes back to pixels: ((x + 1) / 2) * width.",
+      "Clip space va de -1 a +1 en ambos ejes, con 0 en el centro. De x en píxeles a clip: (px / w) * 2 - 1. La y se invierte, porque la y de clip apunta arriba: 1 - (py / h) * 2. El viewport vuelve a píxeles: ((x + 1) / 2) * ancho.",
+      "クリップ空間は両方の軸で -1 から +1、中心が 0。ピクセルの x からクリップへは (px / w) * 2 - 1。クリップの y は上向きなので y は反転：1 - (py / h) * 2。viewport はピクセルへもどす：((x + 1) / 2) * 幅。",
+    ),
+    ex("const clipY = (py: number) => 1 - (py / 200) * 2;\nconst toPx = (x: number) => ((x + 1) / 2) * 200;\nconsole.log(clipY(50), toPx(-0.5));", "0.5 50"),
+  ),
+  note("recap-state", L("Recap: context and state", "Repaso: contexto y estado", "復習：コンテキストと状態"),
+    p(
+      "getContext(\"webgl2\") may return null, so narrow it before use. The context is a state machine: calls act on whatever is bound or set right now, and the last bind wins. Constants such as gl.TRIANGLES are numbers, never strings.",
+      "getContext(\"webgl2\") puede devolver null, así que estréchalo antes de usarlo. El contexto es una máquina de estados: las llamadas actúan sobre lo que esté enlazado o fijado ahora, y gana el último enlace. Las constantes como gl.TRIANGLES son números, nunca strings.",
+      "getContext(\"webgl2\") は null を返すことがあるので、使う前に絞りこむ。コンテキストは状態機械で、命令は今バインド・設定されているものに効き、最後のバインドが勝つ。gl.TRIANGLES のような定数は数値で、文字列ではないよ。",
+    ),
+    ex('let slot = "empty";\nconst bind = (name: string) => { slot = name; };\nbind("rock");\nbind("tree");\nbind("cloud");\nconsole.log("slot holds " + slot);', "slot holds cloud"),
+    tc("declare const gl: WebGL2RenderingContext;\ngl.drawArrays(gl.POINTS, 0, 1);",
+      L("Type-checked only: numeric constants pass", "Solo se verifica el tipo: las constantes numéricas pasan", "型チェックのみ：数値の定数なら通る")),
+  ),
+  note("recap-shaders", L("Recap: shaders", "Repaso: shaders", "復習：シェーダー"),
+    p(
+      "The vertex shader positions each vertex; the fragment shader colors each pixel. A uniform is one value for the whole draw, while in carries per-vertex data. A WebGL2 shader starts with #version 300 es on its very first line, and after linking you check the link status.",
+      "El vertex shader ubica cada vértice; el fragment shader colorea cada píxel. Un uniform es un valor para todo el dibujo, mientras que in trae datos por vértice. Un shader de WebGL2 empieza con #version 300 es en su primerísima línea, y tras enlazar compruebas el estado de enlace.",
+      "頂点シェーダーは頂点の位置を決め、フラグメントシェーダーはピクセルに色をぬる。uniform は描画全体で 1 つの値、in は頂点ごとのデータ。WebGL2 のシェーダーは一番最初の行が #version 300 es で、リンクのあとはリンク状態を確認するよ。",
+    ),
+    p(
+      "Swizzles read components in the order of their letters, from one letter set at a time: xyzw for positions or rgba for colors.",
+      "Los swizzles leen los componentes en el orden de sus letras, de un solo grupo de letras a la vez: xyzw para posiciones o rgba para colores.",
+      "スウィズルは文字の順に成分を読む。使う組は一度に 1 つ：位置なら xyzw、色なら rgba。",
+    ),
+    ex('const col = { r: 0.9, g: 0.3, b: 0.6, a: 1 };\n// like GLSL col.gra\nconsole.log([..."gra"].map((k) => col[k as keyof typeof col]).join(","));', "0.3,0.9,1"),
+  ),
+];
+
 const boss: LessonDef = {
   slug: "pipeline-golem",
   title: L("Boss: Pipeline Golem", "Jefe: Gólem Pipeline", "ボス：パイプラインゴーレム"),
@@ -448,22 +887,23 @@ const boss: LessonDef = {
       "SOY EL GÓLEM PIPELINE. Pierde un signo, sáltate un chequeo, ¡y tu pantalla quedará NEGRA para siempre!",
       "我はパイプラインゴーレム。符号ひとつ、確認ひとつ忘れれば、画面は永遠にまっくろだ！",
     )),
-    { kind: "predict", time: 15, prompt: PRINT, code: "const toClipY = (py: number, h: number) => 1 - (py / h) * 2;\nconsole.log(toClipY(300, 600));", options: ["0", "0.5", "-1"], answer: 0, output: "0", check: { compiles: true, stdout: "0" }, explain: L("The middle row is clip y = 0.", "La fila del medio es clip y = 0.", "まんなかの行はクリップ y = 0。") },
-    { kind: "predict", time: 15, prompt: COMPILES, code: 'declare const canvas: HTMLCanvasElement;\nconst gl = canvas.getContext("webgl2");\ngl.clearColor(0, 0, 0, 1);', options: [YES, NO_TSC], answer: 1, check: { compiles: false }, explain: L("TS18047: gl may be null. Guard it first.", "TS18047: gl puede ser null. Protégelo antes.", "TS18047：gl は null かも。先にガード。") },
-    { kind: "pick", time: 12, prompt: L("Who paints each pixel?", "¿Quién pinta cada píxel?", "ピクセルに色をぬるのは？"), code: "// decides each pixel's color:\n// the ___ shader", options: ["fragment", "vertex"], answer: 0, explain: L("The fragment shader outputs the color.", "El fragment shader da el color.", "色を出すのはフラグメントシェーダー。") },
-    { kind: "predict", time: 12, prompt: L("What is a uniform?", "¿Qué es un uniform?", "uniform とは？"), code: "// GLSL\nuniform float u_time;", options: [L("Same value for the whole draw", "El mismo valor en todo el dibujo", "描画全体で同じ値"), L("A different value per vertex", "Un valor distinto por vértice", "頂点ごとにちがう値")], answer: 0, explain: L("Per-vertex data uses in, not uniform.", "Lo de cada vértice usa in, no uniform.", "頂点ごとのデータは in を使う。") },
-    { kind: "type", time: 15, prompt: L("Did it link?", "¿Se enlazó?", "リンクできた？"), code: 'declare const gl: WebGL2RenderingContext;\ndeclare const prog: WebGLProgram;\nif (!gl.getProgramParameter(prog, gl.___)) {\n  throw new Error(gl.getProgramInfoLog(prog) ?? "");\n}', answer: "LINK_STATUS", check: { compiles: true }, explain: L("Programs report LINK_STATUS after linkProgram.", "Los programas informan LINK_STATUS tras linkProgram.", "linkProgram の後は LINK_STATUS を見る。") },
-    { kind: "pick", time: 12, prompt: L("First line of a WebGL2 shader", "Primera línea de un shader WebGL2", "WebGL2 シェーダーの 1 行目"), code: "const fs = `___\nprecision highp float;\nout vec4 outColor;\nvoid main() { outColor = vec4(1.0); }`;", options: ["#version 300 es", "// my shader", "uniform float u_time;"], answer: 0, explain: L("#version 300 es must come before anything else.", "#version 300 es debe ir antes que todo.", "#version 300 es は何よりも先。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: "const ndcToPx = (x: number, w: number) => ((x + 1) / 2) * w;\nconsole.log(ndcToPx(0.5, 800));", options: ["600", "400", "200"], answer: 0, output: "600", check: { compiles: true, stdout: "600" }, explain: L("(0.5 + 1) / 2 = 0.75, times 800 is 600.", "(0.5 + 1) / 2 = 0.75; por 800 da 600.", "(0.5 + 1) / 2 = 0.75、800 倍で 600。") },
-    { kind: "predict", time: 12, prompt: COMPILES, code: "declare const gl: WebGL2RenderingContext;\ngl.drawArrays(gl.TRIANGLES, 0, 3);", options: [YES, NO_TSC], answer: 0, check: { compiles: true }, explain: L("gl.TRIANGLES is a number enum: correct.", "gl.TRIANGLES es un enum numérico: correcto.", "gl.TRIANGLES は数値の列挙値。正しい。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: 'let bound = "none";\nconst bind = (b: string) => { bound = b; };\nbind("grass");\nbind("sky");\nconsole.log("upload to " + bound);', options: ["upload to sky", "upload to grass", "upload to none"], answer: 0, output: "upload to sky", check: { compiles: true, stdout: "upload to sky" }, explain: L("The last bind wins, like ARRAY_BUFFER.", "Gana el último bind, como ARRAY_BUFFER.", "最後のバインドが勝つ。ARRAY_BUFFER と同じ。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: 'const c = { r: 1, g: 0.5, b: 0, a: 1 };\n// like GLSL c.bgr\nconsole.log([..."bgr"].map((k) => c[k as keyof typeof c]).join(","));', options: ["0,0.5,1", "1,0.5,0", "0,1,0.5"], answer: 0, output: "0,0.5,1", check: { compiles: true, stdout: "0,0.5,1" }, explain: L("Swizzle order is letter order: b, g, r.", "El orden del swizzle es el de las letras: b, g, r.", "スウィズルは文字の順：b、g、r。") },
+    { kind: "predict", hint: L("Use the y formula with the middle row. Where is the canvas's middle in clip space?", "Usa la fórmula de y con la fila del medio. ¿Dónde está el medio del canvas en clip space?", "まんなかの行で y の式を使おう。キャンバスの中央はクリップ空間のどこ？"), note: "recap-clip", time: 15, prompt: PRINT, code: "const toClipY = (py: number, h: number) => 1 - (py / h) * 2;\nconsole.log(toClipY(300, 600));", options: ["0", "0.5", "-1"], answer: 0, output: "0", check: { compiles: true, stdout: "0" }, explain: L("The middle row is clip y = 0.", "La fila del medio es clip y = 0.", "まんなかの行はクリップ y = 0。") },
+    { kind: "predict", hint: L("What can getContext return, and does strict TypeScript allow calls on it?", "¿Qué puede devolver getContext, y TypeScript estricto permite llamadas sobre eso?", "getContext は何を返しうる？strict な TypeScript はそれへの呼び出しを許す？"), note: "recap-state", time: 15, prompt: COMPILES, code: 'declare const canvas: HTMLCanvasElement;\nconst gl = canvas.getContext("webgl2");\ngl.clearColor(0, 0, 0, 1);', options: [YES, NO_TSC], answer: 1, check: { compiles: false }, explain: L("TS18047: gl may be null. Guard it first.", "TS18047: gl puede ser null. Protégelo antes.", "TS18047：gl は null かも。先にガード。") },
+    { kind: "pick", hint: L("One shader positions vertices, the other decides colors. Which one paints?", "Un shader ubica vértices y el otro decide colores. ¿Cuál pinta?", "片方は頂点の位置、もう片方は色を決める。ぬるのはどっち？"), note: "recap-shaders", time: 12, prompt: L("Who paints each pixel?", "¿Quién pinta cada píxel?", "ピクセルに色をぬるのは？"), code: "// decides each pixel's color:\n// the ___ shader", options: ["fragment", "vertex"], answer: 0, explain: L("The fragment shader outputs the color.", "El fragment shader da el color.", "色を出すのはフラグメントシェーダー。") },
+    { kind: "predict", hint: L("Is the value shared by the whole draw, or different for each vertex?", "¿El valor lo comparte todo el dibujo, o es distinto para cada vértice?", "値は描画全体で共有？それとも頂点ごとにちがう？"), note: "recap-shaders", time: 12, prompt: L("What is a uniform?", "¿Qué es un uniform?", "uniform とは？"), code: "// GLSL\nuniform float u_time;", options: [L("Same value for the whole draw", "El mismo valor en todo el dibujo", "描画全体で同じ値"), L("A different value per vertex", "Un valor distinto por vértice", "頂点ごとにちがう値")], answer: 0, explain: L("Per-vertex data uses in, not uniform.", "Lo de cada vértice usa in, no uniform.", "頂点ごとのデータは in を使う。") },
+    { kind: "type", hint: L("After linkProgram, which program parameter tells you whether linking worked?", "Tras linkProgram, ¿qué parámetro del programa te dice si el enlace funcionó?", "linkProgram のあと、リンクの成否を教えるプログラムのパラメーターは？"), note: "recap-shaders", time: 15, prompt: L("Did it link?", "¿Se enlazó?", "リンクできた？"), code: 'declare const gl: WebGL2RenderingContext;\ndeclare const prog: WebGLProgram;\nif (!gl.getProgramParameter(prog, gl.___)) {\n  throw new Error(gl.getProgramInfoLog(prog) ?? "");\n}', answer: "LINK_STATUS", check: { compiles: true }, explain: L("Programs report LINK_STATUS after linkProgram.", "Los programas informan LINK_STATUS tras linkProgram.", "linkProgram の後は LINK_STATUS を見る。") },
+    { kind: "pick", hint: L("Which line must come before anything else in a WebGL2 shader?", "¿Qué línea debe ir antes que todo en un shader de WebGL2?", "WebGL2 のシェーダーで何よりも先に来るべき行は？"), note: "recap-shaders", time: 12, prompt: L("First line of a WebGL2 shader", "Primera línea de un shader WebGL2", "WebGL2 シェーダーの 1 行目"), code: "const fs = `___\nprecision highp float;\nout vec4 outColor;\nvoid main() { outColor = vec4(1.0); }`;", options: ["#version 300 es", "// my shader", "uniform float u_time;"], answer: 0, explain: L("#version 300 es must come before anything else.", "#version 300 es debe ir antes que todo.", "#version 300 es は何よりも先。") },
+    { kind: "predict", hint: L("Add 1, divide by 2, multiply by the width.", "Suma 1, divide entre 2 y multiplica por el ancho.", "1 を足して、2 で割って、幅をかける。"), note: "recap-clip", time: 15, prompt: PRINT, code: "const ndcToPx = (x: number, w: number) => ((x + 1) / 2) * w;\nconsole.log(ndcToPx(0.5, 800));", options: ["600", "400", "200"], answer: 0, output: "600", check: { compiles: true, stdout: "600" }, explain: L("(0.5 + 1) / 2 = 0.75, times 800 is 600.", "(0.5 + 1) / 2 = 0.75; por 800 da 600.", "(0.5 + 1) / 2 = 0.75、800 倍で 600。") },
+    { kind: "predict", hint: L("Is gl.TRIANGLES a string or a number constant? What type does drawArrays want?", "¿gl.TRIANGLES es un string o una constante numérica? ¿Qué tipo quiere drawArrays?", "gl.TRIANGLES は文字列？数値の定数？drawArrays が欲しい型は？"), note: "recap-state", time: 12, prompt: COMPILES, code: "declare const gl: WebGL2RenderingContext;\ngl.drawArrays(gl.TRIANGLES, 0, 3);", options: [YES, NO_TSC], answer: 0, check: { compiles: true }, explain: L("gl.TRIANGLES is a number enum: correct.", "gl.TRIANGLES es un enum numérico: correcto.", "gl.TRIANGLES は数値の列挙値。正しい。") },
+    { kind: "predict", hint: L("Like a bind point, the variable keeps only its latest value. Which call set it last?", "Como una ranura, la variable guarda solo su último valor. ¿Qué llamada lo fijó por última vez?", "バインド先と同じで、変数は最新の値だけを持つ。最後に設定したのは？"), note: "recap-state", time: 15, prompt: PRINT, code: 'let bound = "none";\nconst bind = (b: string) => { bound = b; };\nbind("grass");\nbind("sky");\nconsole.log("upload to " + bound);', options: ["upload to sky", "upload to grass", "upload to none"], answer: 0, output: "upload to sky", check: { compiles: true, stdout: "upload to sky" }, explain: L("The last bind wins, like ARRAY_BUFFER.", "Gana el último bind, como ARRAY_BUFFER.", "最後のバインドが勝つ。ARRAY_BUFFER と同じ。") },
+    { kind: "predict", hint: L("Swizzle order is the order of the letters. Look up each letter in c.", "El orden del swizzle es el de las letras. Busca cada letra en c.", "スウィズルの順は文字の順。c で 1 文字ずつ調べよう。"), note: "recap-shaders", time: 15, prompt: PRINT, code: 'const c = { r: 1, g: 0.5, b: 0, a: 1 };\n// like GLSL c.bgr\nconsole.log([..."bgr"].map((k) => c[k as keyof typeof c]).join(","));', options: ["0,0.5,1", "1,0.5,0", "0,1,0.5"], answer: 0, output: "0,0.5,1", check: { compiles: true, stdout: "0,0.5,1" }, explain: L("Swizzle order is letter order: b, g, r.", "El orden del swizzle es el de las letras: b, g, r.", "スウィズルは文字の順：b、g、r。") },
     enemySays(L(
       "My stones... clipped, bound and linked. The pipeline flows. The Buffer Forest awaits you.",
       "Mis piedras... recortadas, enlazadas y compiladas. El pipeline fluye. Te espera el Bosque de Buffers.",
       "わが石が…クリップされ、バインドされ、リンクされた。パイプラインは流れる。バッファの森が待つぞ。",
     )),
   ],
+  notes: bossNotes,
 };
 
 export const pipelineVillage: RegionDef = {

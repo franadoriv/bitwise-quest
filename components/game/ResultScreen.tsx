@@ -6,7 +6,8 @@ import { Sprite } from "@/components/pixel/Sprite";
 import { levelProgress } from "@/lib/game-rules";
 import { fx, wait } from "@/lib/fx";
 import type { LessonPlay } from "@/lib/repo";
-import type { Reward } from "@/lib/save/progress";
+import { TICKET_PRICE, buyTicket, type Reward } from "@/lib/save/progress";
+import { useSave } from "@/components/save/SaveProvider";
 import { music, sfx } from "@/lib/sfx";
 import { useI18n } from "@/components/ui/I18n";
 
@@ -25,6 +26,16 @@ export function ResultScreen({ play, score, maxCombo, mistakes, reward }: {
   const [ready, setReady] = useState(false);
   const stars = reward?.stars ?? (mistakes === 0 ? 3 : mistakes <= 2 ? 2 : 1);
   const map = `/play/${play.languageSlug}`;
+  const { save, commit } = useSave();
+  const ticketRef = useRef<HTMLButtonElement>(null);
+  const buy = () => {
+    const next = save && buyTicket(save);
+    if (!next) { sfx.wrong(); fx.shake(ticketRef.current, 6); return; }
+    void commit(next);
+    sfx.coin();
+    fx.burst(ticketRef.current, { count: 12, colors: ["var(--gold)", "var(--red)"] });
+    fx.float(ticketRef.current, "+1", "var(--gold)", 16);
+  };
 
   useEffect(() => {
     music.play("result");
@@ -62,6 +73,10 @@ export function ResultScreen({ play, score, maxCombo, mistakes, reward }: {
         });
         gsap.fromTo(xpBar.current, { width: `${from.ratio * 100}%` }, { width: `${(to.level > from.level ? 1 : to.ratio) * 100}%`, duration: 1, ease: "power2.out" });
         await wait(1100);
+        if (reward.ticketsGained && alive) {
+          sfx.coin();
+          fx.float(ticketRef.current, t("result.tickets", { n: reward.ticketsGained }), "var(--gold)", 14);
+        }
         if (to.level > from.level && alive) {
           setLevelUp(true);
           sfx.levelUp();
@@ -109,6 +124,17 @@ export function ResultScreen({ play, score, maxCombo, mistakes, reward }: {
                 <div style={{ height: 12, background: "var(--p1)", boxShadow: "0 0 0 3px var(--p3)" }}>
                   <div ref={xpBar} style={{ height: "100%", width: 0, background: "var(--good)" }} />
                 </div>
+              </div>
+            )}
+            {save && (
+              <div className="pixel" style={{ fontSize: 9, display: "flex", gap: 8, alignItems: "center", justifyContent: "center", marginBottom: 16, flexWrap: "wrap" }}>
+                <span style={{ display: "flex", gap: 4, alignItems: "center", color: "var(--gold)" }}>
+                  <Sprite name="ticket" size={18} /> {t("result.ticketCount", { n: save.stats.tickets })}
+                  {reward?.ticketsGained ? <span style={{ color: "var(--good)" }}>(+{reward.ticketsGained})</span> : null}
+                </span>
+                <button ref={ticketRef} className="btn small" onClick={buy} disabled={save.stats.coins < TICKET_PRICE} style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                  {t("result.buyTicket", { price: TICKET_PRICE })} <Sprite name="coin" size={12} />
+                </button>
               </div>
             )}
           </>

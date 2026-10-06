@@ -1,4 +1,4 @@
-import type { Beat, LessonDef, RegionDef, Text } from "../../../lib/content/types.ts";
+import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
 
 // REGION 2 · BUFFER FOREST  (typed arrays and buffers, attributes, stride and offset, indexed drawing, textures)
@@ -12,6 +12,94 @@ const COMPILES = L("Does it compile?", "¿Compila?", "コンパイルできる�
 const YES = L("Yes", "Sí", "はい");
 const NO_TSC = L("No: tsc stops it", "No: tsc lo detiene", "いいえ：tsc が止める");
 
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example; the validator checks `output` against the real runner. */
+const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code, output, caption });
+/** A WebGL API example: no GPU in the runner, so it is only type-checked (tsc --strict). */
+const api = (code: string, caption?: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: true } });
+
+const typedArraysNotes: NoteDef[] = [
+  note("typed-arrays", L("Typed arrays: numbers as bytes", "Typed arrays: números como bytes", "型付き配列：数をバイトに"),
+    p(
+      "A normal JS array can hold anything: numbers, text, objects, all mixed. The GPU can't read that. It wants a plain row of bytes where every number has the same type and size. A typed array is exactly that: a fixed-length list of numbers of one type, stored as raw bytes in memory.",
+      "Un array normal de JS puede guardar de todo: números, texto, objetos, mezclados. La GPU no puede leer eso. Quiere una fila simple de bytes donde cada número tiene el mismo tipo y tamaño. Un typed array es justo eso: una lista de largo fijo de números de un solo tipo, guardada como bytes crudos.",
+      "ふつうの JS 配列には数も文字もオブジェクトも混ぜて入れられる。でも GPU はそれを読めない。全部の数が同じ型・同じ大きさで並んだバイトの列がほしいんだ。型付き配列はまさにそれ。1 つの型の数を決まった数だけ、生のバイトとして並べる。",
+    ),
+    p(
+      "The name tells you the size of each slot. The number is in bits, and 8 bits make 1 byte: Float64Array uses 8 bytes per number, Int32Array 4, Int16Array 2, Int8Array 1. Every typed array class also has BYTES_PER_ELEMENT, which gives that size directly so you don't have to divide by 8 yourself.",
+      "El nombre te dice el tamaño de cada casilla. El número está en bits, y 8 bits son 1 byte: Float64Array usa 8 bytes por número, Int32Array 4, Int16Array 2, Int8Array 1. Cada clase de typed array tiene además BYTES_PER_ELEMENT, que da ese tamaño directo para que no tengas que dividir entre 8.",
+      "名前の数字が 1 マスの大きさ。単位はビットで、8 ビット = 1 バイト。Float64Array は 1 つ 8 バイト、Int32Array は 4、Int16Array は 2、Int8Array は 1。どのクラスにも BYTES_PER_ELEMENT があり、8 で割らなくてもその大きさがわかる。",
+    ),
+    ex("console.log(Float64Array.BYTES_PER_ELEMENT, Int32Array.BYTES_PER_ELEMENT);", "8 4",
+      L("Bits in the name ÷ 8 = bytes per slot", "Bits del nombre ÷ 8 = bytes por casilla", "名前のビット数 ÷ 8 = 1 マスのバイト数")),
+    p(
+      "Two properties answer two different questions. length counts how many numbers are inside. byteLength counts how many bytes they take in memory. The rule that ties them: byteLength = length × BYTES_PER_ELEMENT. For a 1-byte type both are the same, which is why the difference is easy to forget.",
+      "Dos propiedades responden dos preguntas distintas. length cuenta cuántos números hay dentro. byteLength cuenta cuántos bytes ocupan en memoria. La regla que las une: byteLength = length × BYTES_PER_ELEMENT. En un tipo de 1 byte las dos coinciden, por eso la diferencia es fácil de olvidar.",
+      "2 つのプロパティは別の質問に答える。length は中の数の個数。byteLength はメモリで使うバイト数。2 つをつなぐルール：byteLength = length × BYTES_PER_ELEMENT。1 バイトの型だと同じ値になるので、ちがいを忘れやすい。",
+    ),
+    ex("const marks = new Int16Array(5);\nconsole.log(marks.length, marks.byteLength);", "5 10",
+      L("5 numbers × 2 bytes = 10 bytes", "5 números × 2 bytes = 10 bytes", "5 個 × 2 バイト = 10 バイト")),
+    p(
+      "Common mistake: using length where WebGL expects bytes. Buffer sizes, strides and offsets are all measured in bytes. If your count looks four times too small next to a float buffer, you probably passed length instead of byteLength.",
+      "Error común: usar length donde WebGL espera bytes. Los tamaños de buffer, strides y offsets se miden en bytes. Si tu cuenta parece cuatro veces más chica junto a un buffer de floats, seguramente pasaste length en vez de byteLength.",
+      "よくあるミス：WebGL がバイトを求める場所で length を使うこと。バッファの大きさ、ストライド、オフセットはどれもバイト単位。float のバッファで値が 4 分の 1 に見えたら、byteLength のかわりに length を渡しているかも。",
+    ),
+  ),
+  note("slot-limits", L("Fixed slots: rounding and wrapping", "Casillas fijas: redondeo y vuelta", "決まったマス：丸めと一周"),
+    p(
+      "A typed array slot has a fixed number of bits, so it can't hold every value. When you store something that doesn't fit, nothing throws an error: the value is quietly changed to something that fits. How it changes depends on the type: floats round, unsigned integers wrap around, and clamped bytes stop at the edge.",
+      "Una casilla de typed array tiene un número fijo de bits, así que no puede guardar cualquier valor. Si guardas algo que no cabe, no hay error: el valor se cambia en silencio por uno que cabe. Cómo cambia depende del tipo: los floats redondean, los enteros sin signo dan la vuelta y los bytes clamped se frenan en el borde.",
+      "型付き配列のマスはビット数が決まっているので、どんな値でも入るわけではない。入らない値を入れてもエラーは出ず、入る値にだまって変わる。変わり方は型しだい。float は丸め、符号なし整数は一周し、clamped のバイトは端で止まる。",
+    ),
+    p(
+      "Float32 keeps about 7 significant digits, while JS numbers are 64-bit floats with about 16. Most decimals can't be written exactly in binary, so a Float32Array stores the nearest 32-bit value. Reading it back into JS shows the leftover error in the long digits.",
+      "Float32 guarda unos 7 dígitos significativos, mientras que los números de JS son floats de 64 bits con unos 16. La mayoría de los decimales no se pueden escribir exacto en binario, así que un Float32Array guarda el valor de 32 bits más cercano. Al leerlo de vuelta en JS se ve el error sobrante en los dígitos largos.",
+      "Float32 の有効数字は約 7 けた。JS の数は 64 ビット float で約 16 けた。ほとんどの小数は 2 進数でぴったり書けないので、Float32Array は一番近い 32 ビットの値を保存する。JS で読み直すと、残った誤差が長いけたに見える。",
+    ),
+    ex("console.log(new Float32Array([0.3])[0]);", "0.30000001192092896",
+      L("The nearest float32 to 0.3, seen as a JS number", "El float32 más cercano a 0.3, visto como número de JS", "0.3 に一番近い float32 を JS の数で見る")),
+    p(
+      "Unsigned integer types (Uint8, Uint16, Uint32) keep only the lowest bits. The result is the value modulo 2 to the power of the bits: for Uint8 that is modulo 256, so 256 becomes 0, 257 becomes 1, and -1 becomes 255. Think of a car odometer rolling over to zero.",
+      "Los enteros sin signo (Uint8, Uint16, Uint32) guardan solo los bits más bajos. El resultado es el valor módulo 2 elevado a los bits: en Uint8 es módulo 256, así que 256 pasa a 0, 257 a 1 y -1 a 255. Piensa en el cuentakilómetros de un auto que vuelve a cero.",
+      "符号なし整数（Uint8、Uint16、Uint32）は下のビットだけを残す。結果は「値 mod 2 のビット数乗」。Uint8 なら mod 256 なので、256 は 0、257 は 1、-1 は 255 になる。車の走行距離メーターが 0 にもどるイメージだ。",
+    ),
+    ex('console.log(new Uint8Array([256, 257, -1]).join(","));', "0,1,255",
+      L("Uint8 wraps modulo 256", "Uint8 da la vuelta módulo 256", "Uint8 は 256 で一周")),
+    p(
+      "Uint8ClampedArray was made for pixel colors, where wrapping would turn a bright red into a dark one. It clamps instead: anything below 0 becomes 0 and anything above 255 becomes 255. Common mistake: expecting Uint8Array to clamp too. Only the Clamped version does; every other integer type wraps.",
+      "Uint8ClampedArray se creó para colores de píxeles, donde dar la vuelta convertiría un rojo brillante en uno oscuro. En cambio limita: lo menor que 0 queda en 0 y lo mayor que 255 queda en 255. Error común: esperar que Uint8Array también limite. Solo la versión Clamped lo hace; los demás enteros dan la vuelta.",
+      "Uint8ClampedArray はピクセルの色のために作られた。一周すると明るい赤が暗くなってしまうからね。かわりに端で止める：0 未満は 0、255 より上は 255。よくあるミス：Uint8Array も止まると思うこと。止まるのは Clamped だけで、ほかの整数型は一周する。",
+    ),
+  ),
+  note("upload-buffers", L("Uploading data with bufferData", "Subir datos con bufferData", "bufferData でデータを送る"),
+    p(
+      "Sending data to the GPU takes three calls. createBuffer makes an empty buffer object. bindBuffer plugs it into a bind point, a slot on the context. bufferData then copies your bytes into whatever buffer is plugged into that slot. WebGL works this way everywhere: you bind first, then act on the bound thing.",
+      "Enviar datos a la GPU lleva tres llamadas. createBuffer crea un objeto buffer vacío. bindBuffer lo conecta a un punto de enlace, una ranura del contexto. Luego bufferData copia tus bytes en el buffer que esté conectado a esa ranura. WebGL funciona así en todas partes: primero enlazas, luego actúas sobre lo enlazado.",
+      "GPU にデータを送るには 3 つの呼び出しが必要。createBuffer で空のバッファを作る。bindBuffer でコンテキストの「席」につなぐ。bufferData はその席につながっているバッファにバイトをコピーする。WebGL はどこでもこの形：先にバインドして、バインド中のものを操作する。",
+    ),
+    api("declare const gl: WebGL2RenderingContext;\nconst ring = new Float32Array([0, 0.5, 0.5, 0, 0, -0.5]);\nconst ringBuf = gl.createBuffer();\ngl.bindBuffer(gl.ARRAY_BUFFER, ringBuf);\ngl.bufferData(gl.ARRAY_BUFFER, ring, gl.STATIC_DRAW);",
+      L("Create, bind, then fill the bound buffer", "Crear, enlazar y llenar el buffer enlazado", "作る、バインド、バインド中のバッファに入れる")),
+    p(
+      "There are two main bind points for geometry. ARRAY_BUFFER holds per-vertex data such as positions, colors and UVs. ELEMENT_ARRAY_BUFFER holds index lists: the numbers that say which vertices form each triangle. The names come from OpenGL, so there is no INDEX or VERTEX buffer constant to guess.",
+      "Hay dos puntos de enlace principales para geometría. ARRAY_BUFFER guarda datos por vértice como posiciones, colores y UV. ELEMENT_ARRAY_BUFFER guarda listas de índices: los números que dicen qué vértices forman cada triángulo. Los nombres vienen de OpenGL, así que no hay constantes INDEX o VERTEX que adivinar.",
+      "形のデータを入れる主な席は 2 つ。ARRAY_BUFFER は位置・色・UV など頂点ごとのデータ。ELEMENT_ARRAY_BUFFER はインデックスの列、つまりどの頂点で三角形を作るかを示す番号。名前は OpenGL から来ているので、INDEX や VERTEX という定数はない。",
+    ),
+    p(
+      "bufferData only accepts binary data: a typed array, an ArrayBuffer or a size in bytes. A plain JS array like [1, 2] is rejected by TypeScript, because the browser would not know whether you meant floats, shorts or bytes. Wrap the numbers in the typed array that matches the shader's type.",
+      "bufferData solo acepta datos binarios: un typed array, un ArrayBuffer o un tamaño en bytes. TypeScript rechaza un array simple de JS como [1, 2], porque el navegador no sabría si quisiste floats, shorts o bytes. Envuelve los números en el typed array que coincide con el tipo del shader.",
+      "bufferData が受けとるのはバイナリだけ：型付き配列、ArrayBuffer、またはバイト数。[1, 2] のようなふつうの JS 配列は TypeScript が拒否する。float なのか short なのかバイトなのか、ブラウザにはわからないからだ。シェーダーの型に合う型付き配列で包もう。",
+    ),
+    p(
+      "The last argument is a usage hint for the driver. STATIC_DRAW means you upload once and draw many times, like a rock mesh. DYNAMIC_DRAW means you will rewrite the data often, like moving particles. STREAM_DRAW means you write it, draw a few times and throw it away. Any of them works; the right one helps the driver place the memory well.",
+      "El último argumento es una pista de uso para el driver. STATIC_DRAW: subes una vez y dibujas muchas, como la malla de una roca. DYNAMIC_DRAW: reescribes los datos seguido, como partículas en movimiento. STREAM_DRAW: escribes, dibujas pocas veces y descartas. Cualquiera funciona; el correcto ayuda al driver a ubicar bien la memoria.",
+      "最後の引数はドライバーへの使い方のヒント。STATIC_DRAW は一度送って何度も描く（岩のメッシュなど）。DYNAMIC_DRAW はよく書きかえる（動くパーティクルなど）。STREAM_DRAW は書いて数回描いたら捨てる。どれでも動くが、合ったものを選ぶとドライバーがメモリをうまく置ける。",
+    ),
+  ),
+];
+
 // ─── 2.1 Packing the cart ──────────────────────────────────────────────────
 const typedArrays: LessonDef = {
   slug: "buffers-and-typed-arrays",
@@ -21,6 +109,7 @@ const typedArrays: LessonDef = {
   xp: 65,
   enemy: "webgl/shader-goblin",
   enemyName: L("BYTE GOBLIN", "GOBLIN DE BYTES", "バイトゴブリン"),
+  notes: typedArraysNotes,
   beats: [
     say(L(
       "Welcome to Buffer Forest! The GPU can't read JS arrays. It reads raw bytes, so we pack numbers into TYPED ARRAYS.",
@@ -44,6 +133,8 @@ const typedArrays: LessonDef = {
       answer: 0,
       output: "4 2 1",
       check: { compiles: true, stdout: "4 2 1" },
+      hint: L("The number in each class name counts bits. How many bits make one byte?", "El número en el nombre de cada clase cuenta bits. ¿Cuántos bits forman un byte?", "クラス名の数字はビット数。何ビットで 1 バイトになる？"),
+      note: "typed-arrays",
       explain: L("BYTES_PER_ELEMENT is the slot size in bytes: 32 bits = 4 bytes, 16 bits = 2, 8 bits = 1.", "BYTES_PER_ELEMENT es el tamaño de cada casilla en bytes: 32 bits = 4, 16 bits = 2, 8 bits = 1.", "BYTES_PER_ELEMENT は 1 マスのバイト数。32 ビット = 4、16 ビット = 2、8 ビット = 1。"),
       win: [{ t: "print", text: "4 2 1" }],
     },
@@ -55,6 +146,8 @@ const typedArrays: LessonDef = {
       answer: 0,
       output: "9 36",
       check: { compiles: true, stdout: "9 36" },
+      hint: L("One property counts values, the other counts memory. Each float takes 4 bytes.", "Una propiedad cuenta valores y la otra memoria. Cada float ocupa 4 bytes.", "片方は値の個数、もう片方はメモリの量。float は 1 つ 4 バイト。"),
+      note: "typed-arrays",
       explain: L("length counts numbers (9); byteLength counts bytes (9 × 4 = 36).", "length cuenta números (9); byteLength cuenta bytes (9 × 4 = 36).", "length は数の個数（9）、byteLength はバイト数（9 × 4 = 36）。"),
       win: [{ t: "print", text: "9 36" }],
     },
@@ -71,6 +164,8 @@ const typedArrays: LessonDef = {
       answer: 0,
       output: "0.10000000149011612",
       check: { compiles: true, stdout: "0.10000000149011612" },
+      hint: L("A Float32 slot can't store every decimal exactly. JS prints the stored value with all its digits.", "Una casilla Float32 no guarda todo decimal exacto. JS imprime el valor guardado con todos sus dígitos.", "Float32 のマスはどの小数でもぴったり保存できるわけではない。JS は保存された値を全けた表示する。"),
+      note: "slot-limits",
       explain: L("32-bit floats are less precise than JS numbers, so 0.1 is stored as the closest float32.", "Los floats de 32 bits son menos precisos que los números de JS, así que 0.1 se guarda como el float32 más cercano.", "32 ビット float は JS の数より精度が低い。0.1 は一番近い float32 で保存される。"),
     },
     {
@@ -81,6 +176,8 @@ const typedArrays: LessonDef = {
       answer: 0,
       output: "65535,0",
       check: { compiles: true, stdout: "65535,0" },
+      hint: L("What's the largest number 16 bits can hold? Unsigned slots don't throw errors.", "¿Cuál es el mayor número que cabe en 16 bits? Las casillas sin signo no lanzan errores.", "16 ビットに入る一番大きい数は？符号なしのマスはエラーを出さない。"),
+      note: "slot-limits",
       explain: L("16 bits hold 0..65535. 65536 wraps around to 0, silently.", "16 bits guardan 0..65535. 65536 da la vuelta a 0, sin avisar.", "16 ビットは 0..65535。65536 はだまって 0 に戻る。"),
       win: [{ t: "shake" }, { t: "print", text: "65535,0" }],
     },
@@ -92,6 +189,8 @@ const typedArrays: LessonDef = {
       answer: 0,
       output: "44 255",
       check: { compiles: true, stdout: "44 255" },
+      hint: L("Only one of these two types is Clamped. The other keeps the value modulo 256.", "Solo uno de estos dos tipos es Clamped. El otro guarda el valor módulo 256.", "Clamped なのは片方だけ。もう片方は 256 で割った余りを残す。"),
+      note: "slot-limits",
       explain: L("Uint8 wraps: 300 - 256 = 44. Uint8Clamped stops at the top: 255.", "Uint8 da la vuelta: 300 - 256 = 44. Uint8Clamped se frena arriba: 255.", "Uint8 は一周：300 - 256 = 44。Uint8Clamped は上限の 255 で止まる。"),
     },
     say(L(
@@ -106,6 +205,8 @@ const typedArrays: LessonDef = {
       options: [YES, NO_TSC],
       answer: 1,
       check: { compiles: false },
+      hint: L("Check what bufferData accepts as data. Is a plain JS array binary data?", "Revisa qué acepta bufferData como datos. ¿Un array simple de JS es binario?", "bufferData が受けとるデータを確認。ふつうの JS 配列はバイナリ？"),
+      note: "upload-buffers",
       explain: L("Error TS2769: No overload matches this call. Wrap it: new Float32Array([0, 1, 2]).", "Error TS2769: ninguna sobrecarga coincide. Envuélvelo: new Float32Array([0, 1, 2]).", "エラー TS2769：合うオーバーロードがない。new Float32Array([0, 1, 2]) で包もう。"),
       win: [{ t: "shake" }],
     },
@@ -116,6 +217,8 @@ const typedArrays: LessonDef = {
       options: ["ELEMENT_ARRAY_BUFFER", "ARRAY_BUFFER", "INDEX_BUFFER"],
       answer: 0,
       check: { compiles: true },
+      hint: L("Vertex data and index lists use different bind points, and only OpenGL-style names exist.", "Los vértices y las listas de índices usan puntos de enlace distintos, y solo existen nombres al estilo OpenGL.", "頂点と番号の列は別の席を使う。名前は OpenGL 式のものだけ。"),
+      note: "upload-buffers",
       explain: L("Indices live in ELEMENT_ARRAY_BUFFER. ARRAY_BUFFER is for vertex data; INDEX_BUFFER doesn't exist.", "Los índices van en ELEMENT_ARRAY_BUFFER. ARRAY_BUFFER es para vértices; INDEX_BUFFER no existe.", "インデックスは ELEMENT_ARRAY_BUFFER。ARRAY_BUFFER は頂点用、INDEX_BUFFER はない。"),
     },
     say(L(
@@ -130,6 +233,8 @@ const typedArrays: LessonDef = {
       options: ["DYNAMIC_DRAW", "STATIC_DRAW"],
       answer: 0,
       check: { compiles: true },
+      hint: L("The usage hint describes how often you will rewrite the data.", "La pista de uso describe cada cuánto reescribirás los datos.", "使い方のヒントは、データをどれくらい書きかえるかを表す。"),
+      note: "upload-buffers",
       explain: L("Both compile, but DYNAMIC_DRAW tells the driver the data changes often, so it can place it well.", "Ambos compilan, pero DYNAMIC_DRAW avisa al driver que los datos cambian seguido para ubicarlos bien.", "どちらもコンパイルできるけど、DYNAMIC_DRAW はよく変わると伝えるので、ドライバーがうまく置ける。"),
     },
     {
@@ -139,10 +244,88 @@ const typedArrays: LessonDef = {
       solution: 'const cube = new Float32Array(8 * 3);\nconst bytes = cube.length * Float32Array.BYTES_PER_ELEMENT;\nconsole.log("bytes: " + bytes);\n',
       expect: "bytes: 96",
       fallback: [String.raw`BYTES_PER_ELEMENT`, String.raw`byteLength`, String.raw`cube\.length\s*\*\s*4`],
+      hint: L("length counts floats. Multiply by the bytes per float, or use the property that counts bytes.", "length cuenta floats. Multiplica por los bytes de cada float o usa la propiedad que cuenta bytes.", "length は float の個数。1 つのバイト数をかけるか、バイトを数えるプロパティを使おう。"),
+      note: "typed-arrays",
       explain: L("24 floats × 4 bytes = 96. Use cube.byteLength or multiply by BYTES_PER_ELEMENT.", "24 floats × 4 bytes = 96. Usa cube.byteLength o multiplica por BYTES_PER_ELEMENT.", "24 個 × 4 バイト = 96。cube.byteLength か BYTES_PER_ELEMENT をかけよう。"),
     },
   ],
 };
+
+const attributesNotes: NoteDef[] = [
+  note("stride-offset", L("Stride and offset, in bytes", "Stride y offset, en bytes", "ストライドとオフセットはバイト"),
+    p(
+      "In an interleaved buffer all the data of one vertex sits together, then comes the next vertex: x y r g b, x y r g b... To read one attribute, WebGL needs two numbers. The stride is how far to jump from one vertex to the next. The offset is where this attribute starts inside a vertex.",
+      "En un buffer intercalado, todos los datos de un vértice van juntos y luego viene el siguiente: x y r g b, x y r g b... Para leer un attribute, WebGL necesita dos números. El stride es cuánto saltar de un vértice al siguiente. El offset es dónde empieza este attribute dentro de un vértice.",
+      "まぜて並べたバッファでは、1 つの頂点のデータがまとまり、その後に次の頂点が来る：x y r g b、x y r g b…。1 つのアトリビュートを読むのに WebGL は 2 つの数が必要。ストライドは次の頂点までの距離、オフセットは頂点の中でそのアトリビュートが始まる位置だ。",
+    ),
+    p(
+      "Both are measured in bytes, never in number of values. Add up the bytes of every attribute in a vertex to get the stride. The offset of an attribute is the sum of the bytes of all the attributes before it. A FLOAT is 4 bytes and an UNSIGNED_BYTE is 1, so mixed layouts need each part counted with its own size.",
+      "Ambos se miden en bytes, nunca en cantidad de valores. Suma los bytes de cada attribute de un vértice para obtener el stride. El offset de un attribute es la suma de los bytes de todos los attributes anteriores. Un FLOAT son 4 bytes y un UNSIGNED_BYTE 1, así que en formatos mixtos cada parte se cuenta con su tamaño.",
+      "どちらもバイト単位で、値の個数ではない。頂点の全アトリビュートのバイトを足すとストライド。あるアトリビュートのオフセットは、それより前のアトリビュートのバイトの合計。FLOAT は 4 バイト、UNSIGNED_BYTE は 1 なので、型が混ざるときはそれぞれの大きさで数える。",
+    ),
+    ex("// x y (floats) + r g b a (bytes)\nconst stride = 2 * 4 + 4 * 1;\nconst colorOffset = 2 * 4;\nconsole.log(stride, colorOffset);", "12 8",
+      L("Color starts after the two floats", "El color empieza tras los dos floats", "色は float 2 個のあとから")),
+    p(
+      "When you read interleaved floats in JS, you count in slots instead of bytes, but the idea is the same. Vertex i starts at slot i × F, where F is the number of floats per vertex, and an attribute that starts k floats in is at slot i × F + k. Vertices are numbered from 0.",
+      "Cuando lees floats intercalados en JS, cuentas en casillas en vez de bytes, pero la idea es la misma. El vértice i empieza en la casilla i × F, donde F es la cantidad de floats por vértice, y un attribute que empieza k floats adentro está en la casilla i × F + k. Los vértices se numeran desde 0.",
+      "JS でまぜた float を読むときはバイトでなくマスで数えるが、考え方は同じ。頂点 i はマス i × F から始まる（F は 1 頂点の float の数）。k 個目から始まるアトリビュートはマス i × F + k。頂点の番号は 0 から。",
+    ),
+    ex("const pts = new Float32Array([0, 0, 9, 1, 1, 8, 2, 2, 7]);\nconst F = 3; // x y size\nconsole.log(pts[2 * F + 2]);", "7",
+      L("The size of vertex 2: slot 2 × 3 + 2", "El size del vértice 2: casilla 2 × 3 + 2", "頂点 2 の size：マス 2 × 3 + 2")),
+    p(
+      "Common mistake: passing the number of floats as the stride or offset, for example 5 instead of 20. WebGL then reads from the middle of a number and the mesh explodes into spikes. Multiply by Float32Array.BYTES_PER_ELEMENT to make the unit explicit.",
+      "Error común: pasar la cantidad de floats como stride u offset, por ejemplo 5 en vez de 20. WebGL lee desde la mitad de un número y la malla explota en picos. Multiplica por Float32Array.BYTES_PER_ELEMENT para que la unidad quede clara.",
+      "よくあるミス：ストライドやオフセットに float の個数を渡すこと（20 のかわりに 5 など）。WebGL は数の途中から読み、メッシュがトゲトゲに崩れる。Float32Array.BYTES_PER_ELEMENT をかけて単位をはっきりさせよう。",
+    ),
+  ),
+  note("attrib-pointer", L("vertexAttribPointer, step by step", "vertexAttribPointer, paso a paso", "vertexAttribPointer を順番に"),
+    p(
+      "vertexAttribPointer(location, size, type, normalize, stride, offset) describes how one attribute is laid out: size is how many values per vertex (1 to 4), type is their format (FLOAT, UNSIGNED_BYTE...), then the stride and offset in bytes. It also remembers the buffer bound to ARRAY_BUFFER at the moment of the call.",
+      "vertexAttribPointer(location, size, type, normalize, stride, offset) describe el formato de un attribute: size es cuántos valores por vértice (1 a 4), type es su formato (FLOAT, UNSIGNED_BYTE...), y luego el stride y el offset en bytes. Además recuerda el buffer enlazado a ARRAY_BUFFER en el momento de la llamada.",
+      "vertexAttribPointer(location, size, type, normalize, stride, offset) は 1 つのアトリビュートの並びを伝える。size は 1 頂点あたりの値の数（1〜4）、type は形式（FLOAT、UNSIGNED_BYTE…）、そしてバイト単位のストライドとオフセット。呼んだ瞬間に ARRAY_BUFFER にバインドされているバッファも覚える。",
+    ),
+    p(
+      "That's why order matters: the buffer must exist, be bound and hold its data before you describe it, and the description must be in place before you draw. Also call enableVertexAttribArray(location), or the shader gets a constant default value instead of your data.",
+      "Por eso importa el orden: el buffer debe existir, estar enlazado y tener sus datos antes de describirlo, y la descripción debe estar lista antes de dibujar. Llama también a enableVertexAttribArray(location), o el shader recibe un valor fijo por defecto en vez de tus datos.",
+      "だから順番が大事。バッファは作られ、バインドされ、データが入ってから説明する。描く前に説明が終わっていること。enableVertexAttribArray(location) も呼ぼう。呼ばないとシェーダーにはデータでなく固定の既定値が届く。",
+    ),
+    api("declare const gl: WebGL2RenderingContext;\ndeclare const colorLoc: number;\n// r g b a bytes after two floats, 12 bytes per vertex\ngl.enableVertexAttribArray(colorLoc);\ngl.vertexAttribPointer(colorLoc, 4, gl.UNSIGNED_BYTE, true, 12, 8);",
+      L("Four normalized bytes, 8 bytes into each vertex", "Cuatro bytes normalizados, en el byte 8 de cada vértice", "正規化した 4 バイト、各頂点の 8 バイト目から")),
+    p(
+      "A stride of 0 is a shortcut that means tightly packed: WebGL computes the real stride as size × the bytes of type. It does not mean no data or a single vertex. Use it when a buffer holds only one attribute with no gaps.",
+      "Un stride de 0 es un atajo que significa bien juntos: WebGL calcula el stride real como size × los bytes de type. No significa sin datos ni un solo vértice. Úsalo cuando un buffer guarda un solo attribute sin huecos.",
+      "ストライド 0 は「すき間なし」の省略。WebGL が本当のストライドを size × type のバイト数で計算する。データなしや頂点 1 つという意味ではない。1 つのバッファに 1 つのアトリビュートだけをすき間なく入れるときに使う。",
+    ),
+    p(
+      "normalize only matters for integer types. With true, an unsigned byte is divided by 255, so 0..255 arrives in the shader as 0.0..1.0. The divisor is 255, not 256, so that 255 maps exactly to 1.0. Colors are often stored this way: 4 bytes instead of 16.",
+      "normalize solo importa para tipos enteros. Con true, un byte sin signo se divide entre 255, así que 0..255 llega al shader como 0.0..1.0. El divisor es 255, no 256, para que 255 dé exactamente 1.0. Los colores suelen guardarse así: 4 bytes en vez de 16.",
+      "normalize が効くのは整数型だけ。true なら符号なしバイトを 255 で割り、0..255 がシェーダーでは 0.0..1.0 になる。255 がちょうど 1.0 になるように、割る数は 256 でなく 255。色はよくこの形で保存する。16 バイトでなく 4 バイトですむ。",
+    ),
+    ex("console.log((255 / 255).toFixed(2), (64 / 255).toFixed(2));", "1.00 0.25",
+      L("What the shader sees for bytes 255 and 64", "Lo que ve el shader para los bytes 255 y 64", "バイト 255 と 64 はシェーダーでこう見える")),
+  ),
+  note("locations-vaos", L("Attribute locations and VAOs", "Ubicaciones de attributes y VAO", "アトリビュートの位置と VAO"),
+    p(
+      "Each attribute in a shader has a location, a small integer slot. getAttribLocation(program, name) asks the linked program for it. Its TypeScript type is number (a GLint). Uniforms are different: getUniformLocation returns a WebGLUniformLocation object, or null.",
+      "Cada attribute de un shader tiene una ubicación, una casilla entera pequeña. getAttribLocation(program, name) se la pide al programa enlazado. Su tipo en TypeScript es number (un GLint). Los uniforms son distintos: getUniformLocation devuelve un objeto WebGLUniformLocation, o null.",
+      "シェーダーの各アトリビュートには位置（小さな整数の席）がある。getAttribLocation(program, name) でリンク済みのプログラムにたずねる。TypeScript の型は number（GLint）。uniform はちがい、getUniformLocation は WebGLUniformLocation オブジェクトか null を返す。",
+    ),
+    p(
+      "A result of -1 means the program has no active attribute with that name. Either it's misspelled, or the shader declares it but never uses it in a way that affects the output, and the GLSL compiler removed it. Passing -1 to other calls does nothing useful, so check for it while debugging.",
+      "Un resultado de -1 significa que el programa no tiene un attribute activo con ese nombre. O está mal escrito, o el shader lo declara pero nunca lo usa de forma que afecte el resultado, y el compilador de GLSL lo quitó. Pasar -1 a otras llamadas no sirve de nada, así que revísalo al depurar.",
+      "-1 が返ったら、その名前の有効なアトリビュートがないという意味。つづりのミスか、宣言はしたが結果に効く使い方をしていないので GLSL コンパイラが消したか。-1 をほかの呼び出しに渡しても役に立たないので、デバッグ中は確認しよう。",
+    ),
+    api('declare const gl: WebGL2RenderingContext;\ndeclare const prog: WebGLProgram;\nconst tintLoc = gl.getAttribLocation(prog, "a_tint");\nif (tintLoc === -1) console.log("a_tint is missing or unused");',
+      L("Type-checked only: there is no GPU in the runner", "Solo se verifica el tipo: el runner no tiene GPU", "型チェックのみ：ランナーに GPU はない")),
+    p(
+      "Setting up attributes takes many calls, and a scene with ten meshes would repeat them every frame. A vertex array object (VAO, core in WebGL2) records that setup: which attributes are enabled, their pointers with the buffers they read, and the bound ELEMENT_ARRAY_BUFFER. It does not store the program or uniforms.",
+      "Configurar attributes lleva muchas llamadas, y una escena con diez mallas las repetiría en cada frame. Un vertex array object (VAO, nativo en WebGL2) graba esa configuración: qué attributes están activos, sus punteros con los buffers que leen y el ELEMENT_ARRAY_BUFFER enlazado. No guarda el programa ni los uniforms.",
+      "アトリビュートの設定は呼び出しが多く、メッシュが 10 個あれば毎フレームくり返すことになる。頂点配列オブジェクト（VAO、WebGL2 で標準）はその設定を記録する：有効なアトリビュート、読むバッファつきのポインター、バインド中の ELEMENT_ARRAY_BUFFER。プログラムや uniform は覚えない。",
+    ),
+    api("declare const gl: WebGL2RenderingContext;\nconst shipVao = gl.createVertexArray();\ngl.bindVertexArray(shipVao);\n// ...enable and point the attributes once...\ngl.bindVertexArray(null);\n// later, every frame:\ngl.bindVertexArray(shipVao);\ngl.drawArrays(gl.TRIANGLES, 0, 30);",
+      L("Record once, restore with one call", "Grabar una vez, restaurar con una llamada", "一度記録して、1 回の呼び出しで戻す")),
+  ),
+];
 
 // ─── 2.2 The interleaved caravan ───────────────────────────────────────────
 const attributes: LessonDef = {
@@ -153,6 +336,7 @@ const attributes: LessonDef = {
   xp: 70,
   enemy: "webgl/z-fighting",
   enemyName: L("STRIDE TWINS", "GEMELOS STRIDE", "ストライドふたご"),
+  notes: attributesNotes,
   beats: [
     say(L(
       "An ATTRIBUTE is per-vertex data the shader reads with in. Many attributes can share one INTERLEAVED buffer: x y z u v, x y z u v...",
@@ -182,6 +366,8 @@ const attributes: LessonDef = {
       answer: 0,
       output: "24 12",
       check: { compiles: true, stdout: "24 12" },
+      hint: L("Stride and offset are in bytes. Count the floats, then multiply by 4.", "Stride y offset van en bytes. Cuenta los floats y multiplica por 4.", "ストライドとオフセットはバイト。float を数えて 4 をかけよう。"),
+      note: "stride-offset",
       explain: L("6 floats × 4 bytes = 24 per vertex. Color starts after 3 floats: 12 bytes in.", "6 floats × 4 bytes = 24 por vértice. El color empieza tras 3 floats: en el byte 12.", "1 頂点 6 個 × 4 バイト = 24。色は float 3 個の後、12 バイト目から。"),
       win: [{ t: "print", text: "24 12" }],
     },
@@ -193,6 +379,8 @@ const attributes: LessonDef = {
       answer: 0,
       output: "16",
       check: { compiles: true, stdout: "16" },
+      hint: L("Each type has its own size: a FLOAT is 4 bytes, an UNSIGNED_BYTE is 1.", "Cada tipo tiene su tamaño: un FLOAT son 4 bytes, un UNSIGNED_BYTE es 1.", "型ごとに大きさがちがう：FLOAT は 4 バイト、UNSIGNED_BYTE は 1。"),
+      note: "stride-offset",
       explain: L("Add each attribute's bytes: 3 × 4 for floats plus 4 × 1 for bytes = 16.", "Suma los bytes de cada attribute: 3 × 4 de floats más 4 × 1 de bytes = 16.", "アトリビュートごとのバイトを足す：float 3 × 4 + バイト 4 × 1 = 16。"),
     },
     {
@@ -203,6 +391,8 @@ const attributes: LessonDef = {
       answer: 0,
       output: "1 0",
       check: { compiles: true, stdout: "1 0" },
+      hint: L("Vertex i starts at slot i × F. u and v come right after x, y and z.", "El vértice i empieza en la casilla i × F. u y v vienen justo después de x, y, z.", "頂点 i はマス i × F から。u と v は x, y, z のすぐあと。"),
+      note: "stride-offset",
       explain: L("Vertex 1 starts at slot 5. Its u is slot 8 and its v is slot 9: 1 and 0.", "El vértice 1 empieza en la casilla 5. Su u es la casilla 8 y su v la 9: 1 y 0.", "頂点 1 はマス 5 から。u はマス 8、v はマス 9 で、1 と 0。"),
     },
     say(L(
@@ -224,6 +414,8 @@ const attributes: LessonDef = {
         compiles: true,
         program: "declare const gl: WebGL2RenderingContext;\ndeclare const data: Float32Array;\ndeclare const loc: number;\nconst buf = gl.createBuffer();\ngl.bindBuffer(gl.ARRAY_BUFFER, buf);\ngl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);\ngl.vertexAttribPointer(loc, 3, gl.FLOAT, false, 0, 0);\ngl.drawArrays(gl.TRIANGLES, 0, 3);",
       },
+      hint: L("You can only fill a bound buffer, and only describe a buffer once it has data.", "Solo puedes llenar un buffer enlazado, y solo describirlo cuando ya tiene datos.", "入れられるのはバインド中のバッファだけ。説明できるのはデータが入ってから。"),
+      note: "attrib-pointer",
       explain: L("Create, bind, fill, describe the layout of the bound buffer, and only then draw.", "Crear, enlazar, llenar, describir el formato del buffer enlazado y recién entonces dibujar.", "作る、バインド、データを入れる、バインド中のバッファの並びを伝える、そして描く。"),
     },
     say(L(
@@ -237,6 +429,8 @@ const attributes: LessonDef = {
       code: "gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);",
       options: [L("Packed: 2 × 4 bytes apart", "Juntos: cada 2 × 4 bytes", "すき間なし：2 × 4 バイトごと"), L("No data at all", "Ningún dato", "データなし"), L("Only one vertex", "Un solo vértice", "頂点 1 つだけ")],
       answer: 0,
+      hint: L("Stride 0 is a shortcut. What would the stride be if nothing sat between vertices?", "Stride 0 es un atajo. ¿Cuál sería el stride si no hubiera nada entre vértices?", "ストライド 0 は省略。頂点の間に何もなければストライドはいくつ？"),
+      note: "attrib-pointer",
       explain: L("With stride 0, WebGL computes it from size and type: 2 floats = 8 bytes per vertex.", "Con stride 0, WebGL lo calcula de size y type: 2 floats = 8 bytes por vértice.", "ストライド 0 なら size と type から計算：float 2 個 = 1 頂点 8 バイト。"),
     },
     {
@@ -247,6 +441,8 @@ const attributes: LessonDef = {
       answer: 0,
       output: "0.502",
       check: { compiles: true, stdout: "0.502" },
+      hint: L("Normalizing maps the top byte value to exactly 1.0. What do you divide by?", "Normalizar lleva el byte máximo a 1.0 exacto. ¿Entre qué divides?", "正規化ではバイトの最大値がちょうど 1.0 になる。何で割る？"),
+      note: "attrib-pointer",
       explain: L("The value is divided by 255, not 256, so 128 lands just above half.", "Se divide entre 255, no 256, así que 128 queda apenas sobre la mitad.", "256 ではなく 255 で割るので、128 は半分より少し上になる。"),
       win: [{ t: "print", text: "0.502" }],
     },
@@ -261,6 +457,8 @@ const attributes: LessonDef = {
       code: 'declare const gl: WebGL2RenderingContext;\ndeclare const prog: WebGLProgram;\nconst loc: ___ = gl.getAttribLocation(prog, "a_uv");',
       answer: "number",
       check: { compiles: true },
+      hint: L("An attribute location is a small integer slot. Which TypeScript type holds integers?", "Una ubicación de attribute es una casilla entera chica. ¿Qué tipo de TypeScript guarda enteros?", "アトリビュートの位置は小さな整数の席。整数を表す TypeScript の型は？"),
+      note: "locations-vaos",
       explain: L("Attribute locations are plain numbers (GLint). Uniform locations are objects instead.", "Las ubicaciones de attributes son números (GLint). Las de uniforms, en cambio, son objetos.", "アトリビュートの位置はただの数値（GLint）。uniform の位置はオブジェクトだよ。"),
     },
     {
@@ -269,6 +467,8 @@ const attributes: LessonDef = {
       code: 'const loc = gl.getAttribLocation(prog, "a_normal");\nconsole.log(loc); // -1',
       options: [L("The shader doesn't use a_normal", "El shader no usa a_normal", "シェーダーが a_normal を使っていない"), L("The buffer is empty", "El buffer está vacío", "バッファが空")],
       answer: 0,
+      hint: L("The location comes from the compiled program. What could make a name vanish from it?", "La ubicación viene del programa compilado. ¿Qué podría hacer desaparecer un nombre de él?", "位置はコンパイル済みのプログラムから来る。名前が消えるのはどんなとき？"),
+      note: "locations-vaos",
       explain: L("-1 means missing or unused: compilers remove attributes that don't affect the output.", "-1 significa ausente o sin usar: el compilador quita attributes que no afectan el resultado.", "-1 はないか未使用。結果に効かないアトリビュートはコンパイラが消すんだ。"),
     },
     say(L(
@@ -282,6 +482,8 @@ const attributes: LessonDef = {
       code: "const vao = gl.createVertexArray();\ngl.bindVertexArray(vao);\n// ...attribute setup...",
       options: [L("Attribute pointers and buffers", "Punteros de attributes y buffers", "アトリビュートの設定とバッファ"), L("The program and its uniforms", "El programa y sus uniforms", "プログラムと uniform")],
       answer: 0,
+      hint: L("VAO stands for vertex array object: it records vertex setup, not shader state.", "VAO es vertex array object: graba la configuración de vértices, no el estado del shader.", "VAO は頂点配列オブジェクト。記録するのは頂点の設定で、シェーダーの状態ではない。"),
+      note: "locations-vaos",
       explain: L("A VAO keeps enables, pointers, their buffers and the ELEMENT_ARRAY_BUFFER binding, not the program.", "Un VAO guarda enables, punteros, sus buffers y el ELEMENT_ARRAY_BUFFER enlazado, no el programa.", "VAO は有効化、ポインター、そのバッファ、ELEMENT_ARRAY_BUFFER を覚える。プログラムは別。"),
     },
     {
@@ -291,10 +493,92 @@ const attributes: LessonDef = {
       solution: "const FLOATS_PER_VERTEX = 5; // x y z u v\nconst stride = FLOATS_PER_VERTEX * Float32Array.BYTES_PER_ELEMENT;\nconst uvOffset = 3 * Float32Array.BYTES_PER_ELEMENT;\nconsole.log(`stride=${stride} uvOffset=${uvOffset}`);\n",
       expect: "stride=20 uvOffset=12",
       fallback: [String.raw`stride\s*=\s*(FLOATS_PER_VERTEX|5)\s*\*\s*(4|Float32Array\.BYTES_PER_ELEMENT)[\s\S]*uvOffset\s*=\s*3\s*\*\s*(4|Float32Array\.BYTES_PER_ELEMENT)`, String.raw`stride\s*=\s*20[\s\S]*uvOffset\s*=\s*12`],
+      hint: L("Both values are float counts right now. WebGL wants bytes: 4 per float.", "Ahora los dos valores cuentan floats. WebGL quiere bytes: 4 por float.", "今はどちらも float の個数。WebGL はバイトがほしい：float 1 つで 4。"),
+      note: "stride-offset",
       explain: L("Multiply by Float32Array.BYTES_PER_ELEMENT (4): 5 floats = 20 bytes, uv starts at byte 12.", "Multiplica por Float32Array.BYTES_PER_ELEMENT (4): 5 floats = 20 bytes y uv empieza en el byte 12.", "Float32Array.BYTES_PER_ELEMENT（4）をかける：5 個 = 20 バイト、uv は 12 バイト目から。"),
     },
   ],
 };
+
+const indexedNotes: NoteDef[] = [
+  note("index-buffers", L("Index buffers: share the corners", "Buffers de índices: comparte esquinas", "インデックスで角を共有"),
+    p(
+      "Meshes are made of triangles, and neighboring triangles share corners. Without indices, every triangle stores its own three full vertices, so shared corners are repeated. With an index buffer you store each unique vertex once and then list vertex numbers: every group of three numbers is one triangle when you draw with TRIANGLES.",
+      "Las mallas están hechas de triángulos, y los vecinos comparten esquinas. Sin índices, cada triángulo guarda sus tres vértices completos y las esquinas compartidas se repiten. Con un buffer de índices guardas cada vértice único una vez y luego listas números de vértice: cada grupo de tres es un triángulo al dibujar con TRIANGLES.",
+      "メッシュは三角形でできていて、となりどうしは角を共有する。インデックスなしだと各三角形が頂点 3 つをまるごと持つので、共有の角がくり返される。インデックスバッファなら各頂点を 1 回だけ保存し、頂点の番号を並べる。TRIANGLES で描くと番号 3 つで三角形 1 つ。",
+    ),
+    ex("// a hexagon fan: 7 corners, 6 triangles\nconst fan = [0,1,2, 0,2,3, 0,3,4, 0,4,5, 0,5,6, 0,6,1];\nconsole.log(fan.length, fan.length / 3);", "18 6",
+      L("Triangles = indices ÷ 3", "Triángulos = índices ÷ 3", "三角形の数 = 番号の数 ÷ 3")),
+    p(
+      "Why bother? A vertex may hold position, normal and UV, 32 bytes or more, while an index is only 2 or 4 bytes. Repeating small indices is much cheaper than repeating big vertices, and the GPU can also reuse work it already did for a vertex it has seen.",
+      "¿Para qué? Un vértice puede tener posición, normal y UV, 32 bytes o más, mientras que un índice ocupa solo 2 o 4 bytes. Repetir índices chicos es mucho más barato que repetir vértices grandes, y además la GPU puede reutilizar el trabajo que ya hizo para un vértice que ya vio.",
+      "なぜ使うのか？頂点は位置・法線・UV で 32 バイト以上になるが、番号は 2 か 4 バイトだけ。大きな頂点をくり返すより、小さな番号をくり返すほうがずっと安い。GPU は一度処理した頂点の結果を使い回すこともできる。",
+    ),
+    ex("// cube: 8 corners of 12 bytes, 36 indices of 2 bytes\nconsole.log(8 * 12 + 36 * 2, 36 * 12);", "168 432",
+      L("Indexed cube vs. 36 full vertices", "Cubo con índices vs. 36 vértices completos", "インデックスありの立方体 と 頂点 36 個")),
+    p(
+      "When you build indices for many shapes in one buffer, each shape's numbers must be shifted by the count of vertices that come before it. For a grid of c × r cells, there are (c + 1) × (r + 1) shared corners and each cell needs 6 indices (two triangles).",
+      "Cuando armas índices para muchas figuras en un buffer, los números de cada figura deben desplazarse por la cantidad de vértices que van antes. En una grilla de c × r celdas hay (c + 1) × (r + 1) esquinas compartidas, y cada celda necesita 6 índices (dos triángulos).",
+      "1 つのバッファに多くの形の番号を作るときは、それより前の頂点の数だけ番号をずらす。c × r マスの格子なら共有の角は (c + 1) × (r + 1) 個、各マスに番号 6 つ（三角形 2 つ）が必要。",
+    ),
+    ex('const out: number[] = [];\nfor (let t = 0; t < 3; t++) out.push(t * 3, t * 3 + 1, t * 3 + 2);\nconsole.log(out.join(","));', "0,1,2,3,4,5,6,7,8",
+      L("Separate triangles: each one owns 3 vertices", "Triángulos sueltos: cada uno tiene 3 vértices", "ばらばらの三角形：それぞれ頂点 3 つ")),
+  ),
+  note("draw-elements", L("drawArrays vs drawElements", "drawArrays vs drawElements", "drawArrays と drawElements"),
+    p(
+      "drawArrays(mode, first, count) walks the vertex buffer in order, from vertex first, reading count vertices. It ignores any index buffer. drawElements(mode, count, type, offset) instead reads count numbers from the bound ELEMENT_ARRAY_BUFFER and uses each one to fetch a vertex.",
+      "drawArrays(mode, first, count) recorre el buffer de vértices en orden, desde el vértice first, leyendo count vértices. Ignora cualquier buffer de índices. drawElements(mode, count, type, offset), en cambio, lee count números del ELEMENT_ARRAY_BUFFER enlazado y usa cada uno para buscar un vértice.",
+      "drawArrays(mode, first, count) は頂点バッファを順に、first 番から count 個読む。インデックスバッファは使わない。drawElements(mode, count, type, offset) はバインド中の ELEMENT_ARRAY_BUFFER から番号を count 個読み、その番号で頂点をとってくる。",
+    ),
+    p(
+      "In drawElements, count is the number of indices to read, not triangles and not unique vertices. type must match the typed array you uploaded: UNSIGNED_BYTE for Uint8Array, UNSIGNED_SHORT for Uint16Array, UNSIGNED_INT for Uint32Array. offset is a byte offset into the index buffer and is required, even when it is 0.",
+      "En drawElements, count es la cantidad de índices a leer, no de triángulos ni de vértices únicos. type debe coincidir con el typed array que subiste: UNSIGNED_BYTE para Uint8Array, UNSIGNED_SHORT para Uint16Array, UNSIGNED_INT para Uint32Array. offset es un desplazamiento en bytes dentro del buffer de índices y es obligatorio, aunque sea 0.",
+      "drawElements の count は読む番号の数で、三角形の数でも頂点の数でもない。type は送った型付き配列に合わせる：Uint8Array なら UNSIGNED_BYTE、Uint16Array なら UNSIGNED_SHORT、Uint32Array なら UNSIGNED_INT。offset はインデックスバッファ内のバイト位置で、0 でも省略できない。",
+    ),
+    api("declare const gl: WebGL2RenderingContext;\n// 8 Uint8Array indices = 4 lines\ngl.drawElements(gl.LINES, 8, gl.UNSIGNED_BYTE, 0);\n// 9 vertices in order = 3 triangles\ngl.drawArrays(gl.TRIANGLES, 0, 9);",
+      L("Both calls, with every argument filled in", "Las dos llamadas, con todos sus argumentos", "どちらも引数をすべて書く")),
+    p(
+      "Common mistakes: passing the triangle count to drawElements (you draw only a third of the mesh), or a type that doesn't match the array (indices are read as garbage). TypeScript catches a missing argument, but not a wrong count or type, so double-check those two by hand.",
+      "Errores comunes: pasar la cantidad de triángulos a drawElements (dibujas solo un tercio de la malla) o un type que no coincide con el array (los índices se leen como basura). TypeScript detecta un argumento faltante, pero no un count o type equivocado, así que revisa esos dos a mano.",
+      "よくあるミス：drawElements に三角形の数を渡す（メッシュの 3 分の 1 しか描かれない）、配列に合わない type を渡す（番号がでたらめに読まれる）。引数が足りないのは TypeScript が見つけるが、count や type のまちがいは見つけないので自分で確かめよう。",
+    ),
+  ),
+  note("index-size", L("How big can an index be?", "¿Qué tan grande puede ser un índice?", "番号はどこまで大きくできる？"),
+    p(
+      "An index is just an unsigned integer stored in a typed array, so the slot-size rules apply. Uint16Array holds 0 to 65535, enough for 65536 vertices. Most game props fit, but a detailed scanned model or a big terrain can easily have more.",
+      "Un índice es solo un entero sin signo guardado en un typed array, así que aplican las reglas de tamaño de casilla. Uint16Array guarda de 0 a 65535, suficiente para 65536 vértices. La mayoría de los objetos de un juego caben, pero un modelo escaneado detallado o un terreno grande pueden pasarse fácil.",
+      "番号は型付き配列に入れた符号なし整数なので、マスの大きさのルールがそのまま効く。Uint16Array は 0〜65535、頂点 65536 個まで。ゲームの小物はたいてい入るが、細かいスキャンモデルや広い地形はすぐにこえる。",
+    ),
+    p(
+      "If you store a bigger number, it wraps silently: the value modulo 65536 is kept, so the index now points at a completely different vertex. There is no error, just triangles stretched across the mesh. For large meshes use Uint32Array with gl.UNSIGNED_INT, which is core in WebGL2 (WebGL1 needs the OES_element_index_uint extension).",
+      "Si guardas un número mayor, da la vuelta sin avisar: se guarda el valor módulo 65536, así que el índice apunta a un vértice totalmente distinto. No hay error, solo triángulos estirados por la malla. Para mallas grandes usa Uint32Array con gl.UNSIGNED_INT, nativo en WebGL2 (WebGL1 necesita la extensión OES_element_index_uint).",
+      "大きい数を入れるとだまって一周し、65536 で割った余りが残る。番号はまったく別の頂点をさしてしまう。エラーは出ず、三角形がメッシュを横切ってのびるだけ。大きなメッシュは Uint32Array と gl.UNSIGNED_INT を使う。WebGL2 では標準（WebGL1 は OES_element_index_uint 拡張が必要）。",
+    ),
+    ex("console.log(new Uint16Array([70000])[0], new Uint32Array([70000])[0]);", "4464 70000",
+      L("The same index in 16 and 32 bits", "El mismo índice en 16 y 32 bits", "同じ番号を 16 ビットと 32 ビットで")),
+    p(
+      "Rule to remember: pick the index type from the vertex count, not from the index count. If the highest vertex number is above 65535, you need 32-bit indices, and the type in drawElements must change to match.",
+      "Regla para recordar: elige el tipo de índice según la cantidad de vértices, no de índices. Si el número de vértice más alto pasa de 65535, necesitas índices de 32 bits, y el type de drawElements debe cambiar para coincidir.",
+      "覚えておくルール：番号の型は番号の数ではなく頂点の数で選ぶ。一番大きい頂点番号が 65535 をこえるなら 32 ビットの番号が必要で、drawElements の type もそれに合わせて変える。",
+    ),
+  ),
+  note("winding", L("Winding: which side is the front", "Winding: qué lado es el frente", "巻き方向：どちらが表？"),
+    p(
+      "The order in which you list a triangle's corners is its winding. Seen from the camera, the corners go either counter-clockwise or clockwise. WebGL uses that to decide which side of the triangle faces you. By default, counter-clockwise means front.",
+      "El orden en que listas las esquinas de un triángulo es su winding. Vistas desde la cámara, las esquinas van en sentido antihorario u horario. WebGL usa eso para decidir qué lado del triángulo te mira. Por defecto, antihorario significa frente.",
+      "三角形の角を並べる順番が巻き方向。カメラから見て、角は反時計回りか時計回りに進む。WebGL はそれで三角形のどちら側がこちらを向いているかを決める。既定では反時計回りが表だ。",
+    ),
+    p(
+      "Why care? In a closed mesh like a ball, the inside faces are never visible. gl.enable(gl.CULL_FACE) tells the GPU to skip back faces, which can almost halve the work. If your winding is inconsistent, some faces vanish when culling is on. You can change the rule with gl.frontFace, but it's easier to keep the default and build meshes counter-clockwise.",
+      "¿Por qué importa? En una malla cerrada, como una pelota, las caras interiores nunca se ven. gl.enable(gl.CULL_FACE) le dice a la GPU que omita las caras traseras, lo que puede casi reducir el trabajo a la mitad. Si tu winding es inconsistente, algunas caras desaparecen con el culling activo. Puedes cambiar la regla con gl.frontFace, pero es más fácil dejarla y armar mallas en antihorario.",
+      "なぜ大事？ボールのような閉じたメッシュでは内側の面は見えない。gl.enable(gl.CULL_FACE) で裏面を描かないようにすると、仕事がほぼ半分になる。巻き方向がばらばらだと、カリング中に一部の面が消える。gl.frontFace でルールは変えられるが、既定のまま反時計回りで作るほうが楽。",
+    ),
+    ex("const turn = (ax: number, ay: number, bx: number, by: number, cx: number, cy: number) =>\n  (bx - ax) * (cy - ay) - (cx - ax) * (by - ay);\nconsole.log(turn(0, 0, 2, 0, 0, 2), turn(0, 0, 0, 2, 2, 0));", "4 -4",
+      L("Positive area: counter-clockwise. Negative: clockwise", "Área positiva: antihorario. Negativa: horario", "面積が正なら反時計回り、負なら時計回り")),
+    api("declare const gl: WebGL2RenderingContext;\ngl.enable(gl.CULL_FACE);\ngl.cullFace(gl.BACK);",
+      L("Skip the faces that point away from the camera", "Omite las caras que no miran a la cámara", "カメラに背を向けた面を描かない")),
+  ),
+];
 
 // ─── 2.3 Reusing corners ───────────────────────────────────────────────────
 const indexed: LessonDef = {
@@ -305,6 +589,7 @@ const indexed: LessonDef = {
   xp: 70,
   enemy: "slime",
   enemyName: L("INDEX SLIME", "SLIME ÍNDICE", "インデックスライム"),
+  notes: indexedNotes,
   beats: [
     say(L(
       "A square is 2 triangles = 6 corners, but only 4 are unique. An INDEX buffer lists corner numbers, so each is stored once.",
@@ -328,6 +613,8 @@ const indexed: LessonDef = {
       answer: 0,
       output: "4",
       check: { compiles: true, stdout: "4" },
+      hint: L("With TRIANGLES, how many indices make one triangle?", "Con TRIANGLES, ¿cuántos índices forman un triángulo?", "TRIANGLES では番号いくつで三角形 1 つ？"),
+      note: "index-buffers",
       explain: L("With TRIANGLES, every 3 indices make one triangle: 12 / 3 = 4.", "Con TRIANGLES, cada 3 índices forman un triángulo: 12 / 3 = 4.", "TRIANGLES では 3 つで三角形 1 つ。12 / 3 = 4。"),
       win: [{ t: "print", text: "4" }],
     },
@@ -339,6 +626,8 @@ const indexed: LessonDef = {
       answer: 0,
       output: "60 72",
       check: { compiles: true, stdout: "60 72" },
+      hint: L("Do the math line by line: vertices × their bytes, plus indices × their bytes.", "Haz la cuenta línea por línea: vértices × sus bytes, más índices × sus bytes.", "1 行ずつ計算：頂点 × そのバイト数 + 番号 × そのバイト数。"),
+      note: "index-buffers",
       explain: L("4 vertices + 6 small indices beat 6 full vertices, and the gap grows with mesh size.", "4 vértices + 6 índices pequeños ganan a 6 vértices completos, y la diferencia crece con la malla.", "頂点 4 つ + 小さな番号 6 つは、頂点 6 つより軽い。メッシュが大きいほど差が広がる。"),
     },
     say(L(
@@ -352,6 +641,8 @@ const indexed: LessonDef = {
       code: "gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);",
       options: [L("Indices", "Índices", "インデックス"), L("Triangles", "Triángulos", "三角形"), L("Vertices", "Vértices", "頂点")],
       answer: 0,
+      hint: L("drawElements reads from the index buffer. What is it counting as it reads?", "drawElements lee del buffer de índices. ¿Qué va contando mientras lee?", "drawElements はインデックスバッファから読む。読みながら何を数えている？"),
+      note: "draw-elements",
       explain: L("count is how many indices to read. 6 indices = 2 triangles over 4 vertices.", "count es cuántos índices leer. 6 índices = 2 triángulos sobre 4 vértices.", "count は読むインデックスの数。6 個 = 頂点 4 つで三角形 2 つ。"),
     },
     {
@@ -361,6 +652,8 @@ const indexed: LessonDef = {
       options: [YES, NO_TSC],
       answer: 1,
       check: { compiles: false },
+      hint: L("Count the arguments and compare them with drawElements(mode, count, type, offset).", "Cuenta los argumentos y compáralos con drawElements(mode, count, type, offset).", "引数を数えて drawElements(mode, count, type, offset) とくらべよう。"),
+      note: "draw-elements",
       explain: L("Error TS2554: Expected 4 arguments, but got 3. The byte offset is required: use 0.", "Error TS2554: se esperaban 4 argumentos y llegaron 3. El offset en bytes es obligatorio: usa 0.", "エラー TS2554：引数は 4 つ必要なのに 3 つ。バイトオフセットは必須、0 を渡そう。"),
     },
     {
@@ -369,6 +662,8 @@ const indexed: LessonDef = {
       code: "gl.drawArrays(gl.TRIANGLES, 0, 6);",
       options: [L("No: reads vertices in order", "No: lee vértices en orden", "いらない：頂点を順に読む"), L("Yes: an index buffer", "Sí: un buffer de índices", "いる：インデックスバッファ")],
       answer: 0,
+      hint: L("Only one of the two draw calls reads an index buffer. Which one is this?", "Solo una de las dos llamadas de dibujo lee un buffer de índices. ¿Cuál es esta?", "インデックスバッファを読む描画呼び出しは片方だけ。これはどっち？"),
+      note: "draw-elements",
       explain: L("drawArrays walks the vertices from first to first + count. Only drawElements reads indices.", "drawArrays recorre los vértices de first a first + count. Solo drawElements lee índices.", "drawArrays は first から count 個の頂点を順に読む。インデックスを読むのは drawElements だけ。"),
     },
     {
@@ -379,6 +674,8 @@ const indexed: LessonDef = {
       answer: 0,
       output: "9 24",
       check: { compiles: true, stdout: "9 24" },
+      hint: L("Corners per side are cells + 1. Each cell is 2 triangles of 3 indices.", "Las esquinas por lado son celdas + 1. Cada celda son 2 triángulos de 3 índices.", "1 辺の角の数はマス + 1。1 マスは番号 3 つの三角形 2 つ。"),
+      note: "index-buffers",
       explain: L("A 2×2 grid has 3×3 shared corners, and each of its 4 cells needs 6 indices.", "Una grilla de 2×2 tiene 3×3 esquinas compartidas, y cada una de sus 4 celdas usa 6 índices.", "2×2 の格子は共有の角が 3×3。4 マスそれぞれに番号 6 つ。"),
     },
     say(L(
@@ -394,6 +691,8 @@ const indexed: LessonDef = {
       answer: 0,
       output: "4463",
       check: { compiles: true, stdout: "4463" },
+      hint: L("69999 doesn't fit in 16 bits. Unsigned slots keep the value modulo 65536.", "69999 no cabe en 16 bits. Las casillas sin signo guardan el valor módulo 65536.", "69999 は 16 ビットに入らない。符号なしのマスは 65536 で割った余りを残す。"),
+      note: "index-size",
       explain: L("69999 - 65536 = 4463: the index wraps silently and points at the wrong vertex.", "69999 - 65536 = 4463: el índice da la vuelta sin avisar y apunta al vértice equivocado.", "69999 - 65536 = 4463。番号がだまって一周し、ちがう頂点をさしてしまう。"),
       win: [{ t: "shake" }, { t: "print", text: "4463" }],
     },
@@ -409,6 +708,8 @@ const indexed: LessonDef = {
       options: ["CCW", "CW"],
       answer: 0,
       check: { compiles: true },
+      hint: L("Recall the default winding rule. Angles in math grow in the same direction.", "Recuerda la regla de winding por defecto. Los ángulos en matemáticas crecen en el mismo sentido.", "既定の巻き方向のルールを思い出そう。数学の角度も同じ向きに増える。"),
+      note: "winding",
       explain: L("CCW (counter-clockwise) is the default front. Both compile; only the winding changes.", "CCW (antihorario) es el frente por defecto. Ambos compilan; solo cambia el sentido.", "既定の表は CCW（反時計回り）。どちらもコンパイルでき、回る向きが変わるだけ。"),
     },
     {
@@ -418,10 +719,95 @@ const indexed: LessonDef = {
       solution: 'function quadIndices(quads: number): Uint16Array {\n  const out: number[] = [];\n  for (let q = 0; q < quads; q++) {\n    const b = q * 4;\n    out.push(b, b + 1, b + 2, b + 2, b + 3, b);\n  }\n  return new Uint16Array(out);\n}\nconsole.log("indices: " + quadIndices(2).join(","));\n',
       expect: "indices: 0,1,2,2,3,0,4,5,6,6,7,4",
       fallback: String.raw`b\s*=\s*q\s*\*\s*4`,
+      hint: L("Indices count vertices, not indices. How many vertices does each quad add?", "Los índices cuentan vértices, no índices. ¿Cuántos vértices suma cada quad?", "番号が数えるのは頂点で、番号ではない。四角形 1 つで頂点はいくつ増える？"),
+      note: "index-buffers",
       explain: L("Indices point at vertices, and each quad owns 4 of them. So quad q starts at vertex q * 4.", "Los índices apuntan a vértices, y cada quad tiene 4. Así, el quad q empieza en el vértice q * 4.", "番号は頂点をさす。四角形は頂点 4 つなので、q 番目は頂点 q * 4 から。"),
     },
   ],
 };
+
+const texturesNotes: NoteDef[] = [
+  note("uv-texels", L("UVs pick a texel", "Los UV eligen un texel", "UV でテクセルを選ぶ"),
+    p(
+      "A texture is a grid of pixels called texels. Instead of asking for texel 37, shaders use UV coordinates from 0 to 1 across the whole image, no matter its size. u goes across, v goes up or down. This way the same mesh works with a 64-pixel or a 4096-pixel version of the image.",
+      "Una textura es una grilla de píxeles llamados texels. En vez de pedir el texel 37, los shaders usan coordenadas UV de 0 a 1 a lo largo de toda la imagen, sin importar su tamaño. u va a lo ancho, v hacia arriba o abajo. Así la misma malla sirve con una versión de 64 o de 4096 píxeles de la imagen.",
+      "テクスチャはテクセルというピクセルの格子。シェーダーは「37 番のテクセル」とは言わず、画像全体を 0〜1 で表す UV 座標を使う。大きさは関係ない。u は横、v は縦。だから同じメッシュで 64 ピクセルの画像も 4096 ピクセルの画像も使える。",
+    ),
+    p(
+      "With NEAREST sampling, the texel column is floor(u × width). The catch is u = 1: it would give texel number width, one past the last one (texels are numbered 0 to width − 1). With the default edge behavior the result is clamped to the last texel.",
+      "Con muestreo NEAREST, la columna del texel es floor(u × ancho). El detalle es u = 1: daría el texel número ancho, uno después del último (los texels se numeran de 0 a ancho − 1). Con el comportamiento de borde, el resultado se limita al último texel.",
+      "NEAREST で読むとき、テクセルの列は floor(u × 幅)。気をつけるのは u = 1。答えが「幅」番になり、最後のテクセルの 1 つ先になる（番号は 0〜幅 − 1）。端の処理でいちばん最後のテクセルにおさめられる。",
+    ),
+    ex("const col = (u: number, w: number) => Math.min(Math.floor(u * w), w - 1);\nconsole.log(col(0.1, 16), col(0.99, 16), col(1, 16));", "1 15 15",
+      L("A 16-texel row: u = 1 lands on the last texel, 15", "Una fila de 16 texels: u = 1 cae en el último, 15", "16 テクセルの行：u = 1 は最後の 15 番")),
+    p(
+      "Common mistake: forgetting that the last index is size − 1, not size. The same off-by-one shows up with arrays, grids and screen pixels, so whenever you multiply a 0..1 value by a size, ask what happens at exactly 1.",
+      "Error común: olvidar que el último índice es tamaño − 1, no tamaño. El mismo error de uno aparece en arrays, grillas y píxeles de pantalla, así que siempre que multipliques un valor de 0..1 por un tamaño, pregúntate qué pasa justo en 1.",
+      "よくあるミス：最後の番号が「大きさ」ではなく「大きさ − 1」なのを忘れること。配列や格子や画面のピクセルでも同じずれが起きる。0..1 の値に大きさをかけるときは、ちょうど 1 のときどうなるか考えよう。",
+    ),
+  ),
+  note("filters-mipmaps", L("Filters and mipmaps", "Filtros y mipmaps", "フィルターとミップマップ"),
+    p(
+      "When a texture is drawn bigger than its real size, the MAG filter decides how to fill the gaps. NEAREST copies the closest texel, keeping hard square pixels, ideal for pixel art. LINEAR blends the four nearest texels, which is smooth for photos but blurs pixel art.",
+      "Cuando una textura se dibuja más grande que su tamaño real, el filtro MAG decide cómo rellenar. NEAREST copia el texel más cercano y mantiene píxeles cuadrados y duros, ideal para pixel art. LINEAR mezcla los cuatro texels más cercanos, suave para fotos pero borroso para pixel art.",
+      "テクスチャを本来より大きく描くとき、MAG フィルターがすき間の埋め方を決める。NEAREST は一番近いテクセルをコピーし、四角いドットがくっきり残る。ドット絵向き。LINEAR は近くの 4 テクセルをまぜるので、写真はなめらかだがドット絵はぼやける。",
+    ),
+    p(
+      "When it's drawn smaller, many texels fall on one screen pixel and the image shimmers. Mipmaps fix that: a chain of copies, each half the size of the one before, down to 1×1. A square texture of side n has floor(log2(n)) + 1 levels: log2 counts the halvings, and the + 1 counts the original.",
+      "Cuando se dibuja más chica, muchos texels caen en un píxel de pantalla y la imagen parpadea. Los mipmaps lo arreglan: una cadena de copias, cada una de la mitad de la anterior, hasta 1×1. Una textura cuadrada de lado n tiene floor(log2(n)) + 1 niveles: log2 cuenta las mitades y el + 1 cuenta el original.",
+      "小さく描くと、1 つの画面ピクセルに多くのテクセルが重なり、画像がちらつく。ミップマップで解決：前の半分ずつのコピーを 1×1 まで並べたもの。1 辺 n の正方形なら段は floor(log2(n)) + 1。log2 が半分にした回数、+ 1 が元の画像のぶん。",
+    ),
+    ex('let side = 32;\nconst sizes: number[] = [];\nwhile (side >= 1) { sizes.push(side); side = side / 2; }\nconsole.log(sizes.join(" "), sizes.length);', "32 16 8 4 2 1 6",
+      L("log2(32) = 5 halvings, plus the original", "log2(32) = 5 mitades, más el original", "log2(32) = 5 回、元の画像を足す")),
+    p(
+      "The MIN filter names combine two choices: FIRST_MIPMAP_SECOND. The first word is how to sample inside one mip level (NEAREST or LINEAR), and the second is how to choose between levels: NEAREST picks one level, LINEAR blends the two closest. gl.generateMipmap builds the chain for you.",
+      "Los nombres del filtro MIN combinan dos elecciones: PRIMERO_MIPMAP_SEGUNDO. La primera palabra es cómo muestrear dentro de un nivel (NEAREST o LINEAR) y la segunda cómo elegir entre niveles: NEAREST toma uno, LINEAR mezcla los dos más cercanos. gl.generateMipmap arma la cadena por ti.",
+      "MIN フィルターの名前は 2 つの選択の組み合わせ：「前_MIPMAP_後」。前の語は 1 つの段の中での読み方（NEAREST か LINEAR）、後ろの語は段の選び方。NEAREST は 1 段を選び、LINEAR は近い 2 段をまぜる。チェーンは gl.generateMipmap が作ってくれる。",
+    ),
+    api("declare const gl: WebGL2RenderingContext;\ngl.generateMipmap(gl.TEXTURE_2D);\ngl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_LINEAR);\ngl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);",
+      L("Nearest texel, blended between two levels", "Texel más cercano, mezclado entre dos niveles", "一番近いテクセルを 2 段の間でまぜる")),
+  ),
+  note("npot-black", L("Black textures and power-of-two sizes", "Texturas negras y potencias de dos", "黒いテクスチャと 2 のべき乗"),
+    p(
+      "A texture that WebGL considers incomplete is sampled as black, with no error message. The most common cause: the default MIN filter is NEAREST_MIPMAP_LINEAR, which needs a full mipmap chain. Upload an image, skip generateMipmap and leave the filter alone, and the texture is incomplete.",
+      "Una textura que WebGL considera incompleta se muestrea negra, sin ningún mensaje de error. La causa más común: el filtro MIN por defecto es NEAREST_MIPMAP_LINEAR, que necesita la cadena completa de mipmaps. Sube una imagen, omite generateMipmap y no toques el filtro, y la textura queda incompleta.",
+      "WebGL が不完全と判断したテクスチャは黒く読まれ、エラーも出ない。一番多い原因：既定の MIN フィルターは NEAREST_MIPMAP_LINEAR で、ミップマップがそろっている必要がある。画像を送って generateMipmap をせず、フィルターもそのままだと、テクスチャは不完全になる。",
+    ),
+    p(
+      "WebGL1 adds another rule: mipmaps and REPEAT wrapping only work with power-of-two sizes such as 64, 128 or 512. For other sizes (NPOT) set MIN_FILTER to LINEAR or NEAREST and both wrap modes to CLAMP_TO_EDGE. WebGL2 lifts most of these limits, but the default filter still needs mipmaps.",
+      "WebGL1 suma otra regla: los mipmaps y el wrap REPEAT solo funcionan con tamaños potencia de dos, como 64, 128 o 512. Para otros tamaños (NPOT) pon MIN_FILTER en LINEAR o NEAREST y los dos modos de wrap en CLAMP_TO_EDGE. WebGL2 quita casi todos estos límites, pero el filtro por defecto sigue pidiendo mipmaps.",
+      "WebGL1 にはもう 1 つルールがある：ミップマップと REPEAT は 64、128、512 のような 2 のべき乗の大きさだけ。それ以外（NPOT）は MIN_FILTER を LINEAR か NEAREST に、wrap を両方 CLAMP_TO_EDGE にする。WebGL2 ではほとんどの制限がないが、既定のフィルターはやはりミップマップが必要。",
+    ),
+    api("declare const gl: WebGL2RenderingContext;\ngl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);\ngl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);\ngl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);",
+      L("Safe settings for any image size, no mipmaps", "Ajustes seguros para cualquier tamaño, sin mipmaps", "どんな大きさでも安全な設定（ミップなし）")),
+    p(
+      "To test for a power of two, look at the bits. A power of two has exactly one 1 bit: 64 is 1000000 in binary. Subtracting 1 turns that bit off and every bit below it on: 63 is 111111. The two numbers share no 1 bits, so n & (n − 1) is 0. Any other number keeps a bit in common. Note that 1 = 2⁰ also passes.",
+      "Para probar si es potencia de dos, mira los bits. Una potencia de dos tiene exactamente un bit en 1: 64 es 1000000 en binario. Restar 1 apaga ese bit y enciende todos los de abajo: 63 es 111111. Los dos números no comparten ningún 1, así que n & (n − 1) es 0. Cualquier otro número conserva un bit en común. Ojo: 1 = 2⁰ también pasa.",
+      "2 のべき乗かはビットで調べる。2 のべき乗は 1 のビットがちょうど 1 つ：64 は 2 進数で 1000000。1 を引くとそのビットが消え、下が全部 1 になる：63 は 111111。2 つの数に共通の 1 はないので n & (n − 1) は 0。ほかの数は共通のビットが残る。1 = 2⁰ も通ることに注意。",
+    ),
+    ex("const bin = (n: number) => n.toString(2);\nconsole.log(bin(64), bin(63), 64 & 63, 48 & 47);", "1000000 111111 0 32",
+      L("64 shares no bits with 63; 48 keeps one with 47", "64 no comparte bits con 63; 48 conserva uno con 47", "64 と 63 は共通なし、48 と 47 は 1 つ残る")),
+  ),
+  note("units-upload", L("Texture units and uploading", "Unidades de textura y subida", "テクスチャユニットと送り方"),
+    p(
+      "Shaders don't receive textures directly. The GPU has numbered texture units, like numbered sockets. You pick a unit with activeTexture(gl.TEXTURE0 + n), bind your texture there, and then set the sampler uniform to the plain number n with uniform1i. The sampler reads whatever texture sits in that unit.",
+      "Los shaders no reciben texturas directo. La GPU tiene unidades de textura numeradas, como enchufes con número. Eliges una con activeTexture(gl.TEXTURE0 + n), enlazas ahí tu textura y luego pones el uniform sampler en el número n con uniform1i. El sampler lee la textura que esté en esa unidad.",
+      "シェーダーはテクスチャを直接受けとらない。GPU には番号つきのテクスチャユニット（番号つきのコンセントのようなもの）がある。activeTexture(gl.TEXTURE0 + n) でユニットを選び、そこにテクスチャをバインドし、uniform1i でサンプラーの uniform にただの数 n を入れる。サンプラーはそのユニットのテクスチャを読む。",
+    ),
+    api("declare const gl: WebGL2RenderingContext;\ndeclare const grassTex: WebGLTexture;\ndeclare const grassLoc: WebGLUniformLocation;\ngl.activeTexture(gl.TEXTURE5);\ngl.bindTexture(gl.TEXTURE_2D, grassTex);\ngl.uniform1i(grassLoc, 5);",
+      L("Unit 5: the sampler gets the number 5", "Unidad 5: el sampler recibe el número 5", "ユニット 5：サンプラーには数 5 を渡す")),
+    p(
+      "Common mistake: passing gl.TEXTURE5 to uniform1i. That constant is a large enum value, not 5, so the sampler points at a unit that doesn't exist. activeTexture takes the enum; the uniform takes the small number.",
+      "Error común: pasar gl.TEXTURE5 a uniform1i. Esa constante es un valor enum grande, no 5, así que el sampler apunta a una unidad que no existe. activeTexture recibe el enum; el uniform recibe el número chico.",
+      "よくあるミス：uniform1i に gl.TEXTURE5 を渡すこと。この定数は大きな列挙値で 5 ではないので、サンプラーは存在しないユニットをさす。activeTexture には列挙値、uniform には小さな数を渡す。",
+    ),
+    p(
+      "Image rows are stored top to bottom: row 0 is the top of the picture. Texture coordinates put v = 0 at the first row uploaded, which the usual UV layout treats as the bottom. So images often appear upside down. pixelStorei with UNPACK_FLIP_Y_WEBGL set to true, called before texImage2D, flips the rows during upload.",
+      "Las filas de una imagen se guardan de arriba abajo: la fila 0 es la parte de arriba. Las coordenadas de textura ponen v = 0 en la primera fila subida, que el formato UV habitual trata como abajo. Por eso las imágenes suelen salir al revés. pixelStorei con UNPACK_FLIP_Y_WEBGL en true, llamado antes de texImage2D, invierte las filas al subir.",
+      "画像の行は上から下に保存され、0 行目が絵の上。テクスチャ座標では最初に送った行が v = 0 で、ふつうの UV の並びではそこが下になる。だから画像がよく上下さかさまになる。texImage2D の前に pixelStorei で UNPACK_FLIP_Y_WEBGL を true にすると、送るときに行が反転する。",
+    ),
+  ),
+];
 
 // ─── 2.4 Painting by numbers ───────────────────────────────────────────────
 const textures: LessonDef = {
@@ -432,6 +818,7 @@ const textures: LessonDef = {
   xp: 75,
   enemy: "webgl/black-screen",
   enemyName: L("BLACK TEXTURE", "TEXTURA NEGRA", "まっくろテクスチャ"),
+  notes: texturesNotes,
   beats: [
     say(L(
       "A TEXTURE is an image the GPU samples. UV coords pick a point in it: (0, 0) is one corner, (1, 1) the opposite one.",
@@ -456,6 +843,8 @@ const textures: LessonDef = {
       answer: 0,
       output: "2 7",
       check: { compiles: true, stdout: "2 7" },
+      hint: L("Multiply u by the size and floor it. Texels are numbered 0 to size − 1.", "Multiplica u por el tamaño y redondea hacia abajo. Los texels van de 0 a tamaño − 1.", "u に大きさをかけて切り捨てる。テクセルの番号は 0〜大きさ − 1。"),
+      note: "uv-texels",
       explain: L("0.25 × 8 = 2. u = 1 would be texel 8, which doesn't exist, so it clamps to 7.", "0.25 × 8 = 2. u = 1 sería el texel 8, que no existe, así que se limita a 7.", "0.25 × 8 = 2。u = 1 だとテクセル 8 だけど存在しないので 7 におさめる。"),
       win: [{ t: "print", text: "2 7" }],
     },
@@ -471,6 +860,8 @@ const textures: LessonDef = {
       options: ["NEAREST", "LINEAR"],
       answer: 0,
       check: { compiles: true },
+      hint: L("Crisp means no blending between neighboring texels.", "Nítido significa no mezclar texels vecinos.", "くっきり＝となりのテクセルとまぜないこと。"),
+      note: "filters-mipmaps",
       explain: L("NEAREST takes the closest texel, keeping hard pixel edges. LINEAR blends neighbors, which blurs.", "NEAREST toma el texel más cercano y mantiene bordes duros. LINEAR mezcla vecinos y desenfoca.", "NEAREST は一番近いテクセルでドットがくっきり。LINEAR はとなりとまぜるのでぼやける。"),
     },
     say(L(
@@ -486,6 +877,8 @@ const textures: LessonDef = {
       answer: 0,
       output: "7",
       check: { compiles: true, stdout: "7" },
+      hint: L("Count the halvings from 64 down to 1, then add the original level.", "Cuenta las mitades de 64 a 1 y suma el nivel original.", "64 から 1 まで半分にする回数を数え、元の段を足そう。"),
+      note: "filters-mipmaps",
       explain: L("64, 32, 16, 8, 4, 2, 1: seven levels. log2(64) = 6, plus the 1×1 level.", "64, 32, 16, 8, 4, 2, 1: siete niveles. log2(64) = 6, más el nivel 1×1.", "64、32、16、8、4、2、1 の 7 段。log2(64) = 6 に 1×1 の段を足す。"),
       win: [{ t: "print", text: "7" }],
     },
@@ -502,6 +895,8 @@ const textures: LessonDef = {
       answer: 0,
       output: "true,false,true",
       check: { compiles: true, stdout: "true,false,true" },
+      hint: L("Write each number in binary. And is 1 a power of two? Think of 2 to the 0.", "Escribe cada número en binario. ¿Y 1 es potencia de dos? Piensa en 2 elevado a 0.", "それぞれを 2 進数で書こう。1 は 2 のべき乗？2 の 0 乗を考えて。"),
+      note: "npot-black",
       explain: L("A power of two has a single 1 bit, and n - 1 flips every bit below it. 1 is 2⁰, so it counts.", "Una potencia de dos tiene un solo bit en 1, y n - 1 invierte los de abajo. 1 es 2⁰, así que cuenta.", "2 のべき乗は 1 のビットが 1 つだけ。n - 1 でその下が反転する。1 は 2⁰ なので true。"),
     },
     say(L(
@@ -515,6 +910,8 @@ const textures: LessonDef = {
       code: "gl.bindTexture(gl.TEXTURE_2D, tex);\ngl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);\n// no texParameteri calls",
       options: [L("Default MIN filter needs mipmaps", "El filtro MIN pide mipmaps", "既定の MIN がミップ必須"), L("The image is too big", "La imagen es muy grande", "画像が大きすぎる")],
       answer: 0,
+      hint: L("Which default texture setting needs mipmaps? Were any generated here?", "¿Qué ajuste de textura por defecto necesita mipmaps? ¿Se generó alguno aquí?", "ミップマップが必要な既定の設定はどれ？ここで作られている？"),
+      note: "npot-black",
       explain: L("The default is NEAREST_MIPMAP_LINEAR. Set MIN_FILTER to LINEAR and wrap to CLAMP_TO_EDGE for NPOT.", "El valor por defecto es NEAREST_MIPMAP_LINEAR. Pon MIN_FILTER en LINEAR y wrap en CLAMP_TO_EDGE para NPOT.", "既定は NEAREST_MIPMAP_LINEAR。2 のべき乗でない画像は MIN_FILTER を LINEAR、wrap を CLAMP_TO_EDGE に。"),
       win: [{ t: "attack", from: "hero", to: "enemy" }],
     },
@@ -525,6 +922,7 @@ const textures: LessonDef = {
       answer: "LINEAR_MIPMAP_LINEAR",
       check: { compiles: true },
       hint: L("LINEAR inside a level, LINEAR between levels.", "LINEAR dentro del nivel, LINEAR entre niveles.", "段の中も段の間も LINEAR。"),
+      note: "filters-mipmaps",
       explain: L("The first word filters inside a mip level, the last one blends between two levels.", "La primera palabra filtra dentro de un nivel mip; la última mezcla entre dos niveles.", "前の語はミップの段の中、後ろの語は 2 つの段の間のまぜ方。"),
     },
     say(L(
@@ -538,6 +936,8 @@ const textures: LessonDef = {
       code: "gl.activeTexture(gl.TEXTURE2);\ngl.bindTexture(gl.TEXTURE_2D, rockTex);\ngl.uniform1i(samplerLoc, 2);",
       options: [L("The sampler reads unit 2", "El sampler lee la unidad 2", "サンプラーがユニット 2 を読む"), L("The texture is 2 px wide", "La textura mide 2 px", "テクスチャの幅が 2px")],
       answer: 0,
+      hint: L("uniform1i sets the sampler. What does a sampler store: pixels or a unit number?", "uniform1i fija el sampler. ¿Qué guarda un sampler: píxeles o un número de unidad?", "uniform1i はサンプラーを設定する。サンプラーが持つのはピクセル？ユニット番号？"),
+      note: "units-upload",
       explain: L("A sampler uniform holds a unit number. rockTex sits in unit 2, so the sampler reads it.", "Un uniform sampler guarda un número de unidad. rockTex está en la unidad 2, así que el sampler la lee.", "サンプラーの uniform はユニット番号。rockTex はユニット 2 にあるので、それを読む。"),
     },
     {
@@ -547,6 +947,8 @@ const textures: LessonDef = {
       options: ["UNPACK_FLIP_Y_WEBGL", "UNPACK_ALIGNMENT"],
       answer: 0,
       check: { compiles: true },
+      hint: L("One flag flips the rows during upload; the other is about row padding.", "Una opción invierte las filas al subir; la otra trata del relleno de filas.", "片方は送るときに行を反転し、もう片方は行のすき間に関する設定。"),
+      note: "units-upload",
       explain: L("Images store row 0 at the top, textures at v = 0. UNPACK_FLIP_Y_WEBGL flips rows on upload.", "Las imágenes guardan la fila 0 arriba y las texturas en v = 0. UNPACK_FLIP_Y_WEBGL invierte las filas al subir.", "画像は 0 行目が上、テクスチャは v = 0。UNPACK_FLIP_Y_WEBGL で送るときに行を反転する。"),
     },
     {
@@ -556,10 +958,57 @@ const textures: LessonDef = {
       solution: 'function mipLevels(width: number, height: number): number {\n  return Math.floor(Math.log2(Math.max(width, height))) + 1;\n}\nconsole.log("levels: " + mipLevels(1024, 512));\n',
       expect: "levels: 11",
       fallback: [String.raw`\)\s*\+\s*1\s*;`, String.raw`1\s*\+\s*Math\.floor`],
+      hint: L("log2 counts the halvings, but the original size is a level too.", "log2 cuenta las mitades, pero el tamaño original también es un nivel.", "log2 は半分にした回数。でも元の大きさも 1 段だ。"),
+      note: "filters-mipmaps",
       explain: L("1024 halves 10 times to reach 1, so there are 10 + 1 = 11 levels counting the original.", "1024 se divide a la mitad 10 veces hasta llegar a 1: con el original son 10 + 1 = 11 niveles.", "1024 は 10 回半分にして 1 になる。元の段を入れて 10 + 1 = 11 段。"),
     },
   ],
 };
+
+const bossNotes: NoteDef[] = [
+  note("recap-bytes", L("Recap: bytes, wraps and strides", "Repaso: bytes, vueltas y strides", "復習：バイト・一周・ストライド"),
+    p(
+      "Everything the GPU reads is bytes. A typed array's slot size comes from its name: 32 bits = 4 bytes, 16 bits = 2, 8 bits = 1. Unsigned integer slots wrap modulo 2^bits when a value doesn't fit; only Uint8ClampedArray clamps to 0..255.",
+      "Todo lo que lee la GPU son bytes. El tamaño de casilla de un typed array sale de su nombre: 32 bits = 4 bytes, 16 bits = 2, 8 bits = 1. Las casillas de enteros sin signo dan la vuelta módulo 2^bits cuando el valor no cabe; solo Uint8ClampedArray se limita a 0..255.",
+      "GPU が読むのはすべてバイト。型付き配列のマスの大きさは名前でわかる：32 ビット = 4 バイト、16 ビット = 2、8 ビット = 1。符号なし整数のマスは値が入らないと 2^ビット数 で一周する。0..255 で止まるのは Uint8ClampedArray だけ。",
+    ),
+    p(
+      "In an interleaved buffer, the stride is the total bytes of one vertex: add up every attribute (values × bytes each). The offset of an attribute is the bytes of everything before it. Normalized unsigned bytes reach the shader divided by 255.",
+      "En un buffer intercalado, el stride es el total de bytes de un vértice: suma cada attribute (valores × bytes de cada uno). El offset de un attribute son los bytes de todo lo que va antes. Los bytes sin signo normalizados llegan al shader divididos entre 255.",
+      "まぜたバッファのストライドは 1 頂点の合計バイト数。全アトリビュートの「値の数 × 1 つのバイト数」を足す。オフセットはそれより前の全部のバイト数。正規化した符号なしバイトは 255 で割られてシェーダーに届く。",
+    ),
+    ex("// x y (floats) + r g b a (bytes)\nconsole.log(2 * 4 + 4 * 1, new Uint8Array([260])[0], (102 / 255).toFixed(1));", "12 4 0.4",
+      L("A stride, a wrap and a normalized byte", "Un stride, una vuelta y un byte normalizado", "ストライド、一周、正規化したバイト")),
+  ),
+  note("recap-gl-calls", L("Recap: buffers and draw calls", "Repaso: buffers y draw calls", "復習：バッファと描画呼び出し"),
+    p(
+      "bufferData copies a typed array into the buffer bound to a bind point; plain JS arrays are rejected by TypeScript. vertexAttribPointer reads from the buffer bound to ARRAY_BUFFER at the moment you call it, not the last one you created.",
+      "bufferData copia un typed array en el buffer enlazado a un punto de enlace; TypeScript rechaza los arrays simples de JS. vertexAttribPointer lee del buffer enlazado a ARRAY_BUFFER en el momento de la llamada, no del último que creaste.",
+      "bufferData は型付き配列を、席にバインドされたバッファへコピーする。ふつうの JS 配列は TypeScript が拒否する。vertexAttribPointer が読むのは、呼んだ瞬間に ARRAY_BUFFER にバインドされているバッファで、最後に作ったものではない。",
+    ),
+    p(
+      "Index types must match everywhere. Uint16Array indices go up to 65535 and are drawn with UNSIGNED_SHORT. Meshes with more vertices need Uint32Array and UNSIGNED_INT. drawElements takes the number of indices and a byte offset, always four arguments.",
+      "Los tipos de índice deben coincidir en todos lados. Los índices Uint16Array llegan a 65535 y se dibujan con UNSIGNED_SHORT. Las mallas con más vértices necesitan Uint32Array y UNSIGNED_INT. drawElements recibe la cantidad de índices y un offset en bytes, siempre cuatro argumentos.",
+      "番号の型はどこでも合わせる。Uint16Array の番号は 65535 までで、UNSIGNED_SHORT で描く。もっと頂点が多いメッシュは Uint32Array と UNSIGNED_INT。drawElements には番号の数とバイトオフセットを渡し、引数はいつも 4 つ。",
+    ),
+    api("declare const gl: WebGL2RenderingContext;\ndeclare const loc: number;\nconst lineBuf = gl.createBuffer();\ngl.bindBuffer(gl.ARRAY_BUFFER, lineBuf);\ngl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 1]), gl.STATIC_DRAW);\ngl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);\ngl.drawElements(gl.LINES, 2, gl.UNSIGNED_BYTE, 0);",
+      L("Bind, fill, point, draw", "Enlazar, llenar, apuntar, dibujar", "バインド、入れる、指す、描く")),
+  ),
+  note("recap-mesh-texture", L("Recap: indices, UVs and mipmaps", "Repaso: índices, UV y mipmaps", "復習：番号・UV・ミップ"),
+    p(
+      "When several shapes share one index buffer, each shape's indices are shifted by the number of vertices before it: a quad owns 4 vertices, so quad q starts at q × 4.",
+      "Cuando varias figuras comparten un buffer de índices, los índices de cada una se desplazan por la cantidad de vértices anteriores: un quad tiene 4 vértices, así que el quad q empieza en q × 4.",
+      "いくつもの形が 1 つのインデックスバッファを使うとき、各形の番号は前の頂点の数だけずらす。四角形は頂点 4 つなので、q 番目は q × 4 から始まる。",
+    ),
+    p(
+      "A UV in 0..1 picks texel floor(u × size), clamped to size − 1 at the edge. A texture of side n has floor(log2(n)) + 1 mip levels, because the 1×1 level counts too.",
+      "Un UV en 0..1 elige el texel floor(u × tamaño), limitado a tamaño − 1 en el borde. Una textura de lado n tiene floor(log2(n)) + 1 niveles mip, porque el nivel 1×1 también cuenta.",
+      "0..1 の UV はテクセル floor(u × 大きさ) を選び、端では 大きさ − 1 におさめる。1 辺 n のテクスチャのミップは floor(log2(n)) + 1 段。1×1 の段も数えるからだ。",
+    ),
+    ex("const texel = (u: number, size: number) => Math.min(Math.floor(u * size), size - 1);\nconsole.log(texel(0.5, 32), Math.floor(Math.log2(128)) + 1);", "16 8",
+      L("A texel lookup and a mip count", "Una búsqueda de texel y un conteo de mips", "テクセルの位置とミップの段数")),
+  ),
+];
 
 // ─── 2.5 Boss: Buffer Hydra ────────────────────────────────────────────────
 const boss: LessonDef = {
@@ -570,22 +1019,23 @@ const boss: LessonDef = {
   xp: 170,
   enemy: "dragon",
   enemyName: L("BUFFER HYDRA", "HIDRA BUFFER", "バッファヒドラ"),
+  notes: bossNotes,
   beats: [
     enemySays(L(
       "I AM THE BUFFER HYDRA. Miss one byte and I grow another head. Wrap one index and your mesh is mine!",
       "SOY LA HIDRA BUFFER. Fallas un byte y me crece otra cabeza. ¡Si un índice da la vuelta, tu malla es mía!",
       "我はバッファヒドラ。1 バイトまちがえれば首が増える。番号が一周すれば、メッシュは我のもの！",
     )),
-    { kind: "predict", time: 15, prompt: L("Position, normal, uv: stride?", "Posición, normal, uv: ¿stride?", "位置・法線・UV のストライドは？"), code: "// x y z, nx ny nz, u v (floats)\nconsole.log((3 + 3 + 2) * 4);", options: ["32", "8", "24"], answer: 0, output: "32", check: { compiles: true, stdout: "32" }, explain: L("8 floats × 4 bytes = 32.", "8 floats × 4 bytes = 32.", "float 8 個 × 4 バイト = 32。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: "console.log(new Uint16Array([65536])[0]);", options: ["0", "65536", "65535"], answer: 0, output: "0", check: { compiles: true, stdout: "0" }, explain: L("16 bits wrap: 65536 becomes 0.", "16 bits dan la vuelta: 65536 es 0.", "16 ビットは一周：65536 は 0。") },
-    { kind: "predict", time: 15, prompt: L("Where does it read from?", "¿De dónde lee?", "どこから読む？"), code: "gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);\ngl.vertexAttribPointer(loc, 3, gl.FLOAT, false, 0, 0);", options: [L("The buffer bound now: posBuf", "El enlazado ahora: posBuf", "今バインド中の posBuf"), L("The last created buffer", "El último buffer creado", "最後に作ったバッファ")], answer: 0, explain: L("It captures ARRAY_BUFFER at call time.", "Captura ARRAY_BUFFER en ese momento.", "呼んだ時の ARRAY_BUFFER をつかむ。") },
-    { kind: "predict", time: 12, prompt: COMPILES, code: "declare const gl: WebGL2RenderingContext;\ngl.bufferData(gl.ARRAY_BUFFER, [1, 2], gl.STATIC_DRAW);", options: [YES, NO_TSC], answer: 1, check: { compiles: false }, explain: L("TS2769: pass a typed array, not a JS array.", "TS2769: pasa un typed array, no un array de JS.", "TS2769：JS 配列でなく型付き配列を。") },
-    { kind: "predict", time: 12, prompt: L("Mip levels of a 512 texture?", "¿Niveles mip de una de 512?", "512 のミップは何段？"), code: "console.log(Math.floor(Math.log2(512)) + 1);", options: ["10", "9", "512"], answer: 0, output: "10", check: { compiles: true, stdout: "10" }, explain: L("log2(512) = 9, plus the 1×1 level.", "log2(512) = 9, más el nivel 1×1.", "log2(512) = 9 に 1×1 を足す。") },
-    { kind: "pick", time: 15, prompt: L("Indices for 100 000 vertices", "Índices para 100 000 vértices", "頂点 10 万個の番号"), code: "declare const count: number;\nconst indices = new ___(count);", options: ["Uint32Array", "Uint16Array"], answer: 0, check: { compiles: true }, explain: L("Uint16 stops at 65535; use Uint32Array with UNSIGNED_INT.", "Uint16 llega a 65535; usa Uint32Array con UNSIGNED_INT.", "Uint16 は 65535 まで。Uint32Array と UNSIGNED_INT を。") },
-    { kind: "type", time: 15, prompt: L("Uint16Array indices: type?", "Índices Uint16Array: ¿type?", "Uint16Array の type は？"), code: "declare const gl: WebGL2RenderingContext;\ndeclare const count: number;\n// the index buffer is a Uint16Array\ngl.drawElements(gl.TRIANGLES, count, gl.___, 0);", answer: "UNSIGNED_SHORT", check: { compiles: true }, explain: L("16-bit indices are UNSIGNED_SHORT.", "Los índices de 16 bits son UNSIGNED_SHORT.", "16 ビットの番号は UNSIGNED_SHORT。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: "const texel = (u: number, size: number) =>\n  Math.min(Math.floor(u * size), size - 1);\nconsole.log(texel(0.75, 4));", options: ["3", "4", "2"], answer: 0, output: "3", check: { compiles: true, stdout: "3" }, explain: L("0.75 × 4 = 3, inside 0..3.", "0.75 × 4 = 3, dentro de 0..3.", "0.75 × 4 = 3、0..3 の中。") },
-    { kind: "predict", time: 15, prompt: L("Normalized byte 51 becomes…", "El byte normalizado 51 es…", "正規化した 51 は？"), code: "console.log((51 / 255).toFixed(1));", options: ["0.2", "0.5", "51.0"], answer: 0, output: "0.2", check: { compiles: true, stdout: "0.2" }, explain: L("51 / 255 = 0.2 exactly.", "51 / 255 = 0.2 exacto.", "51 / 255 = ちょうど 0.2。") },
-    { kind: "predict", time: 15, prompt: L("Two quads: which indices?", "Dos quads: ¿qué índices?", "四角形 2 つの番号は？"), code: 'const quads = 2;\nconst out: number[] = [];\nfor (let q = 0; q < quads; q++) out.push(q * 4, q * 4 + 1, q * 4 + 2);\nconsole.log(out.join(","));', options: ["0,1,2,4,5,6", "0,1,2,6,7,8", "0,1,2,3,4,5"], answer: 0, output: "0,1,2,4,5,6", check: { compiles: true, stdout: "0,1,2,4,5,6" }, explain: L("Each quad starts 4 vertices later.", "Cada quad empieza 4 vértices después.", "四角形ごとに頂点 4 つずつ進む。") },
+    { kind: "predict", time: 15, prompt: L("Position, normal, uv: stride?", "Posición, normal, uv: ¿stride?", "位置・法線・UV のストライドは？"), code: "// x y z, nx ny nz, u v (floats)\nconsole.log((3 + 3 + 2) * 4);", options: ["32", "8", "24"], answer: 0, output: "32", check: { compiles: true, stdout: "32" }, hint: L("Count every float in one vertex, then multiply by the bytes per float.", "Cuenta todos los floats de un vértice y multiplica por los bytes de cada float.", "1 頂点の float を全部数え、1 つのバイト数をかけよう。"), note: "recap-bytes", explain: L("8 floats × 4 bytes = 32.", "8 floats × 4 bytes = 32.", "float 8 個 × 4 バイト = 32。") },
+    { kind: "predict", time: 12, prompt: PRINT, code: "console.log(new Uint16Array([65536])[0]);", options: ["0", "65536", "65535"], answer: 0, output: "0", check: { compiles: true, stdout: "0" }, hint: L("What's the largest value 16 bits can hold? This is one past it.", "¿Cuál es el mayor valor que cabe en 16 bits? Este es uno más.", "16 ビットの最大値は？これはその 1 つ上。"), note: "recap-bytes", explain: L("16 bits wrap: 65536 becomes 0.", "16 bits dan la vuelta: 65536 es 0.", "16 ビットは一周：65536 は 0。") },
+    { kind: "predict", time: 15, prompt: L("Where does it read from?", "¿De dónde lee?", "どこから読む？"), code: "gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);\ngl.vertexAttribPointer(loc, 3, gl.FLOAT, false, 0, 0);", options: [L("The buffer bound now: posBuf", "El enlazado ahora: posBuf", "今バインド中の posBuf"), L("The last created buffer", "El último buffer creado", "最後に作ったバッファ")], answer: 0, hint: L("Think bind-then-act: what does the pointer call look at when it runs?", "Piensa en enlazar y actuar: ¿qué mira la llamada al puntero cuando corre?", "バインドしてから操作。ポインターの呼び出しは実行時に何を見る？"), note: "recap-gl-calls", explain: L("It captures ARRAY_BUFFER at call time.", "Captura ARRAY_BUFFER en ese momento.", "呼んだ時の ARRAY_BUFFER をつかむ。") },
+    { kind: "predict", time: 12, prompt: COMPILES, code: "declare const gl: WebGL2RenderingContext;\ngl.bufferData(gl.ARRAY_BUFFER, [1, 2], gl.STATIC_DRAW);", options: [YES, NO_TSC], answer: 1, check: { compiles: false }, hint: L("What kind of data does bufferData accept?", "¿Qué tipo de datos acepta bufferData?", "bufferData が受けとるデータの種類は？"), note: "recap-gl-calls", explain: L("TS2769: pass a typed array, not a JS array.", "TS2769: pasa un typed array, no un array de JS.", "TS2769：JS 配列でなく型付き配列を。") },
+    { kind: "predict", time: 12, prompt: L("Mip levels of a 512 texture?", "¿Niveles mip de una de 512?", "512 のミップは何段？"), code: "console.log(Math.floor(Math.log2(512)) + 1);", options: ["10", "9", "512"], answer: 0, output: "10", check: { compiles: true, stdout: "10" }, hint: L("Count the halvings from 512 to 1, then count the original too.", "Cuenta las mitades de 512 a 1 y luego cuenta también el original.", "512 から 1 まで半分にする回数に、元の段も足そう。"), note: "recap-mesh-texture", explain: L("log2(512) = 9, plus the 1×1 level.", "log2(512) = 9, más el nivel 1×1.", "log2(512) = 9 に 1×1 を足す。") },
+    { kind: "pick", time: 15, prompt: L("Indices for 100 000 vertices", "Índices para 100 000 vértices", "頂点 10 万個の番号"), code: "declare const count: number;\nconst indices = new ___(count);", options: ["Uint32Array", "Uint16Array"], answer: 0, check: { compiles: true }, hint: L("Compare 100 000 with the largest value a 16-bit index can hold.", "Compara 100 000 con el mayor valor que cabe en un índice de 16 bits.", "10 万と、16 ビットの番号に入る最大値をくらべよう。"), note: "recap-gl-calls", explain: L("Uint16 stops at 65535; use Uint32Array with UNSIGNED_INT.", "Uint16 llega a 65535; usa Uint32Array con UNSIGNED_INT.", "Uint16 は 65535 まで。Uint32Array と UNSIGNED_INT を。") },
+    { kind: "type", time: 15, prompt: L("Uint16Array indices: type?", "Índices Uint16Array: ¿type?", "Uint16Array の type は？"), code: "declare const gl: WebGL2RenderingContext;\ndeclare const count: number;\n// the index buffer is a Uint16Array\ngl.drawElements(gl.TRIANGLES, count, gl.___, 0);", answer: "UNSIGNED_SHORT", check: { compiles: true }, hint: L("Index type names come from C: a byte is 8 bits, an int 32. What is 16 bits called?", "Los nombres de tipo vienen de C: un byte son 8 bits, un int 32. ¿Cómo se llama el de 16?", "型の名前は C から来ている：byte は 8 ビット、int は 32。16 ビットの名前は？"), note: "recap-gl-calls", explain: L("16-bit indices are UNSIGNED_SHORT.", "Los índices de 16 bits son UNSIGNED_SHORT.", "16 ビットの番号は UNSIGNED_SHORT。") },
+    { kind: "predict", time: 15, prompt: PRINT, code: "const texel = (u: number, size: number) =>\n  Math.min(Math.floor(u * size), size - 1);\nconsole.log(texel(0.75, 4));", options: ["3", "4", "2"], answer: 0, output: "3", check: { compiles: true, stdout: "3" }, hint: L("Multiply u by the size and floor it; clamp only if it reaches the size.", "Multiplica u por el tamaño y redondea abajo; limita solo si llega al tamaño.", "u に大きさをかけて切り捨て。大きさに届いたときだけおさめる。"), note: "recap-mesh-texture", explain: L("0.75 × 4 = 3, inside 0..3.", "0.75 × 4 = 3, dentro de 0..3.", "0.75 × 4 = 3、0..3 の中。") },
+    { kind: "predict", time: 15, prompt: L("Normalized byte 51 becomes…", "El byte normalizado 51 es…", "正規化した 51 は？"), code: "console.log((51 / 255).toFixed(1));", options: ["0.2", "0.5", "51.0"], answer: 0, output: "0.2", check: { compiles: true, stdout: "0.2" }, hint: L("Normalized bytes are divided by 255 on their way to the shader.", "Los bytes normalizados se dividen entre 255 camino al shader.", "正規化したバイトはシェーダーへ行くとき 255 で割られる。"), note: "recap-bytes", explain: L("51 / 255 = 0.2 exactly.", "51 / 255 = 0.2 exacto.", "51 / 255 = ちょうど 0.2。") },
+    { kind: "predict", time: 15, prompt: L("Two quads: which indices?", "Dos quads: ¿qué índices?", "四角形 2 つの番号は？"), code: 'const quads = 2;\nconst out: number[] = [];\nfor (let q = 0; q < quads; q++) out.push(q * 4, q * 4 + 1, q * 4 + 2);\nconsole.log(out.join(","));', options: ["0,1,2,4,5,6", "0,1,2,6,7,8", "0,1,2,3,4,5"], answer: 0, output: "0,1,2,4,5,6", check: { compiles: true, stdout: "0,1,2,4,5,6" }, hint: L("Follow the loop: q is 0, then 1, and each quad's base is q × 4.", "Sigue el bucle: q vale 0 y luego 1, y la base de cada quad es q × 4.", "ループを追おう：q は 0、次に 1。四角形の基準は q × 4。"), note: "recap-mesh-texture", explain: L("Each quad starts 4 vertices later.", "Cada quad empieza 4 vértices después.", "四角形ごとに頂点 4 つずつ進む。") },
     enemySays(L(
       "All my heads... packed, strided and indexed. Take the bytes, then. Matrix Mountain looms ahead.",
       "Todas mis cabezas... empacadas, con stride e indexadas. Llévate los bytes. Más allá se alza la Montaña Matriz.",

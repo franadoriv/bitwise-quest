@@ -8,7 +8,7 @@ import { shuffle, type BeatCtx } from "./types";
 import { useI18n } from "@/components/ui/I18n";
 
 /** Handles both "pick" (fill the slot) and "predict" (choose the outcome). */
-export function ChoiceBeatView({ beat, ctx, seed }: { beat: PickBeat | PredictBeat; ctx: BeatCtx; seed: number }) {
+export function ChoiceBeatView({ beat, ctx, seed, struck = null }: { beat: PickBeat | PredictBeat; ctx: BeatCtx; seed: number; struck?: number | null }) {
   const { tx } = useI18n();
   const options = useMemo(() => shuffle(beat.options, seed + beat.options.length), [beat, seed]);
   const [disabled, setDisabled] = useState<number[]>([]);
@@ -19,7 +19,7 @@ export function ChoiceBeatView({ beat, ctx, seed }: { beat: PickBeat | PredictBe
   const btns = useRef<(HTMLButtonElement | null)[]>([]);
 
   const choose = async (orig: number, pos: number) => {
-    if (busy || ctx.busy || okIdx != null || disabled.includes(orig)) return;
+    if (busy || ctx.busy || okIdx != null || disabled.includes(orig) || orig === struck) return;
     setBusy(true);
     sfx.select();
     const btn = btns.current[pos];
@@ -60,14 +60,15 @@ export function ChoiceBeatView({ beat, ctx, seed }: { beat: PickBeat | PredictBe
         {options.map(({ v, i }, pos) => {
           const isOk = okIdx === i;
           const isBad = disabled.includes(i);
+          const isStruck = struck === i && !isBad;
           return (
             <button
               key={i}
               ref={(el) => { btns.current[pos] = el; }}
               className={`btn ${isOk ? "good" : isBad ? "danger" : ""}`}
-              style={{ fontFamily: beat.kind === "pick" ? "var(--font-code)" : "var(--font-body)", fontSize: beat.kind === "pick" ? 24 : 17, padding: "10px 12px", textTransform: "none" }}
+              style={{ fontFamily: beat.kind === "pick" ? "var(--font-code)" : "var(--font-body)", fontSize: beat.kind === "pick" ? 24 : 17, padding: "10px 12px", textTransform: "none", ...(isStruck ? { textDecoration: "line-through", opacity: 0.4 } : {}) }}
               onMouseEnter={() => sfx.hover()}
-              disabled={isBad}
+              disabled={isBad || isStruck}
               onClick={() => choose(i, pos)}
             >
               {isBad ? "✗ " : isOk ? "✓ " : ""}{tx(v)}

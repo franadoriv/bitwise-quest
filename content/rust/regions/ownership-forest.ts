@@ -1,10 +1,105 @@
-import type { LessonDef, RegionDef } from "../../../lib/content/types.ts";
+import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L, enemySays, say } from "../helpers.ts";
 
 // REGION 2 · OWNERSHIP FOREST  (move, clone, borrowing)
 
 const YES = L("Yes", "Sí", "はい");
 const NO = L("No", "No", "いいえ");
+
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example; the validator checks `output` against the real compiler. */
+const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code, output, caption });
+/** An example that must NOT compile (verified too). */
+const bad = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: false } });
+
+const ownershipNotes: NoteDef[] = [
+  note("move-owner", L("Moving: one owner at a time", "Move: un dueño a la vez", "ムーブ：持ち主はいつもひとり"),
+    p(
+      "In Rust every value has exactly one owner: the variable responsible for it. A String like String::from(\"coin\") owns text stored in memory. When you write let other = first; that text is not copied. Ownership moves to the new variable, and the old name becomes invalid.",
+      "En Rust cada valor tiene exactamente un dueño: la variable responsable de él. Un String como String::from(\"coin\") es dueño de un texto guardado en memoria. Cuando escribes let other = first; ese texto no se copia. La propiedad se mueve a la variable nueva y el nombre viejo deja de ser válido.",
+      "Rustでは、どの値にも持ち主（オーナー）がちょうどひとりいる。String::from(\"coin\") のような String は、メモリ上の文字列を持っている。let other = first; と書いても文字列はコピーされない。所有権が新しい変数へムーブし、古い名前は使えなくなる。",
+    ),
+    ex('let lamp = String::from("oil lamp");\nlet camp = lamp;\nprintln!("{}", camp);', "oil lamp",
+      L("After the move, camp is the owner", "Tras el move, camp es la dueña", "ムーブのあとは camp が持ち主")),
+    p(
+      "Why move instead of copy? A String's text can be large, and copying it every time would be slow. If two names owned the same text, both would try to free it at the end, a classic crash in other languages. One owner means exactly one cleanup, decided at compile time.",
+      "¿Por qué mover en vez de copiar? El texto de un String puede ser grande y copiarlo cada vez sería lento. Si dos nombres fueran dueños del mismo texto, los dos intentarían liberarlo al final, un fallo clásico en otros lenguajes. Un solo dueño significa una sola limpieza, decidida al compilar.",
+      "なぜコピーではなくムーブなのか？String の文字列は大きくなることがあり、毎回コピーすると遅い。もし2つの名前が同じ文字列を持っていたら、最後に両方が片づけようとしてしまう。他の言語でよくあるクラッシュの原因だ。持ち主がひとりなら片づけも1回だけ。それをコンパイル時に決めている。",
+    ),
+    bad('let rope = String::from("rope");\nlet pack = rope;\nprintln!("{}", rope);',
+      L("E0382: rope moved into pack, so rope is empty-handed", "E0382: rope se movió a pack y quedó sin nada", "E0382：rope は pack にムーブして手ぶら")),
+    p(
+      "The rule to remember: after let b = a; only b may be used. Using a again gives error E0382, \"borrow of moved value\". To know which variable to use, follow the value: it lives in the last variable it moved to.",
+      "La regla: después de let b = a; solo se puede usar b. Usar a de nuevo da el error E0382, \"borrow of moved value\". Para saber qué variable usar, sigue al valor: vive en la última variable a la que se movió.",
+      "覚えるルール：let b = a; のあとで使えるのは b だけ。a をもう一度使うとエラー E0382「borrow of moved value」になる。どの変数を使えばいいか迷ったら、値を追いかけよう。値は最後にムーブした先の変数にいる。",
+    ),
+    p(
+      "Ownership also decides when a value is destroyed. When the owner reaches the closing } of its block, Rust drops the value and frees its memory automatically. There's no garbage collector: the end of the owner's block is the cleanup moment.",
+      "La propiedad también decide cuándo se destruye un valor. Cuando el dueño llega a la } que cierra su bloque, Rust hace drop del valor y libera su memoria automáticamente. No hay recolector de basura: el final del bloque del dueño es el momento de limpiar.",
+      "所有権は、値がいつ消えるかも決める。持ち主がブロックの閉じかっこ } に来ると、Rustは値をドロップしてメモリを自動で片づける。ガベージコレクタはない。持ち主のブロックの終わりが片づけのタイミングだ。",
+    ),
+    p(
+      "Common mistake: thinking let b = a; makes two copies, as in many other languages. For a String it doesn't: a is left empty-handed. If you really need both, the next lesson shows .clone(); if you only need to look, borrowing with & comes later in this forest.",
+      "Error común: creer que let b = a; crea dos copias, como en muchos otros lenguajes. Con un String no es así: a se queda con las manos vacías. Si de verdad necesitas ambos, la próxima lección muestra .clone(); si solo necesitas mirar, el préstamo con & llega más adelante en este bosque.",
+      "よくあるミス：多くの言語と同じように、let b = a; で2つのコピーができると思うこと。String ではそうならず、a は手ぶらになる。両方必要なら次のレッスンの .clone() を、見るだけならこの森の後半で学ぶ & の借用を使おう。",
+    ),
+  ),
+  note("move-into-fn", L("Passing to a function moves too", "Pasar a una función también mueve", "関数に渡してもムーブ"),
+    p(
+      "Calling a function with a String is just another assignment: the value goes into the function's parameter. If the parameter's type is String (no &), the function becomes the new owner, and the caller's variable is moved.",
+      "Llamar a una función con un String es otra asignación más: el valor entra en el parámetro de la función. Si el tipo del parámetro es String (sin &), la función pasa a ser la nueva dueña y la variable de quien llama queda movida.",
+      "String を渡して関数を呼ぶのも、代入の一種だ。値は関数の引数（パラメータ）に入る。パラメータの型が String（& なし）なら、関数が新しい持ち主になり、呼んだ側の変数はムーブ済みになる。",
+    ),
+    ex('fn shout(word: String) {\n    println!("{}!", word);\n}\n\nlet cry = String::from("hey");\nshout(cry);', "hey!",
+      L("shout now owns the text and prints it", "shout ahora es dueña del texto y lo imprime", "shout が文字列の持ち主になって表示する")),
+    p(
+      "When the function ends, its parameter reaches the closing } and the value is dropped there. So after the call there is nothing left for the caller: using the old variable is error E0382, exactly like after let b = a;.",
+      "Cuando la función termina, su parámetro llega a la } de cierre y el valor se destruye ahí. Así que después de la llamada no queda nada para quien llamó: usar la variable vieja es el error E0382, igual que después de let b = a;.",
+      "関数が終わると、パラメータは閉じかっこ } に来て、値はそこでドロップされる。だから呼び出しのあと、呼んだ側には何も残らない。古い変数を使うと、let b = a; のあとと同じエラー E0382 になる。",
+    ),
+    p(
+      "How to read a signature: fn store(item: String) takes ownership; fn view(item: &String) only borrows (you'll meet & later in this forest). The type of each parameter tells you whether your variable survives the call.",
+      "Cómo leer una firma: fn store(item: String) toma la propiedad; fn view(item: &String) solo pide prestado (verás & más adelante en este bosque). El tipo de cada parámetro te dice si tu variable sobrevive a la llamada.",
+      "シグネチャの読み方：fn store(item: String) は所有権を受け取る。fn view(item: &String) は借りるだけ（& はこの森の後半で学ぶ）。パラメータの型を見れば、呼んだあと変数が残るかどうかがわかる。",
+    ),
+    p(
+      "Common mistake: expecting the variable to come back after the call. It only comes back if the function returns it, for example fn tag(label: String) -> String. Values travel into functions and out of them, but never exist in two places at once.",
+      "Error común: esperar que la variable vuelva tras la llamada. Solo vuelve si la función la devuelve, por ejemplo fn tag(label: String) -> String. Los valores entran y salen de las funciones, pero nunca están en dos sitios a la vez.",
+      "よくあるミス：呼び出しのあとで変数が戻ってくると思うこと。戻ってくるのは、関数が返したときだけ（例：fn tag(label: String) -> String）。値は関数に入ったり出たりするが、同時に2か所にいることはない。",
+    ),
+    ex('fn tag(mut label: String) -> String {\n    label.push_str("!");\n    label\n}\n\nlet task = String::from("done");\nlet back = tag(task);\nprintln!("{}", back);', "done!",
+      L("Ownership goes in and comes back out as the return value", "La propiedad entra y vuelve a salir como valor de retorno", "所有権が入って、戻り値として出てくる")),
+  ),
+  note("copy-types", L("Numbers are copied, not moved", "Los números se copian, no se mueven", "数値はムーブせずコピー"),
+    p(
+      "Not every value moves. Small, simple values like integers (i32), floats (f64), bool and char are Copy types: assigning them makes a full, independent duplicate. After let b = a; both a and b are valid and hold the same value.",
+      "No todos los valores se mueven. Los valores pequeños y simples como enteros (i32), decimales (f64), bool y char son tipos Copy: asignarlos crea un duplicado completo e independiente. Después de let b = a; tanto a como b son válidas y guardan el mismo valor.",
+      "すべての値がムーブするわけではない。整数（i32）、小数（f64）、bool、char のような小さく単純な値は Copy 型で、代入すると独立した複製ができる。let b = a; のあとでも a と b の両方が使え、同じ値を持つ。",
+    ),
+    ex("let speed = 2.5;\nlet copy = speed;\nlet letter = 'k';\nlet other = letter;\nprintln!(\"{} {} {} {}\", speed, copy, letter, other);", "2.5 2.5 k k",
+      L("f64 and char are Copy: the originals still work", "f64 y char son Copy: los originales siguen sirviendo", "f64 と char は Copy。元の変数も使える")),
+    p(
+      "Why the difference? A number fits entirely in a few bytes right inside the variable, so copying it is as cheap as moving it. A String's text lives elsewhere in memory (the heap) and can be huge, so Rust moves it rather than silently copying it.",
+      "¿Por qué la diferencia? Un número cabe entero en unos pocos bytes dentro de la variable, así que copiarlo cuesta lo mismo que moverlo. El texto de un String vive en otra parte de la memoria (el heap) y puede ser enorme, así que Rust lo mueve en vez de copiarlo en silencio.",
+      "なぜ違うのか？数値は変数の中の数バイトにすべて収まるので、コピーしてもムーブと同じくらい安い。String の文字列はメモリの別の場所（ヒープ）にあって巨大になりうるので、Rustはこっそりコピーせずムーブする。",
+    ),
+    p(
+      "The rule: to predict whether a variable survives let b = a; look at its type. Numbers, bool and char: copied, both usable. String: moved, only b usable. The same rule applies when you pass the value to a function.",
+      "La regla: para saber si una variable sobrevive a let b = a; mira su tipo. Números, bool y char: se copian, ambas se pueden usar. String: se mueve, solo b se puede usar. La misma regla vale al pasar el valor a una función.",
+      "ルール：let b = a; のあとで変数が残るかは型を見る。数値・bool・char ならコピーされて両方使える。String ならムーブして b だけが使える。関数に渡すときも同じルールだ。",
+    ),
+    ex('fn double(n: i32) -> i32 {\n    n * 2\n}\n\nlet base = 21;\nlet twice = double(base);\nprintln!("{} {}", base, twice);', "21 42",
+      L("base is copied into double, so it's still usable", "base se copia a double, así que sigue usable", "base は double にコピーされるので、まだ使える")),
+    p(
+      "Common mistake: after learning about String, assuming everything moves and expecting an error for numbers. Copying a number never invalidates the original. Another one: thinking a 0 is left behind; the original keeps its value.",
+      "Error común: tras aprender sobre String, creer que todo se mueve y esperar un error con los números. Copiar un número nunca invalida el original. Otro: pensar que queda un 0; el original conserva su valor.",
+      "よくあるミス：String を学んだあと、何でもムーブすると思い、数値でもエラーを予想すること。数値のコピーで元が使えなくなることはない。また、元に 0 が残ると思うのも間違い。元の値はそのままだ。",
+    ),
+  ),
+];
 
 const ownership: LessonDef = {
   slug: "one-owner",
@@ -50,6 +145,8 @@ const ownership: LessonDef = {
     {
       kind: "predict",
       prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"),
+      hint: L("Follow the String: after the second line, which variable owns it? Can the old name still be used?", "Sigue al String: después de la segunda línea, ¿qué variable es su dueña? ¿Se puede usar el nombre viejo?", "String を追いかけよう。2行目のあと持ち主はどの変数？古い名前はまだ使える？"),
+      note: "move-owner",
       code: 'let s1 = String::from("gem");\nlet s2 = s1;\nprintln!("{}", s1);',
       options: [L("Yes: prints gem", "Sí: imprime gem", "はい：gem と表示"), L("No: s1 moved to s2", "No: s1 se movió a s2", "いいえ：s1 は s2 にムーブした")],
       answer: 1,
@@ -61,6 +158,8 @@ const ownership: LessonDef = {
     {
       kind: "pick",
       prompt: L("Use the variable that IS the owner", "Usa la variable que SÍ es dueña", "いまの持ち主の変数を使おう"),
+      hint: L("Trace where the potion went on the second line. Only its current owner can use it.", "Sigue a dónde fue la poción en la segunda línea. Solo su dueño actual puede usarla.", "2行目でポーションがどこへ行ったか追おう。使えるのはいまの持ち主だけ。"),
+      note: "move-owner",
       code: 'let a = String::from("potion");\nlet b = a;\nprintln!("{}", ___);',
       options: ["b", "a", "&a"],
       answer: 0,
@@ -92,6 +191,8 @@ const ownership: LessonDef = {
     {
       kind: "predict",
       prompt: L("What does it print?", "¿Qué imprime?", "何が表示される？"),
+      hint: L("Check the type of x first. Is it a String, or a simple number?", "Revisa primero el tipo de x. ¿Es un String o un número simple?", "まず x の型を確かめよう。String？それとも単純な数値？"),
+      note: "copy-types",
       code: 'let x = 5;\nlet y = x;\nprintln!("{} {}", x, y);',
       options: ["5 5", L("Error: x moved", "Error: x movida", "エラー：x はムーブ済み"), "5 0"],
       answer: 0,
@@ -102,6 +203,8 @@ const ownership: LessonDef = {
     {
       kind: "predict",
       prompt: L("Does passing a String to a function move it?", "Pasar un String a una función, ¿lo mueve?", "String を関数に渡すとムーブする？"),
+      hint: L("Look at take's parameter type: String or &String? Passing a value works just like let.", "Mira el tipo del parámetro de take: ¿String o &String? Pasar un valor funciona igual que let.", "take のパラメータの型は String？&String？値を渡すのは let と同じ働き。"),
+      note: "move-into-fn",
       code: 'fn take(s: String) {}\n\nlet s = String::from("hello");\ntake(s);\nprintln!("{}", s);',
       options: [L("Prints hello", "Imprime hello", "hello と表示"), L("Error: s moved into take", "Error: s se movió a take", "エラー：s は take にムーブした")],
       answer: 1,
@@ -113,6 +216,8 @@ const ownership: LessonDef = {
     {
       kind: "run",
       prompt: L("Fix it: it must print Excalibur", "Arréglalo: debe imprimir Excalibur", "直そう：Excalibur と表示させて"),
+      hint: L("The sword moved on line 3. Print the variable that holds it now.", "La espada se movió en la línea 3. Imprime la variable que la tiene ahora.", "剣は3行目でムーブした。いま持っている変数を表示しよう。"),
+      note: "move-owner",
       starter: 'fn main() {\n    let sword = String::from("Excalibur");\n    let hero = sword;\n    println!("{}", sword);\n}\n',
       expect: "Excalibur",
       solution: 'fn main() {\n    let sword = String::from("Excalibur");\n    let hero = sword;\n    println!("{}", hero);\n}\n',
@@ -125,7 +230,63 @@ const ownership: LessonDef = {
       explain: L("Print the variable that owns it: hero.", "Imprime la variable que es dueña: hero.", "持ち主の変数 hero を表示しよう。"),
     },
   ],
+  notes: ownershipNotes,
 };
+
+const cloneNotes: NoteDef[] = [
+  note("clone", L("clone: a full, separate copy", "clone: una copia completa y aparte", "clone：まるごと別のコピー"),
+    p(
+      "Sometimes two variables really need the same text, each with its own. The method .clone() builds a brand-new String with the same contents. The original keeps its value and stays the owner; the new variable owns the copy.",
+      "A veces dos variables necesitan de verdad el mismo texto, cada una con el suyo. El método .clone() construye un String totalmente nuevo con el mismo contenido. El original conserva su valor y sigue siendo dueño; la variable nueva es dueña de la copia.",
+      "2つの変数がそれぞれ自分の文字列を必要とすることもある。メソッド .clone() は、同じ中身の新しい String を作る。元の変数は値を持ったまま持ち主のまま。新しい変数はコピーの持ち主になる。",
+    ),
+    ex('let banner = String::from("red flag");\nlet spare = banner.clone();\nprintln!("{} / {}", banner, spare);', "red flag / red flag",
+      L("Both are valid: each owns its own text", "Ambas son válidas: cada una es dueña de su texto", "どちらも使える。それぞれが自分の文字列を持つ")),
+    p(
+      "How to write it: the variable, a dot, clone, and empty parentheses: name.clone(). The parentheses matter because clone is a method, a function that belongs to the value. Names from other languages won't work here; in Rust the word is clone.",
+      "Cómo se escribe: la variable, un punto, clone y paréntesis vacíos: name.clone(). Los paréntesis importan porque clone es un método, una función que pertenece al valor. Nombres de otros lenguajes no sirven aquí; en Rust la palabra es clone.",
+      "書き方：変数、ドット、clone、空のかっこ：name.clone()。clone はメソッド（値に属する関数）なので、かっこが必要。他の言語の名前はここでは使えない。Rustでは clone だ。",
+    ),
+    p(
+      "Cloning has a cost: Rust copies every byte of the text into new memory. For a short word it's nothing, but for a big file in a loop it adds up. That's why Rust never clones silently: you write .clone() on purpose, where everyone can see it.",
+      "Clonar tiene un costo: Rust copia cada byte del texto a memoria nueva. Para una palabra corta no es nada, pero para un archivo grande dentro de un bucle se acumula. Por eso Rust nunca clona en silencio: escribes .clone() a propósito, donde todos lo ven.",
+      "クローンにはコストがある。Rustは文字列のすべてのバイトを新しいメモリにコピーする。短い単語なら一瞬だが、大きなファイルをループで何度も複製すると重くなる。だからRustは勝手にクローンしない。見える場所にわざわざ .clone() と書くのだ。",
+    ),
+    ex('let base = String::from("lv");\nlet mut hero = base.clone();\nhero.push_str("99");\nprintln!("{} {}", base, hero);', "lv lv99",
+      L("Changing the clone leaves the original untouched", "Cambiar el clon no toca el original", "クローンを変えても元はそのまま")),
+    p(
+      "Common mistakes: forgetting the parentheses (base.clone without () does not compile), or cloning before the value exists. Order matters: create the value, then clone it, then use both. And don't sprinkle .clone() just to silence the compiler; often a borrow (&) is enough.",
+      "Errores comunes: olvidar los paréntesis (base.clone sin () no compila) o clonar antes de que el valor exista. El orden importa: creas el valor, luego lo clonas y después usas ambos. Y no llenes el código de .clone() solo para callar al compilador; muchas veces basta un préstamo (&).",
+      "よくあるミス：かっこを忘れる（() のない base.clone はコンパイルできない）、値ができる前にクローンする。順番が大事で、値を作り、クローンし、それから両方を使う。また、コンパイラを黙らせるためだけに .clone() をばらまかないこと。借用（&）で足りることも多い。",
+    ),
+  ),
+  note("copy-or-move", L("Which types copy and which move", "Qué tipos se copian y cuáles se mueven", "コピーする型・ムーブする型"),
+    p(
+      "Rust splits types into two families. Copy types are small and fixed-size: integers like i32 and u8, floats like f64, bool and char. Assigning them duplicates them automatically, so the original stays usable. Everything else, like String, moves.",
+      "Rust divide los tipos en dos familias. Los tipos Copy son pequeños y de tamaño fijo: enteros como i32 y u8, decimales como f64, bool y char. Al asignarlos se duplican solos, así que el original sigue usable. Todo lo demás, como String, se mueve.",
+      "Rustの型は2つのグループに分かれる。Copy 型は小さくサイズが決まっているもの：i32 や u8 などの整数、f64 などの小数、bool、char。代入すると自動で複製され、元も使える。それ以外の String などはムーブする。",
+    ),
+    ex("let initial = 'Z';\nlet kept = initial;\nlet ready = false;\nlet flag = ready;\nprintln!(\"{} {} {} {}\", initial, kept, ready, flag);", "Z Z false false",
+      L("char and bool are Copy: the originals still work", "char y bool son Copy: los originales siguen sirviendo", "char と bool は Copy。元の変数も使える")),
+    p(
+      "Why? A String is really two parts: a small handle in the variable, and the text itself on the heap, a separate area of memory. Copying only the handle would give two owners of one text, so Rust moves it. A number has no heap part, so its copy is complete and safe.",
+      "¿Por qué? Un String son en realidad dos partes: un pequeño \"mango\" en la variable y el texto en el heap, otra zona de la memoria. Copiar solo el mango daría dos dueños de un mismo texto, así que Rust lo mueve. Un número no tiene parte en el heap, así que su copia es completa y segura.",
+      "なぜか？String は実は2つの部分でできている。変数の中の小さな取っ手と、ヒープ（別のメモリ領域）にある文字列本体だ。取っ手だけをコピーすると1つの文字列に持ち主が2人できてしまうので、Rustはムーブする。数値にはヒープの部分がないので、コピーは完全で安全だ。",
+    ),
+    bad('let title = String::from("knight");\nlet copy_of = title;\nprintln!("{}", title);',
+      L("E0382: String is not Copy, so title moved", "E0382: String no es Copy, así que title se movió", "E0382：String は Copy ではないので title はムーブした")),
+    p(
+      "Rule of thumb: if the value has a tiny size fixed in advance (a number, true/false, one character), it's Copy. If it can grow, like text, it moves. When unsure, try using the original after the assignment: the compiler will tell you with E0382.",
+      "Regla práctica: si el valor tiene un tamaño diminuto y fijo de antemano (un número, true/false, un carácter), es Copy. Si puede crecer, como un texto, se mueve. Si dudas, intenta usar el original tras la asignación: el compilador te lo dirá con E0382.",
+      "目安：前もって決まった小さなサイズの値（数、true/false、1文字）なら Copy。文字列のように大きくなれる値はムーブする。迷ったら、代入のあとで元の変数を使ってみよう。コンパイラが E0382 で教えてくれる。",
+    ),
+    p(
+      "Common mistake: thinking char is like String because both hold text. A char is a single character in single quotes, like 'q', with a fixed size, so it's Copy. A String in double quotes can hold any amount of text, and it moves.",
+      "Error común: creer que char es como String porque ambos guardan texto. Un char es un solo carácter entre comillas simples, como 'q', de tamaño fijo, así que es Copy. Un String entre comillas dobles puede guardar cualquier cantidad de texto, y se mueve.",
+      "よくあるミス：文字を扱うから char も String と同じだと思うこと。char は 'q' のように一重引用符で書く1文字で、サイズが決まっているので Copy。二重引用符の String はいくらでも文字を入れられるので、ムーブする。",
+    ),
+  ),
+];
 
 const cloneLesson: LessonDef = {
   slug: "clone",
@@ -153,6 +314,8 @@ const cloneLesson: LessonDef = {
     {
       kind: "pick",
       prompt: L("Let both have the map", "Que ambos tengan el mapa", "ふたりとも地図を持てるように"),
+      hint: L("Which method did the demo use to forge a second, complete copy?", "¿Qué método usó la demo para forjar una segunda copia completa?", "デモで2本目の完全なコピーを作ったメソッドはどれ？"),
+      note: "clone",
       code: 'let a = String::from("map");\nlet b = a.___;\nprintln!("{} {}", a, b);',
       options: ["clone()", "copy()", "dup()", "move()"],
       answer: 0,
@@ -164,6 +327,8 @@ const cloneLesson: LessonDef = {
     {
       kind: "predict",
       prompt: L("What does it print?", "¿Qué imprime?", "何が表示される？"),
+      hint: L("Does cloning take the value away from a, or build a new one for b?", "¿Clonar le quita el valor a a, o construye uno nuevo para b?", "クローンは a から値を取り上げる？それとも b に新しく作る？"),
+      note: "clone",
       code: 'let a = String::from("gold");\nlet b = a.clone();\nprintln!("{}", a);',
       options: ["gold", L("Error: a moved", "Error: a movida", "エラー：a はムーブ済み")],
       answer: 0,
@@ -184,6 +349,8 @@ const cloneLesson: LessonDef = {
     {
       kind: "pick",
       prompt: L("Which type MOVES on assignment?", "¿Qué tipo se MUEVE al asignar?", "代入でムーブする型はどれ？"),
+      hint: L("Remember the two families: simple fixed-size types copy themselves. Which one doesn't belong to that family?", "Recuerda las dos familias: los tipos simples de tamaño fijo se copian. ¿Cuál no pertenece a esa familia?", "2つのグループを思い出そう。サイズ固定の単純な型はコピーされる。そこに入らないのは？"),
+      note: "copy-or-move",
       code: "let b = a; // a is of type ___",
       options: ["String", "i32", "bool", "char"],
       answer: 0,
@@ -197,6 +364,8 @@ const cloneLesson: LessonDef = {
     {
       kind: "predict",
       prompt: L("What does it print?", "¿Qué imprime?", "何が表示される？"),
+      hint: L("What type is true? Check whether that type is copied or moved on assignment.", "¿De qué tipo es true? Revisa si ese tipo se copia o se mueve al asignar.", "true の型は何？その型は代入でコピーされる？ムーブする？"),
+      note: "copy-or-move",
       code: 'let a = true;\nlet b = a;\nprintln!("{} {}", a, b);',
       options: ["true true", L("Error", "Error", "エラー")],
       answer: 0,
@@ -207,6 +376,8 @@ const cloneLesson: LessonDef = {
     {
       kind: "type",
       prompt: L("Type the method that duplicates", "Escribe el método que duplica", "複製するメソッドを書こう"),
+      hint: L("It's the method the demo used for the second sword. The parentheses are already written.", "Es el método que usó la demo para la segunda espada. Los paréntesis ya están escritos.", "デモで2本目の剣に使ったメソッド。かっこはもう書いてある。"),
+      note: "clone",
       code: "let copy = original.___();",
       answer: "clone",
       check: { program: "#![allow(unused)]\nfn main() {\n    let original = String::from(\"x\");\n    let copy = original.clone();\n    println!(\"{} {}\", original, copy);\n}\n", compiles: true, stdout: "x x" },
@@ -215,6 +386,8 @@ const cloneLesson: LessonDef = {
     {
       kind: "order",
       prompt: L("Order: create, clone and use both", "Ordena: crear, clonar y usar ambos", "並べよう：作る→クローン→両方使う"),
+      hint: L("A value must exist before you can copy it, and both must exist before you print them.", "Un valor debe existir antes de copiarlo, y ambos deben existir antes de imprimirlos.", "コピーするには先に値が必要。表示するには両方そろっていないといけない。"),
+      note: "clone",
       lines: ['let a = String::from("bread");', "let b = a.clone();", 'println!("{} {}", a, b);'],
       explain: L("You can't clone something that doesn't exist yet.", "No puedes clonar algo que aún no existe.", "まだ存在しないものはクローンできないよ。"),
       win: [{ t: "print", text: "bread bread" }],
@@ -222,6 +395,8 @@ const cloneLesson: LessonDef = {
     {
       kind: "run",
       prompt: L("Fix it so it prints: shield and shield", "Arréglalo para que imprima: shield and shield", "直そう：shield and shield と表示させて"),
+      hint: L("On line 3, a moves into b. How can b get its own text while a keeps hers?", "En la línea 3, a se mueve a b. ¿Cómo puede b tener su propio texto mientras a conserva el suyo?", "3行目で a は b にムーブする。a が自分の分を持ったまま b にも持たせるには？"),
+      note: "clone",
       starter: 'fn main() {\n    let a = String::from("shield");\n    let b = a;\n    println!("{} and {}", a, b);\n}\n',
       expect: "shield and shield",
       solution: 'fn main() {\n    let a = String::from("shield");\n    let b = a.clone();\n    println!("{} and {}", a, b);\n}\n',
@@ -233,7 +408,88 @@ const cloneLesson: LessonDef = {
       explain: L("Use a.clone() so a doesn't move.", "Usa a.clone() para que a no se mueva.", "a.clone() を使えば a はムーブしないよ。"),
     },
   ],
+  notes: cloneNotes,
 };
+
+const borrowNotes: NoteDef[] = [
+  note("shared-borrow", L("Borrowing with &", "Pedir prestado con &", "& で借りる"),
+    p(
+      "Moving a value into a function just to read it would be a waste: you'd lose it. Instead you can lend it. Writing &name creates a reference: a pointer that lets someone read the value while the original variable stays the owner. This is called borrowing.",
+      "Mover un valor a una función solo para leerlo sería un desperdicio: lo perderías. En su lugar puedes prestarlo. Escribir &nombre crea una referencia: un puntero que permite leer el valor mientras la variable original sigue siendo la dueña. Esto se llama préstamo (borrowing).",
+      "読むだけのために値を関数へムーブするのはもったいない。失ってしまうからだ。代わりに貸せばいい。&名前 と書くと参照ができる。参照は値を読ませてくれる指し示しで、元の変数は持ち主のまま。これを借用という。",
+    ),
+    ex('fn count(s: &String) -> usize {\n    s.len()\n}\n\nlet word = String::from("forest");\nlet size = count(&word);\nprintln!("{} has {}", word, size);', "forest has 6",
+      L("count only borrows word, so word is still usable", "count solo pide prestado word, así que word sigue usable", "count は word を借りるだけなので、word はまだ使える")),
+    p(
+      "Both sides must agree. The function says it borrows by putting & in the parameter type: fn count(s: &String). The caller lends with & at the call: count(&word). Without the &, the call would try to hand over word itself.",
+      "Ambos lados deben estar de acuerdo. La función indica que pide prestado poniendo & en el tipo del parámetro: fn count(s: &String). Quien llama presta con & en la llamada: count(&word). Sin el &, la llamada intentaría entregar word misma.",
+      "両側がそろっている必要がある。関数はパラメータの型に & をつけて「借りる」と示す：fn count(s: &String)。呼ぶ側も & をつけて貸す：count(&word)。& がないと、word そのものを渡そうとしてしまう。",
+    ),
+    bad('fn count(s: &String) -> usize {\n    s.len()\n}\n\nlet word = String::from("forest");\nlet size = count(word);',
+      L("E0308: count expects a &String, not a String", "E0308: count espera un &String, no un String", "E0308：count が受け取るのは &String で、String ではない")),
+    p(
+      "Why it's safe: a & reference is read-only. The borrower can look but can't change or destroy the value, and when the borrow ends the owner carries on as before. You can also keep a reference in a variable: after let peek = &word; both peek and word print the same text.",
+      "Por qué es seguro: una referencia & es de solo lectura. Quien la recibe puede mirar pero no cambiar ni destruir el valor, y cuando el préstamo termina el dueño sigue como antes. También puedes guardar una referencia en una variable: tras let peek = &word; tanto peek como word imprimen el mismo texto.",
+      "なぜ安全か：& の参照は読み取り専用。借りた側は見るだけで、値を変えたり消したりできない。借用が終われば、持ち主はそのまま使い続けられる。参照は変数にも入れられる。let peek = &word; のあと、peek と word はどちらも同じ文字列を表示する。",
+    ),
+    p(
+      "Common mistakes: writing *name to lend (the * reads through a reference, it doesn't create one), or mut name (that word is for declaring variables). To lend, the symbol goes right before the name: &name.",
+      "Errores comunes: escribir *nombre para prestar (el * lee a través de una referencia, no crea una) o mut nombre (esa palabra es para declarar variables). Para prestar, el símbolo va justo antes del nombre: &nombre.",
+      "よくあるミス：貸すつもりで *名前 と書く（* は参照の先を読む記号で、参照は作らない）、mut 名前 と書く（変数を宣言するときの言葉）。貸すときは名前のすぐ前に記号をつける：&名前。",
+    ),
+  ),
+  note("mut-borrow", L("&mut: borrowing to change", "&mut: pedir prestado para cambiar", "&mut：変更するために借りる"),
+    p(
+      "A & reference can only read. To let someone modify a value you own, lend it with &mut. Two things are needed: the owner must be declared mut (let mut hp = 3;) and you lend with &mut hp. A read-only owner can't hand out write access it doesn't have.",
+      "Una referencia & solo puede leer. Para dejar que alguien modifique un valor tuyo, préstalo con &mut. Se necesitan dos cosas: el dueño debe declararse mut (let mut hp = 3;) y prestas con &mut hp. Un dueño de solo lectura no puede dar un permiso de escritura que no tiene.",
+      "& の参照は読むことしかできない。自分の値を誰かに変更させたいなら &mut で貸す。必要なのは2つ。持ち主を mut で宣言すること（let mut hp = 3;）と、&mut hp で貸すこと。読み取り専用の持ち主は、自分にない書きこみ権を渡せない。",
+    ),
+    ex('let mut motto = String::from("be brave");\nlet editor = &mut motto;\neditor.push_str(" always");\nprintln!("{}", motto);', "be brave always",
+      L("The change made through editor shows up in motto", "El cambio hecho con editor aparece en motto", "editor でした変更が motto に表れる")),
+    p(
+      "In function signatures it looks the same: fn heal(hp: &mut i32) says \"I will change your number\". Inside, *hp reads or writes the value the reference points to, so *hp += 2; adds 2 to the caller's variable. The call must say &mut too: heal(&mut hp).",
+      "En las firmas de funciones se ve igual: fn heal(hp: &mut i32) dice \"voy a cambiar tu número\". Dentro, *hp lee o escribe el valor al que apunta la referencia, así que *hp += 2; suma 2 a la variable de quien llama. La llamada también debe decir &mut: heal(&mut hp).",
+      "関数のシグネチャでも同じ。fn heal(hp: &mut i32) は「きみの数を変えるよ」という意味。中では *hp で参照の先の値を読み書きするので、*hp += 2; は呼んだ側の変数に2を足す。呼ぶときも &mut が必要：heal(&mut hp)。",
+    ),
+    ex('fn heal(hp: &mut i32) {\n    *hp += 2;\n}\n\nlet mut health = 7;\nheal(&mut health);\nheal(&mut health);\nprintln!("{}", health);', "11",
+      L("Each call adds 2 to the caller's health: 7, 9, 11", "Cada llamada suma 2 al health de quien llama: 7, 9, 11", "呼ぶたびに health に2が足される：7, 9, 11")),
+    p(
+      "Common mistakes: forgetting mut on the owner (Rust says it cannot borrow it as mutable), passing just &health to a function that wants &mut, or writing mut alone without &. Read &mut as one unit: \"a borrow that can write\".",
+      "Errores comunes: olvidar mut en el dueño (Rust dice que no puede prestarlo como mutable), pasar solo &health a una función que espera &mut, o escribir mut solo, sin &. Lee &mut como una unidad: \"un préstamo que puede escribir\".",
+      "よくあるミス：持ち主に mut をつけ忘れる（Rustは「可変として借用できない」と言う）、&mut を求める関数に &health だけを渡す、& なしで mut だけ書く。&mut はひとまとまりで「書きこめる借用」と読もう。",
+    ),
+    bad("let score = 10;\nlet r = &mut score;\n*r += 5;",
+      L("E0596: score isn't mut, so it can't lend &mut", "E0596: score no es mut, así que no puede prestar &mut", "E0596：score は mut ではないので &mut で貸せない")),
+  ),
+  note("borrow-rule", L("Many readers or one writer", "Muchos lectores o un escritor", "読む人は何人でも、書く人はひとり"),
+    p(
+      "The borrow checker enforces one big rule: at any moment, a value can have either any number of & references, or exactly one &mut reference, never both. Many people may read a notice board together, but only one may rewrite it, and nobody reads while it's being rewritten.",
+      "El borrow checker impone una gran regla: en cada momento, un valor puede tener cualquier cantidad de referencias &, o exactamente una referencia &mut, nunca ambas. Mucha gente puede leer un tablón a la vez, pero solo uno puede reescribirlo, y nadie lee mientras se reescribe.",
+      "借用チェッカーには大事な掟がひとつある。ある瞬間に値が持てるのは、いくつもの & 参照か、ちょうど1つの &mut 参照のどちらか。両方同時はダメ。掲示板はみんなで同時に読めるが、書き直せるのはひとりだけ。書き直している間は誰も読めない。",
+    ),
+    ex('let chart = String::from("north");\nlet first = &chart;\nlet second = &chart;\nlet third = &chart;\nprintln!("{} {} {}", first, second, third);', "north north north",
+      L("Three readers at once: allowed", "Tres lectores a la vez: permitido", "読む参照が同時に3つ：OK")),
+    p(
+      "Why? If one reference could change the text while another was reading it, the reader might see half-written data, or point at memory that was just moved. Other languages hit these bugs while running; Rust rejects them when compiling, with error E0499 or E0502.",
+      "¿Por qué? Si una referencia pudiera cambiar el texto mientras otra lo lee, el lector podría ver datos a medio escribir o apuntar a memoria recién movida. Otros lenguajes sufren estos errores al ejecutar; Rust los rechaza al compilar, con el error E0499 o E0502.",
+      "なぜか？ある参照が文字列を変えている間に別の参照が読んでいたら、書きかけのデータを見たり、移動したばかりのメモリを指したりしかねない。他の言語では実行中に起きるバグだが、Rustはコンパイル時にエラー E0499 や E0502 で拒否する。",
+    ),
+    bad('let mut log = String::new();\nlet w1 = &mut log;\nlet w2 = &mut log;\nw1.push_str("a");\nw2.push_str("b");',
+      L("E0499: two &mut alive at the same time", "E0499: dos &mut vivos al mismo tiempo", "E0499：&mut が同時に2つ生きている")),
+    p(
+      "\"At the same time\" means while both are still in use. A borrow ends after its last use, not at the closing }. So if you finish with the first &mut before creating the second, it compiles. Look at where each reference is used for the last time.",
+      "\"Al mismo tiempo\" significa mientras ambas siguen en uso. Un préstamo termina tras su último uso, no en la } de cierre. Así que si terminas con el primer &mut antes de crear el segundo, compila. Fíjate dónde se usa cada referencia por última vez.",
+      "「同時に」とは、両方がまだ使われている間のこと。借用は最後に使われたところで終わり、閉じかっこ } までは続かない。だから1つ目の &mut を使い終えてから2つ目を作ればコンパイルできる。それぞれの参照が最後に使われる場所を見よう。",
+    ),
+    ex('let mut log = String::new();\nlet w1 = &mut log;\nw1.push_str("a");\nlet w2 = &mut log;\nw2.push_str("b");\nprintln!("{}", log);', "ab",
+      L("w1 is done before w2 starts, so this is fine", "w1 termina antes de que empiece w2, así que está bien", "w2 の前に w1 は使い終わっているので OK")),
+    p(
+      "Common mistake: thinking two & references are as bad as two &mut. Readers never conflict with each other; only a writer needs to be alone.",
+      "Error común: creer que dos referencias & son tan malas como dos &mut. Los lectores nunca chocan entre sí; solo quien escribe necesita estar solo.",
+      "よくあるミス：& が2つでも &mut が2つと同じくらいダメだと思うこと。読む人同士はぶつからない。ひとりでいる必要があるのは書く人だけだ。",
+    ),
+  ),
+];
 
 const borrowLesson: LessonDef = {
   slug: "borrowing",
@@ -261,6 +517,8 @@ const borrowLesson: LessonDef = {
     {
       kind: "pick",
       prompt: L("Lend the gem without losing it", "Presta la gema sin perderla", "宝石を失わずに貸そう"),
+      hint: L("look takes a &String. How do you lend a without giving up ownership?", "look recibe un &String. ¿Cómo prestas a sin renunciar a la propiedad?", "look は &String を受け取る。所有権を手放さずに a を貸すには？"),
+      note: "shared-borrow",
       code: 'fn look(s: &String) {}\n\nlet a = String::from("gem");\nlook(___);\nprintln!("{}", a);',
       options: ["&a", "a", "*a", "mut a"],
       answer: 0,
@@ -272,6 +530,8 @@ const borrowLesson: LessonDef = {
     {
       kind: "predict",
       prompt: L("What does it print?", "¿Qué imprime?", "何が表示される？"),
+      hint: L("length's parameter is a &String. Did a move into it, or was it only lent? Then count the letters.", "El parámetro de length es un &String. ¿a se movió o solo se prestó? Luego cuenta las letras.", "length のパラメータは &String。a はムーブした？貸しただけ？そして文字を数えよう。"),
+      note: "shared-borrow",
       code: 'fn length(s: &String) -> usize { s.len() }\n\nlet a = String::from("hello");\nlet n = length(&a);\nprintln!("{} {}", a, n);',
       options: ["hello 5", L("Error: a moved", "Error: a movida", "エラー：a はムーブ済み"), "hello 0"],
       answer: 0,
@@ -297,6 +557,8 @@ const borrowLesson: LessonDef = {
     {
       kind: "pick",
       prompt: L("Lend it so it can be modified", "Préstalo para modificarlo", "変更できるように貸そう"),
+      hint: L("r calls push_str, which changes the text. Which kind of reference is allowed to write?", "r llama a push_str, que cambia el texto. ¿Qué clase de referencia puede escribir?", "r は push_str で文字列を変える。書きこめる参照はどの種類？"),
+      note: "mut-borrow",
       code: 'let mut s = String::from("lv");\nlet r = ___ s;\nr.push_str("2");',
       options: ["&mut", "&", "mut", "*"],
       answer: 0,
@@ -311,6 +573,8 @@ const borrowLesson: LessonDef = {
     {
       kind: "predict",
       prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"),
+      hint: L("Count the mutable borrows of s that are still in use when println! runs.", "Cuenta los préstamos mutables de s que siguen en uso cuando se ejecuta println!.", "println! の時点で、まだ使われている s の可変借用はいくつ？"),
+      note: "borrow-rule",
       code: 'let mut s = String::from("x");\nlet r1 = &mut s;\nlet r2 = &mut s;\nprintln!("{} {}", r1, r2);',
       options: [YES, L("No: two &mut at once", "No: dos &mut a la vez", "いいえ：&mut が同時にふたつ")],
       answer: 1,
@@ -320,6 +584,8 @@ const borrowLesson: LessonDef = {
     {
       kind: "predict",
       prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"),
+      hint: L("These references only read. Does the big rule limit how many readers there can be?", "Estas referencias solo leen. ¿La gran regla limita cuántos lectores puede haber?", "これらの参照は読むだけ。読む参照の数に掟は制限をかける？"),
+      note: "borrow-rule",
       code: 'let s = String::from("x");\nlet r1 = &s;\nlet r2 = &s;\nprintln!("{} {}", r1, r2);',
       options: [L("Yes: prints x x", "Sí: imprime x x", "はい：x x と表示"), NO],
       answer: 0,
@@ -330,6 +596,8 @@ const borrowLesson: LessonDef = {
     {
       kind: "type",
       prompt: L("Type the mutable reference type", "Escribe el tipo de referencia mutable", "可変参照の型を書こう"),
+      hint: L("The body changes *n. Which reference type lets a function write to what it borrowed?", "El cuerpo cambia *n. ¿Qué tipo de referencia deja a una función escribir en lo que pidió prestado?", "本体は *n を変更する。借りたものに書きこめる参照の型は？"),
+      note: "mut-borrow",
       code: "fn bump(n: ___ i32) { *n += 1; }",
       answer: "&mut",
       check: { compiles: true },
@@ -338,6 +606,8 @@ const borrowLesson: LessonDef = {
     {
       kind: "run",
       prompt: L("Fix it: the hero must reach Level 2", "Arréglalo: el héroe debe llegar a Level 2", "直そう：勇者を Level 2 にして"),
+      hint: L("Two fixes: the owner must allow changes, and the call must lend in a way that allows writing.", "Dos arreglos: el dueño debe permitir cambios, y la llamada debe prestar de forma que se pueda escribir.", "直す所は2つ。持ち主が変更を許すことと、書きこめる形で貸すこと。"),
+      note: "mut-borrow",
       starter: "fn level_up(level: &mut i32) {\n    *level += 1;\n}\n\nfn main() {\n    let level = 1;\n    level_up(level);\n    println!(\"Level {}\", level);\n}\n",
       expect: "Level 2",
       solution: 'fn level_up(level: &mut i32) {\n    *level += 1;\n}\n\nfn main() {\n    let mut level = 1;\n    level_up(&mut level);\n    println!("Level {}", level);\n}\n',
@@ -348,7 +618,63 @@ const borrowLesson: LessonDef = {
       explain: L("level must be mut and you must pass &mut level.", "level debe ser mut y debes pasar &mut level.", "level を mut にして、&mut level を渡そう。"),
     },
   ],
+  notes: borrowNotes,
 };
+
+const bossNotes: NoteDef[] = [
+  note("recap-move", L("Recap: move and drop", "Repaso: move y drop", "復習：ムーブとドロップ"),
+    p(
+      "Every value has one owner. With a String, let b = a; moves it: from then on only b is valid, and using a is error E0382. Passing a String to a function by value moves it the same way.",
+      "Cada valor tiene un dueño. Con un String, let b = a; lo mueve: desde ahí solo b es válida, y usar a es el error E0382. Pasar un String a una función por valor lo mueve de la misma forma.",
+      "値の持ち主はひとり。String なら let b = a; でムーブし、それ以降使えるのは b だけ。a を使うとエラー E0382。String を値として関数に渡しても同じようにムーブする。",
+    ),
+    ex('let torch = String::from("torch");\nlet carrier = torch;\nprintln!("{}", carrier);', "torch",
+      L("Use the new owner after a move", "Tras un move, usa al nuevo dueño", "ムーブのあとは新しい持ち主を使う")),
+    p(
+      "When the owner reaches the closing } of its block, the value is dropped: Rust frees it automatically, with no garbage collector. A value lives exactly as long as its owner's block.",
+      "Cuando el dueño llega a la } que cierra su bloque, el valor se destruye (drop): Rust lo libera automáticamente, sin recolector de basura. Un valor vive exactamente lo que dura el bloque de su dueño.",
+      "持ち主がブロックの閉じかっこ } に来ると、値はドロップされる。Rustがガベージコレクタなしで自動的に片づける。値が生きるのは、持ち主のブロックの間だけだ。",
+    ),
+    ex('struct Lantern;\nimpl Drop for Lantern {\n    fn drop(&mut self) { println!("lantern out"); }\n}\n{\n    let lamp = Lantern;\n    println!("lit");\n}\nprintln!("dark");', "lit\nlantern out\ndark",
+      L("Drop prints a message, so you can see the exact moment", "Drop imprime un mensaje para ver el momento exacto", "Drop がメッセージを出すので、消える瞬間が見える")),
+  ),
+  note("recap-copy-clone", L("Recap: Copy types and clone", "Repaso: tipos Copy y clone", "復習：Copy 型と clone"),
+    p(
+      "Simple fixed-size types (i32, f64, bool, char) are Copy: assigning them duplicates the value, and both variables stay valid. A String is not Copy: assign it and it moves.",
+      "Los tipos simples de tamaño fijo (i32, f64, bool, char) son Copy: asignarlos duplica el valor y ambas variables siguen válidas. Un String no es Copy: si lo asignas, se mueve.",
+      "サイズ固定の単純な型（i32, f64, bool, char）は Copy。代入すると値が複製され、両方の変数が使える。String は Copy ではないので、代入するとムーブする。",
+    ),
+    ex('let depth = 0.75;\nlet echo = depth;\nprintln!("{} {}", depth, echo);', "0.75 0.75",
+      L("f64 is Copy: both names work", "f64 es Copy: ambos nombres sirven", "f64 は Copy。どちらの名前も使える")),
+    p(
+      "When you truly need two Strings, call .clone(): it builds a new, independent copy, so the original keeps its value. Cloning copies all the text, so use it on purpose.",
+      "Cuando de verdad necesitas dos Strings, llama a .clone(): construye una copia nueva e independiente, así que el original conserva su valor. Clonar copia todo el texto, así que úsalo a propósito.",
+      "String が本当に2つ必要なら .clone() を呼ぶ。新しく独立したコピーができ、元の値はそのまま。クローンは文字列を全部コピーするので、わざと使おう。",
+    ),
+    ex('let rune = String::from("ice");\nlet twin = rune.clone();\nprintln!("{} {}", rune, twin);', "ice ice"),
+  ),
+  note("recap-borrow", L("Recap: & and &mut", "Repaso: & y &mut", "復習：& と &mut"),
+    p(
+      "&value lends a read-only reference: the owner keeps ownership and stays usable. A parameter of type &String borrows; a parameter of type String takes ownership.",
+      "&valor presta una referencia de solo lectura: el dueño conserva la propiedad y sigue usable. Un parámetro de tipo &String pide prestado; uno de tipo String se queda con la propiedad.",
+      "&値 は読み取り専用の参照を貸す。持ち主は所有権を持ったままで、使い続けられる。&String 型のパラメータは借りる。String 型のパラメータは所有権を受け取る。",
+    ),
+    ex('fn shout(s: &String) {\n    println!("{}!", s);\n}\nlet call = String::from("ho");\nshout(&call);\nprintln!("{}", call);', "ho!\nho"),
+    p(
+      "&mut lends write access. The owner must be let mut, the parameter type is &mut T, the call passes &mut value, and inside the function you change the value through *.",
+      "&mut presta permiso de escritura. El dueño debe ser let mut, el tipo del parámetro es &mut T, la llamada pasa &mut valor y dentro de la función cambias el valor a través de *.",
+      "&mut は書きこむ権利を貸す。持ち主は let mut、パラメータの型は &mut T、呼ぶときは &mut 値 を渡し、関数の中では * を通して値を変える。",
+    ),
+    ex('fn charge(power: &mut i32) {\n    *power *= 3;\n}\nlet mut energy = 4;\ncharge(&mut energy);\nprintln!("{}", energy);', "12"),
+    p(
+      "The big rule: many & at once, or a single &mut, never both while they're in use. Two &mut alive together is error E0499.",
+      "La gran regla: muchos & a la vez, o un solo &mut, nunca ambos mientras estén en uso. Dos &mut vivos a la vez es el error E0499.",
+      "大事な掟：& は同時にいくつでも、&mut はひとつだけ。使っている間に両方はダメ。&mut が同時に2つ生きているとエラー E0499。",
+    ),
+    bad('let mut bag = String::from("x");\nlet p1 = &mut bag;\nlet p2 = &mut bag;\np2.push_str("y");\np1.push_str("z");',
+      L("E0499: p1 is still in use when p2 is created", "E0499: p1 sigue en uso cuando se crea p2", "E0499：p2 を作るとき p1 はまだ使われている")),
+  ),
+];
 
 const boss2: LessonDef = {
   slug: "boss-dragon",
@@ -364,21 +690,22 @@ const boss2: LessonDef = {
       "¡SOY EL BORROW CHECKER! Ningún valor escapa de mis reglas. ¡En guardia!",
       "我こそボローチェッカー！どの値も我が掟からは逃れられぬ。いざ勝負！",
     )),
-    { kind: "predict", time: 12, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: 'let a = String::from("x");\nlet b = a;\nprintln!("{}", a);', options: [YES, NO], answer: 1, check: { compiles: false }, explain: L("a was moved.", "a se movió.", "a はムーブしたよ。") },
-    { kind: "pick", time: 12, prompt: L("Lend without moving", "Presta sin mover", "ムーブせずに貸そう"), code: "look(___);", options: ["&a", "a", "*a"], answer: 0, check: { program: "#![allow(unused)]\nfn look(s: &String) {}\n\nfn main() {\n    let a = String::from(\"x\");\n    look(&a);\n    println!(\"{}\", a);\n}\n", compiles: true, stdout: "x" }, explain: L("&a lends it.", "&a presta.", "&a で貸せるよ。") },
-    { kind: "predict", time: 12, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: "let x = 5;\nlet y = x;\nprintln!(\"{}\", x);", options: [YES, NO], answer: 0, check: { compiles: true, stdout: "5" }, explain: L("i32 is Copy.", "i32 es Copy.", "i32 は Copy だよ。") },
-    { kind: "type", time: 12, prompt: L("Duplicate the String", "Duplica el String", "String を複製しよう"), code: "let b = a.___();", answer: "clone", check: { program: "#![allow(unused)]\nfn main() {\n    let a = String::from(\"x\");\n    let b = a.clone();\n    println!(\"{} {}\", a, b);\n}\n", compiles: true, stdout: "x x" }, explain: L("a.clone()", "a.clone()", "a.clone() だよ。") },
-    { kind: "predict", time: 12, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: "let mut s = String::new();\nlet a = &mut s;\nlet b = &mut s;\na.push('!');", options: [YES, NO], answer: 1, check: { compiles: false }, explain: L("Two &mut alive at once.", "Dos &mut vivos a la vez.", "&mut がふたつ同時に生きているよ。") },
-    { kind: "pick", time: 12, prompt: L("To modify what you borrowed", "Para modificar lo prestado", "借りたものを変更するには"), code: "fn f(s: ___ String) {}", options: ["&mut", "&", "mut"], answer: 0, check: { program: "#![allow(unused)]\nfn f(s: &mut String) {\n    s.push('!');\n}\n\nfn main() {\n    let mut s = String::from(\"x\");\n    f(&mut s);\n    println!(\"{}\", s);\n}\n", compiles: true, stdout: "x!" }, explain: L("&mut String", "&mut String", "&mut String だよ。") },
-    { kind: "predict", time: 12, prompt: L("When } closes, the owner...", "Al cerrar } el dueño...", "} で閉じると持ち主は…"), code: '{\n    let s = String::from("x");\n} // what happens to s?', options: [L("Is destroyed (drop)", "Se destruye (drop)", "ドロップされる"), L("Stays alive", "Sigue viva", "生き続ける"), L("Is copied", "Se copia", "コピーされる")], answer: 0, check: { program: "#![allow(unused)]\nstruct S;\nimpl Drop for S {\n    fn drop(&mut self) {\n        println!(\"drop\");\n    }\n}\n\nfn main() {\n    {\n        let s = S;\n        println!(\"inside\");\n    } // s leaves the block\n    println!(\"outside\");\n}\n", compiles: true, stdout: "inside\ndrop\noutside" }, explain: L("End of block → drop.", "Fin del bloque → drop.", "ブロックの終わり → ドロップ。") },
-    { kind: "predict", time: 12, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: 'let s = String::from("x");\nlet r1 = &s;\nlet r2 = &s;\nprintln!("{}{}", r1, r2);', options: [YES, NO], answer: 0, check: { compiles: true, stdout: "xx" }, explain: L("Several & are fine.", "Varios & están bien.", "& がいくつあっても大丈夫。") },
-    { kind: "type", time: 15, prompt: L("Pass level so it can be modified", "Pasa level para modificarlo", "変更できるように level を渡そう"), code: "bump(___ level);", answer: "&mut", check: { program: "#![allow(unused)]\nfn bump(n: &mut i32) {\n    *n += 1;\n}\n\nfn main() {\n    let mut level = 1;\n    bump(&mut level);\n    println!(\"{}\", level);\n}\n", compiles: true, stdout: "2" }, explain: L("bump(&mut level)", "bump(&mut level)", "bump(&mut level) だよ。") },
+    { kind: "predict", time: 12, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), hint: L("Follow the String after the second line. Which variable owns it when println! runs?", "Sigue al String tras la segunda línea. ¿Qué variable es su dueña cuando se ejecuta println!?", "2行目のあと String を追おう。println! のとき持ち主はどの変数？"), note: "recap-move", code: 'let a = String::from("x");\nlet b = a;\nprintln!("{}", a);', options: [YES, NO], answer: 1, check: { compiles: false }, explain: L("a was moved.", "a se movió.", "a はムーブしたよ。") },
+    { kind: "pick", time: 12, prompt: L("Lend without moving", "Presta sin mover", "ムーブせずに貸そう"), hint: L("look only reads, and a must stay usable afterwards. Lend it instead of handing it over.", "look solo lee, y a debe seguir usable después. Préstala en vez de entregarla.", "look は読むだけで、a はあとでも使いたい。渡さずに貸そう。"), note: "recap-borrow", code: "look(___);", options: ["&a", "a", "*a"], answer: 0, check: { program: "#![allow(unused)]\nfn look(s: &String) {}\n\nfn main() {\n    let a = String::from(\"x\");\n    look(&a);\n    println!(\"{}\", a);\n}\n", compiles: true, stdout: "x" }, explain: L("&a lends it.", "&a presta.", "&a で貸せるよ。") },
+    { kind: "predict", time: 12, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), hint: L("Check the type of x first: is it moved or copied on assignment?", "Revisa primero el tipo de x: ¿se mueve o se copia al asignar?", "まず x の型を確かめよう。代入でムーブする？コピーされる？"), note: "recap-copy-clone", code: "let x = 5;\nlet y = x;\nprintln!(\"{}\", x);", options: [YES, NO], answer: 0, check: { compiles: true, stdout: "5" }, explain: L("i32 is Copy.", "i32 es Copy.", "i32 は Copy だよ。") },
+    { kind: "type", time: 12, prompt: L("Duplicate the String", "Duplica el String", "String を複製しよう"), hint: L("Which method builds a brand-new, independent String with the same text?", "¿Qué método construye un String nuevo e independiente con el mismo texto?", "同じ中身で、新しく独立した String を作るメソッドは？"), note: "recap-copy-clone", code: "let b = a.___();", answer: "clone", check: { program: "#![allow(unused)]\nfn main() {\n    let a = String::from(\"x\");\n    let b = a.clone();\n    println!(\"{} {}\", a, b);\n}\n", compiles: true, stdout: "x x" }, explain: L("a.clone()", "a.clone()", "a.clone() だよ。") },
+    { kind: "predict", time: 12, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), hint: L("Count the mutable borrows of s that are still in use when push runs.", "Cuenta los préstamos mutables de s que siguen en uso cuando se ejecuta push.", "push のとき、まだ使われている s の可変借用はいくつ？"), note: "recap-borrow", code: "let mut s = String::new();\nlet a = &mut s;\nlet b = &mut s;\na.push('!');", options: [YES, NO], answer: 1, check: { compiles: false }, explain: L("Two &mut alive at once.", "Dos &mut vivos a la vez.", "&mut がふたつ同時に生きているよ。") },
+    { kind: "pick", time: 12, prompt: L("To modify what you borrowed", "Para modificar lo prestado", "借りたものを変更するには"), hint: L("The function must change the String it borrows. Which reference type allows writing?", "La función debe cambiar el String que pide prestado. ¿Qué tipo de referencia permite escribir?", "関数は借りた String を変える。書きこめる参照の型は？"), note: "recap-borrow", code: "fn f(s: ___ String) {}", options: ["&mut", "&", "mut"], answer: 0, check: { program: "#![allow(unused)]\nfn f(s: &mut String) {\n    s.push('!');\n}\n\nfn main() {\n    let mut s = String::from(\"x\");\n    f(&mut s);\n    println!(\"{}\", s);\n}\n", compiles: true, stdout: "x!" }, explain: L("&mut String", "&mut String", "&mut String だよ。") },
+    { kind: "predict", time: 12, prompt: L("When } closes, the owner...", "Al cerrar } el dueño...", "} で閉じると持ち主は…"), hint: L("What does Rust do with a value when its owner's block ends? Remember: no garbage collector.", "¿Qué hace Rust con un valor cuando termina el bloque de su dueño? Recuerda: no hay recolector de basura.", "持ち主のブロックが終わると、Rust は値をどうする？GC はないよ。"), note: "recap-move", code: '{\n    let s = String::from("x");\n} // what happens to s?', options: [L("Is destroyed (drop)", "Se destruye (drop)", "ドロップされる"), L("Stays alive", "Sigue viva", "生き続ける"), L("Is copied", "Se copia", "コピーされる")], answer: 0, check: { program: "#![allow(unused)]\nstruct S;\nimpl Drop for S {\n    fn drop(&mut self) {\n        println!(\"drop\");\n    }\n}\n\nfn main() {\n    {\n        let s = S;\n        println!(\"inside\");\n    } // s leaves the block\n    println!(\"outside\");\n}\n", compiles: true, stdout: "inside\ndrop\noutside" }, explain: L("End of block → drop.", "Fin del bloque → drop.", "ブロックの終わり → ドロップ。") },
+    { kind: "predict", time: 12, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), hint: L("These are read-only borrows. How many readers does the big rule allow at once?", "Son préstamos de solo lectura. ¿Cuántos lectores a la vez permite la gran regla?", "これは読むだけの借用。掟は読む参照を同時にいくつまで許す？"), note: "recap-borrow", code: 'let s = String::from("x");\nlet r1 = &s;\nlet r2 = &s;\nprintln!("{}{}", r1, r2);', options: [YES, NO], answer: 0, check: { compiles: true, stdout: "xx" }, explain: L("Several & are fine.", "Varios & están bien.", "& がいくつあっても大丈夫。") },
+    { kind: "type", time: 15, prompt: L("Pass level so it can be modified", "Pasa level para modificarlo", "変更できるように level を渡そう"), hint: L("bump changes the number it receives. How do you lend level so it can be written to?", "bump cambia el número que recibe. ¿Cómo prestas level para que se pueda escribir en él?", "bump は受け取った数を変える。書きこめるように level を貸すには？"), note: "recap-borrow", code: "bump(___ level);", answer: "&mut", check: { program: "#![allow(unused)]\nfn bump(n: &mut i32) {\n    *n += 1;\n}\n\nfn main() {\n    let mut level = 1;\n    bump(&mut level);\n    println!(\"{}\", level);\n}\n", compiles: true, stdout: "2" }, explain: L("bump(&mut level)", "bump(&mut level)", "bump(&mut level) だよ。") },
     enemySays(L(
       "Grrr... you respected all my rules... The forest is yours, Rustacean.",
       "Grrr... respetaste todas mis reglas... El bosque es tuyo, rustáceo.",
       "グルル…我が掟をすべて守ったな…この森はおまえのものだ、Rustacean よ。",
     )),
   ],
+  notes: bossNotes,
 };
 
 export const ownershipForest: RegionDef = {

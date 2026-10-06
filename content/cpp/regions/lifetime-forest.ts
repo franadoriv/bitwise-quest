@@ -1,4 +1,4 @@
-import type { Beat, LessonDef, RegionDef, Text } from "../../../lib/content/types.ts";
+import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
 
 // REGION 2 · LIFETIME FOREST  (classes and initialization, destructors and RAII, copy vs move and
@@ -12,6 +12,23 @@ const COMPILES = L("Does it compile?", "¿Compila?", "コンパイルできる�
 const SAFE = L("Is this code safe?", "¿Este código es seguro?", "このコードは安全？");
 const YES = L("Yes", "Sí", "はい");
 const NO_GCC = L("No: g++ stops it", "No: g++ lo detiene", "いいえ：g++ が止める");
+
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example; the validator checks `output` against the real compiler. */
+const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code, output, caption });
+/** Code shown but never run: undefined behavior has no output worth promising. */
+const show = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption });
+/** An example built on a helper type (Torch or Item); `top` holds extra top-level code. */
+const exWith = (build: (body: string, top?: string) => string) => (code: string, output: string, caption?: Text, top = ""): NoteBlock => ({
+  t: "code",
+  code: top ? `${top}\n// in main:\n${code}` : code,
+  output,
+  caption,
+  check: { compiles: true, stdout: output, program: build(code, top) },
+});
 
 // Helper types used by many questions. The player sees them in a dialog; checks prepend them.
 const HEADERS = "#include <iostream>\n#include <string>\n#include <vector>\n#include <memory>\n#include <utility>\n";
@@ -36,6 +53,106 @@ const item = (body: string, top = "") => prog(ITEM_SRC, body, top);
 
 const TORCH_SHORT = TORCH_SRC; // prints + on birth, - on death
 const ITEM_SHORT = ITEM_SRC; // announces copies and moves
+
+const classesNotes: NoteDef[] = [
+  note("struct-basics", L("struct, class and brace init", "struct, class e inicializar con llaves", "struct・class・{} 初期化"),
+    p(
+      "A struct is a blueprint for a new type. It bundles several boxes, called MEMBERS, under one name: struct Pet { std::string name; int age = 1; }; Each object built from it gets its own copy of every member, and you reach them with a dot: p.name, p.age.",
+      "Un struct es un plano para un tipo nuevo. Junta varias cajas, llamadas MIEMBROS, bajo un nombre: struct Pet { std::string name; int age = 1; }; Cada objeto creado con él tiene su propia copia de cada miembro, y llegas a ellos con un punto: p.name, p.age.",
+      "struct は新しい型の設計図。メンバと呼ぶいくつもの箱を一つの名前にまとめる：struct Pet { std::string name; int age = 1; }; 作ったオブジェクトはそれぞれ全メンバを持ち、p.name、p.age のようにドットで使う。",
+    ),
+    p(
+      "Braces fill the members IN ORDER, top to bottom. Members you leave out get their default (the = value written in the struct) or, if there is none, zero. Giving more values than there are members is a compile error: \"too many initializers\".",
+      "Las llaves llenan los miembros EN ORDEN, de arriba abajo. Los miembros que omites reciben su valor por defecto (el = escrito en el struct) o, si no hay, cero. Dar más valores que miembros es un error de compilación: \"too many initializers\".",
+      "波かっこは上から順にメンバを埋める。省いたメンバは struct に書いた = の初期値、なければ 0 になる。メンバより多い値を渡すと \"too many initializers\" でコンパイルエラーじゃ。",
+    ),
+    ex("struct Box { int w, h, d = 9; };\n\nint main() {\n  Box b{4};\n  std::cout << b.w << \" \" << b.h << \" \" << b.d;\n}", "4 0 9",
+      L("w from the braces, h zero, d its default", "w de las llaves, h en cero, d su valor por defecto", "w は {} から、h は 0、d は初期値")),
+    p(
+      "struct and class are almost the same thing. The one difference is the default ACCESS: in a struct everything is public (anyone can read it), in a class everything is private (only the class's own functions can). Write public: in a class to open what comes after it.",
+      "struct y class son casi lo mismo. La única diferencia es el ACCESO por defecto: en un struct todo es público (cualquiera puede leerlo), en una class todo es privado (solo las funciones de la propia clase pueden). Escribe public: en una class para abrir lo que viene después.",
+      "struct と class はほぼ同じ。ちがいは標準のアクセスだけ。struct は全部 public（誰でも読める）、class は全部 private（クラス自身の関数だけ）。class で public: と書けば、その後ろが公開される。",
+    ),
+    ex("class Vault {\npublic:\n  int gold = 30;\n};\n\nint main() {\n  Vault v;\n  std::cout << v.gold;\n}", "30",
+      L("public: opens the members that follow", "public: abre los miembros que siguen", "public: で後ろのメンバを公開")),
+    p(
+      "Common mistake: writing class out of habit and then reading a member from main. g++ answers \"is private within this context\". Either use struct for plain bundles of data, or add public: where it's needed.",
+      "Error común: escribir class por costumbre y luego leer un miembro desde main. g++ responde \"is private within this context\". Usa struct para paquetes simples de datos, o agrega public: donde haga falta.",
+      "よくあるミス：くせで class と書き、main からメンバを読むこと。g++ は \"is private within this context\" と答える。ただのデータのまとまりなら struct、必要なら public: を足そう。",
+    ),
+  ),
+  note("constructors", L("Constructors and initializer lists", "Constructores y listas de inicialización", "コンストラクタと初期化リスト"),
+    p(
+      "A CONSTRUCTOR is a special function that runs when an object is born. It has the same name as the class and no return type. After its parameters, a colon starts the MEMBER INITIALIZER LIST: Lamp(int w) : watts(w) {} builds the member watts from w before the body { } runs.",
+      "Un CONSTRUCTOR es una función especial que corre cuando nace un objeto. Se llama igual que la clase y no tiene tipo de retorno. Tras sus parámetros, dos puntos inician la LISTA DE INICIALIZACIÓN: Lamp(int w) : watts(w) {} construye el miembro watts con w antes de que corra el cuerpo { }.",
+      "コンストラクタはオブジェクト誕生時に動く特別な関数。クラスと同じ名前で、戻り値の型はない。引数の後の : が初期化リストを始める。Lamp(int w) : watts(w) {} は本体 { } の前に w からメンバ watts を作る。",
+    ),
+    p(
+      "A class can have several constructors with different parameters, and C++ picks the one that matches the arguments. No arguments picks the default constructor; (60) and {60} both pick the one that takes an int.",
+      "Una clase puede tener varios constructores con distintos parámetros, y C++ elige el que coincide con los argumentos. Sin argumentos se elige el constructor por defecto; (60) y {60} eligen el que recibe un int.",
+      "クラスは引数のちがうコンストラクタをいくつも持て、C++ は引数に合うものを選ぶ。引数なしならデフォルトコンストラクタ、(60) も {60} も int を受け取るものを選ぶ。",
+    ),
+    ex("struct Lamp {\n  int watts;\n  Lamp() : watts(40) {}\n  Lamp(int w) : watts(w) {}\n};\n\nint main() {\n  Lamp a;\n  Lamp b{60};\n  std::cout << a.watts << \" \" << b.watts;\n}", "40 60",
+      L("The arguments choose the constructor", "Los argumentos eligen el constructor", "引数がコンストラクタを選ぶ")),
+    p(
+      "Trap, known as the \"most vexing parse\": Lamp c(); with empty parentheses does NOT create a lamp. C++ reads it as the declaration of a function named c that returns a Lamp, so no constructor runs. To build with the default constructor write Lamp c; or Lamp c{};",
+      "Trampa, conocida como \"most vexing parse\": Lamp c(); con paréntesis vacíos NO crea una lámpara. C++ lo lee como la declaración de una función llamada c que devuelve un Lamp, así que no corre ningún constructor. Para usar el constructor por defecto escribe Lamp c; o Lamp c{};",
+      "ワナ（most vexing parse）：空の丸かっこの Lamp c(); はランプを作らない。C++ は「Lamp を返す関数 c の宣言」と読むので、コンストラクタは動かない。デフォルトで作るなら Lamp c; か Lamp c{}; と書こう。",
+    ),
+    p(
+      "A constructor with one parameter also acts as a silent conversion: a function that takes a Seconds could be called with a plain 3. Mark it explicit to forbid that, so callers must write Seconds(3) on purpose. It prevents mixing up units and other surprises.",
+      "Un constructor de un parámetro también actúa como conversión silenciosa: una función que recibe un Seconds podría llamarse con un 3 suelto. Márcalo explicit para prohibirlo, así quien llama debe escribir Seconds(3) a propósito. Evita mezclar unidades y otras sorpresas.",
+      "引数1つのコンストラクタは、こっそり型変換にも使われる。Seconds を受け取る関数に、ただの 3 を渡せてしまう。explicit をつけるとそれを禁止し、Seconds(3) とわざと書かせる。単位の取りちがえなどを防ぐ。",
+    ),
+    ex("struct Seconds {\n  explicit Seconds(int v) : v(v) {}\n  int v;\n};\nvoid wait(Seconds s) { std::cout << s.v; }\n\nint main() {\n  wait(Seconds(3));\n}", "3",
+      L("With explicit, the conversion must be written out", "Con explicit, la conversión debe escribirse", "explicit なら変換を明示する")),
+  ),
+  note("init-order", L("Members are built in declared order", "Miembros: se crean en orden declarado", "メンバは宣言順に作られる"),
+    p(
+      "Members are always constructed in the order they are DECLARED in the class, top to bottom. The order you write them in the initializer list after : is ignored. g++ even warns (-Wreorder) when the two orders differ, because it's a common source of bugs.",
+      "Los miembros siempre se construyen en el orden en que se DECLARAN en la clase, de arriba abajo. El orden en que los escribes en la lista tras : se ignora. g++ incluso avisa (-Wreorder) cuando ambos órdenes difieren, porque es una fuente común de errores.",
+      "メンバは必ずクラスで宣言した順、上から下に作られる。: の後のリストに書いた順は無視される。2つの順番がちがうと g++ は -Wreorder で警告する。よくあるバグの元だからじゃ。",
+    ),
+    ex("struct Say { Say(const char* s) { std::cout << s; } };\nstruct Duo {\n  Say first{\"1\"};\n  Say second{\"2\"};\n  Duo() : second(\"two \"), first(\"one \") {}\n};\n\nint main() { Duo d; }", "one two",
+      L("The list says second first, but first is declared first", "La lista pone second antes, pero first se declara antes", "リストは second が先でも、宣言は first が先")),
+    p(
+      "Why it matters: if one member's initializer reads another member that is declared LATER, it reads a box that hasn't been built yet. For an int that box holds garbage, and reading it is undefined behavior, even though the list makes it look fine.",
+      "Por qué importa: si el inicializador de un miembro lee otro miembro declarado DESPUÉS, lee una caja que aún no se construyó. Para un int esa caja guarda basura, y leerla es comportamiento indefinido, aunque la lista lo haga parecer correcto.",
+      "なぜ大事か：あるメンバの初期化が、後で宣言されたメンバを読むと、まだ作られていない箱を読むことになる。int ならゴミが入っていて、読むのは未定義動作。リスト上は正しく見えてもじゃ。",
+    ),
+    show("struct Range {\n  int hi;  // built first...\n  int lo;\n  Range() : lo(2), hi(lo + 3) {}  // ...so lo is garbage here: UB\n};",
+      L("hi is built first and reads lo too early", "hi se construye primero y lee lo antes de tiempo", "hi が先に作られ、早すぎる lo を読む")),
+    p(
+      "The rule: declare members in the order they depend on each other, and write the initializer list in that same order. Then what you read is what happens.",
+      "La regla: declara los miembros en el orden en que dependen unos de otros, y escribe la lista de inicialización en ese mismo orden. Así lo que lees es lo que pasa.",
+      "ルール：依存する順にメンバを宣言し、初期化リストも同じ順で書く。そうすれば読んだとおりに動く。",
+    ),
+    ex("struct Range {\n  int lo;\n  int hi;\n  Range() : lo(2), hi(lo + 3) {}\n};\n\nint main() {\n  Range r;\n  std::cout << r.lo << \" \" << r.hi;\n}", "2 5",
+      L("Same order in both places: defined and clear", "Mismo orden en ambos lugares: definido y claro", "両方の順番をそろえれば明確")),
+  ),
+  note("member-functions", L("const, static and this->", "const, static y this->", "const・static・this->"),
+    p(
+      "A member function lives inside the class and works on one object. Adding const after its parameters, int count() const, promises it won't change the object. Only const member functions may be called on a const object; calling a non-const one would break the object's promise.",
+      "Una función miembro vive dentro de la clase y trabaja sobre un objeto. Agregar const tras sus parámetros, int count() const, promete que no cambiará el objeto. Solo las funciones miembro const pueden llamarse sobre un objeto const; llamar a una que no lo es rompería la promesa del objeto.",
+      "メンバ関数はクラスの中に住み、1つのオブジェクトに働く。引数の後に const をつけた int count() const はオブジェクトを変えない約束。const オブジェクトから呼べるのは const メンバ関数だけじゃ。",
+    ),
+    ex("struct Wallet {\n  int coins = 5;\n  int count() const { return coins; }\n};\n\nint main() {\n  const Wallet w{};\n  std::cout << w.count();\n}", "5",
+      L("count() is const, so a const Wallet may call it", "count() es const, así que un Wallet const puede llamarla", "count() は const なので const の Wallet から呼べる")),
+    p(
+      "A static member belongs to the CLASS, not to each object: there is only one, shared by all of them. inline static int sold = 0; lets you set it up right in the class. Read it with the class name: Ticket::sold.",
+      "Un miembro static pertenece a la CLASE, no a cada objeto: hay uno solo, compartido por todos. inline static int sold = 0; permite prepararlo dentro de la clase. Se lee con el nombre de la clase: Ticket::sold.",
+      "static メンバはオブジェクトごとではなくクラスのもの。1つだけで、全員が共有する。inline static int sold = 0; でクラスの中に用意できる。Ticket::sold のようにクラス名で読む。",
+    ),
+    ex("struct Ticket {\n  inline static int sold = 0;\n  Ticket() { sold += 2; }\n};\n\nint main() {\n  Ticket a, b;\n  std::cout << Ticket::sold;\n}", "4"),
+    p(
+      "Inside a member function, a member's name means that member. But a local variable or parameter with the same name HIDES it, and then the name means the local. this->name always means the member. A local copy of a member is a separate box: changing it never touches the object.",
+      "Dentro de una función miembro, el nombre de un miembro significa ese miembro. Pero una variable local o un parámetro con el mismo nombre lo OCULTA, y entonces el nombre es la local. this->nombre siempre es el miembro. Una copia local de un miembro es otra caja: cambiarla nunca toca el objeto.",
+      "メンバ関数の中では、メンバの名前はそのメンバを指す。でも同じ名前のローカル変数や引数があると隠れて、名前はローカルを指す。this->名前 は常にメンバ。メンバのローカルコピーは別の箱で、変えてもオブジェクトは変わらない。",
+    ),
+    ex("struct Tank {\n  int fuel = 10;\n  void refill(int fuel) { this->fuel += fuel; }\n};\n\nint main() {\n  Tank t;\n  t.refill(5);\n  std::cout << t.fuel;\n}", "15",
+      L("this->fuel is the member; plain fuel is the parameter", "this->fuel es el miembro; fuel solo es el parámetro", "this->fuel はメンバ、fuel だけなら引数")),
+  ),
+];
 
 // ─── 2.1 Forging classes ───────────────────────────────────────────────────
 const classes: LessonDef = {
@@ -79,6 +196,8 @@ const classes: LessonDef = {
       answer: 0,
       output: "Ada 100",
       check: { compiles: true, stdout: "Ada 100" },
+      hint: L("Braces fill members in order. What about a member that already has a default?", "Las llaves llenan los miembros en orden. ¿Y un miembro que ya tiene valor por defecto?", "{} は順番にメンバを埋める。初期値のあるメンバはどうなる？"),
+      note: "struct-basics",
       explain: L("{\"Ada\"} fills name; hp keeps its default value 100.", "{\"Ada\"} llena name; hp conserva su valor por defecto, 100.", "{\"Ada\"} で name が入り、hp は初期値の 100 のまま。"),
       win: [{ t: "enter", actor: "ally" }, { t: "item", kind: "shield", holder: "ally" }, { t: "print", text: "Ada 100" }],
     },
@@ -89,6 +208,8 @@ const classes: LessonDef = {
       options: [YES, NO_GCC],
       answer: 1,
       check: { compiles: false },
+      hint: L("struct and class differ in one way: who may read the members by default?", "struct y class difieren en una cosa: ¿quién puede leer los miembros por defecto?", "struct と class のちがいは1つ。標準でメンバを読めるのは誰？"),
+      note: "struct-basics",
       explain: L("In a class everything is private until you write public:. main can't read hp.", "En una class todo es privado hasta que escribes public:. main no puede leer hp.", "class は public: と書くまで全部 private。main から hp は読めない。"),
       win: [{ t: "shake" }],
     },
@@ -100,6 +221,8 @@ const classes: LessonDef = {
       answer: 0,
       output: "10",
       check: { compiles: true, stdout: "10" },
+      hint: L("Only one value is given for two members. What do the left-out members become?", "Se da un solo valor para dos miembros. ¿En qué quedan los miembros omitidos?", "メンバ2つに値は1つ。省かれたメンバはどうなる？"),
+      note: "struct-basics",
       explain: L("Brace init fills members in order; the missing ones become zero.", "Las llaves llenan los miembros en orden; los que faltan quedan en cero.", "{} は順番にメンバを埋め、足りない分は 0 になる。"),
     },
     {
@@ -109,6 +232,8 @@ const classes: LessonDef = {
       options: [YES, NO_GCC],
       answer: 1,
       check: { compiles: false },
+      hint: L("Count the members of Point, then count the values in the braces.", "Cuenta los miembros de Point y luego los valores entre las llaves.", "Point のメンバを数え、{} の中の値を数えよう。"),
+      note: "struct-basics",
       explain: L("Point has only two members, so three values are 'too many initializers'.", "Point tiene solo dos miembros, así que tres valores son 'too many initializers'.", "Point のメンバは 2 つだけ。3 つの値は多すぎるエラー。"),
     },
     say(L(
@@ -122,6 +247,8 @@ const classes: LessonDef = {
       code: "struct Hero {\n  int hp;\n  Hero(int h) ___ hp(h) {}\n};\nHero a(7);\nstd::cout << a.hp;",
       answer: ":",
       check: { compiles: true, stdout: "7" },
+      hint: L("Look at the demo line Hero(int h) : hp(h) {}. What symbol comes right after the parameters?", "Mira la línea Hero(int h) : hp(h) {} del diálogo. ¿Qué símbolo va justo tras los parámetros?", "Hero(int h) : hp(h) {} を見よう。引数の直後の記号は？"),
+      note: "constructors",
       explain: L("A colon after the parameters starts the list: hp(h) builds hp from h.", "Dos puntos tras los parámetros inician la lista: hp(h) construye hp con h.", "引数の後の : でリストが始まる。hp(h) で h から hp を作るよ。"),
       win: [{ t: "print", text: "7" }],
     },
@@ -133,6 +260,8 @@ const classes: LessonDef = {
       answer: 0,
       output: "default int int",
       check: { compiles: true, stdout: "default int int" },
+      hint: L("Match each object to a constructor by its arguments. Do ( ) and { } change which one?", "Empareja cada objeto con un constructor según sus argumentos. ¿( ) y { } cambian cuál?", "引数で各オブジェクトのコンストラクタを選ぼう。( ) と { } で変わる？"),
+      note: "constructors",
       explain: L("No arguments picks the default constructor. (5) and {7} both pick Hero(int).", "Sin argumentos se elige el constructor por defecto. (5) y {7} eligen Hero(int).", "引数なしはデフォルトコンストラクタ。(5) も {7} も Hero(int) を選ぶ。"),
     },
     {
@@ -143,6 +272,8 @@ const classes: LessonDef = {
       answer: 0,
       output: "end",
       check: { compiles: true, stdout: "end" },
+      hint: L("Empty parentheses after a name can mean something other than an object.", "Unos paréntesis vacíos tras un nombre pueden significar algo distinto de un objeto.", "名前の後の空の丸かっこは、オブジェクト以外の意味になることがある。"),
+      note: "constructors",
       explain: L("Hero h(); declares a FUNCTION named h, not an object! No hero is born. Write Hero h; or Hero h{};", "Hero h(); declara una FUNCIÓN llamada h, ¡no un objeto! No nace ningún héroe. Escribe Hero h; o Hero h{};", "Hero h(); は関数 h の宣言で、オブジェクトじゃない！Hero h; か Hero h{}; と書こう。"),
       win: [{ t: "banner", text: L("FUNCTION?!", "¿¡FUNCIÓN!?", "関数？！") }, { t: "print", text: "end" }],
     },
@@ -159,6 +290,8 @@ const classes: LessonDef = {
       answer: 0,
       output: "BA",
       check: { compiles: true, stdout: "BA" },
+      hint: L("Members are built in one specific order. Is it the list after : or the declarations?", "Los miembros se construyen en un orden concreto. ¿Es la lista tras : o las declaraciones?", "メンバが作られる順番は1つ。: の後のリスト？宣言の順？"),
+      note: "init-order",
       explain: L("b is declared first, so it's built first (with \"B\"), then a. The list order is ignored.", "b se declara primero, así que se construye primero (con \"B\"), luego a. El orden de la lista se ignora.", "b が先に宣言されているので先に作られ（\"B\"）、次に a。リストの順番は無視される。"),
     },
     {
@@ -168,6 +301,8 @@ const classes: LessonDef = {
       options: [L("No: b reads a before a exists", "No: b lee a antes de que exista", "いいえ：b は作られる前の a を読む"), L("Yes: a is listed first", "Sí: a va primero en la lista", "はい：a がリストの先頭")],
       answer: 0,
       check: { compiles: true },
+      hint: L("Which member is declared first? When it's built, does the other one exist yet?", "¿Qué miembro se declara primero? Cuando se construye, ¿ya existe el otro?", "先に宣言されたのはどちら？それが作られるとき、もう片方はある？"),
+      note: "init-order",
       explain: L("b is declared first, so b(a + 1) runs while a is still garbage: UB. Keep both orders the same.", "b se declara primero, así que b(a + 1) corre con a aún en basura: UB. Mantén ambos órdenes iguales.", "b が先なので、b(a + 1) の時点で a はまだゴミ：UB。順番はそろえよう。"),
       win: [{ t: "say", actor: "enemy", text: L("Foiled!", "¡Frustrado!", "見破られた！") }],
     },
@@ -183,6 +318,8 @@ const classes: LessonDef = {
       options: [YES, NO_GCC],
       answer: 1,
       check: { compiles: false },
+      hint: L("walk wants a Meters but gets a plain 5. What does explicit say about silent conversions?", "walk quiere un Meters pero recibe un 5 suelto. ¿Qué dice explicit sobre conversiones silenciosas?", "walk は Meters がほしいのに 5 を受け取る。explicit はこっそり変換をどうする？"),
+      note: "constructors",
       explain: L("explicit forbids turning 5 into Meters silently. You must write walk(Meters(5)).", "explicit prohíbe convertir 5 en Meters en silencio. Debes escribir walk(Meters(5)).", "explicit は 5 を Meters にこっそり変えるのを禁止。walk(Meters(5)) と書こう。"),
     },
     {
@@ -192,6 +329,8 @@ const classes: LessonDef = {
       options: [YES, NO_GCC],
       answer: 1,
       check: { compiles: false },
+      hint: L("h is const. Which member functions may a const object call?", "h es const. ¿Qué funciones miembro puede llamar un objeto const?", "h は const。const オブジェクトから呼べるメンバ関数は？"),
+      note: "member-functions",
       explain: L("h is const but get() isn't marked const, so it might change h. Write int get() const.", "h es const pero get() no está marcada const, así que podría cambiar h. Escribe int get() const.", "h は const なのに get() は const じゃない。int get() const と書こう。"),
     },
     {
@@ -202,6 +341,8 @@ const classes: LessonDef = {
       answer: 0,
       output: "3",
       check: { compiles: true, stdout: "3" },
+      hint: L("Is count one per object, or one for the whole class? Count the births.", "¿count es uno por objeto, o uno para toda la clase? Cuenta los nacimientos.", "count はオブジェクトごと？クラスに1つ？誕生を数えよう。"),
+      note: "member-functions",
       explain: L("A static member is shared by the whole class: one count for every Counter. Three births: 3.", "Un miembro static es compartido por toda la clase: un solo count para todos. Tres nacimientos: 3.", "static メンバはクラス全体で共有。count は一つだけで、3 回生まれたので 3。"),
     },
     say(L(
@@ -216,10 +357,112 @@ const classes: LessonDef = {
       solution: '#include <iostream>\n\nstruct Hero {\n    int hp = 100;\n    void heal(int amount) {\n        hp += amount;\n    }\n};\n\nint main() {\n    Hero h;\n    h.heal(20);\n    std::cout << "hp: " << h.hp << "\\n";\n}\n',
       expect: "hp: 120",
       fallback: [String.raw`void\s+heal\s*\(\s*int\s+amount\s*\)\s*\{\s*hp\s*\+=\s*amount`, String.raw`this->hp\s*\+=\s*amount`, String.raw`this->hp\s*=\s*hp\s*;`, String.raw`int\s*&\s*hp\s*=\s*this->hp`],
+      hint: L("Inside heal, which hp does hp += amount change: the member, or a local that hides it?", "Dentro de heal, ¿qué hp cambia hp += amount: el miembro o una local que lo oculta?", "heal の中の hp += amount が変えるのは、メンバ？それを隠すローカル？"),
+      note: "member-functions",
       explain: L("The local hp was a copy that hid the member. Add to the member itself.", "La hp local era una copia que ocultaba al miembro. Suma al miembro mismo.", "ローカルの hp はメンバを隠すコピーだった。メンバ自体に足そう。"),
     },
   ],
+  notes: classesNotes,
 };
+
+const exT = exWith(torch);
+const exI = exWith(item);
+
+const raiiNotes: NoteDef[] = [
+  note("scope-death", L("When objects die: scopes", "Cuándo mueren los objetos: ámbitos", "オブジェクトが死ぬとき：スコープ"),
+    p(
+      "The DESTRUCTOR, written ~Name(), runs automatically when an object dies. A local object dies at the closing } of the block where it was created. You never call the destructor yourself; reaching the } is enough.",
+      "El DESTRUCTOR, escrito ~Name(), corre solo cuando un objeto muere. Un objeto local muere en la } final del bloque donde se creó. Nunca llamas al destructor tú mismo; llegar a la } basta.",
+      "デストラクタ ~Name() はオブジェクトが死ぬときに自動で動く。ローカルのオブジェクトは、作られたブロックの } で死ぬ。自分で呼ぶ必要はなく、} に着くだけでいい。",
+    ),
+    p(
+      "Locals in the same block die in REVERSE order of birth: last created, first destroyed, like a stack of plates. This is on purpose: a later object may depend on an earlier one, so the earlier one must outlive it.",
+      "Las locales del mismo bloque mueren en orden INVERSO al nacer: la última creada es la primera destruida, como una pila de platos. Es a propósito: un objeto posterior puede depender de uno anterior, así que el anterior debe vivir más.",
+      "同じブロックのローカルは、生まれた逆順に死ぬ。最後に作ったものが最初に壊れる、皿の山と同じじゃ。わざとそうなっている。後の物は前の物に頼るかもしれないので、前の物が長生きする必要がある。",
+    ),
+    exT("Torch x(\"x\");\nTorch y(\"y\");\nTorch z(\"z\");", "+x+y+z-z-y-x",
+      L("Born x, y, z; destroyed z, y, x", "Nacen x, y, z; se destruyen z, y, x", "x・y・z の順に生まれ、z・y・x の順に壊れる")),
+    p(
+      "Any pair of braces makes a scope: a plain { } block, an if, or a loop body. An object created inside dies at that inner }, before the code after it runs. In a loop, each round's object dies at the end of that round, before the next one starts.",
+      "Cualquier par de llaves crea un ámbito: un bloque { } simple, un if o el cuerpo de un bucle. Un objeto creado dentro muere en esa } interna, antes de que corra el código siguiente. En un bucle, el objeto de cada vuelta muere al final de esa vuelta, antes de la siguiente.",
+      "波かっこの組はどれもスコープを作る。ただの { } ブロック、if、ループ本体。中で作った物は内側の } で死に、その後のコードより先じゃ。ループなら毎回の物はその回の終わりに死に、次の回はその後。",
+    ),
+    exT("Torch outer(\"o\");\n{\n  Torch inner(\"i\");\n  std::cout << \"|\";\n}\nstd::cout << \"|\";", "+o+i|-i|-o",
+      L("inner dies at its own }, outer at main's", "inner muere en su propia }, outer en la de main", "inner は自分の } で、outer は main の } で死ぬ")),
+    p(
+      "A TEMPORARY is an object with no name, like Torch(\"t1\"); on its own. Since nothing can refer to it later, it dies at the end of its full statement, the ;. Common mistake: expecting it to live until the } like a named local.",
+      "Un TEMPORAL es un objeto sin nombre, como Torch(\"t1\"); solo. Como nada puede referirse a él después, muere al final de su sentencia completa, en el ;. Error común: esperar que viva hasta la } como una local con nombre.",
+      "一時オブジェクトは Torch(\"t1\"); のような名前のない物。後から誰も使えないので、その文の終わり（;）で死ぬ。よくあるミス：名前のあるローカルのように } まで生きると思うこと。",
+    ),
+    exT("Torch(\"t1\");\nTorch(\"t2\");", "+t1-t1+t2-t2",
+      L("Each temporary dies at its own ;", "Cada temporal muere en su propio ;", "一時オブジェクトはそれぞれの ; で死ぬ")),
+  ),
+  note("members", L("Members: born and destroyed", "Miembros: nacer y morir", "メンバの誕生と死"),
+    p(
+      "An object's members are objects too. They are built in declaration order, top to bottom, BEFORE the owner's constructor body runs. So when the body starts, every member is ready to use.",
+      "Los miembros de un objeto también son objetos. Se construyen en orden de declaración, de arriba abajo, ANTES de que corra el cuerpo del constructor del dueño. Así, cuando empieza el cuerpo, cada miembro está listo para usarse.",
+      "オブジェクトのメンバもオブジェクト。宣言順に上から、持ち主のコンストラクタ本体より前に作られる。だから本体が始まるときには、メンバは全部使える状態じゃ。",
+    ),
+    exT("Trio t;", "+p+q+r-r-q-p",
+      L("Members: built top to bottom, destroyed bottom to top", "Miembros: se crean de arriba abajo y se destruyen al revés", "メンバは上から作られ、下から壊れる"),
+      "struct Trio {\n  Torch p{\"p\"};\n  Torch q{\"q\"};\n  Torch r{\"r\"};\n};"),
+    p(
+      "Death is the mirror image: first the owner's destructor body runs, then the members are destroyed in REVERSE declaration order. That way the owner's destructor can still use its members while cleaning up.",
+      "La muerte es el reflejo: primero corre el cuerpo del destructor del dueño y luego se destruyen los miembros en orden INVERSO de declaración. Así el destructor del dueño todavía puede usar sus miembros al limpiar.",
+      "死ぬときは鏡うつし。まず持ち主のデストラクタ本体が動き、次にメンバが宣言の逆順で壊れる。だから持ち主のデストラクタは、後片付け中もメンバを使える。",
+    ),
+    exT("Camp c;", "+k~Camp-k",
+      L("The owner's destructor first, then its members", "Primero el destructor del dueño, luego sus miembros", "まず持ち主のデストラクタ、次にメンバ"),
+      "struct Camp {\n  Torch k{\"k\"};\n  ~Camp() { std::cout << \"~Camp\"; }\n};"),
+    p(
+      "An object only counts as born when its constructor FINISHES. If the constructor throws, the object never existed, so its destructor never runs. The members that were already fully built are still destroyed, in reverse order, so nothing they own leaks.",
+      "Un objeto solo cuenta como nacido cuando su constructor TERMINA. Si el constructor lanza una excepción, el objeto nunca existió, así que su destructor nunca corre. Los miembros que ya estaban construidos sí se destruyen, en orden inverso, así que nada de lo suyo se fuga.",
+      "オブジェクトが「生まれた」と数えられるのは、コンストラクタが最後まで終わったときだけ。途中で投げたら存在しなかったことになり、デストラクタは動かない。でも完成済みのメンバは逆順に壊されるので、リークはしない。",
+    ),
+  ),
+  note("raii", L("RAII: cleanup tied to lifetime", "RAII: limpieza atada a la vida", "RAII：寿命に結ぶ後片付け"),
+    p(
+      "Objects made with new live on the heap and only die when someone calls delete. Forget the delete, or skip it with an early return, and the destructor never runs: memory leaks, and anything else the object held (a file, a lock) is never released.",
+      "Los objetos creados con new viven en el heap y solo mueren cuando alguien llama a delete. Si olvidas el delete, o lo saltas con un return temprano, el destructor nunca corre: la memoria se fuga, y todo lo que el objeto tenía (un archivo, un candado) nunca se suelta.",
+      "new で作った物はヒープに住み、誰かが delete したときだけ死ぬ。delete を忘れたり、早めの return で飛ばしたりすると、デストラクタは動かない。メモリはリークし、持っていたファイルやロックも解放されない。",
+    ),
+    exT("Torch* raw = new Torch(\"r\");\nstd::cout << \"|\";\ndelete raw;", "+r|-r",
+      L("A heap torch dies only at delete", "Una antorcha del heap solo muere con delete", "ヒープのたいまつは delete でだけ死ぬ")),
+    p(
+      "RAII (Resource Acquisition Is Initialization) is C++'s big idea: get a resource in a constructor and release it in the destructor. Then the cleanup is tied to a local object's lifetime, and it happens on EVERY way out of the scope: normal end, early return or exception.",
+      "RAII (Resource Acquisition Is Initialization) es la gran idea de C++: toma un recurso en un constructor y suéltalo en el destructor. Así la limpieza queda atada a la vida de un objeto local y ocurre en TODAS las salidas del ámbito: fin normal, return temprano o excepción.",
+      "RAII（Resource Acquisition Is Initialization）は C++ の大事な考え。コンストラクタで資源を得て、デストラクタで解放する。後片付けがローカルの寿命に結びつき、普通の終わり・早めの return・例外、どの出口でも必ず起きる。",
+    ),
+    ex("struct Door {\n  Door() { std::cout << \"open \"; }\n  ~Door() { std::cout << \"close \"; }\n};\n\nvoid visit(bool early) {\n  Door d;\n  if (early) return;\n  std::cout << \"inside \";\n}\n\nint main() {\n  visit(true);\n  visit(false);\n}", "open close open inside close",
+      L("The door closes on both paths", "La puerta se cierra en ambos caminos", "どちらの道でもドアは閉まる")),
+    p(
+      "std::make_unique applies RAII to heap objects: it returns a std::unique_ptr, a small local OWNER that calls delete in its destructor. When the owner dies at its }, the heap object dies with it. Modern C++ uses owners like this instead of writing delete by hand.",
+      "std::make_unique aplica RAII a los objetos del heap: devuelve un std::unique_ptr, un pequeño DUEÑO local que llama a delete en su destructor. Cuando el dueño muere en su }, el objeto del heap muere con él. El C++ moderno usa dueños así en vez de escribir delete a mano.",
+      "std::make_unique はヒープの物に RAII を使う。std::unique_ptr という小さなローカルの持ち主を返し、それがデストラクタで delete する。持ち主が } で死ぬと、ヒープの物も一緒に死ぬ。現代の C++ は delete を手で書かずにこうする。",
+    ),
+    exT("{\n  auto owner = std::make_unique<Torch>(\"k\");\n  std::cout << \"|\";\n}\nstd::cout << \"|\";", "+k|-k|",
+      L("The owner deletes the torch at its }", "El dueño borra la antorcha en su }", "持ち主が } でたいまつを delete")),
+  ),
+  note("unwinding", L("Exceptions and stack unwinding", "Excepciones y stack unwinding", "例外とスタック巻き戻し"),
+    p(
+      "throw stops the current code and jumps to the nearest matching catch. On the way out, every scope it leaves is closed properly: all locals created in those scopes are destroyed, in reverse order. This is called STACK UNWINDING.",
+      "throw detiene el código actual y salta al catch más cercano que coincida. Al salir, cada ámbito que abandona se cierra bien: todas las locales creadas en esos ámbitos se destruyen, en orden inverso. Esto se llama STACK UNWINDING.",
+      "throw は今のコードを止め、合う catch へ飛ぶ。その途中で、抜けるスコープはきちんと閉じられ、そこで作られたローカルは逆順に全部壊れる。これをスタック巻き戻し（stack unwinding）と呼ぶ。",
+    ),
+    p(
+      "Order matters: the try block is left FIRST, so its locals die before the catch handler starts. The lines after the throw inside the try never run at all.",
+      "El orden importa: PRIMERO se sale del bloque try, así que sus locales mueren antes de que empiece el catch. Las líneas que siguen al throw dentro del try nunca se ejecutan.",
+      "順番が大事。先に try ブロックを抜けるので、そのローカルは catch が始まる前に死ぬ。try の中で throw より後の行は一度も動かない。",
+    ),
+    exT("try {\n  Torch g(\"g\");\n  Torch h(\"h\");\n  throw 5;\n  std::cout << \"never\";\n} catch (int) {\n  std::cout << \" caught\";\n}", "+g+h-h-g caught",
+      L("Both torches drop before the catch runs", "Ambas antorchas caen antes del catch", "catch の前に両方のたいまつが消える")),
+    p(
+      "This is why RAII and exceptions work so well together: you don't need a cleanup line on every error path. Each local's destructor runs as the throw passes by, so locks unlock, files close and memory is freed.",
+      "Por eso RAII y las excepciones se llevan tan bien: no necesitas una línea de limpieza en cada camino de error. El destructor de cada local corre cuando el throw pasa, así que los candados se sueltan, los archivos se cierran y la memoria se libera.",
+      "だから RAII と例外は相性がいい。エラーの道ごとに後片付けの行はいらない。throw が通るときに各ローカルのデストラクタが動き、ロックは外れ、ファイルは閉じ、メモリは解放される。",
+    ),
+  ),
+];
 
 // ─── 2.2 Drop the torch: destructors and RAII ──────────────────────────────
 const raii: LessonDef = {
@@ -259,6 +502,8 @@ const raii: LessonDef = {
       answer: 0,
       output: "+a+b-b-a",
       check: { compiles: true, stdout: "+a+b-b-a", program: torch('Torch a("a");\nTorch b("b");') },
+      hint: L("Both torches die at main's }. In which order do locals die?", "Ambas antorchas mueren en la } de main. ¿En qué orden mueren las locales?", "どちらも main の } で死ぬ。ローカルが死ぬ順番は？"),
+      note: "scope-death",
       explain: L("Last lit, first dropped: b dies before a, like a stack of plates.", "Último en encenderse, primero en soltarse: b muere antes que a, como una pila de platos.", "最後に点いたものが最初に消える。皿の山のように b が a より先。"),
       win: [{ t: "print", text: "+a+b-b-a" }],
     },
@@ -270,6 +515,8 @@ const raii: LessonDef = {
       answer: 0,
       output: "+a-a+b-b",
       check: { compiles: true, stdout: "+a-a+b-b", program: torch('{\n  Torch a("a");\n}\nTorch b("b");') },
+      hint: L("a lives inside its own braces. When does that block end compared to b's birth?", "a vive dentro de sus propias llaves. ¿Cuándo termina ese bloque respecto al nacimiento de b?", "a は自分の {} の中。そのブロックが終わるのは b の誕生より前？後？"),
+      note: "scope-death",
       explain: L("Any { } block is a scope. a dies at its } before b is even born.", "Cualquier bloque { } es un ámbito. a muere en su } antes de que b nazca.", "{ } のブロックはスコープ。a は自分の } で消え、その後 b が生まれる。"),
     },
     {
@@ -277,6 +524,8 @@ const raii: LessonDef = {
       prompt: L('Output order of: Torch a("a"); { Torch b("b"); }', 'Orden de salida: Torch a("a"); { Torch b("b"); }', '出力順：Torch a("a"); { Torch b("b"); }'),
       lines: ["+a", "+b", "-b", "-a"],
       check: { compiles: true, stdout: "+a+b-b-a", program: torch('Torch a("a");\n{ Torch b("b"); }') },
+      hint: L("Find the } that closes b's block, and the one that ends main.", "Encuentra la } que cierra el bloque de b y la que termina main.", "b のブロックを閉じる } と、main を終える } を探そう。"),
+      note: "scope-death",
       explain: L("a is born, b is born, b's block ends (-b), then main ends (-a).", "Nace a, nace b, termina el bloque de b (-b) y luego termina main (-a).", "a 誕生、b 誕生、b のブロック終了で -b、main 終了で -a。"),
     },
     {
@@ -287,6 +536,8 @@ const raii: LessonDef = {
       answer: 0,
       output: "+0-0+1-1",
       check: { compiles: true, stdout: "+0-0+1-1", program: torch('for (int i = 0; i < 2; ++i) {\n  Torch t(std::to_string(i));\n}') },
+      hint: L("The loop body has braces too. When does each round's torch reach its }?", "El cuerpo del bucle también tiene llaves. ¿Cuándo llega la antorcha de cada vuelta a su }?", "ループ本体にも {} がある。毎回のたいまつはいつ } に着く？"),
+      note: "scope-death",
       explain: L("The loop body is a scope: each round's torch dies at the } before the next round.", "El cuerpo del bucle es un ámbito: la antorcha de cada vuelta muere en la } antes de la siguiente.", "ループ本体もスコープ。毎回のたいまつは次の回の前に } で消える。"),
     },
     {
@@ -297,6 +548,8 @@ const raii: LessonDef = {
       answer: 0,
       output: "+tmp-tmp|",
       check: { compiles: true, stdout: "+tmp-tmp|", program: torch('Torch("tmp");\nstd::cout << "|";') },
+      hint: L("This torch has no name. Does a nameless object live until the }?", "Esta antorcha no tiene nombre. ¿Un objeto sin nombre vive hasta la }?", "このたいまつには名前がない。名前のない物は } まで生きる？"),
+      note: "scope-death",
       explain: L("A nameless TEMPORARY dies at the end of its statement, the ;.", "Un TEMPORAL sin nombre muere al final de su sentencia, en el ;.", "名前のない一時オブジェクトは、その文の終わり（;）で消える。"),
     },
     say(L(
@@ -312,6 +565,8 @@ const raii: LessonDef = {
       answer: 0,
       output: "+x+y-y-x",
       check: { compiles: true, stdout: "+x+y-y-x", program: torch("Pair p;", 'struct Pair {\n  Torch x{"x"};\n  Torch y{"y"};\n};') },
+      hint: L("Members are built in declaration order. Destruction mirrors construction.", "Los miembros se construyen en orden de declaración. La destrucción es el reflejo.", "メンバは宣言順に作られる。壊れる順はその鏡うつし。"),
+      note: "members",
       explain: L("Members are built top to bottom (x, y) and destroyed bottom to top (y, x).", "Los miembros se construyen de arriba abajo (x, y) y se destruyen de abajo arriba (y, x).", "メンバは上から作られ（x, y）、下から壊される（y, x）。"),
     },
     say(L(
@@ -327,6 +582,8 @@ const raii: LessonDef = {
       answer: 0,
       output: "+h|",
       check: { compiles: true, stdout: "+h|", program: torch('Torch* p = new Torch("h");\nstd::cout << "|";') },
+      hint: L("This torch lives on the heap. Who calls delete for it?", "Esta antorcha vive en el heap. ¿Quién llama a delete por ella?", "このたいまつはヒープにいる。誰が delete する？"),
+      note: "raii",
       explain: L("Nobody calls delete p, so ~Torch never runs: no -h. The memory leaks.", "Nadie llama a delete p, así que ~Torch nunca corre: no hay -h. La memoria se fuga.", "delete p を誰も呼ばないので ~Torch は動かず -h はない。メモリリーク。"),
       win: [{ t: "banner", text: L("LEAK", "FUGA", "リーク") }],
     },
@@ -343,6 +600,8 @@ const raii: LessonDef = {
       answer: 0,
       output: "+u|-u",
       check: { compiles: true, stdout: "+u|-u", program: torch('auto p = std::make_unique<Torch>("u");\nstd::cout << "|";') },
+      hint: L("p is a local object that owns the torch. What happens to the torch when p dies?", "p es un objeto local dueño de la antorcha. ¿Qué le pasa a la antorcha cuando muere p?", "p はたいまつを持つローカル。p が死ぬとたいまつは？"),
+      note: "raii",
       explain: L("p is a local owner. When p dies at the }, it deletes the torch: -u.", "p es un dueño local. Cuando p muere en la }, borra la antorcha: -u.", "p はローカルの持ち主。} で p が死ぬとき、たいまつを delete する：-u。"),
     },
     {
@@ -355,6 +614,8 @@ const raii: LessonDef = {
         L("call delete at the end of each function", "llamar a delete al final de cada función", "関数の最後に毎回 delete を呼ぶ"),
       ],
       answer: 0,
+      hint: L("Think about which special member always runs when an object dies.", "Piensa qué miembro especial corre siempre cuando muere un objeto.", "オブジェクトが死ぬときに必ず動く特殊メンバを考えよう。"),
+      note: "raii",
       explain: L("Tie a resource to an object's lifetime and cleanup happens on EVERY exit path automatically.", "Ata un recurso a la vida de un objeto y la limpieza ocurre sola en TODAS las salidas.", "資源をオブジェクトの寿命に結びつければ、どの出口でも自動で後片付けされる。"),
     },
     say(L(
@@ -370,6 +631,8 @@ const raii: LessonDef = {
       answer: 0,
       output: "+a-a!",
       check: { compiles: true, stdout: "+a-a!", program: torch('try {\n  Torch a("a");\n  throw 1;\n} catch (int) {\n  std::cout << "!";\n}') },
+      hint: L("The throw leaves the try block first. What happens to its locals before the catch runs?", "El throw sale primero del bloque try. ¿Qué les pasa a sus locales antes de que corra el catch?", "throw はまず try を抜ける。catch の前にローカルはどうなる？"),
+      note: "unwinding",
       explain: L("Leaving the try block destroys a (-a) BEFORE the catch handler runs (!).", "Salir del bloque try destruye a (-a) ANTES de que corra el catch (!).", "try を出るときに a が壊れ（-a）、その後で catch が動く（!）。"),
       win: [{ t: "shake" }, { t: "print", text: "+a-a!" }],
     },
@@ -381,6 +644,8 @@ const raii: LessonDef = {
       answer: 0,
       output: "+t-t!",
       check: { compiles: true, stdout: "+t-t!", program: torch('try { Boom b; } catch (int) { std::cout << "!"; }', 'struct Boom {\n  Torch t{"t"};\n  Boom() { throw 1; }\n  ~Boom() { std::cout << "~Boom"; }\n};') },
+      hint: L("Boom's constructor never finishes. Does an object that was never born get a destructor?", "El constructor de Boom nunca termina. ¿Un objeto que nunca nació tiene destructor?", "Boom のコンストラクタは終わらない。生まれなかった物にデストラクタは動く？"),
+      note: "members",
       explain: L("Boom was never fully born, so ~Boom never runs. Its finished member t is still destroyed.", "Boom nunca terminó de nacer, así que ~Boom no corre. Su miembro t, ya construido, sí se destruye.", "Boom は生まれきらなかったので ~Boom は動かない。でも完成済みのメンバ t は壊される。"),
     },
     {
@@ -390,10 +655,100 @@ const raii: LessonDef = {
       solution: '#include <iostream>\n\nstruct Lock {\n    Lock() { std::cout << "lock "; }\n    ~Lock() { std::cout << "unlock "; }\n};\n\nvoid work(bool fail) {\n    Lock l;\n    if (fail) return;\n}\n\nint main() {\n    work(true);\n    std::cout << "done\\n";\n}\n',
       expect: "unlock done",
       fallback: [String.raw`\bLock\s+\w+\s*;`, String.raw`\bLock\s+\w+\s*\{\s*\}`, String.raw`std::unique_ptr\s*<\s*Lock\s*>`, String.raw`make_unique\s*<\s*Lock\s*>`],
+      hint: L("The early return skips delete. Make the lock a local object so its destructor runs anyway.", "El return temprano salta el delete. Haz el candado una local para que su destructor corra igual.", "早めの return で delete が飛ぶ。ロックをローカルにしてデストラクタを動かそう。"),
+      note: "raii",
       explain: L("The early return skipped delete. A local Lock (RAII) unlocks at the } on every path.", "El return temprano se saltaba el delete. Un Lock local (RAII) se suelta en la } en todos los caminos.", "早めの return で delete が飛ばされた。ローカルの Lock（RAII）ならどの道でも } で外れる。"),
     },
   ],
+  notes: raiiNotes,
 };
+
+const movesNotes: NoteDef[] = [
+  note("copy-vs-move", L("Copy or move?", "¿Copiar o mover?", "コピー？ムーブ？"),
+    p(
+      "When a new object is built from another one, C++ calls one of two special constructors. The COPY constructor duplicates everything, leaving the source untouched. The MOVE constructor steals the source's insides (like a string's letters) instead, which is much faster, and leaves the source empty but valid.",
+      "Cuando se construye un objeto nuevo a partir de otro, C++ llama a uno de dos constructores especiales. El constructor de COPIA lo duplica todo y deja el origen intacto. El constructor de MOVIMIENTO en cambio roba las entrañas del origen (como las letras de un string), mucho más rápido, y deja el origen vacío pero válido.",
+      "別のオブジェクトから新しく作るとき、C++ は2つの特殊なコンストラクタのどちらかを呼ぶ。コピーコンストラクタは全部複製し、元はそのまま。ムーブコンストラクタは元の中身（string の文字など）を奪うので速く、元は空だが有効な状態で残る。",
+    ),
+    p(
+      "Which one runs depends on the source. A named object that you can still use later is an LVALUE: C++ must copy it, because you might read it again. A temporary, or something wrapped in std::move(...), is an RVALUE: nobody will look at it again, so C++ is free to move from it.",
+      "Cuál corre depende del origen. Un objeto con nombre que aún puedes usar después es un LVALUE: C++ debe copiarlo, porque podrías volver a leerlo. Un temporal, o algo envuelto en std::move(...), es un RVALUE: nadie volverá a mirarlo, así que C++ puede moverlo.",
+      "どちらが動くかは元しだい。後でまだ使える名前つきの物は lvalue。また読むかもしれないので C++ はコピーする。一時オブジェクトや std::move(...) で包んだ物は rvalue。もう誰も見ないので、C++ はムーブしてよい。",
+    ),
+    exI("Item x(\"orb\");\nItem y = x;\nItem z = std::move(y);", "copy move",
+      L("x is still in use: copy. y is handed over: move", "x sigue en uso: copia. y se entrega: move", "x はまだ使う：コピー。y は渡す：ムーブ")),
+    p(
+      "Function parameters follow the same rule. A by-value parameter (void keep(Item i)) is a new object, so it is copied from an lvalue and moved from an rvalue. A const reference parameter (const Item&) builds no new object at all: no copy, no move.",
+      "Los parámetros de funciones siguen la misma regla. Un parámetro por valor (void keep(Item i)) es un objeto nuevo, así que se copia de un lvalue y se mueve de un rvalue. Un parámetro referencia const (const Item&) no construye ningún objeto: ni copia ni move.",
+      "関数の引数も同じルール。値渡しの引数（void keep(Item i)）は新しいオブジェクトなので、lvalue からはコピー、rvalue からはムーブで作られる。const 参照（const Item&）は新しい物を作らず、コピーもムーブもない。",
+    ),
+    exI("Item x(\"orb\");\nlook(x);\nstd::cout << \"none\";", "none",
+      L("A const& parameter builds nothing", "Un parámetro const& no construye nada", "const& の引数は何も作らない"),
+      "void look(const Item& i) {}"),
+  ),
+  note("std-move", L("What std::move really does", "Qué hace de verdad std::move", "std::move の本当の働き"),
+    p(
+      "Despite its name, std::move moves NOTHING. It is only a cast: it relabels an object as an rvalue, meaning \"you may steal from this\". The actual stealing happens later, if and when a move constructor or move assignment uses that label.",
+      "A pesar de su nombre, std::move no mueve NADA. Es solo una conversión: vuelve a etiquetar un objeto como rvalue, que significa \"puedes robar de esto\". El robo real ocurre después, si un constructor o una asignación de movimiento usa esa etiqueta.",
+      "名前に反して、std::move は何もムーブしない。ただの型変換で、物に「奪ってよい」という rvalue の印をつけるだけ。本当に奪うのは、その印を使うムーブコンストラクタやムーブ代入があったときじゃ。",
+    ),
+    p(
+      "So if no new object is built, nothing happens: binding a reference (Item&& r = std::move(x)) creates no object and runs no constructor. And you can't steal from a const object, because stealing changes it: std::move on a const silently falls back to a COPY.",
+      "Así que si no se construye un objeto nuevo, no pasa nada: enlazar una referencia (Item&& r = std::move(x)) no crea ningún objeto ni corre constructor alguno. Y no puedes robar de un objeto const, porque robar lo cambia: std::move sobre un const vuelve en silencio a una COPIA.",
+      "だから新しい物が作られなければ何も起きない。参照を結ぶだけ（Item&& r = std::move(x)）なら、物は作られずコンストラクタも動かない。また const からは奪えない。奪うと変わってしまうので、const への std::move はこっそりコピーになる。",
+    ),
+    ex("const std::string c = \"fixed\";\nstd::string d = std::move(c);\nstd::cout << c << \" \" << d;", "fixed fixed",
+      L("A const can't be stolen from, so it was copied", "No se puede robar de un const, así que se copió", "const からは奪えないのでコピーされた")),
+    p(
+      "After a move, the source is in a \"valid but unspecified\" state: it's still a real object, but you must not count on its value. The safe things to do are giving it a new value or letting it go out of scope. Reading it and expecting the old value is a bug.",
+      "Tras un move, el origen queda en un estado \"válido pero no especificado\": sigue siendo un objeto real, pero no debes contar con su valor. Lo seguro es darle un valor nuevo o dejar que salga del ámbito. Leerlo esperando el valor viejo es un error.",
+      "ムーブ後の元は「有効だが不定」の状態。本物のオブジェクトのままだが、値に頼ってはいけない。安全なのは新しい値を入れるか、スコープの外へ出すこと。古い値を期待して読むのはバグじゃ。",
+    ),
+    ex("std::string s = \"orb\";\nstd::string t = std::move(s);\ns = \"new\";\nstd::cout << s << \" \" << t;", "new orb",
+      L("Reassigning a moved-from string is fine", "Reasignar un string movido está bien", "ムーブ後の string に代入するのはOK")),
+  ),
+  note("elision-noexcept", L("Elision, vectors and noexcept", "Elisión, vectores y noexcept", "コピー省略・vector・noexcept"),
+    p(
+      "Since C++17, returning a fresh temporary from a function (return Item(\"x\");) is GUARANTEED to build the object straight in its final place. This is called copy elision: no copy constructor and no move constructor run at all, even if they print something.",
+      "Desde C++17, devolver un temporal nuevo desde una función (return Item(\"x\");) GARANTIZA que el objeto se construya directo en su lugar final. Se llama elisión de copia: no corre ni el constructor de copia ni el de movimiento, aunque impriman algo.",
+      "C++17 からは、関数で新しい一時オブジェクトを返す（return Item(\"x\");）と、最終的な場所に直接作られることが保証される。これをコピー省略と呼ぶ。コピーもムーブも、何か表示するものでも一切動かない。",
+    ),
+    p(
+      "A vector stores its elements in one block of memory. When a new element doesn't fit, it allocates a bigger block and transfers the old elements. It MOVES them only if the move constructor is marked noexcept; otherwise it copies, to keep its strong safety promise. reserve(n) makes room ahead of time, so no transfer happens.",
+      "Un vector guarda sus elementos en un bloque de memoria. Cuando un elemento nuevo no cabe, reserva un bloque más grande y pasa los viejos. Los MUEVE solo si el constructor de movimiento es noexcept; si no, los copia, para cumplir su promesa de seguridad. reserve(n) hace lugar de antemano, así no hay traspaso.",
+      "vector は要素を1つのメモリブロックに並べる。新しい要素が入らないと、大きいブロックを確保して古い要素を移す。ムーブコンストラクタが noexcept のときだけムーブし、そうでなければ安全のためコピーする。reserve(n) で先に場所を取れば移動は起きない。",
+    ),
+    exI("std::vector<Item> v;\nv.reserve(3);\nv.emplace_back(\"a\");\nv.emplace_back(\"b\");\nv.emplace_back(\"c\");\nstd::cout << \"none\";", "none",
+      L("Enough room, and emplace_back builds in place", "Hay lugar, y emplace_back construye en su sitio", "場所は十分、emplace_back はその場で作る")),
+    p(
+      "noexcept on a function is a promise that it won't throw. The noexcept(expr) operator asks the compiler, at compile time, whether an expression is declared not to throw; it doesn't run the expression. It answers with a bool.",
+      "noexcept en una función es una promesa de que no lanzará excepciones. El operador noexcept(expr) le pregunta al compilador, al compilar, si una expresión está declarada como que no lanza; no ejecuta la expresión. Responde con un bool.",
+      "関数の noexcept は「例外を投げない」約束。noexcept(式) 演算子は、式が投げないと宣言されているかをコンパイル時にコンパイラに聞く。式は実行しない。答えは bool じゃ。",
+    ),
+    ex("int calm() noexcept { return 1; }\n\nint main() {\n  std::cout << std::boolalpha << noexcept(calm());\n}", "true"),
+  ),
+  note("rule-of-5", L("The rules of 3, 5 and 0", "Las reglas de 3, 5 y 0", "3・5・0 の法則"),
+    p(
+      "C++ can write five special members for you: destructor, copy constructor, copy assignment, move constructor and move assignment. The rule of 3/5 says: if you write one of them by hand, you probably need all of them, because the reason you wrote one (like owning a raw pointer) affects the others too.",
+      "C++ puede escribir por ti cinco miembros especiales: destructor, constructor de copia, asignación de copia, constructor de movimiento y asignación de movimiento. La regla de 3/5 dice: si escribes uno a mano, probablemente necesites todos, porque el motivo (como poseer un puntero crudo) afecta también a los demás.",
+      "C++ は5つの特殊メンバを自動で書ける：デストラクタ、コピーコンストラクタ、コピー代入、ムーブコンストラクタ、ムーブ代入。3/5 の法則：1つを手で書くなら、たぶん全部必要。書いた理由（生ポインタを持つなど）が他にも関わるからじゃ。",
+    ),
+    p(
+      "The classic bug: a class whose destructor deletes a raw pointer, with no copy constructor. The default copy copies the POINTER, not what it points to, so two objects end up deleting the same memory: a double delete. Also, declaring a move operation makes C++ delete the implicit copy operations.",
+      "El error clásico: una clase cuyo destructor borra un puntero crudo, sin constructor de copia. La copia por defecto copia el PUNTERO, no lo apuntado, así que dos objetos acaban borrando la misma memoria: un doble delete. Además, declarar una operación de movimiento hace que C++ elimine las copias implícitas.",
+      "典型的なバグ：デストラクタで生ポインタを delete するのに、コピーコンストラクタがないクラス。デフォルトのコピーはポインタだけを複製するので、2つの物が同じメモリを delete する（二重 delete）。また、ムーブを宣言すると暗黙のコピーは削除される。",
+    ),
+    p(
+      "The rule of 0 is the modern answer: write NONE of the five. Use members that already manage themselves, like std::string, std::vector and std::unique_ptr, and the compiler-written versions do the right thing. A class holding a unique_ptr becomes move-only automatically.",
+      "La regla de 0 es la respuesta moderna: no escribas NINGUNO de los cinco. Usa miembros que ya se manejan solos, como std::string, std::vector y std::unique_ptr, y las versiones que escribe el compilador hacen lo correcto. Una clase con un unique_ptr se vuelve solo movible automáticamente.",
+      "0 の法則が現代の答え。5つを1つも書かない。std::string、std::vector、std::unique_ptr など自分で管理できるメンバを使えば、コンパイラが書く版が正しく動く。unique_ptr を持つクラスは自動でムーブ専用になる。",
+    ),
+    ex("struct Pack {\n  std::string label;\n  std::vector<int> stuff;\n};\n\nint main() {\n  Pack a{\"box\", {1, 2}};\n  Pack b = a;\n  b.stuff.push_back(3);\n  std::cout << a.stuff.size() << b.stuff.size();\n}", "23",
+      L("Rule of 0: the implicit copy copies each member", "Regla de 0: la copia implícita copia cada miembro", "0 の法則：暗黙のコピーが各メンバをコピー")),
+    ex("struct Holder { std::unique_ptr<int> p; };\n\nint main() {\n  Holder a{std::make_unique<int>(4)};\n  Holder b = std::move(a);\n  std::cout << (a.p == nullptr) << *b.p;\n}", "14",
+      L("A unique_ptr member makes the class move-only", "Un miembro unique_ptr hace la clase solo movible", "unique_ptr のメンバでクラスはムーブ専用に")),
+  ),
+];
 
 // ─── 2.3 Give or clone: copy and move ──────────────────────────────────────
 const moves: LessonDef = {
@@ -429,6 +784,8 @@ const moves: LessonDef = {
       answer: 0,
       output: "copy",
       check: { compiles: true, stdout: "copy", program: item('Item a("gem");\nItem b = a;') },
+      hint: L("a has a name and may be used again. Is C++ allowed to steal from it?", "a tiene nombre y puede usarse otra vez. ¿Puede C++ robar de él?", "a には名前があり、また使うかもしれない。C++ は奪ってよい？"),
+      note: "copy-vs-move",
       explain: L("a is a named object still in use, so b is built by the copy constructor.", "a es un objeto con nombre aún en uso, así que b se construye con el constructor de copia.", "a は名前のある使用中のオブジェクト。だから b はコピーコンストラクタで作られる。"),
     },
     {
@@ -437,6 +794,8 @@ const moves: LessonDef = {
       code: 'Item a("gem");\nItem b = std::___(a);',
       answer: "move",
       check: { compiles: true, stdout: "move", program: item('Item a("gem");\nItem b = std::move(a);') },
+      hint: L("Which std function marks a as 'free to steal'? It's in the act you just played.", "¿Qué función de std marca a como 'libre para robar'? Está en la demo que acabas de jugar.", "a に「奪ってOK」の印をつける std の関数は？さっきのデモにある。"),
+      note: "copy-vs-move",
       explain: L("std::move(a) says 'you may steal from a', so the move constructor runs.", "std::move(a) dice 'puedes robar de a', así que corre el constructor de movimiento.", "std::move(a) は「a から奪っていいよ」の合図。ムーブコンストラクタが動く。"),
       win: [{ t: "give", to: "ally" }, { t: "print", text: "move " }],
     },
@@ -453,6 +812,8 @@ const moves: LessonDef = {
       answer: 0,
       output: "none",
       check: { compiles: true, stdout: "none", program: item('Item a("gem");\nItem&& r = std::move(a);\nstd::cout << "none";') },
+      hint: L("Is a new Item being built on this line, or just a reference?", "¿En esta línea se construye un Item nuevo, o solo una referencia?", "この行で新しい Item は作られる？参照だけ？"),
+      note: "std-move",
       explain: L("r is just a reference to a. No new Item is built, so no constructor runs.", "r es solo una referencia a a. No se construye ningún Item nuevo, así que no corre ningún constructor.", "r は a への参照にすぎない。新しい Item は作られないので何も動かない。"),
     },
     {
@@ -463,6 +824,8 @@ const moves: LessonDef = {
       answer: 0,
       output: "copy",
       check: { compiles: true, stdout: "copy", program: item('const Item a("gem");\nItem b = std::move(a);') },
+      hint: L("a is const. Can a move change (steal from) a const object?", "a es const. ¿Un move puede cambiar (robar de) un objeto const?", "a は const。ムーブで const の物から奪える？"),
+      note: "std-move",
       explain: L("You can't steal from a const object, so the move silently becomes a copy.", "No puedes robar de un objeto const, así que el move se vuelve una copia en silencio.", "const からは奪えない。だからムーブはこっそりコピーになる。"),
       win: [{ t: "banner", text: L("COPY", "COPIA", "コピー") }],
     },
@@ -474,6 +837,8 @@ const moves: LessonDef = {
       answer: 0,
       output: "copy move",
       check: { compiles: true, stdout: "copy move", program: item('Item a("gem");\ntake(a);\ntake(std::move(a));', "void take(Item i) {}") },
+      hint: L("Each call builds a new parameter. Is the argument an lvalue or an rvalue each time?", "Cada llamada construye un parámetro nuevo. ¿El argumento es lvalue o rvalue cada vez?", "呼ぶたびに新しい引数が作られる。それぞれの引数は lvalue？rvalue？"),
+      note: "copy-vs-move",
       explain: L("A by-value parameter copies an lvalue (a) and moves an rvalue (std::move(a)).", "Un parámetro por valor copia un lvalue (a) y mueve un rvalue (std::move(a)).", "値渡しの引数は lvalue（a）ならコピー、rvalue（std::move(a)）ならムーブ。"),
     },
     {
@@ -484,6 +849,8 @@ const moves: LessonDef = {
       answer: 0,
       output: "done",
       check: { compiles: true, stdout: "done", program: item('Item a = make();\nstd::cout << "done";', 'Item make() { return Item("x"); }') },
+      hint: L("make returns a fresh temporary. Since C++17, where is that object built?", "make devuelve un temporal nuevo. Desde C++17, ¿dónde se construye ese objeto?", "make は新しい一時オブジェクトを返す。C++17 からそれはどこに作られる？"),
+      note: "elision-noexcept",
       explain: L("Returning a fresh temporary is built straight into a (guaranteed copy elision): no copy, no move.", "Un temporal devuelto se construye directo en a (elisión de copia garantizada): ni copia ni move.", "新しく作った一時オブジェクトを返すと a に直接作られる（コピー省略の保証）。"),
     },
     {
@@ -497,6 +864,8 @@ const moves: LessonDef = {
       ],
       answer: 0,
       check: { compiles: true },
+      hint: L("After a move, can you count on the old value? What is still safe to do?", "Tras un move, ¿puedes contar con el valor viejo? ¿Qué sigue siendo seguro hacer?", "ムーブ後、古い値に頼れる？まだ安全にできることは？"),
+      note: "std-move",
       explain: L("A moved-from object is valid but UNSPECIFIED. Give it a new value or let it go out of scope.", "Un objeto movido es válido pero NO ESPECIFICADO. Dale un valor nuevo o deja que salga del ámbito.", "ムーブ後のオブジェクトは有効だが中身は不定。新しい値を入れるか、スコープ外へ。"),
     },
     say(L(
@@ -511,6 +880,8 @@ const moves: LessonDef = {
       options: [YES, NO_GCC],
       answer: 1,
       check: { compiles: false, program: item('Item a("a");\nItem b("b");\nb = a;') },
+      hint: L("b = a is an assignment. Item wrote a move constructor: what happens to the implicit copies?", "b = a es una asignación. Item escribió un constructor de movimiento: ¿qué pasa con las copias implícitas?", "b = a は代入。Item はムーブコンストラクタを書いた。暗黙のコピーはどうなる？"),
+      note: "rule-of-5",
       explain: L("Item declares a move constructor, so its implicit copy ASSIGNMENT is deleted.", "Item declara un constructor de movimiento, así que su ASIGNACIÓN de copia implícita se elimina.", "Item はムーブコンストラクタを宣言したので、暗黙のコピー代入は削除される。"),
       win: [{ t: "shake" }],
     },
@@ -521,6 +892,8 @@ const moves: LessonDef = {
       options: [YES, NO_GCC],
       answer: 1,
       check: { compiles: false },
+      hint: L("Copying Bag means copying each member. Can its member be copied?", "Copiar Bag significa copiar cada miembro. ¿Su miembro se puede copiar?", "Bag のコピーは各メンバのコピー。そのメンバはコピーできる？"),
+      note: "rule-of-5",
       explain: L("A unique_ptr can't be copied, so a class holding one is move-only: 'use of deleted function'.", "Un unique_ptr no se copia, así que una clase que lo tiene solo se mueve: 'use of deleted function'.", "unique_ptr はコピー不可。それを持つクラスもムーブ専用になる。"),
     },
     {
@@ -532,6 +905,8 @@ const moves: LessonDef = {
         L("nothing: the compiler fixes it", "nada: el compilador lo arregla", "何も：コンパイラが直す"),
       ],
       answer: 0,
+      hint: L("The default copy copies the pointer, not what it points to. How many deletes follow?", "La copia por defecto copia el puntero, no lo apuntado. ¿Cuántos delete siguen?", "デフォルトのコピーはポインタだけ複製。delete は何回起きる？"),
+      note: "rule-of-5",
       explain: L("The default copy copies the pointer, so both objects delete it. Use std::unique_ptr (rule of 0).", "La copia por defecto copia el puntero, y ambos objetos lo borran. Usa std::unique_ptr (regla de 0).", "デフォルトのコピーはポインタだけ複製し、両方が delete する。unique_ptr を使おう。"),
     },
     say(L(
@@ -547,6 +922,8 @@ const moves: LessonDef = {
       answer: 0,
       output: "move",
       check: { compiles: true, stdout: "move", program: item('std::vector<Item> v;\nv.reserve(1);\nv.emplace_back("a");\nv.emplace_back("b");') },
+      hint: L("Room for one. Does the second item fit? emplace_back itself builds in place.", "Hay lugar para uno. ¿Cabe el segundo? emplace_back construye en su sitio.", "場所は1つ分。2個目は入る？emplace_back 自体はその場で作る。"),
+      note: "elision-noexcept",
       explain: L("The 2nd item doesn't fit, so the vector reallocates and MOVES \"a\" (noexcept). emplace_back builds in place.", "El 2.º no cabe: el vector se agranda y MUEVE \"a\" (noexcept). emplace_back construye en su lugar.", "2 個目が入らず再確保。noexcept なので \"a\" をムーブ。emplace_back はその場で作る。"),
     },
     {
@@ -557,6 +934,8 @@ const moves: LessonDef = {
       answer: 0,
       output: "10",
       check: { compiles: true, stdout: "10" },
+      hint: L("noexcept(...) checks what each function promised. Which one was declared noexcept?", "noexcept(...) revisa lo que prometió cada función. ¿Cuál se declaró noexcept?", "noexcept(...) は各関数の約束を調べる。noexcept と宣言したのは？"),
+      note: "elision-noexcept",
       explain: L("The noexcept(...) operator asks the compiler: only a() promised not to throw.", "El operador noexcept(...) le pregunta al compilador: solo a() prometió no lanzar.", "noexcept(...) 演算子はコンパイラに聞く。投げない約束をしたのは a() だけ。"),
     },
     {
@@ -566,10 +945,82 @@ const moves: LessonDef = {
       solution: '#include <iostream>\n#include <utility>\n#include <vector>\n\nstruct Bag {\n    std::vector<int> items;\n};\n\nint main() {\n    Bag a{{1, 2, 3}};\n    Bag b = std::move(a);\n    std::cout << "a has " << a.items.size() << ", b has " << b.items.size() << "\\n";\n}\n',
       expect: "a has 0, b has 3",
       fallback: [String.raw`Bag\s+b\s*=\s*std::move\s*\(\s*a\s*\)`, String.raw`Bag\s+b\s*[({]\s*std::move\s*\(\s*a\s*\)`],
+      hint: L("Bag b = a copies the vector. Tell C++ that a may be stolen from.", "Bag b = a copia el vector. Dile a C++ que puede robar de a.", "Bag b = a は vector をコピーする。a から奪ってよいと C++ に伝えよう。"),
+      note: "rule-of-5",
       explain: L("Bag follows the rule of 0: its implicit move moves the vector, which is left empty.", "Bag sigue la regla de 0: su move implícito mueve el vector, que queda vacío.", "Bag は 0 の法則。暗黙のムーブが vector をムーブし、元は空になる。"),
     },
   ],
+  notes: movesNotes,
 };
+
+const smartNotes: NoteDef[] = [
+  note("unique-ptr", L("unique_ptr: one owner", "unique_ptr: un solo dueño", "unique_ptr：持ち主ひとり"),
+    p(
+      "A smart pointer is an object that OWNS a heap object and deletes it for you. std::unique_ptr allows exactly ONE owner. Create one with std::make_unique<T>(args), and use it like a pointer: *u reads the object, u->member reaches its members.",
+      "Un puntero inteligente es un objeto que es DUEÑO de un objeto del heap y lo borra por ti. std::unique_ptr permite exactamente UN dueño. Créalo con std::make_unique<T>(args) y úsalo como un puntero: *u lee el objeto, u->miembro llega a sus miembros.",
+      "スマートポインタは、ヒープの物を「持ち」、代わりに delete してくれるオブジェクト。std::unique_ptr の持ち主はちょうど1人。std::make_unique<T>(引数) で作り、ポインタのように使う。*u で中身、u->メンバ でメンバに届く。",
+    ),
+    p(
+      "Because there can be only one owner, a unique_ptr can't be COPIED: its copy constructor is deleted, so auto b = a; or push_back(a) won't compile. It can be MOVED: std::move(a) hands the object to the new owner, and a is left as nullptr.",
+      "Como solo puede haber un dueño, un unique_ptr no se puede COPIAR: su constructor de copia está eliminado, así que auto b = a; o push_back(a) no compilan. Sí se puede MOVER: std::move(a) entrega el objeto al nuevo dueño, y a queda en nullptr.",
+      "持ち主は1人だけなので、unique_ptr はコピーできない。コピーコンストラクタは削除ずみで、auto b = a; や push_back(a) はコンパイルできない。ムーブはできる。std::move(a) で新しい持ち主に渡し、a は nullptr になる。",
+    ),
+    ex("auto a = std::make_unique<std::string>(\"relic\");\nauto b = std::move(a);\nstd::cout << *b << \" \" << (a ? \"full\" : \"empty\");", "relic empty",
+      L("The move hands the string over; a is left empty", "El move entrega el string; a queda vacío", "ムーブで string を渡し、a は空に")),
+    ex("std::vector<std::unique_ptr<int>> box;\nauto n = std::make_unique<int>(4);\nbox.push_back(std::move(n));\nstd::cout << box.size() << *box[0];", "14",
+      L("Containers take unique_ptrs by move", "Los contenedores reciben unique_ptr con move", "コンテナには unique_ptr をムーブで入れる")),
+    p(
+      "reset() deletes the owned object right away and leaves the pointer empty. make_unique<T[]>(n) owns an array of n elements, all value-initialized (zero for numbers). unique_ptr costs no more than a raw pointer, so it's the default choice for a single owner.",
+      "reset() borra el objeto de inmediato y deja el puntero vacío. make_unique<T[]>(n) es dueño de un array de n elementos, todos inicializados a valor (cero para números). unique_ptr no cuesta más que un puntero crudo, así que es la opción por defecto para un solo dueño.",
+      "reset() は持っている物をすぐ delete し、ポインタを空にする。make_unique<T[]>(n) は n 個の配列を持ち、全部値初期化（数なら 0）。unique_ptr のコストは生ポインタと同じなので、持ち主1人なら基本はこれ。",
+    ),
+    exT("auto t = std::make_unique<Torch>(\"r\");\nstd::cout << \"|\";\nt.reset();\nstd::cout << \"|\";", "+r|-r|",
+      L("reset() deletes now, not at the }", "reset() borra ahora, no en la }", "reset() は } を待たずに今 delete")),
+  ),
+  note("shared-ptr", L("shared_ptr: counted owners", "shared_ptr: dueños contados", "shared_ptr：数える持ち主"),
+    p(
+      "std::shared_ptr allows MANY owners. All of them share one counter, use_count(). Every copy of a shared_ptr adds 1; every owner that dies or calls reset() subtracts 1. When the count reaches 0, the last owner deletes the object.",
+      "std::shared_ptr permite MUCHOS dueños. Todos comparten un contador, use_count(). Cada copia de un shared_ptr suma 1; cada dueño que muere o llama a reset() resta 1. Cuando la cuenta llega a 0, el último dueño borra el objeto.",
+      "std::shared_ptr は持ち主が何人もいてよい。全員で1つのカウンタ use_count() を共有する。コピーするたびに +1、持ち主が死ぬか reset() すると -1。0 になると最後の持ち主が delete する。",
+    ),
+    ex("auto s = std::make_shared<int>(9);\nauto t = s;\nauto u = s;\nstd::cout << s.use_count();\nt.reset();\nstd::cout << s.use_count();", "32",
+      L("Three owners, then one lets go", "Tres dueños, luego uno suelta", "持ち主3人、そして1人が手放す")),
+    p(
+      "Owners that are locals die at their }, so a copy made inside a block only counts while the block runs. Follow the count line by line: +1 on each copy, -1 at each owner's }.",
+      "Los dueños que son locales mueren en su }, así que una copia hecha dentro de un bloque solo cuenta mientras corre el bloque. Sigue la cuenta línea a línea: +1 en cada copia, -1 en la } de cada dueño.",
+      "ローカルの持ち主は } で死ぬので、ブロックの中で作ったコピーはブロックの間だけ数に入る。1行ずつカウントを追おう。コピーで +1、持ち主の } で -1。",
+    ),
+    p(
+      "A default-constructed shared_ptr owns nothing: its count is 0 and it tests as false in an if. That's the safe way to check before using *p.",
+      "Un shared_ptr creado por defecto no es dueño de nada: su cuenta es 0 y en un if se evalúa como false. Es la forma segura de revisar antes de usar *p.",
+      "デフォルトで作った shared_ptr は何も持たない。カウントは 0 で、if では false になる。*p を使う前の安全な確認方法じゃ。",
+    ),
+    ex("std::shared_ptr<std::string> none;\nif (none) std::cout << *none;\nelse std::cout << \"owns nothing\";", "owns nothing"),
+  ),
+  note("weak-cycles", L("weak_ptr and reference cycles", "weak_ptr y ciclos de referencias", "weak_ptr と循環参照"),
+    p(
+      "std::weak_ptr watches an object owned by shared_ptrs WITHOUT owning it: it doesn't add to use_count. expired() tells you whether the object already died. lock() returns a shared_ptr: a real, temporary owner if the object is alive, or an empty one if it's gone.",
+      "std::weak_ptr observa un objeto que pertenece a shared_ptr SIN ser dueño: no suma a use_count. expired() te dice si el objeto ya murió. lock() devuelve un shared_ptr: un dueño real y temporal si el objeto vive, o uno vacío si ya no está.",
+      "std::weak_ptr は shared_ptr が持つ物を、持たずに見守る。use_count は増えない。expired() で物がもう死んだかわかる。lock() は shared_ptr を返す。生きていれば本物の一時的な持ち主、死んでいれば空のものじゃ。",
+    ),
+    ex("auto s = std::make_shared<int>(3);\nstd::weak_ptr<int> w = s;\nstd::cout << s.use_count() << w.expired();\ns.reset();\nstd::cout << w.expired();", "101",
+      L("w doesn't count; it only notices the death", "w no cuenta; solo nota la muerte", "w は数に入らず、死を知るだけ")),
+    ex("std::weak_ptr<int> w;\n{\n  auto s = std::make_shared<int>(3);\n  w = s;\n}\nif (auto p = w.lock()) std::cout << *p;\nelse std::cout << \"gone\";", "gone",
+      L("lock() gives an empty pointer once it's gone", "lock() da un puntero vacío cuando ya no está", "死んだ後の lock() は空を返す")),
+    p(
+      "The danger with shared_ptr is a CYCLE: A owns B and B owns A. When the outside owners die, each object is still held by the other, so neither count reaches 0. No destructor ever runs and both leak, silently.",
+      "El peligro con shared_ptr es un CICLO: A es dueño de B y B es dueño de A. Cuando mueren los dueños de fuera, cada objeto sigue sostenido por el otro, así que ninguna cuenta llega a 0. Ningún destructor corre nunca y ambos se fugan, en silencio.",
+      "shared_ptr の危険は循環。A が B を持ち、B が A を持つ。外の持ち主が死んでも、互いに持ち合うのでカウントは 0 にならない。デストラクタは動かず、両方がだまってリークする。",
+    ),
+    p(
+      "The fix: decide who really owns whom, and make the back link a weak_ptr. A child watching its parent, or a node pointing back, should not keep the other alive. Then the counts can reach 0 and destructors run normally.",
+      "La solución: decide quién es realmente dueño de quién y haz que el enlace de vuelta sea un weak_ptr. Un hijo que observa a su padre, o un nodo que apunta hacia atrás, no debe mantener vivo al otro. Así las cuentas llegan a 0 y los destructores corren con normalidad.",
+      "直し方：本当の持ち主を決め、逆向きのリンクを weak_ptr にする。親を見守る子や、後ろを指すノードは、相手を生かし続けてはいけない。そうすればカウントは 0 になり、デストラクタは普通に動く。",
+    ),
+    ex("struct Room {\n  std::weak_ptr<Room> back;\n  ~Room() { std::cout << \"x\"; }\n};\n\nint main() {\n  auto r1 = std::make_shared<Room>();\n  auto r2 = std::make_shared<Room>();\n  r1->back = r2;\n  r2->back = r1;\n}", "xx",
+      L("weak links don't own, so both rooms are freed", "Los enlaces weak no son dueños: ambas salas se liberan", "weak のリンクは持たないので両方解放")),
+  ),
+];
 
 // ─── 2.4 Smart relics: unique, shared, weak ────────────────────────────────
 const smart: LessonDef = {
@@ -612,6 +1063,8 @@ const smart: LessonDef = {
       answer: 0,
       output: "15",
       check: { compiles: true, stdout: "15" },
+      hint: L("After the move, who owns the int? What is left in p?", "Tras el move, ¿quién es dueño del int? ¿Qué queda en p?", "ムーブ後、int の持ち主は？p には何が残る？"),
+      note: "unique-ptr",
       explain: L("Moving a unique_ptr hands the object to q and leaves p as nullptr (true prints 1).", "Mover un unique_ptr entrega el objeto a q y deja p en nullptr (true se imprime 1).", "unique_ptr をムーブすると中身は q へ、p は nullptr（true は 1）。"),
       setup: [{ t: "tag", actor: "hero", text: "p" }, { t: "item", kind: "gem", holder: "hero" }],
       win: [{ t: "enter", actor: "ally" }, { t: "give", to: "ally" }, { t: "print", text: "15" }],
@@ -623,6 +1076,8 @@ const smart: LessonDef = {
       options: [YES, NO_GCC],
       answer: 1,
       check: { compiles: false },
+      hint: L("push_back(p) gets a named unique_ptr. Can a unique_ptr be copied?", "push_back(p) recibe un unique_ptr con nombre. ¿Un unique_ptr se puede copiar?", "push_back(p) は名前つきの unique_ptr を受け取る。コピーできる？"),
+      note: "unique-ptr",
       explain: L("push_back(p) would copy p. Write v.push_back(std::move(p)) to hand it over.", "push_back(p) copiaría p. Escribe v.push_back(std::move(p)) para entregarlo.", "push_back(p) はコピーになる。v.push_back(std::move(p)) で渡そう。"),
     },
     {
@@ -633,6 +1088,8 @@ const smart: LessonDef = {
       answer: 0,
       output: "+a-a|",
       check: { compiles: true, stdout: "+a-a|", program: torch('auto p = std::make_unique<Torch>("a");\np.reset();\nstd::cout << "|";') },
+      hint: L("Does reset() wait for the }, or delete the torch right away?", "¿reset() espera a la }, o borra la antorcha de inmediato?", "reset() は } を待つ？それともすぐ delete する？"),
+      note: "unique-ptr",
       explain: L("reset() deletes the owned torch right away, before the |.", "reset() borra la antorcha de inmediato, antes del |.", "reset() は持っているたいまつをすぐ delete。| より先。"),
     },
     say(L(
@@ -648,6 +1105,8 @@ const smart: LessonDef = {
       answer: 0,
       output: "2",
       check: { compiles: true, stdout: "2" },
+      hint: L("Each copy of a shared_ptr is one more owner. How many owners are there?", "Cada copia de un shared_ptr es un dueño más. ¿Cuántos dueños hay?", "shared_ptr のコピーごとに持ち主が1人増える。何人いる？"),
+      note: "shared-ptr",
       explain: L("a and b share one int, so the count is 2.", "a y b comparten un int, así que la cuenta es 2.", "a と b が一つの int を共有。カウントは 2。"),
       setup: [{ t: "tag", actor: "hero", text: "a" }, { t: "item", kind: "gem", holder: "hero" }],
       win: [{ t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: "b" }, { t: "lend", to: "ally" }, { t: "value", actor: "hero", text: "2" }, { t: "print", text: "2" }],
@@ -660,6 +1119,8 @@ const smart: LessonDef = {
       answer: 0,
       output: "21",
       check: { compiles: true, stdout: "21" },
+      hint: L("Count owners line by line: +1 for each copy, -1 when an owner reaches its }.", "Cuenta los dueños línea a línea: +1 por cada copia, -1 cuando un dueño llega a su }.", "1行ずつ持ち主を数えよう。コピーで +1、持ち主の } で -1。"),
+      note: "shared-ptr",
       explain: L("Inside the block b adds an owner (2). At the } b dies and the count drops to 1.", "Dentro del bloque b agrega un dueño (2). En la } b muere y la cuenta baja a 1.", "ブロック内で b が加わり 2。} で b が死んで 1 に戻る。"),
     },
     {
@@ -670,6 +1131,8 @@ const smart: LessonDef = {
       answer: 0,
       output: "0n",
       check: { compiles: true, stdout: "0n" },
+      hint: L("p was never given an object. What count does an owner of nothing have, and is it true?", "p nunca recibió un objeto. ¿Qué cuenta tiene un dueño de nada, y es true?", "p には何も渡されていない。何も持たない持ち主のカウントは？true？"),
+      note: "shared-ptr",
       explain: L("An empty shared_ptr owns nothing: count 0, and it tests as false.", "Un shared_ptr vacío no es dueño de nada: cuenta 0, y se evalúa como false.", "空の shared_ptr は何も持たない。カウント 0 で false あつかい。"),
     },
     say(L(
@@ -685,6 +1148,8 @@ const smart: LessonDef = {
       answer: 0,
       output: "01",
       check: { compiles: true, stdout: "01" },
+      hint: L("Does w count as an owner? Who keeps the int alive, and until when?", "¿w cuenta como dueño? ¿Quién mantiene vivo el int, y hasta cuándo?", "w は持ち主に数えられる？int を生かしているのは誰で、いつまで？"),
+      note: "weak-cycles",
       explain: L("Inside the block s keeps it alive (0). w doesn't count, so at the } the int dies (1).", "Dentro del bloque s lo mantiene vivo (0). w no cuenta, así que en la } el int muere (1).", "ブロック内は s が生かす（0）。w は数に入らないので } で int は死ぬ（1）。"),
     },
     {
@@ -693,6 +1158,8 @@ const smart: LessonDef = {
       code: 'auto s = std::make_shared<int>(7);\nstd::weak_ptr<int> w = s;\nif (auto p = w.___())\n  std::cout << *p << " " << s.use_count();',
       answer: "lock",
       check: { compiles: true, stdout: "7 2" },
+      hint: L("Which weak_ptr function gives back a temporary shared owner?", "¿Qué función de weak_ptr devuelve un dueño compartido temporal?", "一時的な共有の持ち主を返す weak_ptr の関数は？"),
+      note: "weak-cycles",
       explain: L("lock() returns a shared_ptr: while p lives the count is 2 (s and p).", "lock() devuelve un shared_ptr: mientras p vive la cuenta es 2 (s y p).", "lock() は shared_ptr を返す。p がいる間カウントは 2（s と p）。"),
     },
     say(L(
@@ -708,6 +1175,8 @@ const smart: LessonDef = {
       answer: 0,
       output: "end",
       check: { compiles: true, stdout: "end" },
+      hint: L("After the }, does anything still own each node? Look at what they hold.", "Tras la }, ¿algo sigue siendo dueño de cada nodo? Mira qué sostienen.", "} の後も、各ノードを持っている物はある？互いに何を持つか見よう。"),
+      note: "weak-cycles",
       explain: L("Each node holds the other, so both counts stay at 1 after the }. No destructor runs: a leak.", "Cada nodo sostiene al otro, así que ambas cuentas quedan en 1 tras la }. Ningún destructor corre: fuga.", "互いに持ち合うので } の後もカウントは 1。デストラクタは動かずリーク。"),
       win: [{ t: "banner", text: L("LEAK", "FUGA", "リーク") }],
     },
@@ -718,6 +1187,8 @@ const smart: LessonDef = {
       options: ["unique_ptr", "shared_ptr", "weak_ptr"],
       answer: 0,
       check: { compiles: true, program: torch("std::unique_ptr<Torch> t;") },
+      hint: L("One owner and no extra cost. Which smart pointer allows exactly one owner?", "Un dueño y sin costo extra. ¿Qué puntero inteligente permite exactamente un dueño?", "持ち主1人で余分なコストなし。持ち主をちょうど1人にするのは？"),
+      note: "unique-ptr",
       explain: L("unique_ptr costs nothing extra over a raw pointer. Use shared_ptr only for real shared ownership.", "unique_ptr no cuesta nada extra frente a un puntero crudo. Usa shared_ptr solo si de verdad se comparte.", "unique_ptr は生ポインタと同じコスト。本当に共有するときだけ shared_ptr。"),
     },
     {
@@ -728,6 +1199,8 @@ const smart: LessonDef = {
       answer: 0,
       output: "0",
       check: { compiles: true, stdout: "0" },
+      hint: L("make_unique value-initializes the elements. What is a value-initialized int?", "make_unique inicializa a valor los elementos. ¿Qué es un int inicializado a valor?", "make_unique は要素を値初期化する。値初期化された int は？"),
+      note: "unique-ptr",
       explain: L("make_unique<int[]>(3) builds three value-initialized ints: all zeros.", "make_unique<int[]>(3) crea tres int inicializados a valor: todos ceros.", "make_unique<int[]>(3) は値初期化された int を 3 個作る。全部 0。"),
     },
     {
@@ -737,10 +1210,61 @@ const smart: LessonDef = {
       solution: '#include <iostream>\n#include <memory>\n\nstruct Child;\nstruct Parent {\n    std::shared_ptr<Child> child;\n    ~Parent() { std::cout << "parent "; }\n};\nstruct Child {\n    std::weak_ptr<Parent> parent;\n    ~Child() { std::cout << "child "; }\n};\n\nint main() {\n    {\n        auto p = std::make_shared<Parent>();\n        auto c = std::make_shared<Child>();\n        p->child = c;\n        c->parent = p;\n    }\n    std::cout << "end\\n";\n}\n',
       expect: "parent child",
       fallback: [String.raw`weak_ptr\s*<\s*Parent\s*>\s+parent`],
+      hint: L("Parent and Child own each other. Make the child's link watch without owning.", "Parent y Child son dueños uno del otro. Haz que el enlace del hijo observe sin ser dueño.", "Parent と Child が持ち合っている。子のリンクを持たずに見守るものに。"),
+      note: "weak-cycles",
       explain: L("A weak_ptr doesn't own, so Parent's count hits 0 at the }. Parent dies, then releases Child.", "Un weak_ptr no es dueño: la cuenta de Parent llega a 0 en la }. Parent muere y luego suelta a Child.", "weak_ptr は持たないので } で Parent のカウントが 0 に。Parent が死に、次に Child が解放。"),
     },
   ],
+  notes: smartNotes,
 };
+
+const bossNotes: NoteDef[] = [
+  note("boss-copy-move", L("Recap: copy, move, assign", "Repaso: copiar, mover, asignar", "復習：コピー・ムーブ・代入"),
+    p(
+      "To predict which special member runs, ask two questions. First: is a NEW object being built (Item b = a; Item b(a); a parameter by value; push_back into a vector), or is an EXISTING object being changed (b = a;)? New objects use a constructor; existing ones use assignment.",
+      "Para predecir qué miembro especial corre, hazte dos preguntas. Primera: ¿se construye un objeto NUEVO (Item b = a; Item b(a); un parámetro por valor; push_back a un vector) o se cambia uno EXISTENTE (b = a;)? Los nuevos usan un constructor; los existentes, una asignación.",
+      "どの特殊メンバが動くか予想するには2つ考えよう。1つ目：新しい物を作る（Item b = a;、Item b(a);、値渡し、vector への push_back）のか、既存の物を変える（b = a;）のか。新しい物はコンストラクタ、既存の物は代入じゃ。",
+    ),
+    p(
+      "Second: is the source an lvalue you'll use again (copy), or a temporary or std::move(...) (move)? Then check the special cases: a returned fresh temporary is elided (nothing runs), and a vector with enough reserved room never transfers its old elements.",
+      "Segunda: ¿el origen es un lvalue que volverás a usar (copia), o un temporal o std::move(...) (move)? Luego revisa los casos especiales: un temporal nuevo devuelto se elide (no corre nada), y un vector con lugar reservado suficiente nunca traspasa sus elementos viejos.",
+      "2つ目：元はまた使う lvalue（コピー）か、一時オブジェクトや std::move(...)（ムーブ）か。そして特例を確認。新しい一時オブジェクトを返すと省略され（何も動かない）、十分 reserve した vector は古い要素を移さない。",
+    ),
+    ex("struct Echo {\n  Echo() {}\n  Echo(const Echo&) { std::cout << \"new \"; }\n  Echo& operator=(const Echo&) { std::cout << \"set \"; return *this; }\n};\n\nint main() {\n  Echo a;\n  Echo b = a;\n  b = a;\n}", "new set",
+      L("= in a declaration builds; = later assigns", "= en una declaración construye; = después asigna", "宣言の = は作る、後の = は代入")),
+    exI("std::vector<Item> v;\nv.reserve(2);\nv.emplace_back(\"k\");\nItem j(\"j\");\nv.push_back(std::move(j));", "move",
+      L("emplace_back builds in place; std::move hands j over", "emplace_back construye en su sitio; std::move entrega j", "emplace_back はその場で作り、std::move で j を渡す")),
+  ),
+  note("boss-lifetimes", L("Recap: when objects die", "Repaso: cuándo mueren los objetos", "復習：オブジェクトが死ぬとき"),
+    p(
+      "Locals die at the } of their block, in reverse order of birth. A unique_ptr is a local owner too, so the object it owns dies exactly when the owner does, in the same reverse order as the other locals. Objects created after a block closes are born later and die earlier than older ones.",
+      "Las locales mueren en la } de su bloque, en orden inverso al nacer. Un unique_ptr también es un dueño local, así que su objeto muere justo cuando muere el dueño, en el mismo orden inverso que las demás locales. Los objetos creados tras cerrar un bloque nacen después y mueren antes que los más viejos.",
+      "ローカルはブロックの } で、生まれた逆順に死ぬ。unique_ptr もローカルの持ち主なので、持っている物は持ち主と同時に、他のローカルと同じ逆順で死ぬ。ブロックが閉じた後に作られた物は、古い物より後に生まれ先に死ぬ。",
+    ),
+    exT("Torch a(\"1\");\n{\n  auto b = std::make_unique<Torch>(\"2\");\n  Torch c(\"3\");\n}", "+1+2+3-3-2-1",
+      L("The owner b dies in its turn, taking its torch along", "El dueño b muere en su turno y se lleva su antorcha", "持ち主 b は自分の番に死に、たいまつも消える")),
+    p(
+      "Never return a reference or pointer to something that dies when the function ends: a local, or a temporary created in the return statement. The caller gets a dangling reference, and using it is UB. Return by value instead; with copy elision and moves it's cheap.",
+      "Nunca devuelvas una referencia o puntero a algo que muere al terminar la función: una local o un temporal creado en el return. Quien llama recibe una referencia colgante, y usarla es UB. Devuelve por valor; con la elisión y los moves es barato.",
+      "関数の終わりに死ぬ物（ローカルや return 文で作った一時オブジェクト）への参照やポインタを返してはいけない。呼び出し元はダングリング参照を受け取り、使えば UB。値で返そう。コピー省略とムーブで安くすむ。",
+    ),
+    ex("std::string label() {\n  return \"ok\";\n}\n\nint main() {\n  std::cout << label();\n}", "ok",
+      L("Returned by value: the caller owns a real string", "Devuelto por valor: quien llama tiene un string real", "値で返せば呼び出し元が本物の string を持つ")),
+  ),
+  note("boss-owners", L("Recap: owners and the rule of 0", "Repaso: dueños y la regla de 0", "復習：持ち主と 0 の法則"),
+    p(
+      "unique_ptr has one owner: it can be moved, never copied. shared_ptr counts its owners: copies add 1, reset() or death subtracts 1, and the object lives while the count is above 0. weak_ptr watches without counting.",
+      "unique_ptr tiene un dueño: se puede mover, nunca copiar. shared_ptr cuenta sus dueños: las copias suman 1, reset() o la muerte restan 1, y el objeto vive mientras la cuenta sea mayor que 0. weak_ptr observa sin contar.",
+      "unique_ptr の持ち主は1人。ムーブはできてもコピーはできない。shared_ptr は持ち主を数え、コピーで +1、reset() や死で -1。カウントが 0 より大きい間は生きる。weak_ptr は数えずに見守る。",
+    ),
+    ex("auto p = std::make_shared<int>(8);\nstd::shared_ptr<int> q;\nstd::cout << q.use_count();\nq = p;\nstd::cout << p.use_count() << *q;", "028"),
+    p(
+      "The rule of 0 ties it together: build your classes from members that already know how to copy, move and clean up (std::string, std::vector, smart pointers). Then you write none of the five special members, and the defaults are correct.",
+      "La regla de 0 lo une todo: construye tus clases con miembros que ya saben copiarse, moverse y limpiarse (std::string, std::vector, punteros inteligentes). Así no escribes ninguno de los cinco miembros especiales y los de por defecto son correctos.",
+      "0 の法則がすべてをまとめる。コピー・ムーブ・後片付けを自分でこなせるメンバ（std::string、std::vector、スマートポインタ）でクラスを作れば、5つの特殊メンバは1つも書かずにすみ、デフォルトが正しく動く。",
+    ),
+  ),
+];
 
 // ─── 2.5 Boss: Lifetime Lich ───────────────────────────────────────────────
 const boss: LessonDef = {
@@ -757,15 +1281,15 @@ const boss: LessonDef = {
       "SOY EL LICHE DEL TIEMPO. Yo decido cuándo nacen y mueren los objetos. ¿Sabes leer mis rituales?",
       "我は寿命のリッチ。オブジェクトの生と死を決める者。我が儀式を読み解けるか？",
     )),
-    { kind: "predict", time: 12, prompt: PRINT, code: 'Item a("x");\nItem b(a);\nItem c(std::move(b));', options: ["copy move", "copy copy", "move move"], answer: 0, output: "copy move", check: { compiles: true, stdout: "copy move", program: item('Item a("x");\nItem b(a);\nItem c(std::move(b));') }, explain: L("b(a) copies a; c(std::move(b)) steals from b.", "b(a) copia a; c(std::move(b)) roba de b.", "b(a) は a のコピー、c(std::move(b)) は b から奪う。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: 'std::vector<Item> v;\nv.push_back(Item("t"));', options: ["move", "copy", "copy move"], answer: 0, output: "move", check: { compiles: true, stdout: "move", program: item('std::vector<Item> v;\nv.push_back(Item("t"));') }, explain: L("Item(\"t\") is a temporary, so push_back moves it into the vector.", "Item(\"t\") es un temporal, así que push_back lo mueve al vector.", "Item(\"t\") は一時オブジェクト。push_back はムーブで入れる。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: "auto p = std::make_shared<int>(1);\nauto q = p;\np.reset();\nstd::cout << q.use_count() << *q;", options: ["11", "21", "01"], answer: 0, output: "11", check: { compiles: true, stdout: "11" }, explain: L("p lets go, so only q owns the int now: count 1, value still 1.", "p suelta, así que solo q es dueño del int: cuenta 1, valor aún 1.", "p が手放し、持ち主は q だけ。カウント 1、値は 1 のまま。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: 'Torch a("a");\n{\n  Torch b("b");\n  auto c = std::make_unique<Torch>("c");\n}\nTorch d("d");', options: ["+a+b+c-c-b+d-d-a", "+a+b+c-b-c+d-d-a", "+a+b+c+d-d-c-b-a"], answer: 0, output: "+a+b+c-c-b+d-d-a", check: { compiles: true, stdout: "+a+b+c-c-b+d-d-a", program: torch('Torch a("a");\n{\n  Torch b("b");\n  auto c = std::make_unique<Torch>("c");\n}\nTorch d("d");') }, explain: L("At the inner }, c's owner dies first (-c), then b. d is born after, and dies before a.", "En la } interna muere primero el dueño de c (-c), luego b. d nace después y muere antes que a.", "内側の } で c の持ち主が先に死に（-c）、次に b。d は後で生まれ a より先に死ぬ。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: 'Torch make(std::string n) {\n  return Torch(n);\n}\n// in main:\nTorch t = make("m");\nstd::cout << "|";', options: ["+m|-m", "+m-m|-m", "+m|"], answer: 0, output: "+m|-m", check: { compiles: true, stdout: "+m|-m", program: torch('Torch t = make("m");\nstd::cout << "|";', "Torch make(std::string n) {\n  return Torch(n);\n}") }, explain: L("Guaranteed copy elision: the returned temporary IS t. One torch, one -m at the end.", "Elisión de copia garantizada: el temporal devuelto ES t. Una antorcha, un -m al final.", "コピー省略の保証で、返した一時オブジェクトが t そのもの。たいまつは 1 本。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: 'std::vector<Item> v;\nv.reserve(2);\nItem a("x");\nv.push_back(a);\nv.push_back(std::move(a));', options: ["copy move", "copy copy", "move move"], answer: 0, output: "copy move", check: { compiles: true, stdout: "copy move", program: item('std::vector<Item> v;\nv.reserve(2);\nItem a("x");\nv.push_back(a);\nv.push_back(std::move(a));') }, explain: L("Room for 2 means no reallocation: push_back(a) copies, push_back(std::move(a)) moves.", "Espacio para 2: no hay realocación. push_back(a) copia, push_back(std::move(a)) mueve.", "2 個分あるので再確保なし。push_back(a) はコピー、std::move(a) はムーブ。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: 'struct Spy {\n  Spy() { std::cout << "D"; }\n  Spy(const Spy&) { std::cout << "C"; }\n  Spy& operator=(const Spy&) { std::cout << "A"; return *this; }\n};\nSpy a; Spy b = a; Spy c; c = a;', options: ["DCDA", "DADA", "DCDC"], answer: 0, output: "DCDA", check: { compiles: true, stdout: "DCDA" }, explain: L("Spy b = a builds a NEW object: copy constructor (C). c = a changes an existing one: assignment (A).", "Spy b = a crea un objeto NUEVO: constructor de copia (C). c = a cambia uno existente: asignación (A).", "Spy b = a は新しく作るのでコピーコンストラクタ（C）。c = a は既存への代入（A）。") },
-    { kind: "predict", time: 12, prompt: COMPILES, code: "auto p = std::make_unique<int>(5);\nauto q = p;", options: [YES, NO_GCC], answer: 1, check: { compiles: false }, explain: L("unique_ptr has one owner only: its copy constructor is deleted. Use std::move(p).", "unique_ptr tiene un solo dueño: su constructor de copia está eliminado. Usa std::move(p).", "unique_ptr の持ち主はひとり。コピーは削除ずみ。std::move(p) を使おう。") },
-    { kind: "predict", time: 12, prompt: SAFE, code: 'const std::string& f() {\n  return "hi";\n}\n\nint main() { f(); }', options: [L("No: the temporary dies at return", "No: el temporal muere en el return", "いいえ：一時オブジェクトは return で死ぬ"), L("Yes: literals live forever", "Sí: los literales viven siempre", "はい：リテラルは永遠")], answer: 0, check: { compiles: true }, explain: L("\"hi\" becomes a temporary std::string that dies at the return. The reference dangles; g++ warns.", "\"hi\" se vuelve un std::string temporal que muere en el return. La referencia queda colgando; g++ avisa.", "\"hi\" は一時的な std::string になり return で死ぬ。参照はダングリング。g++ も警告。") },
+    { kind: "predict", time: 12, prompt: PRINT, code: 'Item a("x");\nItem b(a);\nItem c(std::move(b));', options: ["copy move", "copy copy", "move move"], answer: 0, output: "copy move", check: { compiles: true, stdout: "copy move", program: item('Item a("x");\nItem b(a);\nItem c(std::move(b));') }, hint: L("For each new Item: is its source still in use, or marked with std::move?", "Para cada Item nuevo: ¿su origen sigue en uso, o está marcado con std::move?", "新しい Item ごとに：元はまだ使う？std::move の印がある？"), note: "boss-copy-move", explain: L("b(a) copies a; c(std::move(b)) steals from b.", "b(a) copia a; c(std::move(b)) roba de b.", "b(a) は a のコピー、c(std::move(b)) は b から奪う。") },
+    { kind: "predict", time: 12, prompt: PRINT, code: 'std::vector<Item> v;\nv.push_back(Item("t"));', options: ["move", "copy", "copy move"], answer: 0, output: "move", check: { compiles: true, stdout: "move", program: item('std::vector<Item> v;\nv.push_back(Item("t"));') }, hint: L("The argument has no name. Is it an lvalue or an rvalue?", "El argumento no tiene nombre. ¿Es un lvalue o un rvalue?", "引数には名前がない。lvalue？rvalue？"), note: "boss-copy-move", explain: L("Item(\"t\") is a temporary, so push_back moves it into the vector.", "Item(\"t\") es un temporal, así que push_back lo mueve al vector.", "Item(\"t\") は一時オブジェクト。push_back はムーブで入れる。") },
+    { kind: "predict", time: 12, prompt: PRINT, code: "auto p = std::make_shared<int>(1);\nauto q = p;\np.reset();\nstd::cout << q.use_count() << *q;", options: ["11", "21", "01"], answer: 0, output: "11", check: { compiles: true, stdout: "11" }, hint: L("Count the owners after reset(). Does letting go change the int's value?", "Cuenta los dueños tras reset(). ¿Soltar cambia el valor del int?", "reset() 後の持ち主を数えよう。手放すと int の値は変わる？"), note: "boss-owners", explain: L("p lets go, so only q owns the int now: count 1, value still 1.", "p suelta, así que solo q es dueño del int: cuenta 1, valor aún 1.", "p が手放し、持ち主は q だけ。カウント 1、値は 1 のまま。") },
+    { kind: "predict", time: 15, prompt: PRINT, code: 'Torch a("a");\n{\n  Torch b("b");\n  auto c = std::make_unique<Torch>("c");\n}\nTorch d("d");', options: ["+a+b+c-c-b+d-d-a", "+a+b+c-b-c+d-d-a", "+a+b+c+d-d-c-b-a"], answer: 0, output: "+a+b+c-c-b+d-d-a", check: { compiles: true, stdout: "+a+b+c-c-b+d-d-a", program: torch('Torch a("a");\n{\n  Torch b("b");\n  auto c = std::make_unique<Torch>("c");\n}\nTorch d("d");') }, hint: L("c's owner is a local too. At the inner }, which local was born last?", "El dueño de c también es una local. En la } interna, ¿qué local nació al final?", "c の持ち主もローカル。内側の } で最後に生まれたのは？"), note: "boss-lifetimes", explain: L("At the inner }, c's owner dies first (-c), then b. d is born after, and dies before a.", "En la } interna muere primero el dueño de c (-c), luego b. d nace después y muere antes que a.", "内側の } で c の持ち主が先に死に（-c）、次に b。d は後で生まれ a より先に死ぬ。") },
+    { kind: "predict", time: 15, prompt: PRINT, code: 'Torch make(std::string n) {\n  return Torch(n);\n}\n// in main:\nTorch t = make("m");\nstd::cout << "|";', options: ["+m|-m", "+m-m|-m", "+m|"], answer: 0, output: "+m|-m", check: { compiles: true, stdout: "+m|-m", program: torch('Torch t = make("m");\nstd::cout << "|";', "Torch make(std::string n) {\n  return Torch(n);\n}") }, hint: L("make returns a fresh temporary. How many torches really exist?", "make devuelve un temporal nuevo. ¿Cuántas antorchas existen de verdad?", "make は新しい一時オブジェクトを返す。たいまつは本当は何本？"), note: "boss-copy-move", explain: L("Guaranteed copy elision: the returned temporary IS t. One torch, one -m at the end.", "Elisión de copia garantizada: el temporal devuelto ES t. Una antorcha, un -m al final.", "コピー省略の保証で、返した一時オブジェクトが t そのもの。たいまつは 1 本。") },
+    { kind: "predict", time: 15, prompt: PRINT, code: 'std::vector<Item> v;\nv.reserve(2);\nItem a("x");\nv.push_back(a);\nv.push_back(std::move(a));', options: ["copy move", "copy copy", "move move"], answer: 0, output: "copy move", check: { compiles: true, stdout: "copy move", program: item('std::vector<Item> v;\nv.reserve(2);\nItem a("x");\nv.push_back(a);\nv.push_back(std::move(a));') }, hint: L("Enough room was reserved, so nothing is transferred. Look at each argument.", "Se reservó lugar suficiente, así que no hay traspaso. Mira cada argumento.", "場所は十分あるので移動はない。各引数を見よう。"), note: "boss-copy-move", explain: L("Room for 2 means no reallocation: push_back(a) copies, push_back(std::move(a)) moves.", "Espacio para 2: no hay realocación. push_back(a) copia, push_back(std::move(a)) mueve.", "2 個分あるので再確保なし。push_back(a) はコピー、std::move(a) はムーブ。") },
+    { kind: "predict", time: 15, prompt: PRINT, code: 'struct Spy {\n  Spy() { std::cout << "D"; }\n  Spy(const Spy&) { std::cout << "C"; }\n  Spy& operator=(const Spy&) { std::cout << "A"; return *this; }\n};\nSpy a; Spy b = a; Spy c; c = a;', options: ["DCDA", "DADA", "DCDC"], answer: 0, output: "DCDA", check: { compiles: true, stdout: "DCDA" }, hint: L("Is each = building a new object or changing an existing one?", "¿Cada = construye un objeto nuevo o cambia uno existente?", "それぞれの = は新しく作る？既存の物を変える？"), note: "boss-copy-move", explain: L("Spy b = a builds a NEW object: copy constructor (C). c = a changes an existing one: assignment (A).", "Spy b = a crea un objeto NUEVO: constructor de copia (C). c = a cambia uno existente: asignación (A).", "Spy b = a は新しく作るのでコピーコンストラクタ（C）。c = a は既存への代入（A）。") },
+    { kind: "predict", time: 12, prompt: COMPILES, code: "auto p = std::make_unique<int>(5);\nauto q = p;", options: [YES, NO_GCC], answer: 1, check: { compiles: false }, hint: L("auto q = p tries to make a second owner. How many owners may a unique_ptr have?", "auto q = p intenta crear un segundo dueño. ¿Cuántos dueños puede tener un unique_ptr?", "auto q = p は2人目の持ち主を作ろうとする。unique_ptr の持ち主は何人まで？"), note: "boss-owners", explain: L("unique_ptr has one owner only: its copy constructor is deleted. Use std::move(p).", "unique_ptr tiene un solo dueño: su constructor de copia está eliminado. Usa std::move(p).", "unique_ptr の持ち主はひとり。コピーは削除ずみ。std::move(p) を使おう。") },
+    { kind: "predict", time: 12, prompt: SAFE, code: 'const std::string& f() {\n  return "hi";\n}\n\nint main() { f(); }', options: [L("No: the temporary dies at return", "No: el temporal muere en el return", "いいえ：一時オブジェクトは return で死ぬ"), L("Yes: literals live forever", "Sí: los literales viven siempre", "はい：リテラルは永遠")], answer: 0, check: { compiles: true }, hint: L("The return type is a reference. What does it refer to, and when does that die?", "El tipo de retorno es una referencia. ¿A qué se refiere, y cuándo muere eso?", "戻り値の型は参照。何を指していて、それはいつ死ぬ？"), note: "boss-lifetimes", explain: L("\"hi\" becomes a temporary std::string that dies at the return. The reference dangles; g++ warns.", "\"hi\" se vuelve un std::string temporal que muere en el return. La referencia queda colgando; g++ avisa.", "\"hi\" は一時的な std::string になり return で死ぬ。参照はダングリング。g++ も警告。") },
     {
       kind: "pick", time: 15,
       prompt: L("The rule of zero says...", "La regla de cero dice...", "0 の法則とは…"),
@@ -776,6 +1300,8 @@ const boss: LessonDef = {
         L("never use classes", "nunca uses clases", "クラスを使わない"),
       ],
       answer: 0,
+      hint: L("The number in the rule's name is how many special members you write yourself.", "El número del nombre de la regla es cuántos miembros especiales escribes tú.", "法則の数字は、自分で書く特殊メンバの数じゃ。"),
+      note: "boss-owners",
       explain: L("Members like std::string, std::vector and std::unique_ptr already copy, move and clean up correctly.", "Miembros como std::string, std::vector y std::unique_ptr ya copian, mueven y limpian bien.", "std::string、vector、unique_ptr などは、コピーもムーブも後片付けも正しくこなす。"),
     },
     enemySays(L(
@@ -784,6 +1310,7 @@ const boss: LessonDef = {
       "ばかな…儀式が破られた。お前はすべての生と死を知った。変身の城が待っているぞ！",
     )),
   ],
+  notes: bossNotes,
 };
 
 export const lifetimeForest: RegionDef = {

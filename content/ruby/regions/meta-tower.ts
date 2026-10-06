@@ -1,4 +1,4 @@
-import type { Beat, LessonDef, RegionDef, Text } from "../../../lib/content/types.ts";
+import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
 
 // REGION 4 · META TOWER  (exceptions, dynamic dispatch and metaprogramming, pattern matching, threads and Ractors)
@@ -7,10 +7,106 @@ const say = (text: Text): Beat => ({ kind: "dialog", speaker: "master", text });
 const enemySays = (text: Text): Beat => ({ kind: "dialog", speaker: "enemy", text });
 const C = (...lines: string[]) => lines.join("\n");
 
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+// Thread examples always print deterministic results (joined, sorted or passed through a Queue).
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example; the validator checks `output` against real Ruby. */
+const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code, output, caption });
+/** An example that must raise the given exception at runtime (verified too). */
+const boom = (code: string, throws: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: true, throws } });
+
 const PRINT = L("What does it print?", "¿Qué imprime?", "何が表示される？");
 const HAPPENS = L("What happens?", "¿Qué pasa?", "どうなる？");
 
 // ─── 4.1 Shields against the storm: rescue and ensure ──────────────────────
+const rescueNotes: NoteDef[] = [
+  note("begin-rescue-ensure", L("begin, rescue, else, ensure", "begin, rescue, else, ensure", "begin・rescue・else・ensure"),
+    p(
+      "When something goes wrong, Ruby raises an exception: it stops the current line and jumps out, looking for a rescue. Wrap risky code in begin ... end with a rescue clause. When a raise happens, the rest of the begin body is skipped, the matching rescue runs, and the program continues after end.",
+      "Cuando algo sale mal, Ruby lanza una excepción: detiene la línea actual y salta afuera buscando un rescue. Envuelve el código riesgoso en begin ... end con una cláusula rescue. Cuando ocurre un raise, el resto del cuerpo del begin se salta, corre el rescue que coincide y el programa sigue después del end.",
+      "何かがおかしくなると、Ruby は例外を raise する。今の行を止めて外へ飛び出し、rescue を探す。危ないコードは begin ... end で包み、rescue 節を書く。raise が起きると begin の残りは飛ばされ、合う rescue が動き、end のあとから続く。",
+    ),
+    ex(C("begin", '  puts "start"', "  [1, 2].fetch(10)", '  puts "never"', "rescue IndexError => e", '  puts "rescued #{e.class}"', "end", 'puts "after"'), "start\nrescued IndexError\nafter",
+      L("The line after the raise is skipped", "La línea después del raise se salta", "raise のあとの行は飛ばされる")),
+    p(
+      "=> e gives the exception object a name, so you can read e.message (the text) and e.class. else runs only when the begin body raised nothing. ensure runs ALWAYS: after success, after a rescue, even when the error is not rescued at all. That makes it the place for cleanup, like closing a file. The order is begin, rescue, else, ensure, end.",
+      "=> e le da un nombre al objeto excepción, para leer e.message (el texto) y e.class. else corre solo si el cuerpo del begin no lanzó nada. ensure corre SIEMPRE: tras un éxito, tras un rescue, e incluso si el error no se atrapa. Por eso es el lugar para limpiar, como cerrar un archivo. El orden es begin, rescue, else, ensure, end.",
+      "=> e で例外オブジェクトに名前をつけ、e.message（文）や e.class を読める。else は begin の中で何も raise されなかった時だけ動く。ensure はいつでも動く。成功しても、rescue しても、捕まえられなくても。だからファイルを閉じるような後片づけの場所になる。順番は begin、rescue、else、ensure、end。",
+    ),
+    ex(C("def check(n)", "  begin", "    10 / n", "  rescue ZeroDivisionError", '    puts "zero!"', "  else", '    puts "fine"', "  ensure", '    puts "checked #{n}"', "  end", "end", "check(2)", "check(0)"), "fine\nchecked 2\nzero!\nchecked 0"),
+    p(
+      "A def body works like a begin: you can write rescue and ensure directly in it, without begin. ensure runs right before the method returns, even after an explicit return. But ensure's own value is thrown away: the method still returns the value of its body (or of the rescue that ran).",
+      "El cuerpo de un def funciona como un begin: puedes escribir rescue y ensure directamente, sin begin. ensure corre justo antes de que el método retorne, incluso tras un return explícito. Pero el valor del propio ensure se descarta: el método sigue devolviendo el valor de su cuerpo (o del rescue que corrió).",
+      "def の本体は begin と同じように使え、begin なしで rescue や ensure を書ける。ensure はメソッドが戻る直前に動き、return のあとでも動く。でも ensure 自身の値は捨てられ、メソッドは本体（または動いた rescue）の値を返す。",
+    ),
+    ex(C("def load", '  puts "loading"', "  42", "ensure", '  puts "closing"', "end", "puts load + 1"), "loading\nclosing\n43",
+      L("ensure prints before the caller gets 42", "ensure imprime antes de que llegue el 42", "呼んだ側が 42 を受け取る前に ensure が動く")),
+  ),
+  note("rescue-order-tree", L("Which rescue catches it?", "¿Qué rescue lo atrapa?", "どの rescue が捕まえる？"),
+    p(
+      "Exceptions are classes in a family tree. Exception is at the top. Below it, StandardError is the parent of the everyday errors: ArgumentError, TypeError, ZeroDivisionError, RuntimeError, NameError (whose child is NoMethodError) and IndexError (whose children include KeyError and StopIteration). rescue SomeClass catches that class AND all of its descendants.",
+      "Las excepciones son clases en un árbol familiar. Exception está arriba. Debajo, StandardError es el padre de los errores de todos los días: ArgumentError, TypeError, ZeroDivisionError, RuntimeError, NameError (cuyo hijo es NoMethodError) e IndexError (entre cuyos hijos están KeyError y StopIteration). rescue UnaClase atrapa esa clase Y todos sus descendientes.",
+      "例外はクラスの家系図になっている。一番上が Exception。その下の StandardError が、ふだんのエラーの親だ：ArgumentError、TypeError、ZeroDivisionError、RuntimeError、NameError（子は NoMethodError）、IndexError（子に KeyError や StopIteration）。rescue クラス名 はそのクラスと子孫すべてを捕まえる。",
+    ),
+    ex(C("p ZeroDivisionError.ancestors.take(3)", "p StopIteration.superclass, FrozenError.superclass"), "[ZeroDivisionError, StandardError, Exception]\nIndexError\nRuntimeError"),
+    p(
+      "rescue clauses are tried from top to bottom, and the first one whose class matches wins; the others are skipped. A broad class like StandardError placed first swallows everything below it, so the specific clauses after it never run. Put the most specific classes first and the general ones last.",
+      "Las cláusulas rescue se prueban de arriba abajo, y gana la primera cuya clase coincide; las demás se saltan. Una clase amplia como StandardError puesta primero se traga todo lo que está debajo, así que las cláusulas específicas que siguen nunca corren. Pon primero las clases más específicas y al final las generales.",
+      "rescue 節は上から順に試され、最初にクラスが合ったものが勝ち、ほかは飛ばされる。StandardError のような広いクラスを先に書くと、その下の全部を飲みこみ、あとの具体的な節は動かない。具体的なクラスを先に、一般的なものを最後に書こう。",
+    ),
+    ex(C("begin", "  {}.fetch(:gold)", "rescue KeyError", '  puts "no such key"', "rescue StandardError", '  puts "something else"', "end"), "no such key"),
+    p(
+      "Know which error you will get. Integer(\"abc\") raises ArgumentError (right kind of object, bad value), while Integer(nil) and 5 + \"a\" raise TypeError (wrong kind of object). Calling a missing method raises NoMethodError. If no clause matches, the exception keeps flying up and can stop the program.",
+      "Conoce qué error vas a obtener. Integer(\"abc\") lanza ArgumentError (tipo de objeto correcto, valor malo), mientras que Integer(nil) y 5 + \"a\" lanzan TypeError (tipo de objeto equivocado). Llamar a un método que no existe lanza NoMethodError. Si ninguna cláusula coincide, la excepción sigue subiendo y puede detener el programa.",
+      "どのエラーが出るかを知っておこう。Integer(\"abc\") は ArgumentError（物の種類は合っているが値がだめ）、Integer(nil) や 5 + \"a\" は TypeError（物の種類がちがう）。ないメソッドを呼ぶと NoMethodError。合う節がなければ、例外は上へ飛び続け、プログラムを止めることもある。",
+    ),
+    ex(C("begin", "  Integer(nil)", "rescue ArgumentError", '  puts "bad value"', "rescue TypeError", '  puts "wrong type"', "end"), "wrong type"),
+  ),
+  note("raise-custom", L("raise and custom errors", "raise y errores propios", "raise と自作エラー"),
+    p(
+      "raise \"message\" raises a RuntimeError with that message. raise SomeError, \"message\" raises a specific class. raise SomeError with no message calls SomeError.new with no arguments, so the class's default message is used.",
+      "raise \"mensaje\" lanza un RuntimeError con ese mensaje. raise UnError, \"mensaje\" lanza una clase específica. raise UnError sin mensaje llama a UnError.new sin argumentos, así que se usa el mensaje por defecto de la clase.",
+      "raise \"文\" はその文をもつ RuntimeError を起こす。raise エラー名, \"文\" は特定のクラスを起こす。文なしの raise エラー名 は引数なしで エラー名.new を呼ぶので、クラスのデフォルトの文が使われる。",
+    ),
+    ex(C("begin", '  raise "out of rope"', "rescue => e", "  p e.class, e.message", "end"), 'RuntimeError\n"out of rope"'),
+    p(
+      "To make your own error, write a class that inherits from StandardError: class LockedDoor < StandardError; end. Inherit from StandardError, not Exception, so that ordinary rescue clauses catch it. To give it a default message, override initialize(msg = \"...\") and call super to pass the message up.",
+      "Para crear tu propio error, escribe una clase que herede de StandardError: class LockedDoor < StandardError; end. Hereda de StandardError, no de Exception, para que las cláusulas rescue normales lo atrapen. Para darle un mensaje por defecto, reemplaza initialize(msg = \"...\") y llama a super para pasar el mensaje hacia arriba.",
+      "自分のエラーを作るには StandardError を継承するクラスを書く：class LockedDoor < StandardError; end。Exception ではなく StandardError を継承すれば、ふつうの rescue で捕まる。デフォルトの文をつけるなら initialize(msg = \"...\") を上書きし、super で文を親に渡そう。",
+    ),
+    ex(C("class LockedDoor < StandardError; end", "begin", '  raise LockedDoor, "need a key"', "rescue StandardError => e", '  puts "#{e.class}: #{e.message}"', "end"), "LockedDoor: need a key"),
+    p(
+      "A bare rescue (or rescue => e) catches StandardError and its descendants only. Exception itself and its other children, such as Interrupt (Ctrl+C), SystemExit (exit) or NotImplementedError, slip past it on purpose, so a program can still be stopped. Avoid rescuing Exception in normal code.",
+      "Un rescue sin clase (o rescue => e) atrapa solo StandardError y sus descendientes. Exception misma y sus otros hijos, como Interrupt (Ctrl+C), SystemExit (exit) o NotImplementedError, pasan de largo a propósito, para que un programa siempre pueda detenerse. Evita atrapar Exception en código normal.",
+      "クラスなしの rescue（rescue => e も）が捕まえるのは StandardError とその子孫だけ。Exception 自身やほかの子、Interrupt（Ctrl+C）、SystemExit（exit）、NotImplementedError などはわざと通りぬける。プログラムを止められるようにするためだ。ふつうのコードで Exception を rescue するのはやめよう。",
+    ),
+    boom(C("begin", '  raise NotImplementedError, "todo"', "rescue => e", '  puts "handled"', "end"), "NotImplementedError",
+      L("Not a StandardError, so the bare rescue misses it", "No es StandardError: el rescue sin clase no lo atrapa", "StandardError でないので素の rescue は捕まえない")),
+  ),
+  note("retry-modifier", L("retry and rescue shortcuts", "retry y atajos de rescue", "retry と rescue の近道"),
+    p(
+      "Inside a rescue, retry jumps back to the start of the begin block and runs it again. Variables created before the begin keep their values, so a counter there can count the attempts. Always limit them: if the error never goes away, an unlimited retry loops forever.",
+      "Dentro de un rescue, retry vuelve al inicio del bloque begin y lo ejecuta de nuevo. Las variables creadas antes del begin conservan su valor, así que un contador ahí puede contar los intentos. Limítalos siempre: si el error nunca desaparece, un retry sin límite se repite para siempre.",
+      "rescue の中の retry は begin の最初に戻ってもう一度動かす。begin より前に作った変数は値をそのまま持つので、そこで回数を数えられる。回数は必ず制限しよう。エラーが消えなければ、制限のない retry は永遠にくり返す。",
+    ),
+    ex(C("attempts = 0", "begin", "  attempts += 1", '  raise "busy" if attempts < 4', '  puts "connected on try #{attempts}"', "rescue", "  retry if attempts < 5", '  puts "gave up"', "end"), "connected on try 4"),
+    p(
+      "The rescue modifier, expr rescue fallback, is a one-line shortcut: if expr raises a StandardError, the whole expression becomes fallback. It is handy for small defaults, but it hides every StandardError, typos included, so keep it for simple, obvious cases.",
+      "El modificador rescue, expr rescue respaldo, es un atajo de una línea: si expr lanza un StandardError, toda la expresión pasa a ser el respaldo. Es útil para valores por defecto pequeños, pero esconde cualquier StandardError, incluidos los errores de tipeo, así que úsalo solo en casos simples y obvios.",
+      "rescue 修飾子（式 rescue 代わりの値）は1行の近道。式が StandardError を raise すると、全体が代わりの値になる。小さなデフォルトには便利だが、打ち間違いも含めてすべての StandardError を隠すので、単純でわかりやすい場面だけにしよう。",
+    ),
+    ex(C('a = Float("2.5") rescue -1.0', 'b = Float("two") rescue -1.0', "p a, b"), "2.5\n-1.0"),
+    p(
+      "In a method you can also put rescue straight into the def body, with no begin. When it runs, the last value in the rescue clause becomes the method's return value, which is a clean way to turn an error into a default.",
+      "En un método también puedes poner rescue directo en el cuerpo del def, sin begin. Cuando corre, el último valor de la cláusula rescue se vuelve el valor de retorno del método, una forma limpia de convertir un error en un valor por defecto.",
+      "メソッドでは begin なしで、def の本体に直接 rescue を書ける。rescue が動くと、その節の最後の値がメソッドの戻り値になる。エラーをデフォルト値に変えるすっきりした書き方だ。",
+    ),
+    ex(C("def price(menu, item)", "  menu.fetch(item)", "rescue KeyError", "  0", "end", 'menu = { "tea" => 3 }', 'p price(menu, "tea"), price(menu, "cake")'), "3\n0"),
+  ),
+];
+
 const rescueLesson: LessonDef = {
   slug: "rescue-and-ensure",
   title: L("Shields against the storm", "Escudos contra la tormenta", "嵐をふせぐ盾"),
@@ -19,6 +115,7 @@ const rescueLesson: LessonDef = {
   xp: 80,
   enemy: "ruby/nil-ghost",
   enemyName: L("STORM GHOST", "FANTASMA TORMENTA", "あらしゴースト"),
+  notes: rescueNotes,
   beats: [
     say(L(
       "Welcome to Meta Tower! When something breaks, Ruby RAISES an exception. begin/rescue catches it like a shield.",
@@ -38,6 +135,7 @@ const rescueLesson: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("When 1 / 0 raises, what happens to the lines left in begin? And which clause runs no matter what?", "Cuando 1 / 0 lanza error, ¿qué pasa con las líneas que quedan en begin? ¿Y qué cláusula corre pase lo que pase?", "1 / 0 で raise したら begin の残りの行は？必ず動く節はどれ？"), note: "begin-rescue-ensure",
       code: C("begin", '  puts "a"', "  1 / 0", '  puts "b"', "rescue ZeroDivisionError => e", '  puts "rescued: #{e.message}"', "ensure", '  puts "ensure"', "end"),
       options: ["a\nrescued: divided by 0\nensure", "a\nb\nensure", "a\nrescued: divided by 0"],
       answer: 0,
@@ -54,6 +152,7 @@ const rescueLesson: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Did anything in begin raise? That decides between rescue and else. ensure follows its own rule.", "¿Algo en begin lanzó error? Eso decide entre rescue y else. ensure sigue su propia regla.", "begin の中で raise は起きた？それで rescue か else かが決まる。ensure は別のルール。"), note: "begin-rescue-ensure",
       code: C("begin", '  puts "a"', "rescue", '  puts "r"', "else", '  puts "else"', "ensure", '  puts "ensure"', "end"),
       options: ["a\nelse\nensure", "a\nr\nensure", "a\nensure"],
       answer: 0,
@@ -64,6 +163,7 @@ const rescueLesson: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("ensure runs before the method hands back its value. Which prints first: the p, or the ensure?", "ensure corre antes de que el método entregue su valor. ¿Qué se imprime primero: el p o el ensure?", "ensure はメソッドが値を返す前に動く。先に出るのは p？ensure？"), note: "begin-rescue-ensure",
       code: C("def m", '  return "body"', "ensure", '  puts "cleanup"', "end", "p m"),
       options: ['cleanup\n"body"', '"body"\ncleanup', '"body"'],
       answer: 0,
@@ -79,6 +179,7 @@ const rescueLesson: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Clauses are tried top to bottom and the first match wins. Is IndexError a kind of StandardError?", "Las cláusulas se prueban de arriba abajo y gana la primera que coincide. ¿IndexError es un tipo de StandardError?", "節は上から試し、最初に合ったものが勝つ。IndexError は StandardError の一種？"), note: "rescue-order-tree",
       code: C("begin", "  [].fetch(3)", "rescue StandardError", '  puts "std"', "rescue IndexError", '  puts "index"', "end"),
       options: ["std", "index", "std\nindex"],
       answer: 0,
@@ -89,6 +190,7 @@ const rescueLesson: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("\"x\" is a String, the right kind of object, but not a valid number. Which error means a bad value?", "\"x\" es un String, el tipo de objeto correcto, pero no un número válido. ¿Qué error significa valor malo?", "\"x\" は文字列で種類は合うが、数として正しくない。悪い値を表すエラーは？"), note: "rescue-order-tree",
       code: C('begin', '  Integer("x")', "rescue TypeError", '  puts "type"', "rescue ArgumentError", '  puts "arg"', "end"),
       options: ["arg", "type", "x"],
       answer: 0,
@@ -99,6 +201,7 @@ const rescueLesson: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Each error class has one parent. Which broader error is a missing key a special case of? A missing method?", "Cada clase de error tiene un padre. ¿De qué error más amplio es un caso especial una clave que falta? ¿Y un método?", "例外クラスの親は1つ。キーがないのはどの広いエラーの一種？メソッドがないのは？"), note: "rescue-order-tree",
       code: "p KeyError.superclass, NoMethodError.superclass",
       options: ["IndexError\nNameError", "StandardError\nStandardError", "Exception\nNameError"],
       answer: 0,
@@ -114,6 +217,7 @@ const rescueLesson: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("raise OutOfMana passes no message, so initialize's default is used. What does bare super forward?", "raise OutOfMana no pasa mensaje, así que se usa el de initialize por defecto. ¿Qué reenvía super solo?", "raise OutOfMana は文を渡さないのでデフォルトが使われる。かっこなし super は何を渡す？"), note: "raise-custom",
       code: C("class OutOfMana < StandardError", "  def initialize(msg = \"not enough mana\")", "    super", "  end", "end", "begin", "  raise OutOfMana", "rescue OutOfMana => e", "  p e.message, e.class.superclass", "end"),
       options: ['"not enough mana"\nStandardError', '"OutOfMana"\nStandardError', '"not enough mana"\nException'],
       answer: 0,
@@ -125,6 +229,7 @@ const rescueLesson: LessonDef = {
     {
       kind: "predict",
       prompt: HAPPENS,
+      hint: L("A bare rescue catches one family of errors only. Is Exception inside that family, or above it?", "Un rescue sin clase atrapa solo una familia de errores. ¿Exception está dentro de esa familia o por encima?", "クラスなし rescue が捕まえるのは1つの家族だけ。Exception はその中？上？"), note: "raise-custom",
       code: C("begin", '  raise Exception, "low"', "rescue => e", '  puts "caught"', "end"),
       options: [L("Not caught: crashes with Exception", "No se atrapa: falla con Exception", "捕まらず Exception で落ちる"), L("Prints caught", "Imprime caught", "caught と表示")],
       answer: 0,
@@ -140,6 +245,7 @@ const rescueLesson: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("retry restarts begin, but tries keeps its value. On which try does the raise stop happening?", "retry reinicia el begin, pero tries conserva su valor. ¿En qué intento deja de ocurrir el raise?", "retry で begin に戻るが tries の値は残る。何回目で raise しなくなる？"), note: "retry-modifier",
       code: C("tries = 0", "begin", "  tries += 1", '  raise "flaky" if tries < 3', '  puts "ok after #{tries}"', "rescue", "  retry", "end"),
       options: ["ok after 3", "ok after 1", "ok after 2"],
       answer: 0,
@@ -155,6 +261,7 @@ const rescueLesson: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("The fallback is used only when the left side raises. Which of the two strings is a valid integer?", "El respaldo se usa solo si el lado izquierdo lanza error. ¿Cuál de los dos strings es un entero válido?", "代わりの値は左側が raise した時だけ。正しい整数の文字列はどっち？"), note: "retry-modifier",
       code: C('x = Integer("42") rescue 0', 'y = Integer("zz") rescue 0', "p x, y"),
       options: ["42\n0", "0\n0", "42\nnil"],
       answer: 0,
@@ -165,6 +272,7 @@ const rescueLesson: LessonDef = {
     {
       kind: "order",
       prompt: L("Build the full shield", "Arma el escudo completo", "盾を完成させよう"),
+      hint: L("Recall the full shape: which clauses can follow the risky code, and which one must come right before end?", "Recuerda la forma completa: ¿qué cláusulas pueden seguir al código riesgoso y cuál va justo antes de end?", "全体の形を思い出そう。危ない処理のあとに来る節は？end の直前に来るのは？"), note: "begin-rescue-ensure",
       lines: ["begin", '  n = Integer("7")', "rescue ArgumentError", '  puts "bad"', "else", "  puts n", "ensure", '  puts "done"', "end"],
       check: { compiles: true, stdout: "7\ndone" },
       explain: L("begin, the risky code, rescue, else for success, ensure for always, then end.", "begin, el código riesgoso, rescue, else si todo va bien, ensure siempre, y end.", "begin、危ない処理、rescue、成功時の else、必ず動く ensure、最後に end。"),
@@ -172,6 +280,7 @@ const rescueLesson: LessonDef = {
     {
       kind: "run",
       prompt: L("Bad levels become 0: levels: [3, 0, 5]", "Niveles malos valen 0: levels: [3, 0, 5]", "だめな値は 0 に：levels: [3, 0, 5]"),
+      hint: L("Integer(\"x\") raises. Catch that error inside parse_level and make the method give 0 instead.", "Integer(\"x\") lanza error. Atrápalo dentro de parse_level y haz que el método dé 0 en su lugar.", "Integer(\"x\") は raise する。parse_level の中で捕まえて 0 を返そう。"), note: "retry-modifier",
       starter: C("def parse_level(text)", "  Integer(text)", "end", 'levels = ["3", "x", "5"].map { |t| parse_level(t) }', 'puts "levels: #{levels}"', ""),
       solution: C("def parse_level(text)", "  Integer(text)", "rescue ArgumentError", "  0", "end", 'levels = ["3", "x", "5"].map { |t| parse_level(t) }', 'puts "levels: #{levels}"', ""),
       expect: "levels: [3, 0, 5]",
@@ -182,6 +291,91 @@ const rescueLesson: LessonDef = {
 };
 
 // ─── 4.2 The Monkey Imp's tricks: dynamic dispatch ─────────────────────────
+const dispatchNotes: NoteDef[] = [
+  note("send-public-send", L("send and public_send", "send y public_send", "send と public_send"),
+    p(
+      "In Ruby, calling a method means sending a message: \"stone\".reverse sends :reverse to the string. send lets you pick the message while the program runs: obj.send(:name, args...). The first argument is the method name as a symbol (or string); the rest are the method's own arguments. Operators are methods too, so 2.send(:*, 5) is 2 * 5.",
+      "En Ruby, llamar a un método es enviar un mensaje: \"stone\".reverse envía :reverse al string. send te deja elegir el mensaje mientras el programa corre: obj.send(:nombre, args...). El primer argumento es el nombre del método como símbolo (o string); el resto son los argumentos del método. Los operadores también son métodos, así que 2.send(:*, 5) es 2 * 5.",
+      "Ruby でメソッドを呼ぶことは、メッセージを送ること。\"stone\".reverse は文字列に :reverse を送る。send を使うと実行中にメッセージを選べる：obj.send(:名前, 引数...)。最初の引数はメソッド名のシンボル（か文字列）、残りはそのメソッドの引数。演算子もメソッドなので 2.send(:*, 5) は 2 * 5。",
+    ),
+    ex(C("action = :reverse", 'p "stone".send(action), 2.send(:*, 5), [3, 1].send(:push, 7)'), '"enots"\n10\n[3, 1, 7]',
+      L("The method name can live in a variable", "El nombre del método puede estar en una variable", "メソッド名を変数に入れておける")),
+    p(
+      "send ignores privacy: it can call private methods. That is handy in tests, but dangerous when the method name comes from user input. public_send does the same job while respecting private: asking it for a private method raises NoMethodError.",
+      "send ignora la privacidad: puede llamar métodos privados. Eso es útil en pruebas, pero peligroso cuando el nombre del método viene de lo que escribe un usuario. public_send hace lo mismo respetando private: si le pides un método privado, lanza NoMethodError.",
+      "send は private を無視して、private メソッドも呼べてしまう。テストでは便利だが、メソッド名が利用者の入力から来るときは危ない。public_send は同じことをしつつ private を守り、private メソッドを頼むと NoMethodError になる。",
+    ),
+    ex(C("class Diary", '  def title; "My diary"; end', "  private", '  def secret; "I like bugs"; end', "end", "d = Diary.new", "p d.public_send(:title), d.send(:secret)"), '"My diary"\n"I like bugs"'),
+    boom(C("class Diary", "  private", '  def secret; "I like bugs"; end', "end", "Diary.new.public_send(:secret)"), "NoMethodError",
+      L("public_send refuses private methods", "public_send rechaza los métodos privados", "public_send は private を断る")),
+    p(
+      "Rule to remember: use public_send when the name comes from outside (input, files, settings), and send only when you deliberately need to get past private.",
+      "Regla para recordar: usa public_send cuando el nombre viene de afuera (entrada, archivos, configuración), y send solo cuando de verdad necesitas saltarte private.",
+      "覚えておこう：名前が外（入力、ファイル、設定）から来るなら public_send。send は、わざと private を通りぬける必要がある時だけ。",
+    ),
+  ),
+  note("method-missing", L("method_missing, respond_to_missing?", "method_missing, respond_to_missing?", "method_missing と仲間"),
+    p(
+      "When lookup finds no method for a message, Ruby calls method_missing(name, *args) on the object. The default version raises NoMethodError. Override it to answer messages you never defined: name is the message as a symbol, and args holds its arguments.",
+      "Cuando la búsqueda no encuentra un método para un mensaje, Ruby llama a method_missing(name, *args) en el objeto. La versión por defecto lanza NoMethodError. Reemplázalo para responder mensajes que nunca definiste: name es el mensaje como símbolo y args guarda sus argumentos.",
+      "メッセージに合うメソッドが見つからないと、Ruby はそのオブジェクトの method_missing(name, *args) を呼ぶ。元の版は NoMethodError を出す。上書きすれば定義していないメッセージにも答えられる。name はシンボルのメッセージ名、args は引数。",
+    ),
+    p(
+      "Handle only the names you mean, and call super for everything else, so unknown messages still raise a real NoMethodError. If you answer every name, typos silently \"work\" and bugs hide.",
+      "Atiende solo los nombres que quieres, y llama a super para todo lo demás, así los mensajes desconocidos siguen lanzando un NoMethodError de verdad. Si respondes a cualquier nombre, los errores de tipeo \"funcionan\" en silencio y los bugs se esconden.",
+      "答えるのはねらった名前だけにし、それ以外は super を呼ぼう。そうすれば知らないメッセージは本物の NoMethodError になる。どんな名前にも答えると、打ち間違いが黙って「動いて」しまい、バグが隠れる。",
+    ),
+    boom(C("class Config", "  def method_missing(name, *args)", '    if name.to_s.start_with?("get_")', '      "value of #{name.to_s.delete_prefix("get_")}"', "    else", "      super", "    end", "  end", "end", "c = Config.new", "puts c.get_port", "c.colour"), "NoMethodError",
+      L("get_port is answered; colour goes to super and raises", "get_port se responde; colour va a super y falla", "get_port には答え、colour は super でエラー")),
+    p(
+      "respond_to? doesn't know about method_missing tricks: it says false for names you answer dynamically. Define respond_to_missing?(name, include_private = false) to return true for those names (and super otherwise), so respond_to? tells the truth. Keep both methods in sync: answer and admit the same names.",
+      "respond_to? no conoce los trucos de method_missing: dice false para los nombres que respondes dinámicamente. Define respond_to_missing?(name, include_private = false) para que devuelva true con esos nombres (y super en otro caso), así respond_to? dice la verdad. Mantén ambos métodos de acuerdo: responder y admitir los mismos nombres.",
+      "respond_to? は method_missing の工夫を知らず、動的に答える名前にも false と言う。respond_to_missing?(name, include_private = false) を定義し、その名前なら true（それ以外は super）を返せば、respond_to? が正直になる。答える名前と認める名前をそろえよう。",
+    ),
+    ex(C("class Config", "  def method_missing(name, *args)", '    return super unless name.to_s.start_with?("get_")', '    "ok"', "  end", "  def respond_to_missing?(name, include_private = false)", '    name.to_s.start_with?("get_") || super', "  end", "end", "p Config.new.respond_to?(:get_host), Config.new.respond_to?(:set_host)"), "true\nfalse"),
+  ),
+  note("define-method-scope", L("define_method and scope gates", "define_method y puertas de scope", "define_method とスコープの門"),
+    p(
+      "define_method(name) { |args| ... } creates a method while the program runs. Because the name can be built from data, a loop can write many similar methods at once, like one predicate per color or state.",
+      "define_method(nombre) { |args| ... } crea un método mientras el programa corre. Como el nombre puede construirse a partir de datos, un bucle puede escribir muchos métodos parecidos a la vez, como uno por color o por estado.",
+      "define_method(名前) { |引数| ... } は実行中にメソッドを作る。名前をデータから組み立てられるので、色ごと・状態ごとのように、似たメソッドをループでまとめて書ける。",
+    ),
+    ex(C("class Lamp", "  [:on, :off].each do |state|", '    define_method("turn_#{state}") { "lamp is #{state}" }', "  end", "end", "p Lamp.new.turn_off"), '"lamp is off"'),
+    p(
+      "def, class and module are scope gates: the code inside them cannot see local variables from outside. A block, written with do...end or { }, is a closure: it sees and remembers the local variables around it. That's why define_method's block can use a loop variable or an outer local, while a def body cannot.",
+      "def, class y module son puertas de scope: el código adentro no ve las variables locales de afuera. Un bloque, escrito con do...end o { }, es un closure: ve y recuerda las variables locales de alrededor. Por eso el bloque de define_method puede usar una variable del bucle o un local de afuera, y el cuerpo de un def no.",
+      "def、class、module はスコープの門で、中のコードは外のローカル変数が見えない。do...end や { } で書くブロックはクロージャで、まわりのローカル変数が見え、おぼえておける。だから define_method のブロックはループの変数や外のローカル変数を使えるが、def の本体は使えない。",
+    ),
+    ex(C('prefix = "Sir"', "class Knight; end", 'Knight.define_method(:title) { |name| "#{prefix} #{name}" }', 'p Knight.new.title("Ada")'), '"Sir Ada"',
+      L("The block remembers prefix from outside", "El bloque recuerda prefix de afuera", "ブロックは外の prefix をおぼえている")),
+    p(
+      "Common mistake: expecting a def to see an outer local. Ruby raises NameError (undefined local variable or method). To share a value with a def, use a constant, an instance variable, a method argument, or define the method with define_method and a block.",
+      "Error común: esperar que un def vea un local de afuera. Ruby lanza NameError (undefined local variable or method). Para compartir un valor con un def, usa una constante, una variable de instancia, un argumento del método, o define el método con define_method y un bloque.",
+      "よくあるミス：def から外のローカル変数が見えると思うこと。Ruby は NameError（undefined local variable or method）を出す。def と値を分けたいなら、定数、インスタンス変数、引数を使うか、define_method とブロックでメソッドを作ろう。",
+    ),
+  ),
+  note("open-classes", L("Peeking into and patching classes", "Espiar y parchar clases", "のぞき見とパッチ"),
+    p(
+      "instance_variable_get(:@name) reads any object's instance variable by name, and instance_variable_set(:@name, value) writes it, with no reader or writer needed. Note the @ inside the symbol. Debuggers and serializers use them; in everyday code they break encapsulation.",
+      "instance_variable_get(:@nombre) lee la variable de instancia de cualquier objeto por su nombre, e instance_variable_set(:@nombre, valor) la escribe, sin necesitar lector ni escritor. Fíjate en el @ dentro del símbolo. Los depuradores y serializadores los usan; en código normal rompen el encapsulamiento.",
+      "instance_variable_get(:@名前) はどんなオブジェクトのインスタンス変数も名前で読み、instance_variable_set(:@名前, 値) は書く。読み書きの扉はいらない。シンボルの中に @ があることに注意。デバッガやシリアライザが使うもので、ふだんのコードではカプセル化を壊す。",
+    ),
+    ex(C("class Safe", "  def initialize; @code = 1111; end", "end", "s = Safe.new", "s.instance_variable_set(:@code, 2222)", "p s.instance_variable_get(:@code), s.instance_variables"), "2222\n[:@code]"),
+    p(
+      "Ruby classes are open: writing class Array ... end again adds methods to (or replaces methods in) the existing class. That's monkey patching. It affects every array in the whole program, including the ones inside libraries, and two libraries patching the same method will collide.",
+      "Las clases de Ruby están abiertas: escribir class Array ... end otra vez agrega métodos a la clase existente (o reemplaza los que tiene). Eso es monkey patching. Afecta a cada array de todo el programa, incluidos los de las librerías, y dos librerías que parchan el mismo método van a chocar.",
+      "Ruby のクラスは開いている。class Array ... end をもう一度書くと、既存のクラスにメソッドを足せる（置きかえもできる）。これがモンキーパッチ。プログラム中のすべての配列に効き、ライブラリの中の配列も例外ではない。同じメソッドにパッチを当てる2つのライブラリはぶつかる。",
+    ),
+    ex(C("class Array", "  def second", "    self[1]", "  end", "end", "p [5, 6, 7].second"), "6"),
+    p(
+      "A refinement is a safer patch. Inside a module, write refine SomeClass do ... end; nothing changes yet. The patch turns on only where a file says using ThatModule, from that line to the end of that file. Other files keep the original class.",
+      "Un refinement es un parche más seguro. Dentro de un módulo escribe refine UnaClase do ... end; todavía no cambia nada. El parche se activa solo donde un archivo dice using EseModulo, desde esa línea hasta el final de ese archivo. Los demás archivos conservan la clase original.",
+      "refinement はより安全なパッチ。モジュールの中で refine クラス do ... end と書くが、まだ何も変わらない。ファイルに using そのモジュール と書いた所から、そのファイルの終わりまでだけ有効になる。ほかのファイルは元のクラスのまま。",
+    ),
+    ex(C("module Excited", "  refine Integer do", "    def cheer", '      "#{self}!!!"', "    end", "  end", "end", "using Excited", "p 3.cheer"), '"3!!!"'),
+  ),
+];
+
 const dispatch: LessonDef = {
   slug: "dynamic-dispatch",
   title: L("The Monkey Imp's tricks", "Trucos del diablillo", "モンキーインプの術"),
@@ -190,6 +384,7 @@ const dispatch: LessonDef = {
   xp: 85,
   enemy: "ruby/monkey-imp",
   enemyName: L("MONKEY IMP", "DIABLILLO MONO", "モンキーインプ"),
+  notes: dispatchNotes,
   beats: [
     say(L(
       "Calling a method SENDS a message. send(:name) sends one chosen while the program runs.",
@@ -208,6 +403,7 @@ const dispatch: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("send's first argument names the method; the rest are its arguments. Rewrite each one as a normal call.", "El primer argumento de send nombra el método; el resto son sus argumentos. Reescribe cada uno como llamada normal.", "send の最初の引数はメソッド名、残りはその引数。ふつうの呼び出しに直そう。"), note: "send-public-send",
       code: 'p 5.send(:+, 3), "hi".send(:upcase)',
       options: ['8\n"HI"', '53\n"HI"', '8\n"hi"'],
       answer: 0,
@@ -223,6 +419,7 @@ const dispatch: LessonDef = {
     {
       kind: "predict",
       prompt: HAPPENS,
+      hint: L("Only one of these two calls checks privacy. Lines run in order.", "Solo una de estas dos llamadas revisa la privacidad. Las líneas corren en orden.", "2つの呼び出しのうち、private を確かめるのは片方だけ。行は順に動く。"), note: "send-public-send",
       code: C("class Safe", '  def open; "open"; end', "  private", "  def code; 1234; end", "end", "s = Safe.new", "p s.send(:code)", "s.public_send(:code)"),
       options: [L("1234, then NoMethodError", "1234, luego NoMethodError", "1234 の後 NoMethodError"), L("NoMethodError right away", "NoMethodError de inmediato", "すぐに NoMethodError"), L("1234 twice", "1234 dos veces", "1234 が2回")],
       answer: 0,
@@ -238,6 +435,7 @@ const dispatch: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("say_ names are answered by method_missing. respond_to? asks respond_to_missing? about names with no real method.", "Los nombres say_ los responde method_missing. respond_to? consulta a respond_to_missing? por nombres sin método real.", "say_ は method_missing が答える。本物のメソッドがない名前は respond_to_missing? に聞く。"), note: "method-missing",
       code: C("class Ghost", "  def method_missing(name, *args)", '    return super unless name.to_s.start_with?("say_")', '    "Ghost says #{name.to_s.delete_prefix("say_")}"', "  end", "  def respond_to_missing?(name, priv = false)", '    name.to_s.start_with?("say_") || super', "  end", "end", "g = Ghost.new", "p g.say_boo, g.respond_to?(:say_hi), g.respond_to?(:fly)"),
       options: ['"Ghost says boo"\ntrue\nfalse', '"Ghost says boo"\nfalse\nfalse', '"Ghost says say_boo"\ntrue\nfalse'],
       answer: 0,
@@ -254,6 +452,7 @@ const dispatch: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("The loop defines one method per color, and each block remembers its own color. Which color is the potion?", "El bucle define un método por color, y cada bloque recuerda su propio color. ¿De qué color es la poción?", "ループは色ごとにメソッドを作り、ブロックは自分の color をおぼえる。ポーションの色は？"), note: "define-method-scope",
       code: C("class Potion", '  ["red", "blue"].each do |color|', '    define_method("#{color}?") { @color == color }', "  end", "  def initialize(c); @color = c; end", "end", 'pt = Potion.new("blue")', "p pt.red?, pt.blue?"),
       options: ["false\ntrue", "true\nfalse", "NoMethodError"],
       answer: 0,
@@ -265,6 +464,7 @@ const dispatch: LessonDef = {
     {
       kind: "predict",
       prompt: HAPPENS,
+      hint: L("bonus is a local created outside. Can the code inside a def see outer local variables?", "bonus es un local creado afuera. ¿El código dentro de un def puede ver las variables locales de afuera?", "bonus は外で作ったローカル変数。def の中から外のローカル変数は見える？"), note: "define-method-scope",
       code: C("bonus = 10", "class Hero", "  def power(n)", "    n + bonus", "  end", "end", "Hero.new.power(1)"),
       options: [L("NameError: bonus unknown", "NameError: bonus desconocido", "NameError：bonus がない"), "11", "1"],
       answer: 0,
@@ -280,6 +480,7 @@ const dispatch: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("instance_variable_get reads the @var by name, and _set really writes it. Read the value before and after.", "instance_variable_get lee la @var por nombre, y _set de verdad la escribe. Lee el valor antes y después.", "_get は名前で @変数を読み、_set は本当に書く。前と後の値を読もう。"), note: "open-classes",
       code: C("class Spy", "  def initialize; @secret = 42; end", "end", "s = Spy.new", "p s.instance_variable_get(:@secret)", "s.instance_variable_set(:@secret, 7)", "p s.instance_variable_get(:@secret)"),
       options: ["42\n7", "nil\n7", "42\n42"],
       answer: 0,
@@ -295,6 +496,7 @@ const dispatch: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Reopening a class adds methods to every string and integer. Work out each new method on its value.", "Reabrir una clase agrega métodos a todo string y entero. Calcula cada método nuevo con su valor.", "クラスを開き直すと全部の文字列・整数にメソッドが加わる。それぞれ計算しよう。"), note: "open-classes",
       code: C("class String", "  def shout", '    upcase + "!"', "  end", "end", "class Integer", "  def minutes", "    self * 60", "  end", "end", 'p "hey".shout, 5.minutes'),
       options: ['"HEY!"\n300', 'NoMethodError', '"hey!"\n300'],
       answer: 0,
@@ -311,6 +513,7 @@ const dispatch: LessonDef = {
     {
       kind: "type",
       prompt: L("Turn the refinement on", "Activa el refinement", "refinement を有効に"),
+      hint: L("refine alone changes nothing. Which keyword switches a refinement on for the rest of the file?", "refine solo no cambia nada. ¿Qué palabra clave activa un refinement para el resto del archivo?", "refine だけでは何も変わらない。ファイルの残りで有効にするキーワードは？"), note: "open-classes",
       code: C("module Quiet", "  refine String do", "    def whisper", '      downcase + "..."', "    end", "  end", "end", "___ Quiet", 'p "HEY".whisper'),
       answer: "using",
       check: { compiles: true, stdout: '"hey..."' },
@@ -320,6 +523,7 @@ const dispatch: LessonDef = {
     {
       kind: "run",
       prompt: L("Make respond_to? honest: casting fire", "Haz honesto a respond_to?: casting fire", "respond_to? を正直に：casting fire"),
+      hint: L("method_missing answers cast_ names, but respond_to? still says false. Which hook does respond_to? consult?", "method_missing responde nombres cast_, pero respond_to? sigue diciendo false. ¿A qué método consulta respond_to??", "cast_ には答えるが respond_to? は false のまま。respond_to? が聞くメソッドは？"), note: "method-missing",
       starter: C("class Spellbook", "  def method_missing(name, *args)", '    if name.to_s.start_with?("cast_")', '      "casting #{name.to_s.delete_prefix("cast_")}"', "    else", "      super", "    end", "  end", "end", "book = Spellbook.new", 'puts book.respond_to?(:cast_fire) ? book.cast_fire : "unknown spell"', ""),
       solution: C("class Spellbook", "  def method_missing(name, *args)", '    if name.to_s.start_with?("cast_")', '      "casting #{name.to_s.delete_prefix("cast_")}"', "    else", "      super", "    end", "  end", "  def respond_to_missing?(name, include_private = false)", '    name.to_s.start_with?("cast_") || super', "  end", "end", "book = Spellbook.new", 'puts book.respond_to?(:cast_fire) ? book.cast_fire : "unknown spell"', ""),
       expect: "casting fire",
@@ -330,6 +534,94 @@ const dispatch: LessonDef = {
 };
 
 // ─── 4.3 Reading the runes: pattern matching ───────────────────────────────
+const patternsNotes: NoteDef[] = [
+  note("case-in-basics", L("case/in: matching shapes", "case/in: comparar formas", "case/in：形で照らし合わせる"),
+    p(
+      "case value, then one or more in pattern clauses, then end: Ruby compares the value with each pattern from top to bottom, runs the first one that fits and skips the rest. A class like Integer matches by type, a literal like 0 or nil matches an equal value, and A | B means either one.",
+      "case valor, luego una o más cláusulas in patrón, y luego end: Ruby compara el valor con cada patrón de arriba abajo, ejecuta el primero que encaja y salta el resto. Una clase como Integer compara por tipo, un literal como 0 o nil compara con un valor igual, y A | B significa cualquiera de los dos.",
+      "case 値、次に1つ以上の in パターン、最後に end。Ruby は値を上から順にパターンと比べ、最初に合ったものを動かし、残りは飛ばす。Integer のようなクラスは型で、0 や nil のようなリテラルは等しい値で一致し、A | B は「どちらか」。",
+    ),
+    ex(C("def describe(v)", "  case v", '  in 0 then "zero"', '  in Integer then "some number"', '  in String | Symbol then "a name"', "  end", "end", "p describe(0), describe(8), describe(:x)"), '"zero"\n"some number"\n"a name"',
+      L("0 also is an Integer, but its clause comes first", "0 también es Integer, pero su cláusula va primero", "0 も Integer だが、その節が先にある")),
+    p(
+      "Array patterns check length and contents. [a, b] fits arrays with exactly two elements and binds them; [first, *rest] fits one or more, with rest getting the remaining array; [] fits only an empty array. The find pattern [*, X, *] searches anywhere in the array for one element that fits X.",
+      "Los patrones de array revisan largo y contenido. [a, b] encaja con arrays de exactamente dos elementos y los asigna; [first, *rest] encaja con uno o más, y rest recibe el array restante; [] encaja solo con un array vacío. El patrón de búsqueda [*, X, *] busca en cualquier parte del array un elemento que encaje con X.",
+      "配列パターンは長さと中身を見る。[a, b] はちょうど2要素の配列に合い、それぞれを結びつける。[first, *rest] は1つ以上に合い、rest は残りの配列。[] は空の配列だけ。検索パターン [*, X, *] は配列のどこかから X に合う要素を1つ探す。",
+    ),
+    ex(C("case [10, 20, 30, 40]", "in [a, b]", '  puts "pair"', "in [head, *tail]", '  puts "#{head} then #{tail.size} more"', "end"), "10 then 3 more"),
+    ex(C('case [:a, "b", 3.5, :d]', "in [*, Float => f, *]", "  p f", "end"), "3.5",
+      L("The find pattern skips items until one is a Float", "El patrón de búsqueda salta hasta hallar un Float", "検索パターンは Float が見つかるまで飛ばす")),
+    p(
+      "Order matters: put specific patterns before general ones. And unlike case/when, which quietly returns nil, a case/in where no pattern fits and there is no else raises NoMatchingPatternError. Add an else when unexpected values are possible.",
+      "El orden importa: pon los patrones específicos antes que los generales. Y a diferencia de case/when, que devuelve nil en silencio, un case/in donde ningún patrón encaja y no hay else lanza NoMatchingPatternError. Agrega un else cuando puedan llegar valores inesperados.",
+      "順番が大事。具体的なパターンを一般的なものより先に書こう。また、黙って nil を返す case/when と違い、case/in はどれにも合わず else もないと NoMatchingPatternError を出す。思わぬ値が来うるなら else を足そう。",
+    ),
+    boom(C("case 3.5", "in String", '  puts "text"', "end"), "NoMatchingPatternError",
+      L("No pattern fits and there's no else", "Ningún patrón encaja y no hay else", "合うパターンも else もない")),
+  ),
+  note("hash-patterns", L("Hash patterns and nesting", "Patrones de hash y anidados", "ハッシュパターンと入れ子"),
+    p(
+      "{key: pattern} matches a hash (with symbol keys) that has those keys with matching values. Extra keys are fine: unlike arrays, a hash pattern only checks the keys it names. A literal value checks equality, so {kind: :drink} fits only when kind is :drink. The short form {size:} binds the value of size to a local called size.",
+      "{clave: patrón} encaja con un hash (de claves símbolo) que tenga esas claves con valores que coincidan. Las claves extra no importan: a diferencia de los arrays, un patrón de hash solo revisa las claves que nombra. Un valor literal compara igualdad, así que {kind: :drink} encaja solo si kind es :drink. La forma corta {size:} asigna el valor de size a un local llamado size.",
+      "{キー: パターン} は、そのキーがあって値も合う（シンボルキーの）ハッシュに一致する。余分なキーは気にしない。配列と違い、ハッシュパターンは書いたキーしか見ない。リテラルの値は等しさを確かめるので、{kind: :drink} は kind が :drink の時だけ。短い形の {size:} は size の値を size というローカル変数に結びつける。",
+    ),
+    ex(C('order = {kind: :drink, size: "L", ice: false}', "case order", "in {kind: :food}", '  puts "kitchen"', "in {kind: :drink, size:}", '  puts "bar, size #{size}"', "end"), "bar, size L"),
+    p(
+      "Patterns nest: the value part can be another hash pattern or an array pattern. Class => name checks the type AND binds the value: Integer => hp only fits an Integer and stores it in hp. That lets one pattern check the shape of deep data and pull out exactly the pieces you need.",
+      "Los patrones se anidan: la parte del valor puede ser otro patrón de hash o un patrón de array. Clase => nombre revisa el tipo Y asigna el valor: Integer => hp solo encaja con un Integer y lo guarda en hp. Así un solo patrón revisa la forma de datos profundos y saca exactamente las piezas que necesitas.",
+      "パターンは入れ子にできる。値の部分に別のハッシュパターンや配列パターンを書ける。クラス => 名前 は型を確かめて値を結びつける。Integer => hp は Integer の時だけ合い、それを hp に入れる。1つのパターンで深いデータの形を確かめ、必要な部分だけ取り出せる。",
+    ),
+    ex(C('player = {stats: {hp: 30, items: ["rope", "map"]}}', "case player", "in {stats: {hp: Integer => hp, items: [first_item, *]}}", "  p [hp, first_item]", "end"), '[30, "rope"]'),
+    p(
+      "Data and Struct objects support hash patterns too, matched by their field names. A common mistake: a hash with string keys like {\"kind\" => 1} does not match a pattern written with symbol keys.",
+      "Los objetos Data y Struct también admiten patrones de hash, comparados por el nombre de sus campos. Un error común: un hash con claves string como {\"kind\" => 1} no encaja con un patrón escrito con claves símbolo.",
+      "Data や Struct のオブジェクトもフィールド名でハッシュパターンに使える。よくあるミス：{\"kind\" => 1} のような文字列キーのハッシュは、シンボルキーで書いたパターンには合わない。",
+    ),
+    ex(C("Pet = Data.define(:name, :legs)", 'case Pet.new(name: "Rex", legs: 4)', "in {legs: 4, name:}", '  puts "#{name} walks"', "end"), "Rex walks"),
+  ),
+  note("bind-vs-pin", L("Binding vs pinning with ^", "Asignar o fijar con ^", "束縛と ^ のピン留め"),
+    p(
+      "Inside a pattern, a bare lowercase name is a binding: it matches ANY value and assigns that value to the name. If a variable with that name already exists, it is overwritten, not compared, and it keeps the new value after the case ends.",
+      "Dentro de un patrón, un nombre suelto en minúsculas es una asignación: encaja con CUALQUIER valor y asigna ese valor al nombre. Si ya existe una variable con ese nombre, se sobrescribe, no se compara, y conserva el valor nuevo después de que termina el case.",
+      "パターンの中の小文字の名前だけは束縛。どんな値にも合い、その値を名前に入れる。同じ名前の変数がすでにあっても比べずに上書きし、case が終わったあとも新しい値のまま。",
+    ),
+    ex(C('color = "red"', 'case ["blue", 1]', "in [color, n]", "  p color", "end"), '"blue"',
+      L("color was rebound, not compared with \"red\"", "color se reasignó, no se comparó con \"red\"", "color は \"red\" と比べず上書きされた")),
+    p(
+      "To compare with the value a variable already has, pin it with ^: ^target means \"equal to the current value of target\". Pins work with expressions too, like ^(limit + 1). Rule of thumb: bare name = capture, ^name = compare, a Constant or class = compare by type.",
+      "Para comparar con el valor que ya tiene una variable, fíjala con ^: ^target significa \"igual al valor actual de target\". Los pines también funcionan con expresiones, como ^(limit + 1). Regla práctica: nombre suelto = capturar, ^nombre = comparar, una Constante o clase = comparar por tipo.",
+      "変数が今持っている値と比べたいなら ^ でピン留めする。^target は「target の今の値と等しい」という意味。^(limit + 1) のように式にも使える。目安：名前だけ＝取りこむ、^名前＝比べる、定数やクラス＝型で比べる。",
+    ),
+    ex(C("target = 4", "[3, 4].each do |n|", "  case n", '  in ^target then puts "#{n}: hit"', '  else puts "#{n}: miss"', "  end", "end"), "3: miss\n4: hit"),
+    p(
+      "Common mistake: writing in max expecting it to check against max. It always matches, the first clause always wins, and max silently changes. If a clause seems to catch everything, look for a bare name that should have a ^.",
+      "Error común: escribir in max esperando que compare con max. Siempre encaja, la primera cláusula siempre gana, y max cambia en silencio. Si una cláusula parece atrapar todo, busca un nombre suelto que debería llevar ^.",
+      "よくあるミス：in max と書いて max と比べるつもりになること。必ず合うので最初の節が毎回勝ち、max は黙って変わる。節が何でも捕まえてしまうなら、^ が必要な名前だけのパターンを探そう。",
+    ),
+  ),
+  note("in-and-rightward", L("Boolean in and rightward =>", "in booleano y => a la derecha", "真偽の in と右向きの =>"),
+    p(
+      "Outside a case, value in pattern is a test: it returns true when the value fits and false when it doesn't, and it never raises. It is handy inside if. When it matches, any names in the pattern are bound as usual.",
+      "Fuera de un case, valor in patrón es una prueba: devuelve true si el valor encaja y false si no, y nunca lanza error. Es útil dentro de un if. Cuando coincide, los nombres del patrón se asignan como siempre.",
+      "case の外の 値 in パターン は判定。合えば true、合わなければ false を返し、例外は出さない。if の中で便利。合った時は、パターン中の名前がいつも通り結びつく。",
+    ),
+    ex(C('ok = ("hi" in String)', "short = ([1, 2] in [_, _, _])", "p ok, short"), "true\nfalse"),
+    p(
+      "value => pattern (rightward assignment) is a demand: if the value fits, the names are bound; if not, Ruby raises NoMatchingPatternError (or its child NoMatchingPatternKeyError when a hash key is missing). Use it to unpack data you are sure about, and let it fail loudly when the data is wrong.",
+      "valor => patrón (asignación hacia la derecha) es una exigencia: si el valor encaja, los nombres se asignan; si no, Ruby lanza NoMatchingPatternError (o su hijo NoMatchingPatternKeyError cuando falta una clave del hash). Úsalo para desarmar datos de los que estás seguro, y deja que falle fuerte cuando los datos están mal.",
+      "値 => パターン（右向き代入）は要求。合えば名前が結びつき、合わなければ Ruby は NoMatchingPatternError（ハッシュのキーがない時はその子の NoMatchingPatternKeyError）を出す。確かなはずのデータを取り出すのに使い、データがおかしい時ははっきり失敗させよう。",
+    ),
+    ex(C("point = {x: 4, y: 9}", "point => {x:, y:}", "p x + y"), "13"),
+    boom(C("pair = [1]", "pair => [a, b]"), "NoMatchingPatternError",
+      L("One element can't fill a two-element pattern", "Un elemento no llena un patrón de dos", "1要素では2要素のパターンを満たせない")),
+    p(
+      "Rule: in asks a question (true or false); => makes a demand (bind or raise).",
+      "Regla: in hace una pregunta (true o false); => hace una exigencia (asignar o lanzar error).",
+      "ルール：in は質問（true か false）、=> は要求（結びつけるか例外）。",
+    ),
+  ),
+];
+
 const patterns: LessonDef = {
   slug: "pattern-matching",
   title: L("Reading the runes", "Leyendo las runas", "ルーンを読む"),
@@ -338,6 +630,7 @@ const patterns: LessonDef = {
   xp: 85,
   enemy: "ruby/hash-mimic",
   enemyName: L("RUNE MIMIC", "MÍMICO RÚNICO", "ルーンミミック"),
+  notes: patternsNotes,
   beats: [
     say(L(
       "case/in matches SHAPES. Each in is a rune: the first one that fits wins, and it can bind names.",
@@ -356,6 +649,7 @@ const patterns: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Try each value against the clauses from the top. [x] fits one exact length only, and the first fit wins.", "Prueba cada valor con las cláusulas desde arriba. [x] encaja solo con un largo exacto, y gana el primero que encaja.", "それぞれの値を上の節から試そう。[x] は長さぴったりの時だけ。最初に合ったものが勝ち。"), note: "case-in-basics",
       code: C("def kind(v)", "  case v", '  in Integer | Float then "number"', '  in String then "text"', '  in [x] then "one: #{x}"', '  in [first, *rest] then "list of #{rest.size + 1}"', '  in nil then "nothing"', "  end", "end", "p kind(2.5), kind([7]), kind([1, 2, 3]), kind(nil)"),
       options: ['"number"\n"one: 7"\n"list of 3"\n"nothing"', '"number"\n"list of 1"\n"list of 3"\n"nothing"', '"text"\n"one: 7"\n"list of 3"\nnil'],
       answer: 0,
@@ -366,6 +660,7 @@ const patterns: LessonDef = {
     {
       kind: "predict",
       prompt: HAPPENS,
+      hint: L("Does :sym fit Integer or String? If nothing fits and there's no else, what does case/in do?", "¿:sym encaja con Integer o String? Si nada encaja y no hay else, ¿qué hace case/in?", ":sym は Integer か String に合う？何にも合わず else もないと case/in は？"), note: "case-in-basics",
       code: C("case :sym", 'in Integer then puts "int"', 'in String then puts "str"', "end"),
       options: [L("NoMatchingPatternError", "NoMatchingPatternError", "NoMatchingPatternError"), L("Prints nothing, returns nil", "No imprime, devuelve nil", "何も出さず nil")],
       answer: 0,
@@ -381,6 +676,7 @@ const patterns: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Check type first in each clause. Do extra keys like rare stop a hash pattern from matching?", "Revisa type primero en cada cláusula. ¿Las claves extra como rare impiden que un patrón de hash encaje?", "各節でまず type を確かめよう。rare のような余分なキーで一致しなくなる？"), note: "hash-patterns",
       code: C("item = {type: :potion, hp: 20, rare: true}", "case item", 'in {type: :sword} then puts "sword"', 'in {type: :potion, hp:} then puts "heal #{hp}"', "end"),
       options: ["heal 20", "sword", "NoMatchingPatternError"],
       answer: 0,
@@ -392,6 +688,7 @@ const patterns: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("String => user checks the type and then stores something in user. Is it the class or the value?", "String => user revisa el tipo y luego guarda algo en user. ¿Es la clase o el valor?", "String => user は型を確かめてから user に何かを入れる。クラス？値？"), note: "hash-patterns",
       code: C('config = {db: {user: "admin", port: 5432}}', "case config", "in {db: {user: String => user, port: Integer => port}}", "  p [user, port]", "end"),
       options: ['["admin", 5432]', '[String, Integer]', "nil"],
       answer: 0,
@@ -407,6 +704,7 @@ const patterns: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("A bare name in a pattern doesn't compare. What does it do with the value 5, and does that last?", "Un nombre suelto en un patrón no compara. ¿Qué hace con el valor 5, y eso dura?", "パターンの名前だけは比べない。5 をどうする？それは case のあとも残る？"), note: "bind-vs-pin",
       code: C("x = 99", "case 5", "in x then p x", "end", "p x"),
       options: ["5\n5", "99\n99", "5\n99"],
       answer: 0,
@@ -418,6 +716,7 @@ const patterns: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("^ means \"equal to the variable's current value\". Is 6 equal to it?", "^ significa \"igual al valor actual de la variable\". ¿6 es igual a ese valor?", "^ は「変数の今の値と等しい」。6 はそれと等しい？"), note: "bind-vs-pin",
       code: C("expected = 5", "case 6", 'in ^expected then puts "pinned"', 'else puts "else branch"', "end"),
       options: ["else branch", "pinned"],
       answer: 0,
@@ -428,6 +727,7 @@ const patterns: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("[*, ..., *] searches the whole array for one element that fits the middle pattern.", "[*, ..., *] busca en todo el array un elemento que encaje con el patrón del medio.", "[*, ..., *] は真ん中のパターンに合う要素を配列全体から探す。"), note: "case-in-basics",
       code: C('case ["x", 42, "y"]', "in [*, Integer => n, *] then p n", "end"),
       options: ["42", '"x"', "NoMatchingPatternError"],
       answer: 0,
@@ -443,6 +743,7 @@ const patterns: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("expr in pattern only answers true or false. Check each value against its pattern's type.", "expr in patrón solo responde true o false. Compara cada valor con el tipo de su patrón.", "式 in パターン は true か false を返すだけ。それぞれの値と型を比べよう。"), note: "in-and-rightward",
       code: C("r1 = (1 in Integer)", "r2 = ({a: 1} in {a: String})", "p r1, r2"),
       options: ["true\nfalse", "true\ntrue", "1\nnil"],
       answer: 0,
@@ -453,6 +754,7 @@ const patterns: LessonDef = {
     {
       kind: "predict",
       prompt: HAPPENS,
+      hint: L("=> demands a match. The first one fits; count the elements on both sides of the second one.", "=> exige que encaje. El primero encaja; cuenta los elementos a cada lado del segundo.", "=> は一致を求める。1つ目は合う。2つ目は両側の要素数を数えよう。"), note: "in-and-rightward",
       code: C('h = {name: "Rubi", lv: 3}', "h => {name:}", "p name", "[1, 2] => [a, b, c]"),
       options: [L('"Rubi", then NoMatchingPatternError', '"Rubi", luego NoMatchingPatternError', '"Rubi" の後 NoMatchingPatternError'), L('"Rubi", then a, b, c set', '"Rubi", luego a, b, c asignadas', '"Rubi" の後 a, b, c に代入')],
       answer: 0,
@@ -463,6 +765,7 @@ const patterns: LessonDef = {
     {
       kind: "type",
       prompt: L("Start the rune clause", "Empieza la cláusula rúnica", "ルーンの節を始めよう"),
+      hint: L("case/when clauses use when; pattern matching clauses start with a different two-letter keyword.", "Las cláusulas de case/when usan when; las de pattern matching empiezan con otra palabra de dos letras.", "case/when の節は when。パターンマッチの節は別の2文字のキーワードで始まる。"), note: "case-in-basics",
       code: C("case [3, 4]", "___ [a, b] then p a + b", "end"),
       answer: "in",
       check: { compiles: true, stdout: "7" },
@@ -472,6 +775,7 @@ const patterns: LessonDef = {
     {
       kind: "run",
       prompt: L("Teach use about potions: potion heals 20", "Enseña a use las pociones: potion heals 20", "use にポーションを教えよう：potion heals 20"),
+      hint: L("The potion hash fits no clause, so case/in raises. Add a clause shaped like the potion that binds hp.", "El hash de la poción no encaja en ninguna cláusula y case/in falla. Agrega una con su forma que asigne hp.", "ポーションに合う節がなく例外になる。ポーションの形の節を足し、hp を結びつけよう。"), note: "hash-patterns",
       starter: C("def use(item)", "  case item", "  in {type: :sword, power:}", '    "sword hits #{power}"', "  in {type: :shield}", '    "shield up"', "  end", "end", "puts use({type: :sword, power: 7})", "puts use({type: :potion, hp: 20})", ""),
       solution: C("def use(item)", "  case item", "  in {type: :sword, power:}", '    "sword hits #{power}"', "  in {type: :shield}", '    "shield up"', "  in {type: :potion, hp:}", '    "potion heals #{hp}"', "  end", "end", "puts use({type: :sword, power: 7})", "puts use({type: :potion, hp: 20})", ""),
       expect: "potion heals 20",
@@ -482,6 +786,89 @@ const patterns: LessonDef = {
 };
 
 // ─── 4.4 Many hands, one key: threads and Ractors ──────────────────────────
+const threadsNotes: NoteDef[] = [
+  note("thread-basics", L("Thread, join and value", "Thread, join y value", "Thread と join と value"),
+    p(
+      "Thread.new { ... } starts running the block alongside the rest of the program, and the main code continues right away. join waits until the thread finishes; value waits too, then returns the block's last value. When the main program ends, unfinished threads are killed, so always join (or ask value from) threads whose work you need.",
+      "Thread.new { ... } empieza a ejecutar el bloque junto al resto del programa, y el código principal sigue de inmediato. join espera hasta que el thread termina; value también espera y luego devuelve el último valor del bloque. Cuando el programa principal termina, los threads sin terminar se cortan, así que siempre haz join (o pide value) a los threads cuyo trabajo necesitas.",
+      "Thread.new { ... } はブロックを残りのプログラムと並んで動かし始め、メインのコードはすぐ先へ進む。join はスレッドが終わるまで待ち、value も待ってからブロックの最後の値を返す。メインが終わると未完了のスレッドは止められるので、結果が必要なスレッドは必ず join（か value）しよう。",
+    ),
+    ex(C("workers = [2, 3, 4].map { |n| Thread.new { n * n } }", "p workers.map(&:value)"), "[4, 9, 16]",
+      L("value waits for each thread and collects its result", "value espera a cada thread y junta su resultado", "value は各スレッドを待って結果を集める")),
+    p(
+      "Threads can finish in any order, so printing from inside them gives unpredictable output. Collect results with value (or a Queue) and print from the main thread, in an order you control.",
+      "Los threads pueden terminar en cualquier orden, así que imprimir desde adentro da una salida impredecible. Junta los resultados con value (o una Queue) e imprime desde el thread principal, en un orden que tú controles.",
+      "スレッドが終わる順番は決まっていないので、中から表示すると出力が読めなくなる。value（や Queue）で結果を集め、メインスレッドから自分で決めた順に表示しよう。",
+    ),
+    p(
+      "An exception inside a thread doesn't stop the main program right away. The thread dies, and the exception is raised again in whichever thread calls join or value on it. So put begin/rescue around join or value. (Ruby also prints a report when a thread dies; Thread.report_on_exception = false silences it.)",
+      "Una excepción dentro de un thread no detiene el programa principal de inmediato. El thread muere, y la excepción se lanza otra vez en el thread que llame a join o value sobre él. Así que pon begin/rescue alrededor de join o value. (Ruby además imprime un reporte cuando un thread muere; Thread.report_on_exception = false lo silencia.)",
+      "スレッド内の例外は、すぐにはメインを止めない。スレッドは終わり、そのスレッドに join か value を呼んだ側で例外がもう一度 raise される。だから join や value を begin/rescue で包もう。（スレッドが死ぬと Ruby は報告も表示する。Thread.report_on_exception = false で消せる。）",
+    ),
+    ex(C("Thread.report_on_exception = false", 't = Thread.new { Integer("oops") }', "begin", "  t.value", "rescue ArgumentError => e", '  puts "worker failed: #{e.class}"', "end"), "worker failed: ArgumentError"),
+  ),
+  note("gvl-ractor", L("The GVL and Ractors", "El GVL y los Ractors", "GVL と Ractor"),
+    p(
+      "CRuby, the standard Ruby, has a Global VM Lock (GVL): only one thread can run Ruby code at any moment, so threads take turns. That means CPU-heavy work in pure Ruby does not get faster by splitting it across threads; the results are the same, just not truly parallel.",
+      "CRuby, el Ruby estándar, tiene un Global VM Lock (GVL): solo un thread puede ejecutar código Ruby en cada momento, así que los threads se turnan. Eso significa que el trabajo pesado de CPU en Ruby puro no se acelera al repartirlo en threads; los resultados son los mismos, solo que no en paralelo real.",
+      "標準の Ruby である CRuby には GVL（グローバル VM ロック）があり、Ruby のコードを動かせるのは一度に1スレッドだけ。スレッドは交代で動く。だから純粋な Ruby の重い計算は、スレッドに分けても速くならない。結果は同じだが、本当の並列ではない。",
+    ),
+    ex(C("t1 = Thread.new { (1..1000).sum }", "t2 = Thread.new { (1..10).sum }", "p [t1.value, t2.value]"), "[500500, 55]",
+      L("They take turns under the GVL; results arrive intact", "Se turnan bajo el GVL; los resultados llegan intactos", "GVL の下で交代で動き、結果はそのまま届く")),
+    p(
+      "Threads still shine when they wait. Reading files, talking to the network or calling sleep releases the GVL, so another thread can run in the meantime. That's why threads are great for many web requests at once.",
+      "Los threads igual brillan cuando esperan. Leer archivos, hablar con la red o llamar a sleep libera el GVL, así que otro thread puede correr mientras tanto. Por eso los threads son ideales para muchas peticiones web a la vez.",
+      "それでもスレッドは「待ち」で活躍する。ファイルの読みこみ、ネットワーク通信、sleep は GVL を手放すので、その間に別のスレッドが動ける。だからたくさんの Web リクエストを同時に扱うのに向いている。",
+    ),
+    p(
+      "A Ractor (still experimental in Ruby 3.4) is an isolated worker with its own lock, so several Ractors really run in parallel on different cores. The price is isolation: Ractors can't share mutable objects. Objects travel between them by being copied or moved, and only frozen, shareable objects can be seen by more than one.",
+      "Un Ractor (aún experimental en Ruby 3.4) es un trabajador aislado con su propio candado, así que varios Ractors corren de verdad en paralelo en núcleos distintos. El precio es el aislamiento: los Ractors no pueden compartir objetos mutables. Los objetos viajan entre ellos copiados o movidos, y solo los objetos congelados y compartibles pueden ser vistos por más de uno.",
+      "Ractor（Ruby 3.4 ではまだ実験的）は自分のロックを持つ隔離された働き手で、複数の Ractor は別々のコアで本当に並列に動く。代わりに隔離が必要で、変更できるオブジェクトは共有できない。物はコピーか移動で渡し、複数から見られるのは凍った共有可能な物だけ。",
+    ),
+  ),
+  note("mutex", L("Mutex and race conditions", "Mutex y condiciones de carrera", "Mutex と競合状態"),
+    p(
+      "Threads can switch at almost any moment, even in the middle of count += 1, which is really three steps: read count, add 1, write count. If two threads read the same old value, one update is lost. That's a race condition. The GVL does not prevent it, and the result may even look right by luck.",
+      "Los threads pueden cambiar casi en cualquier momento, incluso a mitad de count += 1, que en realidad son tres pasos: leer count, sumar 1, escribir count. Si dos threads leen el mismo valor viejo, una actualización se pierde. Eso es una condición de carrera. El GVL no la evita, y el resultado hasta puede parecer correcto por suerte.",
+      "スレッドはほとんどいつでも切りかわる。count += 1 の途中でもだ。これは本当は「count を読む・1 足す・書く」の3手。2つのスレッドが同じ古い値を読むと、更新が1つ消える。これが競合状態。GVL では防げず、たまたま正しく見えることもある。",
+    ),
+    p(
+      "A Mutex (mutual exclusion) is a key that only one thread can hold. lock.synchronize { ... } lets one thread at a time into the block; the others wait their turn. Put every read-modify-write of shared data inside it.",
+      "Un Mutex (exclusión mutua) es una llave que solo un thread puede tener. lock.synchronize { ... } deja entrar al bloque a un thread a la vez; los demás esperan su turno. Pon dentro cada lectura-cambio-escritura de datos compartidos.",
+      "Mutex（相互排他）は1つのスレッドしか持てない鍵。lock.synchronize { ... } はブロックに1スレッドずつ入れ、ほかは順番を待つ。共有データの「読む・変える・書く」はすべてこの中に入れよう。",
+    ),
+    ex(C("total = 0", "lock = Mutex.new", "threads = 4.times.map do", "  Thread.new { 250.times { lock.synchronize { total += 1 } } }", "end", "threads.each(&:join)", "p total"), "1000",
+      L("With the Mutex, no update is lost", "Con el Mutex no se pierde ninguna actualización", "Mutex があれば更新は消えない")),
+    p(
+      "A Mutex is not reentrant: if the thread that already holds it tries to lock it again, Ruby raises ThreadError (deadlock; recursive locking). This often happens when a helper locks inside and its caller had already locked. Lock at one level only; owned? tells you whether the current thread holds the lock.",
+      "Un Mutex no es reentrante: si el thread que ya lo tiene intenta bloquearlo otra vez, Ruby lanza ThreadError (deadlock; recursive locking). Suele pasar cuando un ayudante bloquea por dentro y quien lo llama ya había bloqueado. Bloquea en un solo nivel; owned? te dice si el thread actual tiene el candado.",
+      "Mutex は再入できない。すでに持っているスレッドがもう一度ロックしようとすると、Ruby は ThreadError（deadlock; recursive locking）を出す。助っ人が中でロックし、呼んだ側もすでにロックしていた時によく起こる。ロックは1か所だけで。owned? で今のスレッドが持っているかわかる。",
+    ),
+    ex(C("guard = Mutex.new", "guard.synchronize { p guard.owned? }", "p guard.owned?"), "true\nfalse"),
+    boom(C("guard = Mutex.new", "guard.lock", "guard.lock"), "ThreadError",
+      L("The same thread locks twice", "El mismo thread bloquea dos veces", "同じスレッドが2回ロック")),
+  ),
+  note("queue", L("Queue: passing work safely", "Queue: pasar trabajo seguro", "Queue：安全に受け渡す"),
+    p(
+      "A Queue is a thread-safe line. q << item adds at the back and q.pop takes from the front, so items come out in the order they went in. Many threads can push and pop at once without a Mutex.",
+      "Una Queue es una fila segura entre threads. q << item agrega al final y q.pop saca del frente, así que los elementos salen en el orden en que entraron. Muchos threads pueden agregar y sacar a la vez sin un Mutex.",
+      "Queue はスレッド間で安全な行列。q << 物 は後ろに足し、q.pop は前から取るので、入れた順に出てくる。たくさんのスレッドが Mutex なしで同時に出し入れできる。",
+    ),
+    p(
+      "pop blocks: when the queue is empty, the thread waits until another thread pushes something. A common pattern: the producer pushes a special stop value (like :stop) at the end, and the consumer loops until it sees it, without keeping it.",
+      "pop bloquea: si la queue está vacía, el thread espera hasta que otro agregue algo. Un patrón común: el productor agrega al final un valor especial de parada (como :stop), y el consumidor repite hasta verlo, sin guardarlo.",
+      "pop は待つ。空なら、ほかのスレッドが何か入れるまで待つ。よくある形：作る側が最後に :stop のような止める合図を入れ、使う側はそれを見るまでくり返し、合図自体はしまわない。",
+    ),
+    ex(C("jobs = Queue.new", "worker = Thread.new do", "  done = []", "  while (job = jobs.pop) != :stop", "    done << job.upcase", "  end", "  done", "end", 'jobs << "a"', 'jobs << "b"', "jobs << :stop", "p worker.value"), '["A", "B"]',
+      L("The worker waits on pop until each job arrives", "El trabajador espera en pop hasta que llega cada tarea", "worker は仕事が届くまで pop で待つ")),
+    p(
+      "If every thread ends up waiting on pop and nobody can push anymore, Ruby notices and stops with a fatal deadlock error (No live threads left). Make sure something always sends the stop signal.",
+      "Si todos los threads terminan esperando en pop y nadie puede agregar nada, Ruby lo nota y se detiene con un error fatal de deadlock (No live threads left). Asegúrate de que algo siempre envíe la señal de parada.",
+      "すべてのスレッドが pop で待ち、だれも入れられなくなると、Ruby は気づいてデッドロックの致命的エラー（No live threads left）で止まる。止める合図を必ずだれかが送るようにしよう。",
+    ),
+  ),
+];
+
 const threads: LessonDef = {
   slug: "threads-and-ractors",
   title: L("Many hands, one key", "Muchas manos, una llave", "たくさんの手とひとつの鍵"),
@@ -490,6 +877,7 @@ const threads: LessonDef = {
   xp: 85,
   enemy: "ruby/frozen-cube",
   enemyName: L("LOCK CUBE", "CUBO CANDADO", "ロックキューブ"),
+  notes: threadsNotes,
   beats: [
     say(L(
       "A Thread runs a block alongside your code. join waits for it; value waits and returns the block's result.",
@@ -508,6 +896,7 @@ const threads: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("The thread itself prints nothing. What does value return, and when does the next puts run?", "El thread mismo no imprime nada. ¿Qué devuelve value y cuándo corre el siguiente puts?", "スレッド自身は何も表示しない。value は何を返す？次の puts はいつ動く？"), note: "thread-basics",
       code: C("t = Thread.new { [1, 2, 3].sum }", 'puts "waiting"', "puts t.value + 1"),
       options: ["waiting\n7", "waiting\n6", "7\nwaiting"],
       answer: 0,
@@ -523,6 +912,7 @@ const threads: LessonDef = {
     {
       kind: "predict",
       prompt: L("In CRuby, how do a and b run?", "En CRuby, ¿cómo corren a y b?", "CRuby で a と b はどう動く？"),
+      hint: L("Think about CRuby's global lock: how many threads may run Ruby code at the same moment?", "Piensa en el candado global de CRuby: ¿cuántos threads pueden ejecutar código Ruby en el mismo momento?", "CRuby の全体ロックを思い出そう。同時に Ruby コードを動かせるスレッドはいくつ？"), note: "gvl-ractor",
       code: C("a = Thread.new { crunch_numbers }", "b = Thread.new { crunch_numbers }", "[a, b].each(&:join)"),
       options: [L("One at a time, taking turns (GVL)", "De a uno, por turnos (GVL)", "交代で1つずつ（GVL）"), L("Truly in parallel on two cores", "En paralelo real en dos núcleos", "2コアで本当に並列")],
       answer: 0,
@@ -538,6 +928,7 @@ const threads: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("join waits for all five threads, and sort fixes the order. Which numbers did the threads add?", "join espera a los cinco threads y sort fija el orden. ¿Qué números agregaron los threads?", "join で5つ全部を待ち、sort で順番がそろう。スレッドが入れた数は？"), note: "mutex",
       code: C("results = []", "m = Mutex.new", "ths = 5.times.map do |i|", "  Thread.new { m.synchronize { results << i } }", "end", "ths.each(&:join)", "p results.sort"),
       options: ["[0, 1, 2, 3, 4]", "[]", "[4, 3, 2, 1, 0]"],
       answer: 0,
@@ -549,6 +940,7 @@ const threads: LessonDef = {
     {
       kind: "predict",
       prompt: L("Safe to assume c == 10000?", "¿Se puede asumir c == 10000?", "c == 10000 と言い切れる？"),
+      hint: L("c += 1 is read, add, write. Could another thread switch in between those steps?", "c += 1 es leer, sumar, escribir. ¿Podría entrar otro thread entre esos pasos?", "c += 1 は読む・足す・書く。その途中で別のスレッドに切りかわる？"), note: "mutex",
       code: C("c = 0", "ths = 10.times.map do", "  Thread.new { 1000.times { c += 1 } }", "end", "ths.each(&:join)"),
       options: [L("No: protect c with a Mutex", "No: protege c con un Mutex", "いいえ：Mutex で守る"), L("Yes: the GVL makes += atomic", "Sí: el GVL hace atómico +=", "はい：GVL で += は安全")],
       answer: 0,
@@ -557,6 +949,7 @@ const threads: LessonDef = {
     {
       kind: "predict",
       prompt: HAPPENS,
+      hint: L("The same thread asks for a lock it already holds. Is a Mutex reentrant?", "El mismo thread pide un candado que ya tiene. ¿Un Mutex es reentrante?", "同じスレッドが、もう持っているロックを求める。Mutex は再入できる？"), note: "mutex",
       code: C("m = Mutex.new", "m.synchronize do", "  m.synchronize { puts \"inside\" }", "end"),
       options: [L("ThreadError: recursive locking", "ThreadError: bloqueo recursivo", "ThreadError：二重ロック"), L("Prints inside", "Imprime inside", "inside と表示")],
       answer: 0,
@@ -572,6 +965,7 @@ const threads: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("A Queue keeps order, and the loop stops when it pops :done. Is :done added to out?", "Una Queue mantiene el orden, y el bucle para cuando saca :done. ¿Se agrega :done a out?", "Queue は順番を守り、:done を pop したらループは止まる。:done は out に入る？"), note: "queue",
       code: C("q = Queue.new", "producer = Thread.new do", "  3.times { |i| q << i }", "  q << :done", "end", "out = []", "while (v = q.pop) != :done", "  out << v", "end", "producer.join", "p out"),
       options: ["[0, 1, 2]", "[0, 1, 2, :done]", "[]"],
       answer: 0,
@@ -583,6 +977,7 @@ const threads: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("An error inside a thread waits; join raises it again in the caller. Which class and message does it keep?", "Un error dentro de un thread espera; join lo relanza en quien llama. ¿Qué clase y mensaje conserva?", "スレッド内のエラーは待機し、join で呼んだ側に再び raise。クラスと文は？"), note: "thread-basics",
       code: C("Thread.report_on_exception = false", 'th = Thread.new { raise ArgumentError, "in thread" }', "begin", "  th.join", "rescue => e", "  p e.class, e.message", "end"),
       options: ['ArgumentError\n"in thread"', "nil\nnil", "RuntimeError\n\"in thread\""],
       answer: 0,
@@ -598,6 +993,7 @@ const threads: LessonDef = {
     {
       kind: "predict",
       prompt: L("Which runs Ruby in parallel, isolated?", "¿Cuál corre Ruby en paralelo y aislado?", "隔離して並列に動くのは？"),
+      hint: L("Which one has its own lock and shares no mutable objects? Threads all share one global lock.", "¿Cuál tiene su propio candado y no comparte objetos mutables? Los threads comparten un candado global.", "自分のロックを持ち、変更できる物を共有しないのは？スレッドは全体ロックを共有。"), note: "gvl-ractor",
       code: C("r = Ractor.new { 1 + 2 }", "r.take"),
       options: ["Ractor", "Thread", "Mutex"],
       answer: 0,
@@ -606,6 +1002,7 @@ const threads: LessonDef = {
     {
       kind: "run",
       prompt: L("Stop the double lock: total: 5", "Quita el doble bloqueo: total: 5", "二重ロックをやめよう：total: 5"),
+      hint: L("add already locks inside. Calling it while holding the same lock locks twice. Keep just one level.", "add ya bloquea por dentro. Llamarlo con el mismo candado tomado bloquea dos veces. Deja un solo nivel.", "add は中でロックする。同じロックを持ったまま呼ぶと二重ロック。1か所だけに。"), note: "mutex",
       starter: C("lock = Mutex.new", "total = 0", "add = ->(n) { lock.synchronize { total += n } }", "lock.synchronize { add.call(5) }", 'puts "total: #{total}"', ""),
       solution: C("lock = Mutex.new", "total = 0", "add = ->(n) { lock.synchronize { total += n } }", "add.call(5)", 'puts "total: #{total}"', ""),
       expect: "total: 5",
@@ -616,6 +1013,54 @@ const threads: LessonDef = {
 };
 
 // ─── Boss: The Monkey Imp ──────────────────────────────────────────────────
+// The boss recaps the whole region: one short note per idea it tests.
+const bossNotes: NoteDef[] = [
+  note("recap-errors", L("Recap: rescue and ensure", "Repaso: rescue y ensure", "復習：rescue と ensure"),
+    p(
+      "rescue SomeClass catches that class and all its descendants, and the exception object keeps its real class. A bare rescue catches only StandardError and its children, so Exception itself slips past.",
+      "rescue UnaClase atrapa esa clase y todos sus descendientes, y el objeto excepción conserva su clase real. Un rescue sin clase atrapa solo StandardError y sus hijos, así que Exception misma se escapa.",
+      "rescue クラス名 はそのクラスと子孫を捕まえ、例外オブジェクトは本当のクラスのまま。クラスなしの rescue は StandardError とその子だけなので、Exception 自身は逃げる。",
+    ),
+    ex(C("begin", "  [].fetch(0)", "rescue StandardError => e", "  p e.class", "end"), "IndexError",
+      L("Caught by its ancestor, still an IndexError", "Lo atrapa su ancestro, pero sigue siendo IndexError", "祖先に捕まっても IndexError のまま")),
+    p(
+      "ensure always runs, but its value is thrown away: the method returns the value of its body or of the rescue that ran.",
+      "ensure siempre corre, pero su valor se descarta: el método devuelve el valor de su cuerpo o del rescue que corrió.",
+      "ensure は必ず動くが、その値は捨てられる。メソッドは本体か、動いた rescue の値を返す。",
+    ),
+  ),
+  note("recap-dispatch", L("Recap: define_method and sending", "Repaso: define_method y send", "復習：define_method と send"),
+    p(
+      "define_method builds methods from data, often in a loop; its block remembers the loop variable. public_send calls a method by name but refuses private ones, while send skips that check.",
+      "define_method construye métodos a partir de datos, a menudo en un bucle; su bloque recuerda la variable del bucle. public_send llama a un método por nombre pero rechaza los privados, mientras que send se salta esa revisión.",
+      "define_method はデータからメソッドを作る。ループで使うことが多く、ブロックはループの変数をおぼえている。public_send は名前でメソッドを呼ぶが private は断る。send はその確認をしない。",
+    ),
+    ex(C("class Robot; end", "%w[left right].each do |dir|", '  Robot.define_method("turn_#{dir}") { "turning #{dir}" }', "end", "p Robot.new.turn_right"), '"turning right"'),
+  ),
+  note("recap-patterns", L("Recap: pattern matching", "Repaso: pattern matching", "復習：パターンマッチ"),
+    p(
+      "A bare name in a pattern captures any value (and overwrites a variable with that name); ^name compares with the current value. Hash patterns check only the keys they name, and they work on Data objects too.",
+      "Un nombre suelto en un patrón captura cualquier valor (y sobrescribe una variable con ese nombre); ^nombre compara con el valor actual. Los patrones de hash revisan solo las claves que nombran, y también funcionan con objetos Data.",
+      "パターンの名前だけはどんな値も取りこむ（同じ名前の変数は上書き）。^名前 は今の値と比べる。ハッシュパターンは書いたキーだけを見て、Data のオブジェクトにも使える。",
+    ),
+    p(
+      "When no in clause fits and there is no else, case/in raises NoMatchingPatternError. An else branch turns unexpected values into a safe answer.",
+      "Cuando ninguna cláusula in encaja y no hay else, case/in lanza NoMatchingPatternError. Una rama else convierte los valores inesperados en una respuesta segura.",
+      "どの in にも合わず else もなければ、case/in は NoMatchingPatternError を出す。else があれば、思わぬ値も安全な答えに変えられる。",
+    ),
+    ex(C("def react(event)", "  case event", '  in {type: :hit, dmg:} then "ouch #{dmg}"', '  else "ignored"', "  end", "end", "p react({type: :hit, dmg: 2}), react({type: :wave})"), '"ouch 2"\n"ignored"'),
+  ),
+  note("recap-threads", L("Recap: Mutex and Queue", "Repaso: Mutex y Queue", "復習：Mutex と Queue"),
+    p(
+      "A Mutex is not reentrant: locking one you already hold raises ThreadError. A Queue hands items between threads in order, and pop waits until something arrives. value waits for a thread and returns its result.",
+      "Un Mutex no es reentrante: bloquear uno que ya tienes lanza ThreadError. Una Queue pasa elementos entre threads en orden, y pop espera hasta que llegue algo. value espera a un thread y devuelve su resultado.",
+      "Mutex は再入できず、持っているものをまたロックすると ThreadError。Queue はスレッド間で順番に物を渡し、pop は何か届くまで待つ。value はスレッドを待って結果を返す。",
+    ),
+    ex(C("box = Queue.new", 'Thread.new { box << "parcel" }', "p box.pop"), '"parcel"',
+      L("pop waits for the other thread's push", "pop espera el envío del otro thread", "pop はほかのスレッドの push を待つ")),
+  ),
+];
+
 const boss: LessonDef = {
   slug: "tower-boss",
   title: L("The Monkey Imp", "El Diablillo Mono", "モンキーインプ"),
@@ -624,25 +1069,27 @@ const boss: LessonDef = {
   xp: 190,
   enemy: "ruby/monkey-imp",
   enemyName: L("MONKEY IMP", "DIABLILLO MONO", "モンキーインプ"),
+  notes: bossNotes,
   beats: [
     enemySays(L(
       "HEE HEE! I AM THE MONKEY IMP. I patch your classes, swallow your messages and tangle your threads. Catch me!",
       "¡JI JI! SOY EL DIABLILLO MONO. Parcho tus clases, me trago tus mensajes y enredo tus threads. ¡Atrápame!",
       "ひっひっ！我はモンキーインプ。クラスにパッチを当て、メッセージを飲みこみ、スレッドをもつれさせる。捕まえてみろ！",
     )),
-    { kind: "predict", time: 15, prompt: PRINT, code: C("def m", '  "body"', "ensure", '  "ignored"', "end", "p m"), options: ['"body"', '"ignored"', "nil"], answer: 0, output: '"body"', check: { compiles: true, stdout: '"body"' }, explain: L("ensure runs, but its value is thrown away; the body's value is returned.", "ensure corre, pero su valor se descarta; se devuelve el del cuerpo.", "ensure は動くが値は捨てられ、本体の値が返る。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: C("begin", "  {a: 1}.fetch(:b)", "rescue IndexError => e", "  p e.class", "end"), options: ["KeyError", "IndexError", "nil"], answer: 0, output: "KeyError", check: { compiles: true, stdout: "KeyError" }, explain: L("fetch raises KeyError, a child of IndexError, so that clause catches it. e keeps its real class.", "fetch lanza KeyError, hijo de IndexError, así que esa cláusula lo atrapa. e conserva su clase real.", "fetch は IndexError の子 KeyError。その節で捕まり、e は本当のクラスのまま。") },
-    { kind: "predict", time: 15, prompt: HAPPENS, code: C("begin", '  raise Exception, "deep"', "rescue => e", '  puts "saved"', "end"), options: [L("Crashes: Exception escapes", "Falla: Exception escapa", "Exception が逃げて落ちる"), L("Prints saved", "Imprime saved", "saved と表示")], answer: 0, check: { compiles: true, throws: "(Exception)" }, explain: L("A bare rescue catches StandardError only; Exception is its parent.", "Un rescue solo atrapa StandardError; Exception es su padre.", "クラスなし rescue は StandardError だけ。Exception はその親。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: C("class Hero; end", '["run", "jump"].each do |m|', '  Hero.define_method(m) { "#{m}!" }', "end", "p Hero.new.public_send(:jump)"), options: ['"jump!"', '"run!"', "NoMethodError"], answer: 0, output: '"jump!"', check: { compiles: true, stdout: '"jump!"' }, explain: L("define_method made run and jump; public_send calls jump by name.", "define_method creó run y jump; public_send llama a jump por nombre.", "define_method で run と jump ができ、public_send が jump を呼ぶ。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: C("x = 99", "case 5", "in x then p x", "end", "p x == 99"), options: ["5\nfalse", "99\ntrue", "5\ntrue"], answer: 0, output: "5\nfalse", check: { compiles: true, stdout: "5\nfalse" }, explain: L("A bare name binds: x became 5. Pin with ^x to compare instead.", "Un nombre suelto asigna: x pasó a 5. Usa ^x para comparar.", "名前だけだと束縛され x は 5 に。比べるなら ^x。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: C("Box = Data.define(:w, :h)", "case Box.new(w: 2, h: 3)", "in {w:, h:} then p w * h", "end"), options: ["6", "5", "NoMatchingPatternError"], answer: 0, output: "6", check: { compiles: true, stdout: "6" }, explain: L("Data objects support hash patterns: w: and h: bind their fields.", "Los Data admiten patrones de hash: w: y h: asignan sus campos.", "Data はハッシュパターンに対応。w: と h: がフィールドを束縛。") },
-    { kind: "predict", time: 15, prompt: HAPPENS, code: C("lock = Mutex.new", "lock.synchronize do", "  lock.synchronize { }", "end"), options: ["ThreadError", L("Nothing, it's fine", "Nada, está bien", "何も起きない")], answer: 0, check: { compiles: true, throws: "ThreadError" }, explain: L("Locking a Mutex you already hold is recursive locking: ThreadError.", "Bloquear un Mutex que ya tienes es bloqueo recursivo: ThreadError.", "持っている Mutex を再ロックすると ThreadError。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: C("q = Queue.new", "t = Thread.new { q.pop * 2 }", "q << 21", "p t.value"), options: ["42", "21", "nil"], answer: 0, output: "42", check: { compiles: true, stdout: "42" }, explain: L("The thread waits on pop until 21 arrives, then value returns 42.", "El thread espera en pop hasta que llega 21; luego value devuelve 42.", "スレッドは 21 が届くまで pop で待ち、value は 42。") },
-    { kind: "pick", time: 12, prompt: L("Call by name, respecting private", "Llama por nombre respetando private", "private を守って名前で呼ぶ"), code: C("class Safe", '  def open; "opened"; end', "end", "p Safe.new.___(:open)"), options: ["public_send", "send", "call"], answer: 0, check: { compiles: true, stdout: '"opened"' }, explain: L("public_send calls by name but refuses private methods; send would skip that check.", "public_send llama por nombre pero rechaza métodos privados; send se saltaría esa revisión.", "public_send は名前で呼びつつ private は拒否。send は確認しない。") },
+    { kind: "predict", time: 15, prompt: PRINT, hint: L("ensure runs, but does its value replace the method's return value?", "ensure corre, pero ¿su valor reemplaza el valor de retorno del método?", "ensure は動く。でもその値はメソッドの戻り値になる？"), note: "recap-errors", code: C("def m", '  "body"', "ensure", '  "ignored"', "end", "p m"), options: ['"body"', '"ignored"', "nil"], answer: 0, output: '"body"', check: { compiles: true, stdout: '"body"' }, explain: L("ensure runs, but its value is thrown away; the body's value is returned.", "ensure corre, pero su valor se descarta; se devuelve el del cuerpo.", "ensure は動くが値は捨てられ、本体の値が返る。") },
+    { kind: "predict", time: 15, prompt: PRINT, hint: L("Is KeyError a child of IndexError? And does rescuing by a parent class change e.class?", "¿KeyError es hijo de IndexError? ¿Y atrapar por una clase padre cambia e.class?", "KeyError は IndexError の子？親で rescue すると e.class は変わる？"), note: "recap-errors", code: C("begin", "  {a: 1}.fetch(:b)", "rescue IndexError => e", "  p e.class", "end"), options: ["KeyError", "IndexError", "nil"], answer: 0, output: "KeyError", check: { compiles: true, stdout: "KeyError" }, explain: L("fetch raises KeyError, a child of IndexError, so that clause catches it. e keeps its real class.", "fetch lanza KeyError, hijo de IndexError, así que esa cláusula lo atrapa. e conserva su clase real.", "fetch は IndexError の子 KeyError。その節で捕まり、e は本当のクラスのまま。") },
+    { kind: "predict", time: 15, prompt: HAPPENS, hint: L("Which family does a bare rescue catch, and where does Exception sit in the tree?", "¿Qué familia atrapa un rescue sin clase y dónde está Exception en el árbol?", "クラスなし rescue はどの家族を捕まえる？Exception は家系図のどこ？"), note: "recap-errors", code: C("begin", '  raise Exception, "deep"', "rescue => e", '  puts "saved"', "end"), options: [L("Crashes: Exception escapes", "Falla: Exception escapa", "Exception が逃げて落ちる"), L("Prints saved", "Imprime saved", "saved と表示")], answer: 0, check: { compiles: true, throws: "(Exception)" }, explain: L("A bare rescue catches StandardError only; Exception is its parent.", "Un rescue solo atrapa StandardError; Exception es su padre.", "クラスなし rescue は StandardError だけ。Exception はその親。") },
+    { kind: "predict", time: 15, prompt: PRINT, hint: L("The loop defined one method per name. public_send calls the one whose name you pass.", "El bucle definió un método por nombre. public_send llama al que tiene el nombre que pasas.", "ループで名前ごとにメソッドができた。public_send は渡した名前のものを呼ぶ。"), note: "recap-dispatch", code: C("class Hero; end", '["run", "jump"].each do |m|', '  Hero.define_method(m) { "#{m}!" }', "end", "p Hero.new.public_send(:jump)"), options: ['"jump!"', '"run!"', "NoMethodError"], answer: 0, output: '"jump!"', check: { compiles: true, stdout: '"jump!"' }, explain: L("define_method made run and jump; public_send calls jump by name.", "define_method creó run y jump; public_send llama a jump por nombre.", "define_method で run と jump ができ、public_send が jump を呼ぶ。") },
+    { kind: "predict", time: 15, prompt: PRINT, hint: L("A bare name binds instead of comparing. After the case, is x still 99?", "Un nombre suelto asigna en vez de comparar. Después del case, ¿x sigue siendo 99?", "名前だけは比べずに束縛する。case のあとも x は 99？"), note: "recap-patterns", code: C("x = 99", "case 5", "in x then p x", "end", "p x == 99"), options: ["5\nfalse", "99\ntrue", "5\ntrue"], answer: 0, output: "5\nfalse", check: { compiles: true, stdout: "5\nfalse" }, explain: L("A bare name binds: x became 5. Pin with ^x to compare instead.", "Un nombre suelto asigna: x pasó a 5. Usa ^x para comparar.", "名前だけだと束縛され x は 5 に。比べるなら ^x。") },
+    { kind: "predict", time: 15, prompt: PRINT, hint: L("Data objects work with hash patterns: w: and h: bind the fields. Then do the math.", "Los Data funcionan con patrones de hash: w: y h: asignan los campos. Luego haz la cuenta.", "Data はハッシュパターンに使える。w: と h: がフィールドを束縛。あとは計算。"), note: "recap-patterns", code: C("Box = Data.define(:w, :h)", "case Box.new(w: 2, h: 3)", "in {w:, h:} then p w * h", "end"), options: ["6", "5", "NoMatchingPatternError"], answer: 0, output: "6", check: { compiles: true, stdout: "6" }, explain: L("Data objects support hash patterns: w: and h: bind their fields.", "Los Data admiten patrones de hash: w: y h: asignan sus campos.", "Data はハッシュパターンに対応。w: と h: がフィールドを束縛。") },
+    { kind: "predict", time: 15, prompt: HAPPENS, hint: L("The inner synchronize asks for a lock the same thread already holds.", "El synchronize interno pide un candado que el mismo thread ya tiene.", "内側の synchronize は、同じスレッドがもう持っているロックを求める。"), note: "recap-threads", code: C("lock = Mutex.new", "lock.synchronize do", "  lock.synchronize { }", "end"), options: ["ThreadError", L("Nothing, it's fine", "Nada, está bien", "何も起きない")], answer: 0, check: { compiles: true, throws: "ThreadError" }, explain: L("Locking a Mutex you already hold is recursive locking: ThreadError.", "Bloquear un Mutex que ya tienes es bloqueo recursivo: ThreadError.", "持っている Mutex を再ロックすると ThreadError。") },
+    { kind: "predict", time: 15, prompt: PRINT, hint: L("pop waits until something is pushed. What arrives, and what does the block do with it?", "pop espera hasta que se agregue algo. ¿Qué llega y qué hace el bloque con eso?", "pop は何か入るまで待つ。何が届き、ブロックはそれをどうする？"), note: "recap-threads", code: C("q = Queue.new", "t = Thread.new { q.pop * 2 }", "q << 21", "p t.value"), options: ["42", "21", "nil"], answer: 0, output: "42", check: { compiles: true, stdout: "42" }, explain: L("The thread waits on pop until 21 arrives, then value returns 42.", "El thread espera en pop hasta que llega 21; luego value devuelve 42.", "スレッドは 21 が届くまで pop で待ち、value は 42。") },
+    { kind: "pick", time: 12, prompt: L("Call by name, respecting private", "Llama por nombre respetando private", "private を守って名前で呼ぶ"), hint: L("You need a call by name that still refuses private methods. Which one checks privacy?", "Necesitas una llamada por nombre que igual rechace métodos privados. ¿Cuál revisa la privacidad?", "名前で呼びつつ private は断るものが必要。private を確かめるのは？"), note: "recap-dispatch", code: C("class Safe", '  def open; "opened"; end', "end", "p Safe.new.___(:open)"), options: ["public_send", "send", "call"], answer: 0, check: { compiles: true, stdout: '"opened"' }, explain: L("public_send calls by name but refuses private methods; send would skip that check.", "public_send llama por nombre pero rechaza métodos privados; send se saltaría esa revisión.", "public_send は名前で呼びつつ private は拒否。send は確認しない。") },
     {
       kind: "run",
       time: 90,
       prompt: L("Unknown events must not crash: tower stands", "Eventos desconocidos no deben fallar: tower stands", "知らないイベントで落ちないように"),
+      hint: L("{type: :spell} fits no clause, so case/in raises. Give the case a branch for anything else.", "{type: :spell} no encaja en ninguna cláusula y case/in falla. Dale al case una rama para todo lo demás.", "{type: :spell} に合う節がなく例外に。それ以外を受ける枝を足そう。"), note: "recap-patterns",
       starter: C("def handle(event)", "  case event", "  in {type: :damage, amount: Integer => n}", '    "took #{n}"', "  in {type: :heal, amount:}", '    "healed #{amount}"', "  end", "end", "[{type: :damage, amount: 3}, {type: :spell}].each do |e|", "  puts handle(e)", "end", 'puts "tower stands"', ""),
       solution: C("def handle(event)", "  case event", "  in {type: :damage, amount: Integer => n}", '    "took #{n}"', "  in {type: :heal, amount:}", '    "healed #{amount}"', "  else", '    "ignored"', "  end", "end", "[{type: :damage, amount: 3}, {type: :spell}].each do |e|", "  puts handle(e)", "end", 'puts "tower stands"', ""),
       expect: "tower stands",

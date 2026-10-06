@@ -15,7 +15,7 @@ The game and all its content are localized in **English** (primary), **Spanish**
 | [adding-a-language.md](adding-a-language.md) | Add a new programming language (a planet with its guide and bugs, like Zig or Haskell) or a framework moon (React, WebGL, three.js, Rails, ...), including a framework no sandbox can run, and choose or add a runner |
 | [exams.md](exams.md) | Understand or extend the entry exam (junior, mid, senior) |
 | [i18n.md](i18n.md) | Understand localization, translate content or add a UI locale |
-| [game-design.md](game-design.md) | Learn the "dopagaki" principles, planets, the memory card, scoring and progression |
+| [game-design.md](game-design.md) | Learn the "dopagaki" principles, planets, the memory card, the lesson timer, scoring, the guidebook and hints, and progression |
 | [security.md](security.md) | Understand the backend abuse protection (rate limits, origin checks, body limits, CSP and headers), where player code runs, and how to add a safe endpoint |
 | [testing.md](testing.md) | Validate content (TS/TSX type-checking, real compilers and sandboxes for every language, the remote result cache), run unit and end-to-end tests, play headless and check the build |
 | [research/](research/) | Supporting research: what companies assess in Rust, TypeScript, React, Go, Python, C++, C#, Zig, Haskell, Ruby, Rails, WebGL and three.js, and the curricula built on it |

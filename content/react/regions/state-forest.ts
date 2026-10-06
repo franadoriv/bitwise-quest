@@ -1,4 +1,4 @@
-import type { LessonDef, RegionDef } from "../../../lib/content/types.ts";
+import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
 import { enemySays, say } from "../../rust/helpers.ts";
 
@@ -24,6 +24,379 @@ const AFTER_CLICK = L("After ONE click, count shows…", "Tras UN clic, count mu
 const LOGS = L("What does it print?", "¿Qué imprime?", "何が表示される？");
 const RENDER = L("RE-RENDER!", "¡RE-RENDER!", "再レンダー！");
 
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A rendered example: shows `body` and `el`; the validator renders `el` and checks the HTML. */
+const ex = (body: string, el: string, output: string, caption?: Text): NoteBlock =>
+  ({ t: "code", code: body ? `${body}\n${el}` : el, output, caption, check: { program: show(body, el), compiles: true, stdout: output } });
+/** A runnable example shown as written (React and useState are imported behind the scenes). */
+const run = (code: string, output: string, caption?: Text): NoteBlock =>
+  ({ t: "code", code, output, caption, check: { program: `${HEAD}${code}`, compiles: true, stdout: output } });
+/** An example that must NOT type-check (verified too). */
+const bad = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { program: `${HEAD}${code}`, compiles: false } });
+/** A click handler on `score` (starting at `start`): prints the next state after React applies the queue. */
+const tap = (handler: string, start: number, output: string, caption: Text): NoteBlock => ({
+  t: "code",
+  code: `// score is ${start}\n${handler}`,
+  output,
+  caption,
+  check: {
+    program:
+      `type Update = number | ((n: number) => number);\nconst updates: Update[] = [];\nconst setScore = (u: Update) => { updates.push(u); };\nconst score: number = ${start};\n` +
+      `${handler}\nlet next = score;\nfor (const u of updates) next = typeof u === "function" ? u(next) : u;\nconsole.log(next);\n`,
+    compiles: true,
+    stdout: output,
+  },
+});
+
+const useStateNotes: NoteDef[] = [
+  note("use-state", L("useState: memory between renders", "useState: memoria entre renders", "useState：レンダーをまたぐ記憶"),
+    p(
+      "React draws a component by calling its function. Every call starts fresh, so a normal local variable is created again with its first value each time, and changing it doesn't tell React to draw again. useState solves both problems: React keeps the value between calls.",
+      "React dibuja un componente llamando a su función. Cada llamada empieza de cero, así que una variable local normal se crea otra vez con su primer valor, y cambiarla no le avisa a React que vuelva a dibujar. useState resuelve ambos problemas: React guarda el valor entre llamadas.",
+      "React はコンポーネントの関数を呼んで描く。呼ぶたびに最初からなので、普通のローカル変数は毎回最初の値で作り直され、変えても React に再描画を伝えられない。useState は両方を解決する。React が呼び出しの間も値を保ってくれるんだ。",
+    ),
+    p(
+      "useState(initial) returns a pair: the current value and a setter function. You name both with array destructuring, by convention [thing, setThing]. On the first render, the value is the initial one you passed.",
+      "useState(inicial) devuelve un par: el valor actual y una función setter. Nombras ambos con desestructuración de arreglos, por convención [cosa, setCosa]. En el primer render, el valor es el inicial que pasaste.",
+      "useState(初期値) はペアを返す。今の値とセッター関数だ。配列の分割代入で両方に名前を付け、慣例では [thing, setThing]。最初のレンダーでは、値は渡した初期値になる。",
+    ),
+    ex("function Lamp() {\n  const [mana, setMana] = useState(25);\n  return <p>mana {mana}</p>;\n}", "<Lamp />", "<p>mana 25</p>",
+      L("First render: mana is the initial value", "Primer render: mana vale el valor inicial", "最初のレンダー：mana は初期値")),
+    p(
+      "Calling the setter, like setMana(30), doesn't change mana right away. It asks React to render again, and in that next render useState hands back 30. Each component instance gets its own state: two <Lamp /> tags keep two separate values.",
+      "Llamar al setter, como setMana(30), no cambia mana de inmediato. Le pide a React renderizar otra vez, y en ese siguiente render useState devuelve 30. Cada instancia del componente tiene su propio estado: dos etiquetas <Lamp /> guardan dos valores separados.",
+      "setMana(30) のようにセッターを呼んでも、mana はすぐには変わらない。React に再レンダーを頼み、次のレンダーで useState が 30 を返す。インスタンスごとに自分の状態を持つので、<Lamp /> がふたつなら値もふたつ別々だよ。",
+    ),
+    p(
+      "Common mistakes: naming the setter at random (it works, but setThing is what every React reader expects), and picturing the value with brackets: the value is 25, not [25]; the brackets belong to the destructuring only.",
+      "Errores comunes: nombrar el setter al azar (funciona, pero setCosa es lo que todo lector de React espera) e imaginar el valor con corchetes: el valor es 25, no [25]; los corchetes solo pertenecen a la desestructuración.",
+      "よくあるミス：セッターに適当な名前を付けること（動くけど、React を読む人はみな setThing を期待する）。値を角かっこ付きで考えること：値は 25 で [25] ではない。角かっこは分割代入のものだよ。",
+    ),
+  ),
+  note("snapshot", L("State is a snapshot", "El estado es una foto", "状態はスナップショット"),
+    p(
+      "Inside one render, a state variable is a constant. If score was 4 when the render started, it stays 4 until that render's code is done, even right after you call setScore. The new value only appears when React calls your component again.",
+      "Dentro de un render, una variable de estado es una constante. Si score valía 4 al empezar el render, sigue en 4 hasta que termina el código de ese render, incluso justo después de llamar a setScore. El valor nuevo solo aparece cuando React vuelve a llamar a tu componente.",
+      "1回のレンダーの中では、状態の変数は定数。レンダー開始時に score が 4 なら、setScore を呼んだ直後でも、そのレンダーのコードが終わるまで 4 のまま。新しい値が出てくるのは、React がもう一度コンポーネントを呼んだときだよ。",
+    ),
+    run("const score = 4; // this render's snapshot\nconst setScore = (n: number) => {}; // React only schedules a render\nsetScore(score * 3);\nconsole.log(score);", "4",
+      L("The setter schedules a render; the snapshot stays 4", "El setter programa un render; la foto sigue en 4", "セッターはレンダーを予約するだけ。スナップショットは 4 のまま")),
+    p(
+      "That's why calling setScore(score * 2) twice in one click doubles only once. Both calls read the same snapshot, 4, and both ask for 8. Asking for the same value twice is the same as asking once.",
+      "Por eso llamar a setScore(score * 2) dos veces en un clic duplica solo una vez. Ambas llamadas leen la misma foto, 4, y ambas piden 8. Pedir el mismo valor dos veces es igual que pedirlo una.",
+      "だから1回のクリックで setScore(score * 2) を2回呼んでも、2倍になるのは1回だけ。どちらも同じスナップショット 4 を読み、どちらも 8 を頼む。同じ値を2回頼むのは1回と同じだよ。",
+    ),
+    tap("setScore(score * 2);\nsetScore(score * 2);", 4, "8",
+      L("Both calls ask for 4 × 2, so score ends at 8", "Ambas llamadas piden 4 × 2, así que score termina en 8", "どちらも 4 × 2 を頼むので score は 8")),
+    p(
+      "Rule: when a handler reads state, it reads the value from the render that created it. A console.log right after the setter prints the old value; that's not a bug, it's the snapshot.",
+      "Regla: cuando un handler lee el estado, lee el valor del render que lo creó. Un console.log justo después del setter imprime el valor viejo; no es un bug, es la foto.",
+      "ルール：ハンドラーが状態を読むと、そのハンドラーを作ったレンダーの値を読む。セッター直後の console.log が古い値を出すのはバグではなく、スナップショットだから。",
+    ),
+  ),
+  note("updaters", L("Updater functions: s => s + 1", "Funciones updater: s => s + 1", "更新関数：s => s + 1"),
+    p(
+      "A setter accepts two kinds of argument. A plain value means \"replace the state with this\". A function means \"compute the next state from the latest one\": React calls it with the most recent queued value and uses what it returns. These functions are called updaters.",
+      "Un setter acepta dos tipos de argumento. Un valor simple significa \"reemplaza el estado por esto\". Una función significa \"calcula el siguiente estado a partir del último\": React la llama con el valor encolado más reciente y usa lo que devuelve. Estas funciones se llaman updaters.",
+      "セッターが受け取る引数は2種類。普通の値は「状態をこれに置き換えて」。関数は「最新の状態から次を計算して」という意味で、React は予約済みの一番新しい値でそれを呼び、戻り値を使う。こういう関数を更新関数（updater）と呼ぶ。",
+    ),
+    p(
+      "During a click, React doesn't apply setter calls immediately: it puts them in a queue. After the handler finishes, it goes through the queue in order, starting from the current state. A value replaces the running result; an updater transforms it.",
+      "Durante un clic, React no aplica las llamadas al setter de inmediato: las pone en una cola. Cuando termina el handler, recorre la cola en orden, empezando por el estado actual. Un valor reemplaza el resultado parcial; un updater lo transforma.",
+      "クリックの間、React はセッターの呼び出しをすぐには反映せず、キューに入れる。ハンドラーが終わると、今の状態から始めて順番にキューを処理する。値は途中の結果を置き換え、更新関数はそれを変形する。",
+    ),
+    tap("setScore(s => s * 2);\nsetScore(s => s * 2);", 4, "16",
+      L("Updaters chain: 4 → 8 → 16", "Los updaters se encadenan: 4 → 8 → 16", "更新関数はつながる：4 → 8 → 16")),
+    tap("setScore(10);\nsetScore(s => s - 3);", 4, "7",
+      L("First replace with 10, then the updater gets 10", "Primero se reemplaza por 10, luego el updater recibe 10", "まず 10 に置き換え、次に更新関数が 10 を受け取る")),
+    p(
+      "To predict the result, write the starting state, then walk the queue: for a value, write that value; for an updater, apply it to what you have. The last result is the next state. Use updaters whenever the new state depends on the old one.",
+      "Para predecir el resultado, escribe el estado inicial y recorre la cola: con un valor, escribe ese valor; con un updater, aplícalo a lo que tienes. El último resultado es el siguiente estado. Usa updaters siempre que el estado nuevo dependa del viejo.",
+      "結果を予想するには、最初の状態を書いてキューを順にたどる。値ならその値を書き、更新関数なら手元の値に適用する。最後の結果が次の状態。新しい状態が古い状態に依存するときは、いつも更新関数を使おう。",
+    ),
+  ),
+  note("typing-state", L("Typing state in TypeScript", "Tipar el estado en TypeScript", "TypeScript で状態に型を付ける"),
+    p(
+      "TypeScript infers the type of state from the initial value: useState(0) is a number, useState(\"\") a string. That works until the initial value doesn't say enough. An empty array has no items to learn from, so TypeScript infers never[]: an array that can never hold anything.",
+      "TypeScript infiere el tipo del estado a partir del valor inicial: useState(0) es number, useState(\"\") es string. Eso funciona hasta que el valor inicial no dice lo suficiente. Un arreglo vacío no tiene items de los que aprender, así que TypeScript infiere never[]: un arreglo que nunca puede guardar nada.",
+      "TypeScript は初期値から状態の型を推論する。useState(0) は number、useState(\"\") は string。でも初期値の情報が足りないと困る。空の配列には手がかりになる要素がないので、never[]（何も入れられない配列）と推論されてしまう。",
+    ),
+    bad("function Deck() {\n  const [cards, setCards] = useState([]);\n  setCards([7]);\n  return null;\n}",
+      L("Does not compile: 7 doesn't fit in never[]", "No compila: 7 no cabe en never[]", "コンパイル不可：7 は never[] に入らない")),
+    p(
+      "The fix is a type argument in angle brackets: useState<number[]>([]). Now the state is an array of numbers that starts empty. Do the same when state can be missing: useState<string | null>(null) allows a string later.",
+      "La solución es un argumento de tipo entre ángulos: useState<number[]>([]). Ahora el estado es un arreglo de números que empieza vacío. Haz lo mismo cuando el estado puede faltar: useState<string | null>(null) permite un string después.",
+      "直し方は山かっこの型引数：useState<number[]>([])。これで状態は空から始まる数値の配列になる。値がないこともある状態も同じ：useState<string | null>(null) なら、あとで string を入れられる。",
+    ),
+    ex('function Deck() {\n  const [cards] = useState<number[]>([]);\n  const [pick] = useState<string | null>(null);\n  return <p>{cards.length} {pick ?? "none"}</p>;\n}', "<Deck />", "<p>0 none</p>"),
+    p(
+      "Rule: if the initial value is empty ([] or null), write the type yourself; otherwise let TypeScript infer it. The error to recognize is TS2322, a value that \"is not assignable to type never\".",
+      "Regla: si el valor inicial está vacío ([] o null), escribe tú el tipo; si no, deja que TypeScript lo infiera. El error que debes reconocer es TS2322, un valor que \"is not assignable to type never\".",
+      "ルール：初期値が空（[] や null）なら自分で型を書き、そうでなければ TypeScript に推論させる。見分けるべきエラーは TS2322、\"is not assignable to type never\" だよ。",
+    ),
+  ),
+];
+
+const eventsNotes: NoteDef[] = [
+  note("handlers", L("Event handlers: pass, don't call", "Handlers: pásalos, no los llames", "ハンドラー：呼ばずに渡す"),
+    p(
+      "To react to a click, give the element a function: onClick={handleTap}. React stores it and calls it later, each time the user clicks. The name without parentheses is the function itself, a value you can hand over like any other.",
+      "Para reaccionar a un clic, dale al elemento una función: onClick={handleTap}. React la guarda y la llama después, cada vez que el usuario hace clic. El nombre sin paréntesis es la función misma, un valor que puedes entregar como cualquier otro.",
+      "クリックに反応するには、要素に関数を渡す：onClick={handleTap}。React はそれを預かり、ユーザーがクリックするたびに呼ぶ。かっこなしの名前は関数そのもので、ほかの値と同じように渡せるよ。",
+    ),
+    p(
+      "Adding parentheses changes everything. onClick={handleTap()} calls the function right now, during render, and passes its result, usually undefined. The click then does nothing, and the code ran too early. TypeScript catches it: void is not a valid handler.",
+      "Agregar paréntesis lo cambia todo. onClick={handleTap()} llama a la función ahora mismo, al renderizar, y pasa su resultado, normalmente undefined. Luego el clic no hace nada, y el código corrió demasiado pronto. TypeScript lo detecta: void no es un handler válido.",
+      "かっこを付けると話が変わる。onClick={handleTap()} はレンダー中の今すぐ関数を呼び、その結果（たいてい undefined）を渡す。クリックしても何も起きず、コードは早すぎるタイミングで動いた。TypeScript は void はハンドラーじゃないと気づくよ。",
+    ),
+    bad('const ring = () => console.log("ding");\nconst bell = <button onClick={ring()}>Ring</button>;',
+      L("Does not compile: ring() is a call, and its result is void", "No compila: ring() es una llamada y su resultado es void", "コンパイル不可：ring() は呼び出しで、結果は void")),
+    p(
+      "Need to pass an argument? Wrap the call in an arrow: onClick={() => greet(\"Kai\")}. The arrow is a new function; React calls it on click, and only then does greet run. Handlers never show up in the HTML: they live inside React, not as attributes.",
+      "¿Necesitas pasar un argumento? Envuelve la llamada en una flecha: onClick={() => greet(\"Kai\")}. La flecha es una función nueva; React la llama al hacer clic, y solo entonces corre greet. Los handlers nunca aparecen en el HTML: viven dentro de React, no como atributos.",
+      "引数を渡したい？呼び出しをアロー関数で包もう：onClick={() => greet(\"Kai\")}。アローは新しい関数で、React がクリック時に呼び、そのとき初めて greet が動く。ハンドラーは HTML には出ない。属性ではなく React の中にいるんだ。",
+    ),
+    run('const greet = (who: string) => console.log("hello", who);\nconst btn = <button onClick={() => greet("Kai")}>Hi</button>;\nconsole.log(renderToStaticMarkup(btn));\nbtn.props.onClick(); // simulate a click', "<button>Hi</button>\nhello Kai",
+      L("Rendering calls nothing; the click runs the arrow", "Renderizar no llama a nada; el clic ejecuta la flecha", "レンダーでは何も呼ばれず、クリックでアローが動く")),
+  ),
+  note("controlled-inputs", L("Controlled and uncontrolled inputs", "Inputs controlados y no controlados", "制御された入力と非制御の入力"),
+    p(
+      "A controlled input gets its text from state: value={city}. Each keystroke fires onChange with an event, and the handler stores the new text with the setter, which re-renders the input with it. React state is the single owner of the text.",
+      "Un input controlado obtiene su texto del estado: value={city}. Cada tecla dispara onChange con un evento, y el handler guarda el texto nuevo con el setter, que vuelve a renderizar el input con él. El estado de React es el único dueño del texto.",
+      "制御された入力は、文字を状態から受け取る：value={city}。キーを押すたびに onChange がイベント付きで呼ばれ、ハンドラーがセッターで新しい文字を保存し、その文字で入力が再レンダーされる。文字の持ち主は React の状態だけだよ。",
+    ),
+    ex('function City() {\n  const [city, setCity] = useState("Oslo");\n  return <input value={city} onChange={e => setCity(e.target.value)} />;\n}', "<City />", '<input value="Oslo"/>'),
+    p(
+      "Inside onChange, e is the event and e.target is the element that changed, here the input. Its value property holds the full current text, not just the last key. For a checkbox you would read e.target.checked instead.",
+      "Dentro de onChange, e es el evento y e.target es el elemento que cambió, aquí el input. Su propiedad value tiene el texto actual completo, no solo la última tecla. En un checkbox leerías e.target.checked.",
+      "onChange の中で e はイベント、e.target は変わった要素（ここでは input）。その value には最後のキーだけでなく、今の文字全体が入っている。チェックボックスなら e.target.checked を読むよ。",
+    ),
+    p(
+      "An uncontrolled input uses defaultValue instead: it only sets the starting text, and from then on the browser keeps the text itself. In a static render both come out as a plain value attribute, because the first HTML looks the same either way.",
+      "Un input no controlado usa defaultValue: solo pone el texto inicial, y desde ahí el navegador guarda el texto por su cuenta. En un render estático ambos salen como un atributo value normal, porque el primer HTML se ve igual en los dos casos.",
+      "非制御の入力は代わりに defaultValue を使う。最初の文字を入れるだけで、その後はブラウザが自分で文字を持つ。静的レンダーではどちらも普通の value 属性になる。最初の HTML はどちらでも同じ見た目だからね。",
+    ),
+    ex("", '<input type="number" defaultValue={3} />', '<input type="number" value="3"/>',
+      L("defaultValue only sets where the field starts", "defaultValue solo fija cómo empieza el campo", "defaultValue は欄の最初の値を決めるだけ")),
+    p(
+      "Common mistake: setting value without onChange. React then shows a read-only field that ignores typing. Pick one style: value plus onChange (controlled), or defaultValue (uncontrolled).",
+      "Error común: poner value sin onChange. React muestra entonces un campo de solo lectura que ignora lo que escribes. Elige un estilo: value más onChange (controlado) o defaultValue (no controlado).",
+      "よくあるミス：onChange なしで value を書くこと。すると React は入力を無視する読み取り専用の欄を表示する。value と onChange（制御）か、defaultValue（非制御）のどちらかを選ぼう。",
+    ),
+  ),
+  note("event-object", L("The event object: types and defaults", "El objeto evento: tipos y acciones", "イベントオブジェクト：型と既定動作"),
+    p(
+      "Every handler receives an event object, e. Two of its methods matter most. e.preventDefault() cancels what the browser would do on its own: submitting a form reloads the page, so form handlers usually start with it. e.stopPropagation() is different: it stops the event from reaching parent elements.",
+      "Cada handler recibe un objeto evento, e. Dos de sus métodos importan más. e.preventDefault() cancela lo que el navegador haría por su cuenta: enviar un formulario recarga la página, así que los handlers de formularios suelen empezar con él. e.stopPropagation() es distinto: impide que el evento llegue a los elementos padre.",
+      "どのハンドラーもイベントオブジェクト e を受け取る。大事なメソッドは2つ。e.preventDefault() はブラウザが勝手にする動作を取り消す。フォーム送信はページを再読み込みするので、フォームのハンドラーはたいていこれで始まる。e.stopPropagation() は別物で、イベントが親要素に届くのを止める。",
+    ),
+    p(
+      "Events bubble: a click on a button runs the button's handler first, then its parent's, then the grandparent's, up the tree. Stopping propagation cuts that climb, but it never cancels the default action. Reloading and bubbling are separate things.",
+      "Los eventos suben: un clic en un botón ejecuta primero el handler del botón, luego el del padre, luego el del abuelo, subiendo por el árbol. Detener la propagación corta esa subida, pero nunca cancela la acción por defecto. Recargar y subir son cosas separadas.",
+      "イベントは伝播する。ボタンをクリックすると、まずボタンのハンドラー、次に親、その次に祖父母と、ツリーを上っていく。伝播を止めるとその上りは止まるけど、既定の動作は取り消さない。再読み込みと伝播は別の話だよ。",
+    ),
+    p(
+      "In TypeScript, React names each event type: React.ChangeEvent<HTMLInputElement> for an input's change, React.MouseEvent<HTMLButtonElement> for a click, React.FormEvent<HTMLFormElement> for a submit. The type in angle brackets tells TypeScript what kind of element the event comes from.",
+      "En TypeScript, React nombra cada tipo de evento: React.ChangeEvent<HTMLInputElement> para el cambio de un input, React.MouseEvent<HTMLButtonElement> para un clic, React.FormEvent<HTMLFormElement> para un envío. El tipo entre ángulos le dice a TypeScript de qué elemento viene el evento.",
+      "TypeScript では、React がイベントごとに型を用意している。input の変更は React.ChangeEvent<HTMLInputElement>、クリックは React.MouseEvent<HTMLButtonElement>、送信は React.FormEvent<HTMLFormElement>。山かっこの型で、イベントがどの要素から来たかが決まる。",
+    ),
+    run('function onSend(e: React.FormEvent<HTMLFormElement>) {\n  e.preventDefault();\n  console.log("sent, no reload");\n}\nconst form = <form onSubmit={onSend} />;\nconsole.log(renderToStaticMarkup(form));', "<form></form>",
+      L("A typed submit handler; it runs only when the form is sent", "Un handler de envío tipado; solo corre al enviar el formulario", "型付きの送信ハンドラー。送信されたときだけ動く")),
+    bad("function onTap(e: React.MouseEvent<HTMLButtonElement>) {\n  console.log(e.target.value);\n}",
+      L("Does not compile: on a click, e.target is a plain EventTarget", "No compila: en un clic, e.target es un EventTarget común", "コンパイル不可：クリックの e.target はただの EventTarget")),
+  ),
+];
+
+const updatingNotes: NoteDef[] = [
+  note("references", L("Same object, no re-render", "Mismo objeto, sin re-render", "同じオブジェクトなら再レンダーなし"),
+    p(
+      "When you call a setter, React compares the new state with the old one using Object.is. For objects and arrays, that checks identity, not contents: is it the very same object? If it is, React assumes nothing changed and skips the render.",
+      "Cuando llamas a un setter, React compara el estado nuevo con el viejo usando Object.is. Para objetos y arreglos, eso compara identidad, no contenido: ¿es exactamente el mismo objeto? Si lo es, React asume que nada cambió y se salta el render.",
+      "セッターを呼ぶと、React は Object.is で新しい状態と古い状態を比べる。オブジェクトや配列では中身ではなく「同一かどうか」を調べる。まったく同じオブジェクトなら、React は何も変わっていないとみなしてレンダーを省くんだ。",
+    ),
+    p(
+      "Assigning an object to another name doesn't copy it: both names point to the same object. So changing a field through one name changes it for both, and Object.is still says they are identical. Editing state in place like this is called mutation.",
+      "Asignar un objeto a otro nombre no lo copia: ambos nombres apuntan al mismo objeto. Así que cambiar un campo por un nombre lo cambia para ambos, y Object.is sigue diciendo que son idénticos. Editar el estado en su sitio así se llama mutación.",
+      "オブジェクトを別の名前に代入してもコピーはされない。両方の名前が同じオブジェクトを指す。だから片方の名前でフィールドを変えると両方が変わり、Object.is は同一のままだと言う。こうして状態をその場で書きかえることをミューテーションと呼ぶ。",
+    ),
+    run("const old = { gold: 10 };\nconst alias = old;\nalias.gold = 99;\nconsole.log(old.gold, Object.is(old, alias));", "99 true",
+      L("alias is not a copy: one object, two names", "alias no es una copia: un objeto, dos nombres", "alias はコピーではない。オブジェクト1つに名前2つ")),
+    p(
+      "To change state, build a NEW object. The spread syntax copies every field into a fresh object, and fields written after it override: { ...old, gold: 20 }. The original is untouched, the new object has a different identity, and React renders.",
+      "Para cambiar el estado, crea un objeto NUEVO. La sintaxis spread copia cada campo en un objeto nuevo, y los campos escritos después la sobrescriben: { ...old, gold: 20 }. El original queda intacto, el objeto nuevo tiene otra identidad, y React renderiza.",
+      "状態を変えるには新しいオブジェクトを作る。スプレッド構文は全フィールドを新しいオブジェクトにコピーし、後ろに書いたフィールドが上書きする：{ ...old, gold: 20 }。元はそのまま、新しいオブジェクトは別物なので、React はレンダーする。",
+    ),
+    run("const old = { gold: 10, gems: 2 };\nconst next = { ...old, gold: 20 };\nconsole.log(old.gold, next.gold, next.gems, old === next);", "10 20 2 false"),
+    p(
+      "Common mistake: changing a field and then passing the same object to the setter. The data did change, but the reference didn't, so the screen stays stale.",
+      "Error común: cambiar un campo y luego pasar el mismo objeto al setter. Los datos sí cambiaron, pero la referencia no, así que la pantalla queda desactualizada.",
+      "よくあるミス：フィールドを変えてから同じオブジェクトをセッターに渡すこと。データは変わっても参照は同じなので、画面は古いままになる。",
+    ),
+  ),
+  note("array-updates", L("Updating arrays without mutation", "Actualizar arreglos sin mutar", "配列を書きかえずに更新する"),
+    p(
+      "Arrays in state follow the same rule: never change the old one, return a new one. JavaScript has methods that return new arrays. Add with a spread: [...list, item] or [item, ...list]. Remove with filter, which keeps only the items that pass a test. Change items with map.",
+      "Los arreglos en el estado siguen la misma regla: nunca cambies el viejo, devuelve uno nuevo. JavaScript tiene métodos que devuelven arreglos nuevos. Agrega con spread: [...list, item] o [item, ...list]. Quita con filter, que deja solo los items que pasan una prueba. Cambia items con map.",
+      "状態の配列も同じルール。古い配列は変えず、新しい配列を返す。JavaScript には新しい配列を返すメソッドがある。追加はスプレッド [...list, item] か [item, ...list]。削除は条件に合うものだけ残す filter。変更は map。",
+    ),
+    run('const rocks = ["opal", "jade", "ruby"];\nconst more = [...rocks, "onyx"];\nconst fewer = rocks.filter(r => r !== "jade");\nconsole.log(rocks.length, more.length, fewer);', "3 4 [ 'opal', 'ruby' ]",
+      L("rocks keeps its 3 items; more and fewer are new arrays", "rocks conserva sus 3 items; more y fewer son arreglos nuevos", "rocks は3つのまま。more と fewer は新しい配列")),
+    p(
+      "To change one item, map over the array and return a spread copy for the match and the same item for the rest: list.map(x => x.id === id ? { ...x, hp: 0 } : x). The result is a new array in which only one element is new.",
+      "Para cambiar un item, recorre el arreglo con map y devuelve una copia con spread para el que coincide y el mismo item para el resto: list.map(x => x.id === id ? { ...x, hp: 0 } : x). El resultado es un arreglo nuevo en el que solo un elemento es nuevo.",
+      "1つの項目を変えるには、map で回して、該当するものはスプレッドのコピーを、それ以外はそのままを返す：list.map(x => x.id === id ? { ...x, hp: 0 } : x)。結果は、1つの要素だけが新しくなった新しい配列だよ。",
+    ),
+    run("const bots = [{ id: 1, hp: 5 }, { id: 2, hp: 5 }];\nconst hit = bots.map(b => b.id === 2 ? { ...b, hp: 0 } : b);\nconsole.log(bots[1].hp, hit[1].hp, hit[0] === bots[0]);", "5 0 true",
+      L("Only the matching item is copied; the rest are reused", "Solo se copia el item que coincide; el resto se reutiliza", "該当する項目だけコピーし、残りはそのまま使う")),
+    p(
+      "Avoid methods that work in place: push, pop, splice, sort, reverse. They change the original array and, for sort and reverse, return that same array. push even returns a number, the new length. If you need them, copy first: [...list].sort().",
+      "Evita los métodos que trabajan en sitio: push, pop, splice, sort, reverse. Cambian el arreglo original y, en el caso de sort y reverse, devuelven ese mismo arreglo. push incluso devuelve un número, la nueva longitud. Si los necesitas, copia primero: [...list].sort().",
+      "その場で変更するメソッドは避けよう：push・pop・splice・sort・reverse。元の配列を変え、sort と reverse は同じ配列を返す。push は新しい長さの数値まで返す。使いたいなら先にコピー：[...list].sort()。",
+    ),
+    run('const ranks = ["c", "a", "b"];\nconst flipped = ranks.reverse();\nconsole.log(flipped === ranks, ranks);', "true [ 'b', 'a', 'c' ]",
+      L("reverse changed the original and returned it", "reverse cambió el original y lo devolvió", "reverse は元の配列を変えて、それを返した")),
+  ),
+  note("nested-copies", L("Copying nested objects", "Copiar objetos anidados", "入れ子のオブジェクトをコピー"),
+    p(
+      "A spread copies only one level. In { ...user }, the top-level fields are copied, but a nested object, like user.pet, is still the same shared object. To change something deep inside, you must copy every level on the way down.",
+      "Un spread copia solo un nivel. En { ...user }, los campos de primer nivel se copian, pero un objeto anidado, como user.pet, sigue siendo el mismo objeto compartido. Para cambiar algo profundo, debes copiar cada nivel en el camino.",
+      "スプレッドがコピーするのは1段だけ。{ ...user } では一番上のフィールドはコピーされるけど、user.pet のような入れ子のオブジェクトは共有されたまま。奥のものを変えるには、途中の段をすべてコピーする必要がある。",
+    ),
+    p(
+      "The pattern nests spreads: { ...user, pet: { ...user.pet, name: \"Rex\" } }. The outer spread copies the user and the inner one copies the pet with the new name. Writing { ...user, name: \"Rex\" } would add a name field to the user and leave the pet unchanged.",
+      "El patrón anida spreads: { ...user, pet: { ...user.pet, name: \"Rex\" } }. El spread externo copia al usuario y el interno copia la mascota con el nombre nuevo. Escribir { ...user, name: \"Rex\" } agregaría un campo name al usuario y dejaría la mascota igual.",
+      "パターンはスプレッドの入れ子：{ ...user, pet: { ...user.pet, name: \"Rex\" } }。外側で user を、内側で新しい名前の pet をコピーする。{ ...user, name: \"Rex\" } と書くと、pet は変わらず user に name フィールドが増えるだけ。",
+    ),
+    run('const user = { id: 3, pet: { name: "Bo", age: 2 } };\nconst next = { ...user, pet: { ...user.pet, name: "Rex" } };\nconsole.log(user.pet.name, next.pet.name, next.pet.age);', "Bo Rex 2",
+      L("Both levels are copied; the old pet keeps its name", "Se copian ambos niveles; la mascota vieja conserva su nombre", "2段ともコピー。古い pet の名前はそのまま")),
+    p(
+      "TypeScript helps here: when the state has a type, a field that doesn't exist on that type is an error. A flat spread that puts a field at the wrong level doesn't compile when the target is typed.",
+      "TypeScript ayuda aquí: cuando el estado tiene un tipo, un campo que no existe en ese tipo es un error. Un spread plano que pone un campo en el nivel equivocado no compila cuando el destino está tipado.",
+      "ここでは TypeScript が助けてくれる。状態に型があれば、その型にないフィールドはエラーになる。フィールドを違う段に置いた平らなスプレッドは、型付きの相手にはコンパイルできない。",
+    ),
+    bad('type Owner = { id: number; pet: { name: string } };\nconst owner: Owner = { id: 3, pet: { name: "Bo" } };\nconst next: Owner = { ...owner, name: "Rex" };',
+      L("Does not compile: name belongs to pet, not to Owner", "No compila: name es de pet, no de Owner", "コンパイル不可：name は pet のもので Owner のものではない")),
+  ),
+];
+
+const DIAL = "function Dial({ start }: { start: number }) {\n  const [v] = useState(start);\n  return <b>{v}</b>;\n}";
+
+const sharingNotes: NoteDef[] = [
+  note("lifting-state", L("Lifting state up", "Subir el estado", "状態を持ち上げる"),
+    p(
+      "When two components each keep their own copy of some state, nothing keeps the copies in sync: change one and the other still shows the old value. The fix is to keep ONE copy, in the closest parent they share, and pass it down to both as a prop.",
+      "Cuando dos componentes guardan cada uno su propia copia de un estado, nada mantiene las copias sincronizadas: cambias una y la otra sigue mostrando el valor viejo. La solución es guardar UNA copia, en el padre común más cercano, y pasarla a ambos como prop.",
+      "2つのコンポーネントがそれぞれ自分の状態のコピーを持つと、それをそろえるものがない。片方を変えても、もう片方は古い値のまま。直し方は、コピーをひとつだけ、いちばん近い共通の親に置いて、両方にプロップスで渡すこと。",
+    ),
+    ex("function Gauge({ fuel }: { fuel: number }) {\n  return <i>{fuel}</i>;\n}\nfunction Dash() {\n  const [fuel] = useState(40);\n  return <p><Gauge fuel={fuel} /><Gauge fuel={fuel} /></p>;\n}", "<Dash />", "<p><i>40</i><i>40</i></p>",
+      L("One state in Dash feeds both gauges", "Un estado en Dash alimenta a ambos medidores", "Dash の状態ひとつが両方のゲージに届く")),
+    p(
+      "This is called lifting state up, and the parent's state becomes the single source of truth. The children no longer own the value; they show what they receive. The prop name the parent writes must match the name the child destructures.",
+      "Esto se llama subir el estado, y el estado del padre se vuelve la única fuente de verdad. Los hijos ya no son dueños del valor; muestran lo que reciben. El nombre de la prop que escribe el padre debe coincidir con el que desestructura el hijo.",
+      "これを「状態の持ち上げ」と呼び、親の状態が唯一の真実になる。子はもう値の持ち主ではなく、受け取ったものを表示する。親が書くプロップスの名前は、子が分割代入する名前と同じにしないといけない。",
+    ),
+    p(
+      "Common mistake: a child that receives a prop but also creates its own useState and shows that instead. It ignores the parent and shows its own initial value. If a value comes from a prop, render the prop.",
+      "Error común: un hijo que recibe una prop pero también crea su propio useState y muestra ese en su lugar. Ignora al padre y muestra su propio valor inicial. Si un valor viene de una prop, muestra la prop.",
+      "よくあるミス：プロップスを受け取っているのに、自分でも useState を作ってそちらを表示する子。親を無視して自分の初期値を出してしまう。値がプロップスから来るなら、そのプロップスを表示しよう。",
+    ),
+    ex("function Gauge({ fuel }: { fuel: number }) {\n  const [mine] = useState(0);\n  return <i>{mine}</i>;\n}", "<Gauge fuel={40} />", "<i>0</i>",
+      L("The child shows its own copy and ignores the prop", "El hijo muestra su propia copia e ignora la prop", "子は自分のコピーを表示し、プロップスを無視している")),
+  ),
+  note("derived-values", L("Derive, don't store", "Calcula, no guardes", "保存せずに計算する"),
+    p(
+      "Not every value needs state. If something can be computed from props or existing state, compute it during render: const total = price * qty; It is recalculated on every render, so it is always up to date, and there is no second copy to forget to update.",
+      "No todo valor necesita estado. Si algo se puede calcular a partir de props o del estado existente, calcúlalo al renderizar: const total = price * qty; Se recalcula en cada render, así que siempre está al día, y no hay una segunda copia que olvidar actualizar.",
+      "すべての値に状態がいるわけじゃない。プロップスや今の状態から計算できるなら、レンダー中に計算しよう：const total = price * qty; レンダーごとに計算し直されるので常に最新で、更新し忘れる2つ目のコピーもない。",
+    ),
+    ex("function Cart({ price, qty }: { price: number; qty: number }) {\n  const total = price * qty;\n  return <p>{qty} x {price} = {total}</p>;\n}", "<Cart price={3} qty={4} />", "<p>4 x 3 = 12</p>"),
+    p(
+      "Storing a derived value in its own state invites bugs: whenever the inputs change, you must remember to update the copy too. Rule of thumb: keep the minimum state and calculate everything else. And watch the quotes: a name inside quotes is fixed text, not the variable.",
+      "Guardar un valor derivado en su propio estado invita a bugs: cada vez que cambian las entradas, debes acordarte de actualizar también la copia. Regla práctica: guarda el estado mínimo y calcula todo lo demás. Y ojo con las comillas: un nombre entre comillas es texto fijo, no la variable.",
+      "派生した値を別の状態に保存するとバグのもと。入力が変わるたびに、コピーの更新も忘れずにしないといけない。目安：状態は最小限にして、ほかは全部計算しよう。引用符にも注意。引用符の中の名前は変数ではなく決まった文字だよ。",
+    ),
+  ),
+  note("state-position", L("State lives at a position", "El estado vive en una posición", "状態は位置に住む"),
+    p(
+      "React stores state by where a component sits in the tree, not inside the function. Render the same component at the same spot and its state survives re-renders. Render two copies side by side and each one has its own, separate state.",
+      "React guarda el estado según dónde está un componente en el árbol, no dentro de la función. Renderiza el mismo componente en el mismo lugar y su estado sobrevive a los re-renders. Renderiza dos copias juntas y cada una tiene su propio estado separado.",
+      "React は状態を関数の中ではなく、コンポーネントがツリーのどこにあるかで保存する。同じ場所に同じコンポーネントを描けば、状態は再レンダーを越えて残る。2つ並べれば、それぞれが別々の状態を持つ。",
+    ),
+    ex(DIAL, "<p><Dial start={5} /><Dial start={9} /></p>", "<p><b>5</b><b>9</b></p>",
+      L("Two positions, two separate states", "Dos posiciones, dos estados separados", "位置が2つなら状態も2つ")),
+    p(
+      "The key prop gives a component an identity. When the key changes, React treats it as a different component: it throws away the old state and starts fresh from the initial values. That's the clean way to reset a form when, say, the selected user changes.",
+      "La prop key le da identidad a un componente. Cuando la key cambia, React lo trata como un componente distinto: descarta el estado viejo y empieza de cero con los valores iniciales. Esa es la forma limpia de reiniciar un formulario cuando, por ejemplo, cambia el usuario seleccionado.",
+      "key プロップスはコンポーネントに身元を与える。キーが変わると React は別のコンポーネントとみなし、古い状態を捨てて初期値からやり直す。選んだユーザーが変わったときなどに、フォームをきれいにリセットする方法だよ。",
+    ),
+    run('const saved = new Map([["u7", "half-typed reply"]]); // state kept per key\nconst stateFor = (key: string) => saved.get(key) ?? "(fresh)";\nconsole.log(stateFor("u7"));\nconsole.log(stateFor("u8"));', "half-typed reply\n(fresh)",
+      L("A new key finds no saved state, so it starts over", "Una key nueva no encuentra estado guardado y empieza de cero", "新しいキーには保存された状態がないので、やり直しになる")),
+    p(
+      "key works on any component, not only on list items, and React keeps it for itself: the component never receives it as a prop.",
+      "key funciona en cualquier componente, no solo en items de listas, y React se la guarda para sí: el componente nunca la recibe como prop.",
+      "key はリストの項目だけでなく、どのコンポーネントにも使える。React が自分用に使うので、コンポーネントにはプロップスとして届かない。",
+    ),
+  ),
+  note("events-up", L("Data down, events up", "Datos abajo, eventos arriba", "データは下へ、イベントは上へ"),
+    p(
+      "A child can't change its parent's state directly: the state and its setter live in the parent. So the parent passes a function down, often the setter itself, and the child calls it when something happens. Data flows down as props; requests for change flow up as calls.",
+      "Un hijo no puede cambiar el estado de su padre directamente: el estado y su setter viven en el padre. Así que el padre pasa una función hacia abajo, a menudo el propio setter, y el hijo la llama cuando algo ocurre. Los datos bajan como props; los pedidos de cambio suben como llamadas.",
+      "子は親の状態を直接変えられない。状態とセッターは親の中にあるから。そこで親が関数（セッターそのものも多い）を下へ渡し、何か起きたら子がそれを呼ぶ。データはプロップスとして下へ、変更の頼みは呼び出しとして上へ流れる。",
+    ),
+    run(`let mode = "day";\nconst setMode = (m: string) => { mode = m; }; // stands in for the parent's setter\nfunction Switch({ onFlip }: { onFlip: (m: string) => void }) {\n  return <button onClick={() => onFlip("night")}>Flip</button>;\n}\nSwitch({ onFlip: setMode }).props.onClick(); // simulate a click\nconsole.log(mode);`, "night",
+      L("The child calls onFlip; the parent's setter does the change", "El hijo llama a onFlip; el setter del padre hace el cambio", "子が onFlip を呼び、親のセッターが変更する")),
+    p(
+      "In TypeScript, the child's prop type describes the function: onFlip: (m: string) => void. A setter from useState<string> accepts a string, so it fits that type and can be passed straight down. If the types don't match, TypeScript tells you before anything runs.",
+      "En TypeScript, el tipo de la prop del hijo describe la función: onFlip: (m: string) => void. Un setter de useState<string> acepta un string, así que encaja en ese tipo y se puede pasar directo. Si los tipos no coinciden, TypeScript te avisa antes de ejecutar nada.",
+      "TypeScript では、子のプロップスの型が関数を表す：onFlip: (m: string) => void。useState<string> のセッターは string を受け取るので、この型に合い、そのまま渡せる。型が合わなければ、動かす前に TypeScript が教えてくれる。",
+    ),
+    bad('function Switch({ onFlip }: { onFlip: (m: string) => void }) {\n  return <button onClick={() => onFlip("night")}>Flip</button>;\n}\nconst setLevel = (n: number) => {};\nconst sw = <Switch onFlip={setLevel} />;',
+      L("Does not compile: setLevel wants a number, not a string", "No compila: setLevel espera un número, no un string", "コンパイル不可：setLevel が欲しいのは string ではなく数値")),
+  ),
+];
+
+// The boss recaps the whole region: one short note per idea it tests.
+const shadeNotes: NoteDef[] = [
+  note("recap-queue", L("Recap: snapshots and the queue", "Repaso: fotos y la cola", "復習：スナップショットとキュー"),
+    p(
+      "State is a snapshot: during one render it never changes, so logging it right after a setter shows the old value. Setter calls are queued and applied after the handler, in order: a value replaces the running result, and an updater function transforms it.",
+      "El estado es una foto: durante un render nunca cambia, así que imprimirlo justo después de un setter muestra el valor viejo. Las llamadas al setter se encolan y se aplican después del handler, en orden: un valor reemplaza el resultado parcial, y una función updater lo transforma.",
+      "状態はスナップショット。1回のレンダー中は変わらないので、セッター直後に表示すると古い値が出る。セッターの呼び出しはキューに入り、ハンドラーのあとに順番に処理される。値は途中の結果を置き換え、更新関数はそれを変形する。",
+    ),
+    tap("setScore(s => s + 4);\nsetScore(1);\nsetScore(s => s * 3);", 2, "3",
+      L("2 → 6, then replaced by 1, then 1 × 3 = 3", "2 → 6, luego se reemplaza por 1, luego 1 × 3 = 3", "2 → 6、次に 1 に置き換え、最後に 1 × 3 = 3")),
+  ),
+  note("recap-state", L("Recap: useState in practice", "Repaso: useState en la práctica", "復習：useState の使い方"),
+    p(
+      "Each component instance has its own state, starting from the initial value it was given. Type empty initial values yourself, like useState<number[]>([]), or TypeScript infers never[]. Changing a component's key resets its state: React sees a brand-new instance.",
+      "Cada instancia de un componente tiene su propio estado, que empieza con el valor inicial que recibió. Tipa tú los valores iniciales vacíos, como useState<number[]>([]), o TypeScript infiere never[]. Cambiar la key de un componente reinicia su estado: React ve una instancia totalmente nueva.",
+      "インスタンスはそれぞれ自分の状態を持ち、渡された初期値から始まる。空の初期値には useState<number[]>([]) のように自分で型を付けよう。でないと never[] になる。key を変えると状態はリセットされる。React はまったく新しいインスタンスだと見るからね。",
+    ),
+    ex("function Jar({ beans }: { beans: number }) {\n  const [n] = useState(beans);\n  const [log] = useState<string[]>([]);\n  return <b>{n}/{log.length}</b>;\n}", "<p><Jar beans={4} /><Jar beans={8} /></p>", "<p><b>4/0</b><b>8/0</b></p>"),
+  ),
+  note("recap-events", L("Recap: handlers and inputs", "Repaso: handlers e inputs", "復習：ハンドラーと入力"),
+    p(
+      "Pass a handler as a function, onClick={store}; writing store() calls it during render. A controlled input pairs value with onChange, while defaultValue only sets the starting text. Both render as a plain value attribute in static HTML.",
+      "Pasa un handler como función, onClick={store}; escribir store() lo llama al renderizar. Un input controlado combina value con onChange, mientras que defaultValue solo pone el texto inicial. Ambos se renderizan como un atributo value normal en el HTML estático.",
+      "ハンドラーは関数として渡す：onClick={store}。store() と書くとレンダー中に呼ばれる。制御された入力は value と onChange の組で、defaultValue は最初の文字を入れるだけ。静的な HTML ではどちらも普通の value 属性になる。",
+    ),
+    bad('const store = () => console.log("kept");\nconst keep = <button onClick={store()}>Keep</button>;',
+      L("Does not compile: store() runs during render", "No compila: store() corre al renderizar", "コンパイル不可：store() はレンダー中に動く")),
+    ex("", '<input placeholder="Name" defaultValue="Sol" />', '<input placeholder="Name" value="Sol"/>'),
+  ),
+  note("recap-immutable", L("Recap: never mutate state", "Repaso: nunca mutes el estado", "復習：状態は書きかえない"),
+    p(
+      "React compares state by reference with Object.is. push, splice and sort change the original array in place, so the reference stays the same and React skips the render. Build new values instead: spread to add or copy, filter to remove, map to change.",
+      "React compara el estado por referencia con Object.is. push, splice y sort cambian el arreglo original en sitio, así que la referencia sigue igual y React se salta el render. Mejor crea valores nuevos: spread para agregar o copiar, filter para quitar, map para cambiar.",
+      "React は Object.is で状態を参照として比べる。push・splice・sort は元の配列をその場で変えるので、参照は同じまま、React はレンダーを省く。代わりに新しい値を作ろう。追加やコピーはスプレッド、削除は filter、変更は map。",
+    ),
+    run('const bag = { coins: 7 };\nconst richer = { ...bag, coins: 9 };\nconst tags = ["x1", "x2", "x3"];\nconsole.log(bag.coins, richer === bag, tags.filter(t => t !== "x2"));', "7 false [ 'x1', 'x3' ]"),
+  ),
+];
+
 // ─── 2.1 useState ────────────────────────────────────────────────────────────
 const useStateLesson: LessonDef = {
   slug: "use-state",
@@ -33,6 +406,7 @@ const useStateLesson: LessonDef = {
   xp: 75,
   enemy: "react/rerender-tornado",
   enemyName: L("RENDER TORNADO", "TORNADO RENDER", "レンダー竜巻"),
+  notes: useStateNotes,
   beats: [
     say(L(
       "Welcome to the State Forest. A plain local variable resets every render, and changing it never re-renders.",
@@ -75,6 +449,8 @@ const useStateLesson: LessonDef = {
       output: "<p>10</p>",
       check: { program: show("function C() {\n  const [n] = useState(10);\n  return <p>{n}</p>;\n}", "<C />"), compiles: true, stdout: "<p>10</p>" },
       explain: L("On the first render, state starts at the initial value: 10.", "En el primer render, el estado empieza con el valor inicial: 10.", "最初のレンダーでは、状態は初期値 10 から始まるよ。"),
+      hint: L("On the very first render, which value does useState hand back?", "En el primer render, ¿qué valor devuelve useState?", "いちばん最初のレンダーで useState が返す値は？"),
+      note: "use-state",
       setup: [{ t: "item", kind: "gem", holder: "hero" }, { t: "tag", actor: "hero", text: "n" }],
       win: [{ t: "value", actor: "hero", text: "10" }, { t: "print", text: "<p>10</p>" }],
     },
@@ -85,6 +461,8 @@ const useStateLesson: LessonDef = {
       answer: "setHp",
       check: { program: show("function Hero() {\n  const [hp, setHp] = useState(10);\n  return <b onClick={() => setHp(hp - 1)}>{hp}</b>;\n}", "<Hero />"), compiles: true, stdout: "<b>10</b>" },
       explain: L("Pairs read [thing, setThing]. The array destructuring lets you choose both names.", "El par se lee [cosa, setCosa]. La desestructuración te deja elegir ambos nombres.", "ペアは [thing, setThing] と読む。配列の分割代入で両方の名前を決められるよ。"),
+      hint: L("The pair follows a naming pattern: the thing, then set plus the thing in camelCase.", "El par sigue un patrón: la cosa, y luego set más la cosa en camelCase.", "ペアの名前には型がある。thing と、set に thing をキャメルケースでつなげたもの。"),
+      note: "use-state",
       win: [{ t: "tag", actor: "hero", text: "hp", value: "10" }],
     },
     say(L(
@@ -101,6 +479,8 @@ const useStateLesson: LessonDef = {
       output: "1",
       check: { program: queue("  setCount(count + 1);\n  setCount(count + 1);\n  setCount(count + 1);"), compiles: true, stdout: "1" },
       explain: L("Each call reads the SAME snapshot (0) and asks for 0 + 1. Three times \"make it 1\" is still 1.", "Cada llamada lee la MISMA foto (0) y pide 0 + 1. Tres veces \"que sea 1\" sigue siendo 1.", "どの呼び出しも同じスナップショット 0 を読んで 0 + 1 を頼む。「1 にして」を 3 回でも 1 だよ。"),
+      hint: L("count is a snapshot. What value does each of the three calls ask for?", "count es una foto. ¿Qué valor pide cada una de las tres llamadas?", "count はスナップショット。3回の呼び出しはそれぞれどの値を頼む？"),
+      note: "snapshot",
       setup: [{ t: "item", kind: "gem", holder: "hero" }, { t: "tag", actor: "hero", text: "count", value: "0" }],
       win: [{ t: "banner", text: RENDER }, { t: "value", actor: "hero", text: "1" }],
     },
@@ -118,6 +498,8 @@ const useStateLesson: LessonDef = {
       output: "3",
       check: { program: queue("  setCount(c => c + 1);\n  setCount(c => c + 1);\n  setCount(c => c + 1);"), compiles: true, stdout: "3" },
       explain: L("Updaters run in order on the queued value: 0 → 1 → 2 → 3.", "Los updaters corren en orden sobre el valor encolado: 0 → 1 → 2 → 3.", "更新関数は順番に前の結果へ適用される：0 → 1 → 2 → 3。"),
+      hint: L("Each updater receives the result of the previous one. Walk the queue from 0.", "Cada updater recibe el resultado del anterior. Recorre la cola desde 0.", "更新関数は前の結果を受け取る。0 からキューをたどろう。"),
+      note: "updaters",
       setup: [{ t: "item", kind: "gem", holder: "hero" }, { t: "tag", actor: "hero", text: "count", value: "0" }],
       win: [{ t: "banner", text: RENDER }, { t: "value", actor: "hero", text: "3" }],
     },
@@ -130,6 +512,8 @@ const useStateLesson: LessonDef = {
       output: "6",
       check: { program: queue("  setCount(count + 5);\n  setCount(c => c + 1);"), compiles: true, stdout: "6" },
       explain: L("First \"replace with 5\", then the updater gets 5 and returns 6.", "Primero \"reemplaza por 5\", luego el updater recibe 5 y devuelve 6.", "まず「5 に置き換え」、次に更新関数が 5 を受け取って 6 を返す。"),
+      hint: L("Walk the queue in order: the first call replaces the value, the second transforms it.", "Recorre la cola en orden: la primera llamada reemplaza el valor, la segunda lo transforma.", "キューを順にたどろう。1つ目は値を置き換え、2つ目はそれを変形する。"),
+      note: "updaters",
     },
     {
       kind: "predict",
@@ -144,6 +528,8 @@ const useStateLesson: LessonDef = {
         stdout: "0",
       },
       explain: L("count is a constant of THIS render. The 5 only shows up in the next render.", "count es una constante de ESTE render. El 5 solo aparece en el siguiente render.", "count はこのレンダーの定数。5 になるのは次のレンダーだよ。"),
+      hint: L("The setter schedules the next render. Which render does this console.log belong to?", "El setter programa el siguiente render. ¿A qué render pertenece este console.log?", "セッターは次のレンダーを予約する。この console.log はどのレンダーのもの？"),
+      note: "snapshot",
     },
     say(L(
       "TypeScript tip: an empty array needs a type, or it becomes never[]. Write useState<string[]>([]).",
@@ -158,6 +544,8 @@ const useStateLesson: LessonDef = {
       answer: 1,
       check: { program: `${HEAD}function Bag() {\n  const [items, setItems] = useState([]);\n  setItems(["a"]);\n  return null;\n}`, compiles: false },
       explain: L("useState([]) infers never[], so \"a\" doesn't fit (TS2322). Fix: useState<string[]>([]).", "useState([]) infiere never[], así que \"a\" no cabe (TS2322). Solución: useState<string[]>([]).", "useState([]) は never[] と推論され \"a\" が入らない（TS2322）。useState<string[]>([]) で直そう。"),
+      hint: L("What type does TypeScript infer for an empty array with nothing to learn from?", "¿Qué tipo infiere TypeScript para un arreglo vacío sin nada de qué aprender?", "手がかりのない空の配列に、TypeScript はどんな型を推論する？"),
+      note: "typing-state",
       win: [{ t: "shake" }],
     },
     {
@@ -173,6 +561,8 @@ const useStateLesson: LessonDef = {
         String.raw`typeof\s+update\s*===?\s*["']number["']`,
       ],
       explain: L("A function is an updater: call it with the current state. A number replaces it. 0 → 1 → 2 → 20.", "Una función es un updater: llámala con el estado actual. Un número lo reemplaza. 0 → 1 → 2 → 20.", "関数なら更新関数として今の状態で呼ぶ。数値なら置き換える。0 → 1 → 2 → 20。"),
+      hint: L("The loop treats every entry as a value. Which entries are functions, and what should happen to them?", "El bucle trata cada entrada como un valor. ¿Cuáles son funciones, y qué debe pasar con ellas?", "ループは全部を値として扱っている。関数はどれ？それはどう扱うべき？"),
+      note: "updaters",
     },
   ],
 };
@@ -186,6 +576,7 @@ const eventsAndForms: LessonDef = {
   xp: 75,
   enemy: "typescript/callback-spaghetti",
   enemyName: L("CALLBACK KNOT", "NUDO CALLBACK", "コールバック結び"),
+  notes: eventsNotes,
   beats: [
     say(L(
       "Events: hand the button a FUNCTION. React keeps it and calls it later, when the click actually happens.",
@@ -225,6 +616,8 @@ const eventsAndForms: LessonDef = {
       answer: 0,
       check: { compiles: true, wrongFail: true },
       explain: L("Pass the function itself. With () you call it during render and pass undefined.", "Pasa la función misma. Con () la llamas al renderizar y pasas undefined.", "関数そのものを渡そう。() を付けるとレンダー中に呼ばれ undefined が渡る。"),
+      hint: L("Should the function run now, while rendering, or later, when the click happens?", "¿La función debe correr ahora, al renderizar, o después, cuando ocurra el clic?", "関数を動かすのは今（レンダー中）？それともクリックされたとき？"),
+      note: "handlers",
       setup: [{ t: "item", kind: "key", holder: "hero" }, { t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: "button" }],
       win: [{ t: "give", to: "ally" }],
     },
@@ -236,6 +629,8 @@ const eventsAndForms: LessonDef = {
       answer: 0,
       check: { compiles: true, wrongFail: true },
       explain: L("Need an argument? Wrap the call in an arrow: React calls the arrow on click.", "¿Necesitas un argumento? Envuelve la llamada en una flecha: React llama a la flecha al hacer clic.", "引数が必要ならアロー関数で包もう。クリック時に React がそのアローを呼ぶ。"),
+      hint: L("You need an argument, but the call must wait for the click. What can delay a call?", "Necesitas un argumento, pero la llamada debe esperar al clic. ¿Qué puede retrasar una llamada?", "引数は必要だけど、呼ぶのはクリックまで待ちたい。呼び出しを遅らせるには？"),
+      note: "handlers",
     },
     {
       kind: "predict",
@@ -246,6 +641,8 @@ const eventsAndForms: LessonDef = {
       output: "<button>Go</button>",
       check: { program: show("", "<button onClick={() => {}}>Go</button>"), compiles: true, stdout: "<button>Go</button>" },
       explain: L("Handlers live in React, not in the HTML. The markup stays clean.", "Los handlers viven en React, no en el HTML. El marcado queda limpio.", "ハンドラーは React の中にあり、HTML には出ないよ。"),
+      hint: L("Where does React keep event handlers: in the HTML markup, or in its own memory?", "¿Dónde guarda React los handlers: en el marcado HTML o en su propia memoria?", "React はハンドラーをどこに置く？HTML の中？それとも自分の記憶の中？"),
+      note: "handlers",
     },
     say(L(
       "Forms: a CONTROLLED input takes value from state and reports each keystroke with onChange. React owns the value.",
@@ -280,6 +677,8 @@ const eventsAndForms: LessonDef = {
         stdout: "Ada",
       },
       explain: L("e.target is the input element; its value is the current text.", "e.target es el elemento input; su value es el texto actual.", "e.target は input 要素。その value がいまの文字列だよ。"),
+      hint: L("e.target is the input element. Which of its properties holds the current text?", "e.target es el elemento input. ¿Cuál de sus propiedades tiene el texto actual?", "e.target は input 要素。今の文字を持っているプロパティは？"),
+      note: "controlled-inputs",
       win: [{ t: "value", actor: "hero", text: '"Ada"' }],
     },
     {
@@ -291,6 +690,8 @@ const eventsAndForms: LessonDef = {
       output: '<input value="Ada"/>',
       check: { program: show("", '<input defaultValue="Ada" />'), compiles: true, stdout: '<input value="Ada"/>' },
       explain: L("defaultValue is UNCONTROLLED: it only sets the starting text, then the DOM owns it.", "defaultValue es NO CONTROLADO: solo pone el texto inicial y luego el DOM es su dueño.", "defaultValue は非制御。最初の文字を入れるだけで、その後は DOM が持つよ。"),
+      hint: L("The first HTML of a field looks the same no matter who owns its text later.", "El primer HTML de un campo se ve igual, sin importar quién controle su texto después.", "欄の最初の HTML は、あとで誰が文字を持つかに関係なく同じ見た目。"),
+      note: "controlled-inputs",
     },
     {
       kind: "pick",
@@ -304,6 +705,8 @@ const eventsAndForms: LessonDef = {
         stdout: "no reload\nsaved",
       },
       explain: L("preventDefault cancels the browser's default action (the reload). stopPropagation only stops bubbling.", "preventDefault cancela la acción por defecto (recargar). stopPropagation solo frena la propagación.", "preventDefault は既定の動作（再読み込み）を止める。stopPropagation は伝播を止めるだけ。"),
+      hint: L("The reload is the browser's own default action. Which method cancels defaults, not bubbling?", "Recargar es la acción por defecto del navegador. ¿Qué método cancela acciones por defecto, no la subida?", "再読み込みはブラウザの既定の動作。伝播ではなく既定動作を止めるのは？"),
+      note: "event-object",
     },
     say(L(
       "Clicks BUBBLE: the button's handler runs first, then its parent's. e.stopPropagation() stops the climb.",
@@ -318,6 +721,8 @@ const eventsAndForms: LessonDef = {
       answer: 0,
       check: { program: `${HEAD}function onName(e: React.ChangeEvent<HTMLInputElement>) {\n  console.log(e.target.value);\n}\nconst field = <input onChange={onName} />;`, compiles: true },
       explain: L("React.ChangeEvent<HTMLInputElement> is the exact type of an input's change event.", "React.ChangeEvent<HTMLInputElement> es el tipo exacto del evento change de un input.", "React.ChangeEvent<HTMLInputElement> が input の change イベントの正確な型だよ。"),
+      hint: L("Which event does an input's onChange produce, and on which element? Compare with the type.", "¿Qué evento produce el onChange de un input, y en qué elemento? Compáralo con el tipo.", "input の onChange が出すイベントは？どの要素で？型と比べよう。"),
+      note: "event-object",
     },
     {
       kind: "run",
@@ -330,6 +735,8 @@ const eventsAndForms: LessonDef = {
         String.raw`onClick=\{\s*\(\s*\)\s*=>\s*onPress\s*\(\s*\)\s*\}`,
       ],
       explain: L("onClick={onPress()} calls it while rendering. Pass onPress itself so React calls it on click.", "onClick={onPress()} la llama al renderizar. Pasa onPress tal cual para que React la llame al hacer clic.", "onClick={onPress()} はレンダー中に呼んでしまう。onPress そのものを渡そう。"),
+      hint: L("Look at onClick: is onPress handed over, or called right away during render?", "Mira onClick: ¿se entrega onPress, o se llama enseguida al renderizar?", "onClick を見よう。onPress を渡している？それともレンダー中に呼んでいる？"),
+      note: "handlers",
     },
   ],
 };
@@ -343,6 +750,7 @@ const updatingObjectsAndArrays: LessonDef = {
   xp: 80,
   enemy: "react/stale-closure",
   enemyName: L("OLD AMBER", "ÁMBAR VIEJO", "古びた琥珀"),
+  notes: updatingNotes,
   beats: [
     say(L(
       "Never scratch the crystal. React compares state by reference: same object means nothing changed, so no re-render.",
@@ -379,6 +787,8 @@ const updatingObjectsAndArrays: LessonDef = {
       output: "true",
       check: { program: "const before = { hp: 3 };\nconst after = before;\nafter.hp = 5;\nconsole.log(Object.is(before, after));", compiles: true, stdout: "true" },
       explain: L("Both names point to ONE object. React sees the same reference and skips the render.", "Ambos nombres apuntan a UN objeto. React ve la misma referencia y se salta el render.", "ふたつの名前はひとつのオブジェクトを指す。同じ参照なので React はレンダーを省くよ。"),
+      hint: L("Does after = before copy the object, or only the reference? Count how many objects exist.", "¿after = before copia el objeto o solo la referencia? Cuenta cuántos objetos existen.", "after = before は中身のコピー？参照だけ？オブジェクトがいくつあるか数えよう。"),
+      note: "references",
       setup: [{ t: "item", kind: "gem", holder: "hero" }, { t: "tag", actor: "hero", text: "before" }, { t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: "after" }],
       win: [{ t: "lend", to: "ally" }, { t: "say", actor: "ally", text: L("Same gem!", "¡Misma gema!", "同じ宝石！") }],
     },
@@ -394,6 +804,8 @@ const updatingObjectsAndArrays: LessonDef = {
         stdout: "render 5",
       },
       explain: L("The spread makes a NEW object, so Object.is says it changed and React renders.", "El spread crea un objeto NUEVO, así que Object.is dice que cambió y React renderiza.", "スプレッドで新しいオブジェクトができ、Object.is が変化を検出して React がレンダーする。"),
+      hint: L("React compares with Object.is. Which option produces an object with a new identity?", "React compara con Object.is. ¿Qué opción produce un objeto con identidad nueva?", "React は Object.is で比べる。新しい別物のオブジェクトを作るのはどっち？"),
+      note: "references",
       win: [{ t: "enter", actor: "ally" }, { t: "clone", to: "ally" }, { t: "banner", text: RENDER }],
       setup: [{ t: "item", kind: "gem", holder: "hero" }, { t: "tag", actor: "hero", text: "hero", value: "hp: 3" }],
     },
@@ -405,6 +817,8 @@ const updatingObjectsAndArrays: LessonDef = {
       answer: 0,
       check: { compiles: true, wrongFail: true },
       explain: L("push mutates the old array and returns a number. A spread builds a new array.", "push muta el arreglo viejo y devuelve un número. Un spread crea un arreglo nuevo.", "push は古い配列を変更して数値を返す。スプレッドなら新しい配列ができる。"),
+      hint: L("The setter needs a new array. Which option builds one, and what does the other return?", "El setter necesita un arreglo nuevo. ¿Qué opción crea uno, y qué devuelve la otra?", "セッターには新しい配列が必要。それを作るのはどっち？もう片方は何を返す？"),
+      note: "array-updates",
     },
     say(L(
       "Arrays: add with [...a, x], remove with filter, change with map. Avoid push, splice, sort and reverse on state.",
@@ -422,6 +836,8 @@ const updatingObjectsAndArrays: LessonDef = {
         stdout: "1 2",
       },
       explain: L("filter returns a NEW array without the removed item; the old one stays intact.", "filter devuelve un arreglo NUEVO sin el item; el viejo queda intacto.", "filter は項目を除いた新しい配列を返す。元の配列はそのままだよ。"),
+      hint: L("You want a new array that keeps only the items passing the test. Which method does that?", "Quieres un arreglo nuevo que deje solo los items que pasan la prueba. ¿Qué método hace eso?", "条件に合う項目だけを残した新しい配列がほしい。そのメソッドは？"),
+      note: "array-updates",
     },
     {
       kind: "predict",
@@ -432,6 +848,8 @@ const updatingObjectsAndArrays: LessonDef = {
       output: "false false",
       check: { program: "const a = [{ id: 1, done: false }];\nconst b = a.map(t => t.id === 1 ? { ...t, done: true } : t);\nconsole.log(a[0].done, a === b);", compiles: true, stdout: "false false" },
       explain: L("map builds a new array and the spread a new todo: the old state is untouched.", "map crea un arreglo nuevo y el spread un todo nuevo: el estado viejo no se toca.", "map で新しい配列、スプレッドで新しい todo。古い状態はそのまま。"),
+      hint: L("map always returns a new array, and the spread creates a new todo. Was a touched?", "map siempre devuelve un arreglo nuevo, y el spread crea un todo nuevo. ¿Se tocó a?", "map は必ず新しい配列を返し、スプレッドは新しい todo を作る。a は変わった？"),
+      note: "array-updates",
     },
     {
       kind: "pick",
@@ -441,6 +859,8 @@ const updatingObjectsAndArrays: LessonDef = {
       answer: 0,
       check: { compiles: true, wrongFail: true },
       explain: L("Nested data needs a nested spread: copy p, then copy address with the new city.", "Los datos anidados piden spread anidado: copia p y luego address con la nueva city.", "入れ子のデータには入れ子のスプレッド。p をコピーし、address も新しい city でコピー。"),
+      hint: L("city lives inside address. Which option copies every level down to it?", "city vive dentro de address. ¿Qué opción copia cada nivel hasta llegar a ella?", "city は address の中にある。そこまでの段をすべてコピーしているのは？"),
+      note: "nested-copies",
     },
     {
       kind: "predict",
@@ -451,6 +871,8 @@ const updatingObjectsAndArrays: LessonDef = {
       output: "true [ 1, 2, 3 ]",
       check: { program: "const items = [3, 1, 2];\nconst sorted = items.sort();\nconsole.log(sorted === items, items);", compiles: true, stdout: "true [ 1, 2, 3 ]" },
       explain: L("sort works IN PLACE and returns the same array. For state, sort a copy: [...items].sort().", "sort trabaja EN SITIO y devuelve el mismo arreglo. Para el estado, ordena una copia: [...items].sort().", "sort はその場で並べ替え、同じ配列を返す。状態ならコピー [...items].sort() を使おう。"),
+      hint: L("Does sort make a copy or work in place? And what does it return?", "¿sort hace una copia o trabaja en sitio? ¿Y qué devuelve?", "sort はコピーを作る？その場で並べ替える？何を返す？"),
+      note: "array-updates",
       win: [{ t: "shake" }, { t: "say", actor: "enemy", text: L("Scratched!", "¡Rayado!", "削れた！") }],
     },
     {
@@ -469,6 +891,8 @@ const updatingObjectsAndArrays: LessonDef = {
         stdout: "true false",
       },
       explain: L("map returns a new array; only the matching todo is replaced by a spread copy.", "map devuelve un arreglo nuevo; solo el todo que coincide se cambia por una copia con spread.", "map は新しい配列を返し、該当する todo だけをスプレッドのコピーに置き換える。"),
+      hint: L("Start with the function header, return the mapped array, and keep the closing lines last.", "Empieza con la cabecera de la función, devuelve el arreglo mapeado y deja los cierres al final.", "関数の見出しから始めて map した配列を返し、閉じる行は最後に。"),
+      note: "array-updates",
     },
     {
       kind: "run",
@@ -481,6 +905,8 @@ const updatingObjectsAndArrays: LessonDef = {
         String.raw`\[\s*\.\.\.\s*todos\s*\][\s\S]*\.\.\.\s*t\b`,
       ],
       explain: L("Return a NEW array with a NEW todo: map plus a spread. The old state stays as it was.", "Devuelve un arreglo NUEVO con un todo NUEVO: map más spread. El estado viejo queda como estaba.", "新しい配列と新しい todo を返そう。map とスプレッドで、古い状態はそのまま。"),
+      hint: L("find gives you the same todo object, which then gets changed. Build a new array with a new todo instead.", "find te da el mismo objeto todo, que luego se cambia. Mejor crea un arreglo nuevo con un todo nuevo.", "find は同じ todo を返し、それを書きかえている。新しい配列と新しい todo を作ろう。"),
+      note: "array-updates",
     },
   ],
 };
@@ -497,6 +923,7 @@ const sharingState: LessonDef = {
   xp: 80,
   enemy: "react/key-twins",
   enemyName: L("QUARREL TWINS", "GEMELOS RIÑENDO", "けんか双子"),
+  notes: sharingNotes,
   beats: [
     say(L(
       "These twins each kept their own crystal and now they disagree. Fix: LIFT the state up to their closest common parent.",
@@ -539,6 +966,8 @@ const sharingState: LessonDef = {
       output: "<div><b>7</b><b>7</b></div>",
       check: { program: show(`${DISPLAY}\n${PANEL}`, "<Panel />"), compiles: true, stdout: "<div><b>7</b><b>7</b></div>" },
       explain: L("One state in the parent, passed down as a prop: both children show the same 7.", "Un estado en el padre, pasado como prop: ambos hijos muestran el mismo 7.", "親の状態ひとつをプロップスで渡すので、ふたりとも同じ 7 を表示する。"),
+      hint: L("There is one state in Panel. What does each Display receive as its value?", "Hay un solo estado en Panel. ¿Qué recibe cada Display como value?", "Panel には状態がひとつ。Display はそれぞれ value に何を受け取る？"),
+      note: "lifting-state",
     },
     {
       kind: "predict",
@@ -552,6 +981,8 @@ const sharingState: LessonDef = {
         stdout: "<nav><b>map</b><b>map</b></nav>",
       },
       explain: L("Two copies can drift apart. One state in the parent is the single source of truth.", "Dos copias pueden desincronizarse. Un estado en el padre es la única fuente de verdad.", "複製はずれていく。親に状態をひとつ置けば、それが唯一の真実になる。"),
+      hint: L("Two separate copies can drift apart. From where can one value reach both tabs?", "Dos copias separadas pueden desincronizarse. ¿Desde dónde puede un valor llegar a ambas pestañas?", "別々のコピーはずれていく。ひとつの値を両方のタブに届けられる場所は？"),
+      note: "lifting-state",
       win: [{ t: "banner", text: L("IN SYNC", "EN SINTONÍA", "そろった！") }],
     },
     say(L(
@@ -567,6 +998,8 @@ const sharingState: LessonDef = {
       answer: 0,
       check: { program: show('function Name({ first, last }: { first: string; last: string }) {\n  const fullName = first + " " + last;\n  return <p>{fullName}</p>;\n}', '<Name first="Ada" last="Lovelace" />'), compiles: true, stdout: "<p>Ada Lovelace</p>" },
       explain: L("Computed from props on every render, so it can never go out of date. No extra state needed.", "Se calcula desde las props en cada render, así nunca queda desactualizado. Sin estado extra.", "毎回プロップスから計算するので古くならない。余分な状態はいらないよ。"),
+      hint: L("Quotes make fixed text. You want a value computed from the two props.", "Las comillas crean texto fijo. Quieres un valor calculado a partir de las dos props.", "引用符は決まった文字になる。欲しいのは2つのプロップスから計算した値。"),
+      note: "derived-values",
     },
     say(L(
       "State lives at a POSITION in the tree. Same component, same spot: state is kept. A new key: state resets.",
@@ -581,6 +1014,8 @@ const sharingState: LessonDef = {
       answer: 0,
       check: { compiles: true, wrongFail: true },
       explain: L("A different key makes React treat it as a NEW Form: old state is dropped. id isn't a prop of Form.", "Una key distinta hace que React lo trate como un Form NUEVO y descarta el estado. id no es prop de Form.", "キーが変わると React は新しい Form とみなし、古い状態を捨てる。id は Form のプロップスじゃない。"),
+      hint: L("Which special prop decides a component's identity, so that changing it starts fresh?", "¿Qué prop especial decide la identidad de un componente, de modo que cambiarla empieza de cero?", "部品の身元を決め、変えるとやり直しになる特別なプロップスは？"),
+      note: "state-position",
       win: [{ t: "drop" }, { t: "banner", text: L("FRESH FORM", "FORM NUEVO", "まっさら！") }],
     },
     say(L(
@@ -596,6 +1031,8 @@ const sharingState: LessonDef = {
       answer: 0,
       check: { program: `${HEAD}function Child({ onPick }: { onPick: (tab: string) => void }) {\n  return <button onClick={() => onPick("map")}>Map</button>;\n}\nfunction Parent() {\n  const [tab, setTab] = useState("bag");\n  return <Child onPick={setTab} />;\n}`, compiles: true },
       explain: L("setTab accepts a string, so it fits (tab: string) => void. The child calls it to ask for a change.", "setTab acepta un string, así que encaja en (tab: string) => void. El hijo lo llama para pedir un cambio.", "setTab は string を受け取るので (tab: string) => void に合う。子はそれを呼んで変更を頼む。"),
+      hint: L("Compare what setTab accepts with the type of onPick. Do they line up?", "Compara lo que acepta setTab con el tipo de onPick. ¿Coinciden?", "setTab が受け取るものと onPick の型を比べよう。合っている？"),
+      note: "events-up",
       setup: [{ t: "tag", actor: "hero", text: "Parent", value: "bag" }, { t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: "Child" }],
       win: [{ t: "say", actor: "ally", text: L("Map, please!", "¡Mapa, porfa!", "マップにして！") }, { t: "value", actor: "hero", text: "map" }],
     },
@@ -606,6 +1043,8 @@ const sharingState: LessonDef = {
       answer: "value",
       check: { program: show(`${DISPLAY}\nconst level = 7;`, "<Display value={level} />"), compiles: true, stdout: "<b>7</b>" },
       explain: L("The prop name must match what Display destructures: value.", "El nombre de la prop debe coincidir con lo que Display desestructura: value.", "プロップスの名前は Display が受け取る名前 value と同じにしよう。"),
+      hint: L("The prop name must match the name Display destructures.", "El nombre de la prop debe coincidir con el que desestructura Display.", "プロップスの名前は Display が分割代入する名前と同じに。"),
+      note: "lifting-state",
       win: [{ t: "print", text: "<b>7</b>" }],
     },
     {
@@ -619,6 +1058,8 @@ const sharingState: LessonDef = {
         String.raw`useState\(\s*value\s*\)`,
       ],
       explain: L("Display kept its own copy at 0. Use the value prop: the parent's state is the single source of truth.", "Display tenía su propia copia en 0. Usa la prop value: el estado del padre es la única fuente de verdad.", "Display は自分用のコピー 0 を持っていた。プロップスの value を使えば、親の状態が唯一の真実になる。"),
+      hint: L("Display shows its own useState copy. Which value should it show instead?", "Display muestra su propia copia de useState. ¿Qué valor debería mostrar en su lugar?", "Display は自分の useState のコピーを表示している。代わりに表示すべき値は？"),
+      note: "lifting-state",
     },
   ],
 };
@@ -634,6 +1075,7 @@ const stateShade: LessonDef = {
   xp: 190,
   enemy: "ghost",
   enemyName: L("STATE SHADE", "SOMBRA DEL ESTADO", "状態の影"),
+  notes: shadeNotes,
   beats: [
     enemySays(L(
       "I whisper stale snapshots and scratch every crystal I touch. Click if you dare!",
@@ -646,6 +1088,8 @@ const stateShade: LessonDef = {
       options: ["6", "42", "43"], answer: 1,
       check: { program: queue("  setCount(count + 5);\n  setCount(c => c + 1);\n  setCount(42);"), compiles: true, stdout: "42" },
       explain: L("The last update replaces everything with 42.", "La última actualización lo reemplaza todo por 42.", "最後の更新がすべてを 42 に置き換える。"),
+      hint: L("Walk the queue from 0 to the end. What does the last entry do to whatever came before?", "Recorre la cola desde 0 hasta el final. ¿Qué le hace la última entrada a lo anterior?", "0 から最後までキューをたどろう。最後の項目はそれまでの結果をどうする？"),
+      note: "recap-queue",
     },
     {
       kind: "predict", time: 12, prompt: AFTER_CLICK,
@@ -653,6 +1097,8 @@ const stateShade: LessonDef = {
       options: ["1", "3"], answer: 1,
       check: { program: queue("  setCount(c => c + 1);\n  setCount(c => c + 1);\n  setCount(c => c + 1);"), compiles: true, stdout: "3" },
       explain: L("Updaters chain: 0 → 1 → 2 → 3.", "Los updaters se encadenan: 0 → 1 → 2 → 3.", "更新関数はつながる：0 → 1 → 2 → 3。"),
+      hint: L("Updaters receive the latest queued value, not the snapshot.", "Los updaters reciben el último valor encolado, no la foto.", "更新関数が受け取るのはスナップショットではなく、最新の予約された値。"),
+      note: "recap-queue",
     },
     {
       kind: "predict", time: 12, prompt: LOGS,
@@ -660,6 +1106,8 @@ const stateShade: LessonDef = {
       options: ["0", "5"], answer: 0,
       check: { program: "const count = 0;\nconst setCount = (n: number) => {};\nsetCount(count + 5);\nconsole.log(count);", compiles: true, stdout: "0" },
       explain: L("A snapshot: count changes only in the next render.", "Una foto: count cambia solo en el siguiente render.", "スナップショット。count が変わるのは次のレンダー。"),
+      hint: L("Does the setter change count in this render, or schedule the next one?", "¿El setter cambia count en este render o programa el siguiente?", "セッターはこのレンダーの count を変える？次のレンダーを予約する？"),
+      note: "recap-queue",
     },
     {
       kind: "pick", time: 12,
@@ -668,6 +1116,8 @@ const stateShade: LessonDef = {
       options: ["handleClick", "handleClick()"], answer: 0,
       check: { compiles: true, wrongFail: true },
       explain: L("Pass the function, don't call it.", "Pasa la función, no la llames.", "関数を渡す。呼ばないで。"),
+      hint: L("Should it run while rendering, or wait for the click?", "¿Debe correr al renderizar o esperar al clic?", "レンダー中に動かす？クリックを待つ？"),
+      note: "recap-events",
     },
     {
       kind: "type", time: 15,
@@ -676,6 +1126,8 @@ const stateShade: LessonDef = {
       answer: "string[]",
       check: { program: `${HEAD}function List() {\n  const [names, setNames] = useState<string[]>([]);\n  return <p onClick={() => setNames(["Ada"])}>{names.length}</p>;\n}\nconsole.log(renderToStaticMarkup(<List />));`, compiles: true, stdout: "<p>0</p>" },
       explain: L("Without it, [] is never[] and nothing fits.", "Sin él, [] es never[] y nada cabe.", "型がないと [] は never[] で何も入らない。"),
+      hint: L("The state will hold names. How do you write the type of an array of text?", "El estado guardará nombres. ¿Cómo se escribe el tipo de un arreglo de texto?", "状態には名前が入る。文字の配列の型はどう書く？"),
+      note: "recap-state",
     },
     {
       kind: "pick", time: 12,
@@ -684,6 +1136,8 @@ const stateShade: LessonDef = {
       options: ["filter", "splice", "forEach"], answer: 0,
       check: { compiles: true, wrongFail: true },
       explain: L("filter returns a new array without \"x\".", "filter devuelve un arreglo nuevo sin \"x\".", "filter は \"x\" を除いた新しい配列を返す。"),
+      hint: L("You need a NEW array without one item. Which method returns that, and which mutate or return nothing?", "Necesitas un arreglo NUEVO sin un item. ¿Qué método lo devuelve, y cuáles mutan o no devuelven nada?", "1つを除いた新しい配列が必要。それを返すのは？書きかえたり何も返さないのは？"),
+      note: "recap-immutable",
     },
     {
       kind: "predict", time: 12, prompt: LOGS,
@@ -691,6 +1145,8 @@ const stateShade: LessonDef = {
       options: ["1 false", "2 true", "2 false"], answer: 0,
       check: { program: "const a = { hp: 1 };\nconst b = { ...a, hp: 2 };\nconsole.log(a.hp, a === b);", compiles: true, stdout: "1 false" },
       explain: L("The spread copies; the original stays at 1.", "El spread copia; el original sigue en 1.", "スプレッドはコピー。元は 1 のまま。"),
+      hint: L("The spread builds a new object. Is a changed, and are a and b the same object?", "El spread crea un objeto nuevo. ¿Cambia a, y son a y b el mismo objeto?", "スプレッドは新しいオブジェクトを作る。a は変わる？a と b は同じもの？"),
+      note: "recap-immutable",
     },
     {
       kind: "predict", time: 12, prompt: LOGS,
@@ -698,6 +1154,8 @@ const stateShade: LessonDef = {
       options: ["true", "false"], answer: 0,
       check: { program: 'const list = ["a"];\nlist.push("b");\nconsole.log(Object.is(list, list));', compiles: true, stdout: "true" },
       explain: L("Same reference after push: setList(list) would skip the render.", "Misma referencia tras push: setList(list) se saltaría el render.", "push 後も同じ参照。setList(list) ではレンダーされない。"),
+      hint: L("push changes the array in place. Is list still the same reference afterwards?", "push cambia el arreglo en sitio. ¿list sigue siendo la misma referencia después?", "push はその場で配列を変える。そのあとも list は同じ参照？"),
+      note: "recap-immutable",
     },
     {
       kind: "predict", time: 15, prompt: HTML,
@@ -705,6 +1163,8 @@ const stateShade: LessonDef = {
       options: ["<div><b>1</b><b>2</b></div>", "<div><b>1</b><b>1</b></div>", "<div><b>2</b><b>2</b></div>"], answer: 0,
       check: { program: show(COUNTER, "<div><Counter start={1} /><Counter start={2} /></div>"), compiles: true, stdout: "<div><b>1</b><b>2</b></div>" },
       explain: L("Each instance has its own state.", "Cada instancia tiene su propio estado.", "インスタンスごとに自分の状態を持つ。"),
+      hint: L("Each Counter is its own instance. Which initial value does each one get?", "Cada Counter es su propia instancia. ¿Qué valor inicial recibe cada uno?", "Counter はそれぞれ別のインスタンス。それぞれの初期値は？"),
+      note: "recap-state",
     },
     {
       kind: "predict", time: 12, prompt: HTML,
@@ -712,6 +1172,8 @@ const stateShade: LessonDef = {
       options: ['<input value="Bo"/>', '<input defaultValue="Bo"/>'], answer: 0,
       check: { program: show("", '<input defaultValue="Bo" />'), compiles: true, stdout: '<input value="Bo"/>' },
       explain: L("defaultValue sets only the starting value.", "defaultValue solo fija el valor inicial.", "defaultValue は最初の値だけを決める。"),
+      hint: L("On the first render, does the HTML care who owns the field later?", "En el primer render, ¿al HTML le importa quién controle el campo después?", "最初のレンダーの HTML は、あとで誰が欄を持つかを気にする？"),
+      note: "recap-events",
     },
     {
       kind: "pick", time: 12,
@@ -720,6 +1182,8 @@ const stateShade: LessonDef = {
       options: ["key", "id"], answer: 0,
       check: { compiles: true, wrongFail: true },
       explain: L("A new key means a new Form with fresh state.", "Una key nueva es un Form nuevo con estado limpio.", "新しいキーは、まっさらな状態の新しい Form。"),
+      hint: L("Which special prop makes React treat a component as a brand-new instance?", "¿Qué prop especial hace que React trate a un componente como una instancia totalmente nueva?", "React にまったく新しいインスタンスだと思わせる特別なプロップスは？"),
+      note: "recap-state",
     },
     enemySays(L(
       "No stale snapshot fooled you... my crystals stay whole. The forest is yours, state keeper!",

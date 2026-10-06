@@ -44,6 +44,7 @@ There is no `main` branch.
 
 - Never ask about something the game has not taught yet.
 - Every claim about the compiler has a `check`, and every `run` beat has a `solution`.
+- Every lesson has `notes` (the guidebook: concept → example → rule → why → common mistakes, with examples that use names and values different from the questions) and every question has a `hint` that nudges without giving the answer away. Never insert, remove or reorder beats in an existing lesson: saved reviews point at questions by beat index. See [`docs/authoring-lessons.md`](docs/authoring-lessons.md#notes-and-hints).
 - TS/TSX content must type-check under `tsc --strict` where it claims to, and its output must come from the game's runner (`npm run content:verify`). Avoid Node-only globals, the DOM at runtime and anything that depends on effects running in a static React render.
 - Go, C++, C#, Zig, Haskell, Ruby and Python content is verified on the same runners the game uses; outputs must be deterministic (no hash-map iteration order, timing, object addresses or C++ undefined behavior), Python lessons cannot use threads, the network or `input()`, and Ruby has only the standard library (no gems). See [`docs/content-model.md`](docs/content-model.md#go-c-c-zig-haskell-ruby-and-python-packs).
 - Frameworks no sandbox can run, such as Rails, are taught with small plain-language versions of their mechanisms (verified with `check`) plus conceptual questions without `check`, explained from the framework's official guides. See [`docs/adding-a-language.md`](docs/adding-a-language.md#a-framework-without-a-sandbox).
@@ -71,5 +72,6 @@ There is no `main` branch.
 - [ ] `npm run typecheck` and `npm test` pass (and `npm run build` for engine/UI changes).
 - [ ] Save system or memory card changes: `npm run e2e` passes with the dev server running.
 - [ ] New text exists in English, Spanish and Japanese.
+- [ ] New or changed lessons have `notes`, and every question has a `hint` (and a `note` id when the lesson has several notes); no existing beat was inserted, removed or reordered.
 - [ ] API, `proxy.ts` or `lib/security/` changes: every endpoint uses the guards, limits are in `policies.ts`, `tests/security.test.ts` covers new guards and the manual probes in `docs/security.md` give the expected statuses.
 - [ ] Playtested at least one affected lesson or exam, ideally in more than one locale.

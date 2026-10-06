@@ -1,4 +1,4 @@
-import type { LessonDef, RegionDef } from "../../../lib/content/types.ts";
+import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
 import { say, enemySays } from "../../rust/helpers.ts";
 
@@ -12,6 +12,546 @@ const HAPPENS = L("What happens?", "¿Qué pasa?", "どうなる？");
 const YES = L("Yes", "Sí", "はい");
 const NO_CE = L("No: compile error", "No: error de compilación", "いいえ：コンパイルエラー");
 
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example; the validator checks `output` against the real compiler. */
+const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code, output, caption });
+/** An example that must NOT compile (verified too). */
+const bad = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: false } });
+/** An example that compiles and then panics with the given message (verified too). */
+const crash = (code: string, throws: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: true, throws } });
+
+const labelsNotes: NoteDef[] = [
+  note("zero-values", L("Zero values: never empty", "Valores cero: nunca vacíos", "ゼロ値：空っぽはない"),
+    p(
+      "In Go, var name type creates a variable and gives it a value right away, even if you don't write one. That starting value is the type's zero value: 0 for numbers, \"\" (the empty string) for string, false for bool, and nil for pointers. There is no garbage and no \"undefined\".",
+      "En Go, var nombre tipo crea una variable y le da un valor al instante, aunque no escribas ninguno. Ese valor inicial es el valor cero del tipo: 0 para números, \"\" (el string vacío) para string, false para bool y nil para punteros. No hay basura ni \"undefined\".",
+      "Go では var 名前 型 で変数を作ると、値を書かなくてもすぐに値が入る。その最初の値が型の「ゼロ値」：数値は 0、string は \"\"（空文字列）、bool は false、ポインタは nil。ゴミ値も undefined もない。",
+    ),
+    ex('var score float64\nvar name string\nvar ready bool\nfmt.Println(score, ready, len(name))', "0 false 0",
+      L("Every type has a safe starting value", "Cada tipo tiene un valor inicial seguro", "どの型にも安全な初期値がある")),
+    p(
+      "Why? Many bugs in other languages come from reading a variable before anything was stored in it. Go removes that problem: every variable is usable from the moment it exists. An empty string prints as nothing at all, which is why questions often compare it with == \"\" to make it visible.",
+      "¿Por qué? Muchos bugs en otros lenguajes vienen de leer una variable antes de guardar algo en ella. Go elimina ese problema: toda variable se puede usar desde que existe. Un string vacío no imprime nada, por eso las preguntas suelen compararlo con == \"\" para que se vea.",
+      "なぜ？ほかの言語では、何も入れる前に変数を読んでしまうバグが多い。Go ではどの変数も生まれた瞬間から使える。空文字列は表示しても何も出ないので、問題ではよく == \"\" で比べて見えるようにしている。",
+    ),
+    p(
+      "A pointer holds the address of another value. A pointer that doesn't point anywhere yet has the zero value nil, and you check for it with == nil. nil is Go's word for \"nothing here\": it is not the number 0 and it is not a string.",
+      "Un puntero guarda la dirección de otro valor. Un puntero que aún no apunta a nada tiene el valor cero nil, y se revisa con == nil. nil es la palabra de Go para \"aquí no hay nada\": no es el número 0 ni un string.",
+      "ポインタはほかの値の住所を持つ。まだどこも指していないポインタのゼロ値は nil で、== nil で調べる。nil は Go で「ここには何もない」という意味。数字の 0 でも文字列でもない。",
+    ),
+    ex("var ptr *string\nfmt.Println(ptr == nil, ptr)", "true <nil>",
+      L("An unset pointer is nil", "Un puntero sin asignar es nil", "設定していないポインタは nil")),
+    p(
+      "Common mistake: expecting nil or an error from a var of type int, string or bool. Those types are never nil: they start at 0, \"\" and false. nil only belongs to pointers and a few other kinds you'll meet later, like slices and maps.",
+      "Error común: esperar nil o un error de un var de tipo int, string o bool. Esos tipos nunca son nil: empiezan en 0, \"\" y false. nil solo pertenece a los punteros y a otros tipos que verás después, como slices y maps.",
+      "よくあるミス：int・string・bool の var が nil やエラーになると思うこと。これらは nil にならず、0、\"\"、false から始まる。nil はポインタと、あとで出てくるスライスやマップなどだけのもの。",
+    ),
+  ),
+  note("short-decl", L(":= creates, = changes", ":= crea, = cambia", ":= は作る、= は変える"),
+    p(
+      "gold := 10 is the short way to declare a variable: Go creates gold and guesses its type from the value (here int). After that, gold already exists, so to give it a new value you use a plain =. Think of := as \"new label\" and = as \"new value on an existing label\".",
+      "gold := 10 es la forma corta de declarar una variable: Go crea gold y deduce su tipo del valor (aquí int). Después gold ya existe, así que para darle otro valor usas un = simple. Piensa en := como \"etiqueta nueva\" y en = como \"valor nuevo en una etiqueta que ya existe\".",
+      "gold := 10 は変数を宣言する短い書き方。Go が gold を作り、値から型（ここでは int）を決める。そのあと gold はもうあるので、新しい値は = で入れる。:= は「新しいラベル」、= は「あるラベルに新しい値」と覚えよう。",
+    ),
+    ex("gold := 10\ngold = gold * 3\nfmt.Println(gold)", "30",
+      L(":= once to create, = to change it later", ":= una vez para crear, = para cambiar", "作るのは := 1回、変えるのは ="),
+    ),
+    p(
+      "The rule: := needs at least one NEW name on its left. Using := twice with the same single name fails with \"no new variables on left side of :=\". With several names, := is allowed if at least one is new: the new ones are created and the old ones are simply assigned.",
+      "La regla: := necesita al menos un nombre NUEVO a su izquierda. Usar := dos veces con el mismo nombre solo falla con \"no new variables on left side of :=\". Con varios nombres, := se permite si al menos uno es nuevo: los nuevos se crean y los viejos solo se asignan.",
+      "ルール：:= の左には新しい名前が1つ以上必要。同じ名前1つだけで := を2回使うと「no new variables on left side of :=」。名前が複数なら、1つでも新しければ OK。新しいものは作られ、古いものは代入されるだけ。",
+    ),
+    ex('name := "ann"\nname, age := "bo", 7\nfmt.Println(name, age)', "bo 7",
+      L("age is new, so := is fine; name is just reassigned", "age es nueva, así que := vale; name solo se reasigna", "age が新しいので OK。name は代入されるだけ")),
+    p(
+      "Several values can be assigned at once. Go reads every value on the right first and only then stores them, so you can swap or rotate variables in one line, with no temporary variable.",
+      "Se pueden asignar varios valores a la vez. Go lee primero todos los valores de la derecha y solo después los guarda, así que puedes intercambiar o rotar variables en una línea, sin variable temporal.",
+      "複数の値を一度に代入できる。Go は右側の値をすべて先に読み、それから代入する。だから一時変数なしで、1行で入れかえや回転ができる。",
+    ),
+    ex("first, second, third := 1, 2, 3\nfirst, second, third = second, third, first\nfmt.Println(first, second, third)", "2 3 1",
+      L("The right side is read before anything changes", "La derecha se lee antes de cambiar nada", "何かが変わる前に右側を読む")),
+    p(
+      "Go also refuses unused variables: if you create a variable and never read it, the program does not compile (\"declared and not used\"). It's an error, not a warning, because a forgotten variable is often a bug. Use the variable or delete it.",
+      "Go también rechaza las variables sin usar: si creas una variable y nunca la lees, el programa no compila (\"declared and not used\"). Es un error, no un aviso, porque una variable olvidada suele ser un bug. Úsala o bórrala.",
+      "Go は使わない変数も許さない。作ったのに一度も読まない変数があると、コンパイルできない（「declared and not used」）。忘れた変数はバグのもとなので、警告ではなくエラー。使うか消そう。",
+    ),
+    bad('msg := "hi"\ncount := 3\nfmt.Println(msg)',
+      L("Does not compile: count is never used", "No compila: count nunca se usa", "コンパイル不可：count を使っていない")),
+  ),
+  note("numbers-types", L("Numbers and their types", "Los números y sus tipos", "数値とその型"),
+    p(
+      "Every Go value has a type. A whole number like 42 is an int by default, a number with a decimal point is a float64, and text in double quotes is a string. The verb %T in fmt.Printf prints a value's type, handy when you're not sure.",
+      "Todo valor de Go tiene un tipo. Un número entero como 42 es int por defecto, un número con punto decimal es float64 y el texto entre comillas dobles es string. El verbo %T de fmt.Printf imprime el tipo de un valor, útil cuando dudas.",
+      "Go の値にはすべて型がある。42 のような整数は既定で int、小数点つきの数は float64、二重引用符の文字は string。fmt.Printf の %T は値の型を表示する。迷ったときに便利。",
+    ),
+    ex('var w float32 = 2\nfmt.Printf("%T %T\\n", w, false)', "float32 bool",
+      L("%T shows the type, not the value", "%T muestra el tipo, no el valor", "%T は値ではなく型を表示")),
+    p(
+      "Go never mixes number types by itself: an int plus a float64 is a compile error, \"mismatched types\". To combine them, convert one by hand, writing the type name like a function: float64(n) turns an int into a float64, and int(f) turns a float64 into an int, dropping the decimals.",
+      "Go nunca mezcla tipos numéricos por su cuenta: un int más un float64 es un error de compilación, \"mismatched types\". Para combinarlos, convierte uno a mano escribiendo el tipo como una función: float64(n) vuelve float64 un int, e int(f) vuelve int un float64, perdiendo los decimales.",
+      "Go は数値の型を勝手に混ぜない。int + float64 はコンパイルエラー「mismatched types」。組み合わせるには、型名を関数のように書いて自分で変換する：float64(n) で int を float64 に、int(f) で float64 を int に（小数は捨てる）。",
+    ),
+    ex("steps := 4\nfactor := 0.25\nfmt.Println(float64(steps) * factor)", "1",
+      L("Convert first, then both sides match", "Convierte primero y ambos lados coinciden", "先に変換すれば両側の型がそろう")),
+    bad("steps := 4\nfactor := 0.25\nfmt.Println(steps * factor)",
+      L("Does not compile: int times float64", "No compila: int por float64", "コンパイル不可：int × float64")),
+    p(
+      "Division follows the types too. int / int gives an int and simply cuts off the decimals (it doesn't round). If either side is a float, you get decimals. The % operator gives the remainder of a whole-number division.",
+      "La división también sigue a los tipos. int / int da un int y simplemente corta los decimales (no redondea). Si algún lado es float, obtienes decimales. El operador % da el resto de una división entera.",
+      "割り算も型にしたがう。int / int は int になり、小数は切り捨て（四捨五入しない）。どちらかが小数なら小数の答え。% は整数の割り算の余り。",
+    ),
+    ex("fmt.Println(9/4, 9.0/4, 9%4)", "2 2.25 1"),
+    p(
+      "Common mistake: expecting a decimal or rounded answer from two ints. Why is Go so strict about mixing types? Silent conversions hide bugs, like losing precision without noticing, so Go makes every conversion visible in the code.",
+      "Error común: esperar un resultado decimal o redondeado de dos int. ¿Por qué Go es tan estricto al mezclar tipos? Las conversiones silenciosas esconden bugs, como perder precisión sin notarlo, así que Go hace visible cada conversión en el código.",
+      "よくあるミス：int 同士の計算で小数や四捨五入の答えを期待すること。なぜ Go は型の混合に厳しい？見えない変換は、気づかないうちに精度を失うようなバグを隠す。だから Go は変換をすべてコードに書かせる。",
+    ),
+  ),
+  note("const-iota", L("Constants and iota", "Constantes e iota", "定数と iota"),
+    p(
+      "const declares a value that never changes, like const maxHP = 100. Assigning to it later is a compile error. Constants are perfect for fixed settings and for naming a list of options.",
+      "const declara un valor que nunca cambia, como const maxHP = 100. Asignarle algo después es un error de compilación. Las constantes son perfectas para ajustes fijos y para nombrar una lista de opciones.",
+      "const は変わらない値を宣言する。例：const maxHP = 100。あとで代入するとコンパイルエラー。決まった設定や、選択肢のリストに名前をつけるのにぴったり。",
+    ),
+    bad("const limit = 5\nlimit = 6",
+      L("Does not compile: a const can't change", "No compila: una const no puede cambiar", "コンパイル不可：const は変えられない")),
+    p(
+      "Inside a const ( ) block, iota is a counter: 0 on the first line, 1 on the second, 2 on the third, and so on. A line with no = repeats the previous expression, so writing iota once numbers the whole list.",
+      "Dentro de un bloque const ( ), iota es un contador: 0 en la primera línea, 1 en la segunda, 2 en la tercera, etc. Una línea sin = repite la expresión anterior, así que escribir iota una vez numera toda la lista.",
+      "const ( ) ブロックの中で iota はカウンター：1行目は 0、2行目は 1、3行目は 2…。= のない行は前の式をくり返すので、iota を1回書くだけでリスト全体に番号がつく。",
+    ),
+    ex("const (\n\tNorth = iota\n\tEast\n\tSouth\n\tWest\n)\nfmt.Println(East, West)", "1 3",
+      L("iota grows by one on each line", "iota sube uno en cada línea", "iota は1行ごとに1増える")),
+    p(
+      "You can do math with iota: each line repeats the expression with the next iota value, so iota * 10 gives 0, 10, 20.",
+      "Puedes hacer cálculos con iota: cada línea repite la expresión con el siguiente valor de iota, así que iota * 10 da 0, 10, 20.",
+      "iota で計算もできる。各行は次の iota で式をくり返すので、iota * 10 は 0, 10, 20 になる。",
+    ),
+    ex("const (\n\tSmall = iota * 10\n\tMedium\n\tLarge\n)\nfmt.Println(Small, Medium, Large)", "0 10 20"),
+    p(
+      "Common mistake: thinking iota starts at 1. It always starts at 0 in each new const block. If you want the list to start at 1, write iota + 1 on the first line.",
+      "Error común: creer que iota empieza en 1. Siempre empieza en 0 en cada bloque const nuevo. Si quieres que la lista empiece en 1, escribe iota + 1 en la primera línea.",
+      "よくあるミス：iota が 1 から始まると思うこと。新しい const ブロックでは必ず 0 から。1 から始めたいなら、1行目に iota + 1 と書く。",
+    ),
+  ),
+];
+
+const functionsNotes: NoteDef[] = [
+  note("multi-return", L("Returning two values", "Devolver dos valores", "2つの値を返す"),
+    p(
+      "A function is declared with func, a name, its parameters with their types, and the type of what it returns. A Go function can return more than one value: list the result types in parentheses, like (int, int), and separate the values with commas after return.",
+      "Una función se declara con func, un nombre, sus parámetros con sus tipos y el tipo de lo que devuelve. Una función de Go puede devolver más de un valor: escribe los tipos de resultado entre paréntesis, como (int, int), y separa los valores con comas después de return.",
+      "関数は func、名前、型つきの引数、返す値の型で宣言する。Go の関数は値を2つ以上返せる。戻り値の型を (int, int) のようにかっこに並べ、return のあとに値をカンマで区切って書く。",
+    ),
+    ex("func stats(a, b int) (int, int) {\n\treturn a + b, a * b\n}\n\nfunc main() {\n\tsum, product := stats(3, 4)\n\tfmt.Println(sum, product)\n}", "7 12",
+      L("Values come back in the order of return", "Los valores vuelven en el orden del return", "値は return の順に返ってくる")),
+    p(
+      "The caller must catch every returned value: two results need two names on the left. If you only want one of them, put the blank identifier _ in place of the other. _ is a write-only trash can: it takes a value and throws it away, so it never counts as an unused variable.",
+      "Quien llama debe recibir cada valor devuelto: dos resultados necesitan dos nombres a la izquierda. Si solo quieres uno, pon el identificador vacío _ en lugar del otro. _ es un basurero de solo escritura: recibe un valor y lo tira, así que nunca cuenta como variable sin usar.",
+      "呼ぶ側は返る値をすべて受けとる必要がある。2つ返るなら左に名前が2つ。1つだけほしいなら、もう片方にブランク識別子 _ を置く。_ は書きこみ専用のゴミ箱で、受けとった値を捨てるので未使用変数にならない。",
+    ),
+    p(
+      "Results can have names, like func f() (total int). Named results start at their zero value like any variable, and a bare return (the word return alone) hands back their current values. It's handy in short functions, but in long ones it can hide what is returned.",
+      "Los resultados pueden tener nombre, como func f() (total int). Los resultados con nombre empiezan en su valor cero como cualquier variable, y un return solo (la palabra return sin nada) devuelve sus valores actuales. Sirve en funciones cortas, pero en las largas puede ocultar qué se devuelve.",
+      "戻り値には名前をつけられる。例：func f() (total int)。名前つき戻り値はふつうの変数と同じくゼロ値から始まり、何も書かない return はその時点の値を返す。短い関数では便利だが、長い関数では何を返すかわかりにくくなる。",
+    ),
+    ex('func greet() (msg string) {\n\tmsg = "hey"\n\treturn\n}\n\nfunc main() {\n\tfmt.Println(greet())\n}', "hey",
+      L("A bare return sends the named result as it is now", "Un return solo envía el resultado con nombre tal cual", "return だけで名前つき戻り値を今の値で返す")),
+    p(
+      "Common mistakes: returning fewer values than the signature promises (\"not enough return values\"), and catching two results with one variable (\"assignment mismatch\"). The result list is a promise: always return exactly that many values, in that order.",
+      "Errores comunes: devolver menos valores de los que promete la firma (\"not enough return values\") y recibir dos resultados con una sola variable (\"assignment mismatch\"). La lista de resultados es una promesa: devuelve siempre esa cantidad exacta de valores, en ese orden.",
+      "よくあるミス：宣言より少ない値を返す（「not enough return values」）、2つの戻り値を1つの変数で受ける（「assignment mismatch」）。戻り値のリストは約束。いつもその数の値を、その順番で返そう。",
+    ),
+  ),
+  note("for-loops", L("for: Go's only loop", "for: el único bucle de Go", "for：Go の唯一のループ"),
+    p(
+      "Go has a single loop keyword, for, used in three shapes. The classic one has three parts separated by semicolons: start; condition; step. It runs while the condition is true, doing the step after each lap.",
+      "Go tiene una sola palabra para bucles, for, que se usa de tres formas. La clásica tiene tres partes separadas por punto y coma: inicio; condición; paso. Se repite mientras la condición sea true y hace el paso después de cada vuelta.",
+      "Go のループのキーワードは for だけで、3つの形がある。基本形はセミコロンで区切った3部分：初期化; 条件; 更新。条件が true の間くり返し、毎周のあとに更新をする。",
+    ),
+    ex("total := 0\nfor k := 2; k <= 6; k += 2 {\n\ttotal += k\n}\nfmt.Println(total)", "12",
+      L("k is 2, 4, 6; at 8 the condition is false", "k vale 2, 4, 6; en 8 la condición es falsa", "k は 2, 4, 6。8 で条件が false")),
+    p(
+      "With only a condition, for works like a while loop in other languages. The condition is checked BEFORE each lap, so the loop stops at the first value that fails it, and that value stays in the variable after the loop.",
+      "Con solo una condición, for funciona como el while de otros lenguajes. La condición se revisa ANTES de cada vuelta, así que el bucle para en el primer valor que no la cumple, y ese valor queda en la variable después del bucle.",
+      "条件だけの for は、ほかの言語の while と同じ。条件は毎周の「前」に調べるので、条件を満たさない最初の値でループが止まり、その値が変数に残る。",
+    ),
+    ex("pow := 1\nfor pow < 50 {\n\tpow *= 2\n}\nfmt.Println(pow)", "64",
+      L("1, 2, 4 ... 32, 64: the loop stops at 64", "1, 2, 4 ... 32, 64: el bucle para en 64", "1, 2, 4 … 32, 64：64 で止まる")),
+    p(
+      "for i := range n (Go 1.22 and later) counts from 0 up to n-1: n laps, starting at zero. It never reaches n itself. range also walks slices, strings and maps, as you'll see later.",
+      "for i := range n (Go 1.22 en adelante) cuenta desde 0 hasta n-1: n vueltas, empezando en cero. Nunca llega a n. range también recorre slices, strings y maps, como verás más adelante.",
+      "for i := range n（Go 1.22 以降）は 0 から n-1 まで数える。0 から始まる n 周で、n そのものには届かない。range はスライス・文字列・マップも回れる。あとで出てくるよ。",
+    ),
+    ex('for lap := range 4 {\n\tfmt.Print(lap, ";")\n}', "0;1;2;3;"),
+    p(
+      "Common mistake: being off by one. Trace the first and last laps by hand: what is the variable at the start, and what is the first value that makes the condition false? Writing the values down is the fastest way to predict a loop.",
+      "Error común: equivocarse por uno. Sigue a mano la primera y la última vuelta: ¿cuánto vale la variable al inicio y cuál es el primer valor que hace falsa la condición? Anotar los valores es la forma más rápida de predecir un bucle.",
+      "よくあるミス：1つずれること。最初と最後の周を手で追おう。最初の値は？条件を false にする最初の値は？値を書き出すのが、ループを予想するいちばんの近道。",
+    ),
+  ),
+  note("switch", L("switch picks one case", "switch elige un caso", "switch は1つだけ選ぶ"),
+    p(
+      "switch compares a value against several cases and runs the FIRST one that matches. Unlike C or JavaScript, Go stops at the end of that case by itself: there is no break to forget, and the following cases don't run.",
+      "switch compara un valor con varios casos y ejecuta el PRIMERO que coincide. A diferencia de C o JavaScript, Go se detiene solo al final de ese caso: no hay break que olvidar y los casos siguientes no se ejecutan.",
+      "switch は値をいくつかの case と比べ、最初に合ったものを実行する。C や JavaScript とちがい、Go はその case の終わりで自分で止まる。break を忘れる心配はなく、後ろの case は動かない。",
+    ),
+    ex('switch day := 6; day {\ncase 6, 7:\n\tfmt.Println("weekend")\ncase 1:\n\tfmt.Println("monday")\ndefault:\n\tfmt.Println("weekday")\n}', "weekend",
+      L("One case matches, it runs, the switch ends", "Un caso coincide, corre y el switch termina", "合う case が1つ動いて switch 終了")),
+    p(
+      "A case can list several values separated by commas, and default runs when nothing matches. You can also write a short statement before the value, like switch d := 6; d, and d lives only inside the switch.",
+      "Un caso puede listar varios valores separados por comas, y default corre cuando nada coincide. También puedes escribir una instrucción corta antes del valor, como switch d := 6; d, y d vive solo dentro del switch.",
+      "case にはカンマで値を複数書ける。どれにも合わないときは default が動く。switch d := 6; d のように値の前に短い文も書けて、d は switch の中だけで生きる。",
+    ),
+    p(
+      "To continue into the next case on purpose, write fallthrough as the last line of a case. It jumps into the very next case's body WITHOUT checking its value, and only one step: the case after that runs only if it has its own fallthrough.",
+      "Para seguir al siguiente caso a propósito, escribe fallthrough como última línea de un caso. Salta al cuerpo del caso siguiente SIN revisar su valor, y solo un paso: el caso posterior solo corre si tiene su propio fallthrough.",
+      "わざと次の case に進むには、case の最後の行に fallthrough と書く。次の case の中身へ、値を調べずに進む。進むのは1つだけで、その次は自分の fallthrough があるときだけ動く。",
+    ),
+    ex('switch 5 {\ncase 5:\n\tfmt.Println("five")\n\tfallthrough\ncase 8:\n\tfmt.Println("eight")\ndefault:\n\tfmt.Println("other")\n}', "five\neight",
+      L("case 8 runs without matching; default does not", "case 8 corre sin coincidir; default no", "case 8 は合わなくても動く。default は動かない")),
+    p(
+      "Common mistake: assuming cases fall through like in C, or that fallthrough keeps going to the end. Read it as: match one case, run it, stop, unless that case ends with fallthrough, which adds exactly one more.",
+      "Error común: suponer que los casos caen al siguiente como en C, o que fallthrough sigue hasta el final. Léelo así: coincide un caso, se ejecuta y se detiene, salvo que termine con fallthrough, que agrega exactamente uno más.",
+      "よくあるミス：C のように次の case へ落ちると思うこと、fallthrough が最後まで続くと思うこと。「1つ合う → 実行 → 止まる。ただし fallthrough で終わる case は、ちょうど1つ追加」と読もう。",
+    ),
+  ),
+  note("scope", L("Scope and shadowing", "Alcance y sombra", "スコープとシャドーイング"),
+    p(
+      "A variable lives inside the braces { } where it was created: that's its scope. A variable declared in an if's short statement (if v := ...; cond) or in a for exists only inside that if or for, including its else. After the closing brace the name is gone: \"undefined\".",
+      "Una variable vive dentro de las llaves { } donde se creó: ese es su alcance. Una variable declarada en la instrucción corta de un if (if v := ...; cond) o en un for existe solo dentro de ese if o for, incluido su else. Tras la llave de cierre el nombre desaparece: \"undefined\".",
+      "変数は作られた波かっこ { } の中で生きる。これをスコープという。if の短い文（if v := ...; 条件）や for で宣言した変数は、その if（else も含む）や for の中だけにいる。閉じかっこのあとは「undefined」。",
+    ),
+    bad("for idx := 0; idx < 2; idx++ {\n\tfmt.Println(idx)\n}\nfmt.Println(idx)",
+      L("Does not compile: idx only lives in the loop", "No compila: idx solo vive en el bucle", "コンパイル不可：idx はループの中だけ")),
+    p(
+      "Inside an inner block, := with a name that already exists outside creates a NEW, separate variable that hides the outer one until the block ends. That's called shadowing. Changes to the inner variable never touch the outer one.",
+      "Dentro de un bloque interno, := con un nombre que ya existe afuera crea una variable NUEVA y separada que oculta a la de afuera hasta que el bloque termina. Eso se llama sombra (shadowing). Los cambios a la variable interna nunca tocan a la externa.",
+      "内側のブロックで、外にある名前に := を使うと、別の新しい変数ができて、ブロックの終わりまで外の変数を隠す。これがシャドーイング。内側の変数を変えても外の変数には届かない。",
+    ),
+    ex('color := "red"\nif len(color) > 0 {\n\tcolor := "blue"\n\tfmt.Println(color)\n}\nfmt.Println(color)', "blue\nred",
+      L("Two different variables share one name", "Dos variables distintas comparten nombre", "名前は同じでも別の変数")),
+    p(
+      "To change the outer variable from inside a block, use = instead of :=. One character decides whether you update the variable or create a new one.",
+      "Para cambiar la variable externa desde dentro de un bloque, usa = en vez de :=. Un solo carácter decide si actualizas la variable o creas una nueva.",
+      "ブロックの中から外の変数を変えるなら、:= ではなく = を使う。1文字のちがいで、更新か新しく作るかが決まる。",
+    ),
+    ex('color := "red"\nif len(color) > 0 {\n\tcolor = "blue"\n}\nfmt.Println(color)', "blue"),
+    p(
+      "Common mistake: writing := inside an if or a loop when you meant =. It compiles and Go doesn't complain, but the outer variable never changes. When a value \"won't update\", look for a stray :=.",
+      "Error común: escribir := dentro de un if o un bucle cuando querías =. Compila y Go no se queja, pero la variable externa nunca cambia. Cuando un valor \"no se actualiza\", busca un := de más.",
+      "よくあるミス：if やループの中で = のつもりで := と書くこと。コンパイルは通り Go も何も言わないが、外の変数は変わらない。値が「更新されない」ときは、余計な := を探そう。",
+    ),
+  ),
+  note("closures", L("Functions that remember", "Funciones que recuerdan", "覚えている関数"),
+    p(
+      "In Go, functions are values: you can store them in variables, pass them and return them. A function written without a name, func() { ... }, is a function literal. When it uses a variable from the code around it, it captures that variable: that's a closure.",
+      "En Go las funciones son valores: puedes guardarlas en variables, pasarlas y devolverlas. Una función escrita sin nombre, func() { ... }, es una función literal. Cuando usa una variable del código que la rodea, captura esa variable: eso es una closure.",
+      "Go では関数も値。変数に入れたり、わたしたり、返したりできる。名前のない関数 func() { ... } を関数リテラルという。それがまわりのコードの変数を使うと、その変数をつかまえる。これがクロージャ。",
+    ),
+    p(
+      "The closure doesn't copy the variable: it keeps the variable itself alive. Every call of the same closure sees and changes that same variable, even after the function that created it has returned.",
+      "La closure no copia la variable: mantiene viva la variable misma. Cada llamada a la misma closure ve y cambia esa misma variable, incluso después de que la función que la creó haya terminado.",
+      "クロージャは変数をコピーせず、変数そのものを生かし続ける。同じクロージャを呼ぶたびに、同じ変数を見て変える。作った関数が終わったあとでもそう。",
+    ),
+    ex("func makeAdder() func(int) int {\n\ttotal := 0\n\treturn func(n int) int { total += n; return total }\n}\n\nfunc main() {\n\tadd := makeAdder()\n\tadd(10)\n\tfmt.Println(add(5))\n}", "15",
+      L("Both calls change the same total", "Ambas llamadas cambian el mismo total", "2回の呼び出しが同じ total を変える")),
+    p(
+      "Each call to the outer function creates a fresh variable, so two closures made by two different calls share nothing.",
+      "Cada llamada a la función externa crea una variable nueva, así que dos closures hechas por dos llamadas distintas no comparten nada.",
+      "外側の関数を呼ぶたびに新しい変数ができる。だから別々の呼び出しで作った2つのクロージャは何も共有しない。",
+    ),
+    ex("func makeAdder() func(int) int {\n\ttotal := 0\n\treturn func(n int) int { total += n; return total }\n}\n\nfunc main() {\n\ta, b := makeAdder(), makeAdder()\n\ta(10)\n\tfmt.Println(a(1), b(1))\n}", "11 1",
+      L("a and b each have their own total", "a y b tienen cada una su total", "a と b はそれぞれ自分の total を持つ")),
+    p(
+      "Common mistake: thinking the variable restarts on each call. It was created once, when the outer function ran; the inner function only updates it. Count the calls one by one to predict the result.",
+      "Error común: creer que la variable se reinicia en cada llamada. Se creó una vez, cuando corrió la función externa; la interna solo la actualiza. Cuenta las llamadas una por una para predecir el resultado.",
+      "よくあるミス：呼ぶたびに変数がリセットされると思うこと。変数は外側の関数が動いたときに1回だけ作られ、内側の関数は更新するだけ。呼び出しを1回ずつ数えて予想しよう。",
+    ),
+  ),
+];
+
+const runesNotes: NoteDef[] = [
+  note("bytes-len", L("Strings are bytes", "Los strings son bytes", "文字列はバイトの列"),
+    p(
+      "A Go string is a read-only row of bytes, stored in UTF-8. Plain English letters, digits and spaces take 1 byte each, but letters like é, ñ or ü take 2 bytes, and many symbols and Japanese characters take 3. len(s) counts BYTES, not letters.",
+      "Un string de Go es una fila de bytes de solo lectura, guardada en UTF-8. Las letras inglesas simples, los dígitos y los espacios ocupan 1 byte cada uno, pero letras como é, ñ o ü ocupan 2, y muchos símbolos y caracteres japoneses ocupan 3. len(s) cuenta BYTES, no letras.",
+      "Go の文字列は読みとり専用のバイトの列で、UTF-8 で保存される。ふつうの英字・数字・空白は1バイトずつ、é・ñ・ü などは2バイト、記号や日本語の多くは3バイト。len(s) は文字ではなくバイトを数える。",
+    ),
+    ex('word := "año"\nfmt.Println(len(word), len("ok"))', "4 2",
+      L("ñ takes 2 bytes, so len is bigger than the letter count", "ñ ocupa 2 bytes, así que len supera a las letras", "ñ は2バイトなので len は文字数より大きい")),
+    p(
+      "To count letters, convert the string to a slice of runes, []rune(s). Each rune is one character, however many bytes it uses, so the length of that slice is the number of characters you see.",
+      "Para contar letras, convierte el string en un slice de runas, []rune(s). Cada runa es un carácter, ocupe los bytes que ocupe, así que el largo de ese slice es el número de caracteres que ves.",
+      "文字を数えるには、文字列をルーンのスライス []rune(s) に変換する。ルーン1つが1文字（何バイトでも）なので、そのスライスの長さが見えている文字の数になる。",
+    ),
+    p(
+      "Indexing a string, s[i], gives one byte, of type byte (another name for uint8): a number, not a letter. Println prints bytes as numbers, so the byte for 'e' prints as 101. Wrap it with string(...) to see it as text again.",
+      "Indexar un string, s[i], da un byte, de tipo byte (otro nombre de uint8): un número, no una letra. Println imprime los bytes como números, así que el byte de 'e' sale como 101. Envuélvelo con string(...) para verlo como texto.",
+      "文字列の添字 s[i] は1バイトで、型は byte（uint8 の別名）。文字ではなく数値。Println はバイトを数値で表示するので、'e' のバイトは 101 と出る。string(...) で包むと文字に戻る。",
+    ),
+    ex('tag := "zen"\nfmt.Println(tag[1], string(tag[1]))', "101 e",
+      L("The same byte, as a number and as text", "El mismo byte, como número y como texto", "同じバイトを数値と文字で")),
+    p(
+      "Common mistake: assuming len equals the number of letters. That's only true for plain ASCII text. As soon as accents or other alphabets appear, len is bigger than the letter count.",
+      "Error común: suponer que len es igual al número de letras. Solo es cierto con texto ASCII simple. En cuanto aparecen tildes u otros alfabetos, len es mayor que la cantidad de letras.",
+      "よくあるミス：len が文字数と同じだと思うこと。それはふつうの ASCII 文字だけのとき。アクセントやほかの文字が入ると、len は文字数より大きくなる。",
+    ),
+  ),
+  note("runes-range", L("Runes and range over text", "Runas y range sobre texto", "ルーンと文字列の range"),
+    p(
+      "A rune is a character stored as a number, its Unicode code point; the type rune is another name for int32. A letter in single quotes, like 'b', is a rune; double quotes make a string. Println prints a rune as its number, while string(r) or the %c verb shows the letter.",
+      "Una runa es un carácter guardado como número, su punto de código Unicode; el tipo rune es otro nombre de int32. Una letra entre comillas simples, como 'b', es una runa; las comillas dobles hacen un string. Println imprime la runa como número; string(r) o el verbo %c muestran la letra.",
+      "ルーンは数値として保存された文字（Unicode のコードポイント）で、型 rune は int32 の別名。'b' のようにシングルクォートの文字はルーン、ダブルクォートは文字列。Println はルーンを数値で表示し、string(r) や %c は文字を表示する。",
+    ),
+    ex("letter := 'b'\nfmt.Println(letter, string(letter))\nfmt.Printf(\"%c\\n\", letter+1)", "98 b\nc",
+      L("A rune is a number you can show as a letter", "Una runa es un número que puedes ver como letra", "ルーンは文字として表示できる数値")),
+    p(
+      "for i, r := range s walks the string character by character: r is each rune, already decoded from its bytes. But i is the BYTE position where that rune starts, so after a 2-byte letter, i jumps by 2.",
+      "for i, r := range s recorre el string carácter por carácter: r es cada runa, ya decodificada de sus bytes. Pero i es la posición en BYTES donde empieza esa runa, así que después de una letra de 2 bytes, i salta de 2 en 2.",
+      "for i, r := range s は文字列を1文字ずつ回る。r はバイトから読みとったルーン。でも i はそのルーンが始まるバイト位置なので、2バイトの文字のあとは i が2つ進む。",
+    ),
+    ex('for pos, ch := range "ñu" {\n\tfmt.Println(pos, string(ch))\n}', "0 ñ\n2 u",
+      L("u starts at byte 2 because ñ uses bytes 0 and 1", "u empieza en el byte 2 porque ñ usa los bytes 0 y 1", "ñ が 0 と 1 バイト目を使うので u は 2 から")),
+    p(
+      "To work letter by letter (reverse, swap, take the third letter), convert to []rune first. Doing it on []byte splits multi-byte letters into broken halves, which print as garbage.",
+      "Para trabajar letra por letra (invertir, intercambiar, tomar la tercera letra), convierte primero a []rune. Hacerlo con []byte parte las letras de varios bytes en mitades rotas, que se imprimen como basura.",
+      "1文字ずつ処理する（反転、入れかえ、3文字目をとる）なら、先に []rune に変換する。[]byte でやると、複数バイトの文字が半分に割れて、文字化けして表示される。",
+    ),
+    ex('chars := []rune("día")\nfmt.Println(string(chars[1]), len(chars))', "í 3"),
+    p(
+      "Common mistake: using the range index as a letter counter. It counts bytes. If you need 0, 1, 2 for each letter, keep your own counter or range over []rune(s).",
+      "Error común: usar el índice de range como contador de letras. Cuenta bytes. Si necesitas 0, 1, 2 por cada letra, lleva tu propio contador o recorre []rune(s).",
+      "よくあるミス：range の添字を文字の番号として使うこと。それはバイト位置。文字ごとに 0, 1, 2 がほしいなら、自分でカウンターを持つか []rune(s) を range しよう。",
+    ),
+  ),
+  note("immutable-strings", L("Strings can't be edited", "Los strings no se editan", "文字列は書きかえられない"),
+    p(
+      "Strings in Go are immutable: once created, their bytes never change. Assigning to s[i] is a compile error, \"cannot assign to s[i]\". Thanks to that, many parts of a program can safely share the same string, because nobody can modify it.",
+      "Los strings de Go son inmutables: una vez creados, sus bytes nunca cambian. Asignar a s[i] es un error de compilación, \"cannot assign to s[i]\". Gracias a eso, muchas partes de un programa pueden compartir el mismo string sin peligro, porque nadie puede modificarlo.",
+      "Go の文字列は変更不可（イミュータブル）。作ったあとはバイトが変わらない。s[i] への代入はコンパイルエラー「cannot assign to s[i]」。だからプログラムのあちこちで同じ文字列を安全に共有できる。",
+    ),
+    bad('name := "bob"\nname[0] = \'B\'\nfmt.Println(name)',
+      L("Does not compile: strings are read-only", "No compila: los strings son de solo lectura", "コンパイル不可：文字列は読みとり専用")),
+    p(
+      "To change text, make an editable copy: []byte(s) copies the bytes into a new slice that you CAN modify. Change it, then convert it back with string(...). The original string stays exactly as it was.",
+      "Para cambiar texto, haz una copia editable: []byte(s) copia los bytes a un slice nuevo que SÍ puedes modificar. Cámbialo y vuelve a convertirlo con string(...). El string original queda exactamente igual.",
+      "文字を変えたいなら、編集できるコピーを作る。[]byte(s) はバイトを新しいスライスにコピーし、それは変更できる。変えたら string(...) で戻す。元の文字列はそのまま。",
+    ),
+    ex('name := "bob"\nbuf := []byte(name)\nbuf[0] = \'B\'\nfmt.Println(string(buf), name)', "Bob bob",
+      L("The copy changes; the original doesn't", "La copia cambia; el original no", "コピーは変わり、元は変わらない")),
+    p(
+      "You can also build a new string and put it on the same label: name = \"B\" + name[1:]. The label now holds a fresh string; the old one was never edited.",
+      "También puedes construir un string nuevo y ponerlo en la misma etiqueta: name = \"B\" + name[1:]. La etiqueta ahora guarda un string nuevo; el viejo nunca se editó.",
+      "新しい文字列を作って同じラベルに入れる方法もある：name = \"B\" + name[1:]。ラベルには新しい文字列が入り、古い文字列は編集されていない。",
+    ),
+    p(
+      "Common mistake: expecting []byte(s) to be a view of s. It's a copy, so editing the bytes never changes s. Use []rune instead of []byte when the letters you change might take more than 1 byte.",
+      "Error común: esperar que []byte(s) sea una vista de s. Es una copia, así que editar los bytes nunca cambia s. Usa []rune en vez de []byte cuando las letras que cambias puedan ocupar más de 1 byte.",
+      "よくあるミス：[]byte(s) が s をのぞく窓だと思うこと。コピーなので、バイトを変えても s は変わらない。変える文字が1バイトをこえるかもしれないなら []byte ではなく []rune を使おう。",
+    ),
+  ),
+  note("strconv", L("Numbers to text and back", "Números a texto y vuelta", "数値と文字列の変換"),
+    p(
+      "Go never turns a number into text automatically. Joining a string and an int with + is a compile error, \"mismatched types\": the + operator joins two strings or adds two numbers, never one of each.",
+      "Go nunca convierte un número en texto automáticamente. Unir un string y un int con + es un error de compilación, \"mismatched types\": el operador + une dos strings o suma dos números, nunca uno de cada uno.",
+      "Go は数値を勝手に文字列にしない。文字列と int を + でつなぐとコンパイルエラー「mismatched types」。+ は文字列2つをつなぐか数値2つを足すだけで、まぜることはできない。",
+    ),
+    bad('lives := 3\nmsg := "lives: " + lives\nfmt.Println(msg)',
+      L("Does not compile: string + int", "No compila: string + int", "コンパイル不可：string + int")),
+    p(
+      "The strconv package converts between them. strconv.Atoi(s) turns text into an int and returns two values: the number and an error, because the text might not be a number at all. The function going the other way, int to text, returns just the text.",
+      "El paquete strconv convierte entre ellos. strconv.Atoi(s) convierte texto en int y devuelve dos valores: el número y un error, porque el texto podría no ser un número. La función que va al revés, de int a texto, devuelve solo el texto.",
+      "strconv パッケージで変換する。strconv.Atoi(s) は文字列を int にして、数値と error の2つを返す（数字じゃない文字かもしれないから）。逆向き（int → 文字列）の関数は文字列だけを返す。",
+    ),
+    ex('n, err := strconv.Atoi("250")\nfmt.Println(n+1, err)\nfmt.Println(fmt.Sprint(7) + "7")', "251 <nil>\n77",
+      L("Atoi gives a number and an error; Sprint also makes text", "Atoi da número y error; Sprint también hace texto", "Atoi は数値と error、Sprint でも文字列が作れる")),
+    p(
+      "The strings package has helpers for text: strings.Repeat(s, n) repeats s n times, strings.Contains(s, part) reports whether part appears anywhere inside s, and strings.ToUpper, strings.Fields and many more do what their names say.",
+      "El paquete strings tiene ayudas para texto: strings.Repeat(s, n) repite s n veces, strings.Contains(s, part) dice si part aparece en algún lugar de s, y strings.ToUpper, strings.Fields y muchas más hacen lo que dice su nombre.",
+      "strings パッケージには文字列の便利な関数がある。strings.Repeat(s, n) は s を n 回くり返し、strings.Contains(s, part) は part が s のどこかにあるかを返す。strings.ToUpper や strings.Fields なども名前のとおりに動く。",
+    ),
+    ex('fmt.Println(strings.ToUpper("go"), strings.Repeat("-", 4), strings.Contains("forest", "rest"))', "GO ---- true"),
+    p(
+      "Common mistake: using string(n) to get digits. string(n) treats the number as a character code (string(rune(65)) is \"A\"), not as digits. Use the strconv functions, or fmt.Sprint, to turn a number into its digits.",
+      "Error común: usar string(n) para obtener dígitos. string(n) trata el número como código de carácter (string(rune(65)) es \"A\"), no como dígitos. Usa las funciones de strconv, o fmt.Sprint, para convertir un número en sus dígitos.",
+      "よくあるミス：数字の文字列がほしくて string(n) を使うこと。string(n) は数値を文字コードとしてあつかう（string(rune(65)) は \"A\"）。数字にするなら strconv の関数か fmt.Sprint を使おう。",
+    ),
+  ),
+];
+
+const deferNotes: NoteDef[] = [
+  note("defer-order", L("defer: later, in reverse", "defer: después, al revés", "defer：あとで、逆順に"),
+    p(
+      "defer schedules a function call to run when the surrounding function finishes, however it finishes. The defer line runs, the call is saved, and the function keeps going. It's made for cleanup: closing a file, unlocking, printing \"done\".",
+      "defer programa una llamada para que corra cuando termine la función que la contiene, termine como termine. La línea del defer corre, la llamada se guarda y la función sigue. Está hecho para limpiar: cerrar un archivo, desbloquear, imprimir \"listo\".",
+      "defer は、囲んでいる関数が終わるときに動く呼び出しを予約する（どんな終わり方でも）。defer の行で呼び出しが保存され、関数はそのまま進む。ファイルを閉じる、ロックを外すなどの後片づけ用。",
+    ),
+    ex('defer fmt.Println("lights off")\nfmt.Println("reading")\nfmt.Println("writing")', "reading\nwriting\nlights off",
+      L("The deferred call runs when main ends", "La llamada diferida corre al terminar main", "defer の呼び出しは main の終わりに動く")),
+    p(
+      "Several defers stack up like plates: the last one deferred runs first (LIFO: last in, first out). So defers made inside a loop run in the reverse order of the laps.",
+      "Varios defer se apilan como platos: el último diferido corre primero (LIFO: último en entrar, primero en salir). Así, los defer hechos dentro de un bucle corren en el orden inverso de las vueltas.",
+      "defer はお皿のように積み重なる。最後に defer したものが最初に動く（LIFO：後入れ先出し）。だからループの中の defer は、周の逆順に動く。",
+    ),
+    ex('defer fmt.Println("one")\ndefer fmt.Println("two")\ndefer fmt.Println("three")', "three\ntwo\none"),
+    p(
+      "Why reverse? Cleanup usually undoes setup, and you undo things in the opposite order: if you open A and then B, you close B first, then A.",
+      "¿Por qué al revés? La limpieza suele deshacer la preparación, y las cosas se deshacen en orden opuesto: si abres A y luego B, cierras B primero y luego A.",
+      "なぜ逆順？後片づけは準備を元にもどす作業で、もどすときは逆の順番になる。A を開けて B を開けたら、先に B を閉じてから A を閉じる。",
+    ),
+    p(
+      "Common mistake: thinking defer runs at the end of a loop lap or a block. It always waits for the end of the whole FUNCTION, which in short snippets is main.",
+      "Error común: creer que defer corre al final de una vuelta del bucle o de un bloque. Siempre espera al final de la FUNCIÓN completa, que en los fragmentos cortos es main.",
+      "よくあるミス：defer がループの1周やブロックの終わりで動くと思うこと。いつも「関数」全体の終わりまで待つ。短いコード例ではそれが main。",
+    ),
+  ),
+  note("defer-args", L("defer photographs its arguments", "defer fotografía los argumentos", "defer は引数を写真にとる"),
+    p(
+      "When the defer line runs, Go evaluates the arguments of the call right then and saves those values. Only the call itself waits. If a variable changes later, the deferred call still uses the old photo.",
+      "Cuando corre la línea del defer, Go evalúa los argumentos de la llamada en ese momento y guarda esos valores. Solo la llamada espera. Si una variable cambia después, la llamada diferida usa la foto vieja.",
+      "defer の行が動いた瞬間に、Go は呼び出しの引数を評価してその値を保存する。待つのは呼び出しだけ。あとで変数が変わっても、defer した呼び出しは古い写真を使う。",
+    ),
+    ex('coins := 5\ndefer fmt.Println("saved coins:", coins)\ncoins = 50\nfmt.Println("coins:", coins)', "coins: 50\nsaved coins: 5",
+      L("The argument was read at the defer line", "El argumento se leyó en la línea del defer", "引数は defer の行で読まれた")),
+    p(
+      "Any function call inside the arguments also runs immediately. In defer fmt.Println(load()), load() runs at the defer line; only Println waits for the end.",
+      "Cualquier llamada dentro de los argumentos también corre de inmediato. En defer fmt.Println(load()), load() corre en la línea del defer; solo Println espera al final.",
+      "引数の中の関数呼び出しもすぐに動く。defer fmt.Println(load()) なら load() は defer の行で動き、最後まで待つのは Println だけ。",
+    ),
+    ex('func load() string {\n\tfmt.Println("loading")\n\treturn "map"\n}\n\nfunc main() {\n\tdefer fmt.Println("using", load())\n\tfmt.Println("main body")\n}', "loading\nmain body\nusing map"),
+    p(
+      "A deferred closure, defer func() { ... }(), has no arguments to photograph. Its body runs at the end and reads the variables as they are THEN, so it sees the latest values.",
+      "Una closure diferida, defer func() { ... }(), no tiene argumentos que fotografiar. Su cuerpo corre al final y lee las variables como estén ENTONCES, así que ve los valores más recientes.",
+      "defer したクロージャ defer func() { ... }() には写真にとる引数がない。中身は最後に動き、そのときの変数を読むので、最新の値が見える。",
+    ),
+    ex('coins := 5\ndefer func() { fmt.Println("final coins:", coins) }()\ncoins = 50', "final coins: 50",
+      L("The closure reads coins at the very end", "La closure lee coins al final de todo", "クロージャは最後に coins を読む")),
+    p(
+      "Rule to remember: arguments now, call later. Look inside the parentheses of the deferred call: plain values are frozen at the defer line, while anything read inside a func body is read at the end.",
+      "Regla para recordar: argumentos ahora, llamada después. Mira dentro de los paréntesis de la llamada diferida: los valores quedan congelados en la línea del defer, y lo que se lee dentro del cuerpo de una func se lee al final.",
+      "覚え方：引数は今、呼び出しはあと。defer した呼び出しのかっこの中を見よう。そこにある値は defer の行で固定され、func の中身で読むものは最後に読まれる。",
+    ),
+  ),
+  note("panic", L("panic: stopping the program", "panic: detener el programa", "panic：プログラムを止める"),
+    p(
+      "A panic stops the normal flow of the program. It happens when you call panic(\"message\") or when Go detects an impossible operation while running: an index outside a slice, an integer division by zero, a write to a nil map. The program prints panic: and the reason, and exits.",
+      "Un panic detiene el flujo normal del programa. Ocurre cuando llamas a panic(\"mensaje\") o cuando Go detecta una operación imposible al ejecutar: un índice fuera de un slice, una división entera por cero, escribir en un map nil. El programa imprime panic: y el motivo, y termina.",
+      "panic はプログラムのふつうの流れを止める。panic(\"メッセージ\") を呼んだときや、実行中に不可能な操作（スライスの範囲外、整数のゼロ除算、nil マップへの書きこみ）を Go が見つけたときに起きる。panic: と理由を表示して終了する。",
+    ),
+    p(
+      "While panicking, Go unwinds the stack: it leaves each function and runs that function's deferred calls on the way out. So cleanup code still runs, and then the program crashes with the panic message.",
+      "Durante un panic, Go deshace la pila: sale de cada función y ejecuta sus llamadas diferidas al salir. Así el código de limpieza igual corre, y luego el programa cae con el mensaje del panic.",
+      "panic 中、Go はスタックを巻きもどす。関数を1つずつぬけながら、その関数の defer を帰り道で実行する。だから後片づけは動き、そのあとで panic のメッセージとともに落ちる。",
+    ),
+    crash('defer fmt.Println("saving game")\nfmt.Println("playing")\npanic("dragon")', "panic: dragon",
+      L("Prints playing, then saving game, then panic: dragon", "Imprime playing, luego saving game y luego panic: dragon", "playing、saving game、そして panic: dragon")),
+    p(
+      "Some mistakes are caught by the compiler, others only while running. An array's length is part of its type, so a constant index outside it is a compile error. A slice's length is only known at runtime, so a bad index panics: \"index out of range\".",
+      "Algunos errores los atrapa el compilador y otros solo aparecen al ejecutar. El largo de un array es parte de su tipo, así que un índice constante fuera de él es error de compilación. El largo de un slice solo se conoce al ejecutar, así que un índice malo hace panic: \"index out of range\".",
+      "コンパイラが見つけるミスと、実行中にしかわからないミスがある。配列の長さは型の一部なので、範囲外の定数添字はコンパイルエラー。スライスの長さは実行時にしかわからないので、不正な添字は panic「index out of range」。",
+    ),
+    crash("nums := []int{4, 5}\nidx := 2\nfmt.Println(nums[idx])", "index out of range [2] with length 2",
+      L("A slice: the bad index is found while running", "Un slice: el índice malo aparece al ejecutar", "スライス：不正な添字は実行中に見つかる")),
+    bad("grid := [2]int{4, 5}\nfmt.Println(grid[2])",
+      L("An array: the compiler already knows the size", "Un array: el compilador ya conoce el tamaño", "配列：コンパイラはサイズを知っている")),
+    p(
+      "Integer division by zero panics too (\"integer divide by zero\"), while a constant like 1 / 0 is rejected by the compiler. Floats are different: dividing a float variable by zero gives +Inf instead of panicking. Common mistake: thinking a panic skips deferred calls; they always run.",
+      "Dividir enteros por cero también hace panic (\"integer divide by zero\"), mientras que una constante como 1 / 0 la rechaza el compilador. Los float son distintos: dividir una variable float por cero da +Inf en vez de panic. Error común: creer que un panic salta los defer; siempre corren.",
+      "整数のゼロ除算も panic（「integer divide by zero」）。定数の 1 / 0 ならコンパイラがはじく。小数はちがい、float の変数を 0 で割ると panic せず +Inf になる。よくあるミス：panic で defer が飛ばされると思うこと。必ず動く。",
+    ),
+  ),
+  note("recover", L("recover: catching a panic", "recover: atrapar un panic", "recover：panic をつかまえる"),
+    p(
+      "recover() stops a panic and returns the value that was passed to panic. It only works when called directly inside a deferred function while a panic is happening. Called anywhere else, or when nothing is panicking, it does nothing and returns nil.",
+      "recover() detiene un panic y devuelve el valor que se pasó a panic. Solo funciona cuando se llama directamente dentro de una función diferida mientras ocurre un panic. Llamado en otro lugar, o cuando nada está en panic, no hace nada y devuelve nil.",
+      "recover() は panic を止めて、panic にわたされた値を返す。働くのは、panic の最中に defer した関数の中で直接呼んだときだけ。ほかの場所や、panic が起きていないときは何もせず nil を返す。",
+    ),
+    ex('func guard() {\n\tdefer func() { fmt.Println("caught:", recover()) }()\n\tpanic("lava")\n}\n\nfunc main() {\n\tguard()\n\tfmt.Println("still running")\n}', "caught: lava\nstill running",
+      L("guard ends normally and main keeps going", "guard termina normal y main sigue", "guard はふつうに終わり、main は続く")),
+    p(
+      "After recover, the function that deferred it ends normally, and its caller continues as if nothing happened. The usual pattern is defer func() { if r := recover(); r != nil { ... } }() at the top of the function you want to protect.",
+      "Después de recover, la función que lo difirió termina normalmente y quien la llamó continúa como si nada. El patrón habitual es defer func() { if r := recover(); r != nil { ... } }() al inicio de la función que quieres proteger.",
+      "recover のあと、それを defer した関数はふつうに終わり、呼んだ側は何事もなかったように続く。守りたい関数の先頭に defer func() { if r := recover(); r != nil { ... } }() と書くのが定番。",
+    ),
+    p(
+      "Deferred functions can change named results. return 5 first stores 5 in the named result; then the deferred functions run and may change it before the caller receives it. That's how a recovered function can still return a message or ok = false.",
+      "Las funciones diferidas pueden cambiar los resultados con nombre. return 5 primero guarda 5 en el resultado con nombre; luego corren las funciones diferidas y pueden cambiarlo antes de que lo reciba quien llamó. Así una función recuperada puede devolver un mensaje u ok = false.",
+      "defer した関数は名前つき戻り値を変えられる。return 5 はまず名前つき戻り値に 5 を入れ、そのあと defer が動いて、呼んだ側が受けとる前に値を変えられる。だから recover した関数でもメッセージや ok = false を返せる。",
+    ),
+    ex("func score() (pts int) {\n\tdefer func() { pts += 100 }()\n\treturn 5\n}\n\nfunc main() {\n\tfmt.Println(score())\n}", "105",
+      L("return sets pts, then the deferred func changes it", "return fija pts y luego la func diferida lo cambia", "return が pts を決め、defer がそれを変える")),
+    p(
+      "Common mistakes: calling recover() in normal code (it returns nil and catches nothing), or protecting a function from the outside. Also, recover is for unexpected failures; for expected problems, like bad input, Go code returns an error value instead.",
+      "Errores comunes: llamar a recover() en código normal (devuelve nil y no atrapa nada) o intentar proteger una función desde afuera. Además, recover es para fallos inesperados; para problemas esperados, como una entrada mala, el código Go devuelve un valor error.",
+      "よくあるミス：ふつうのコードで recover() を呼ぶ（nil が返り何もつかまえない）、関数の外から守ろうとする。また recover は予想外の失敗用。入力ミスのような予想できる問題には、Go では error 値を返す。",
+    ),
+  ),
+];
+
+const villageBossNotes: NoteDef[] = [
+  note("recap-defer", L("Recap: defer and recover", "Repaso: defer y recover", "復習：defer と recover"),
+    p(
+      "Deferred calls run when the function ends, last in, first out. Their arguments are evaluated at the defer line, including calls inside them, while a deferred closure reads its variables at the very end.",
+      "Las llamadas diferidas corren cuando termina la función, de la última a la primera. Sus argumentos se evalúan en la línea del defer, incluidas las llamadas dentro de ellos, mientras que una closure diferida lee sus variables al final de todo.",
+      "defer した呼び出しは関数の終わりに、後から先の順で動く。引数（その中の関数呼び出しも）は defer の行で評価され、defer したクロージャは最後に変数を読む。",
+    ),
+    p(
+      "Since Go 1.22 each lap of a for loop has its own copy of the loop variable, so a closure deferred in a loop remembers that lap's value.",
+      "Desde Go 1.22 cada vuelta de un for tiene su propia copia de la variable del bucle, así que una closure diferida en un bucle recuerda el valor de esa vuelta.",
+      "Go 1.22 からは、for の周ごとにループ変数が別になる。だからループで defer したクロージャは、その周の値を覚えている。",
+    ),
+    ex('for n := 1; n <= 3; n++ {\n\tdefer func() { fmt.Print(n*10, " ") }()\n}', "30 20 10",
+      L("Each closure has its lap's n; they run in reverse", "Cada closure tiene el n de su vuelta; corren al revés", "各クロージャは自分の周の n。逆順に動く")),
+    p(
+      "recover() stops a panic only when called inside a deferred function; it returns the value given to panic, or nil when nothing is panicking.",
+      "recover() detiene un panic solo si se llama dentro de una función diferida; devuelve el valor dado a panic, o nil cuando nada está en panic.",
+      "recover() が panic を止めるのは defer した関数の中で呼んだときだけ。panic にわたされた値を返し、panic がなければ nil。",
+    ),
+  ),
+  note("recap-variables", L("Recap: variables and scope", "Repaso: variables y alcance", "復習：変数とスコープ"),
+    p(
+      "Every variable starts at its zero value: 0, \"\", false, or nil for pointers. Its type is fixed forever, so a label created as an int can never hold a string. And every declared variable must be used, or the program does not compile.",
+      "Toda variable empieza en su valor cero: 0, \"\", false o nil para punteros. Su tipo queda fijo para siempre, así que una etiqueta creada como int nunca puede guardar un string. Y toda variable declarada debe usarse, o el programa no compila.",
+      "変数はゼロ値から始まる：0、\"\"、false、ポインタなら nil。型はずっと変わらないので、int で作ったラベルに文字列は入らない。宣言した変数は必ず使わないとコンパイルできない。",
+    ),
+    bad('speed := 2.5\nspeed = "fast"\nfmt.Println(speed)',
+      L("Does not compile: speed is a float64 forever", "No compila: speed es float64 para siempre", "コンパイル不可：speed はずっと float64")),
+    p(
+      "A variable lives inside the braces where it was created. One declared in an if header, if v := ...; cond, exists only inside that if and its else.",
+      "Una variable vive dentro de las llaves donde se creó. Una declarada en la cabecera de un if, if v := ...; cond, existe solo dentro de ese if y su else.",
+      "変数は作られた波かっこの中で生きる。if の頭 if v := ...; 条件 で宣言した変数は、その if と else の中だけにいる。",
+    ),
+    ex('if hp := 3; hp > 0 {\n\tfmt.Println("alive", hp)\n} else {\n\tfmt.Println("down", hp)\n}', "alive 3",
+      L("hp works in both branches, and nowhere after", "hp sirve en ambas ramas y en ningún lugar después", "hp は両方の分岐で使えて、そのあとは使えない")),
+  ),
+  note("recap-functions", L("Recap: results and integer math", "Repaso: resultados y enteros", "復習：戻り値と整数計算"),
+    p(
+      "Named results start at zero, and a bare return sends their current values, in order. Integer arithmetic stays integer: each / drops the decimals of its own step, so the order of * and / matters.",
+      "Los resultados con nombre empiezan en cero, y un return solo envía sus valores actuales, en orden. La aritmética entera sigue siendo entera: cada / descarta los decimales de su propio paso, así que el orden de * y / importa.",
+      "名前つき戻り値はゼロから始まり、return だけでその時点の値を順に返す。整数計算は整数のまま：/ のたびに小数が捨てられるので、* と / の順番が大事。",
+    ),
+    ex("func halves(n int) (a, b int) {\n\ta = n / 2\n\tb = n - a\n\treturn\n}\n\nfunc main() {\n\tfmt.Println(halves(9))\n}", "4 5"),
+    p(
+      "When a function returns two values and you need only one, the blank identifier _ takes the other and throws it away. A real name there would be an unused variable, and nil can't be assigned to.",
+      "Cuando una función devuelve dos valores y solo necesitas uno, el identificador vacío _ recibe el otro y lo tira. Un nombre real ahí sería una variable sin usar, y a nil no se le puede asignar.",
+      "関数が2つ返して1つだけほしいとき、ブランク識別子 _ がもう片方を受けとって捨てる。ふつうの名前だと未使用変数になり、nil には代入できない。",
+    ),
+  ),
+  note("recap-strings", L("Recap: bytes and runes", "Repaso: bytes y runas", "復習：バイトとルーン"),
+    p(
+      "A string is UTF-8 bytes. len counts bytes, and letters like é or ü take 2 of them. []rune(s) splits the text into characters, so its length is the letter count.",
+      "Un string son bytes UTF-8. len cuenta bytes, y letras como é o ü ocupan 2. []rune(s) separa el texto en caracteres, así que su largo es la cantidad de letras.",
+      "文字列は UTF-8 のバイト列。len はバイトを数え、é や ü は2バイト。[]rune(s) は文字ごとに分けるので、その長さが文字数になる。",
+    ),
+    ex('city := "Zürich"\nfmt.Println(len(city), len([]rune(city)))', "7 6",
+      L("ü takes 2 bytes: 7 bytes, 6 letters", "ü ocupa 2 bytes: 7 bytes, 6 letras", "ü は2バイト：7バイトで6文字")),
+  ),
+];
+
 // ─── 1.1 Labels and zero values ────────────────────────────────────────────
 const labels: LessonDef = {
   slug: "labels-and-zero-values",
@@ -21,6 +561,7 @@ const labels: LessonDef = {
   xp: 60,
   enemy: "go/nil-blob",
   enemyName: L("ZERO BLOB", "BLOB CERO", "ゼロブロブ"),
+  notes: labelsNotes,
   beats: [
     say(L(
       "Welcome to Gopher Village! A variable is a label with a TYPE. var n int makes one, and it already holds a value.",
@@ -60,6 +601,8 @@ const labels: LessonDef = {
       output: "0 true false",
       check: { compiles: true, stdout: "0 true false" },
       explain: L("Each var starts at its zero value: 0, the empty string and false.", "Cada var empieza en su valor cero: 0, el string vacío y false.", "var はゼロ値で始まる：0、空文字列、false。"),
+      hint: L("No value is written after var. What does each type start with in Go: numbers, text, true/false?", "No se escribe ningún valor tras var. ¿Con qué empieza cada tipo en Go: números, texto, verdadero/falso?", "var のあとに値がない。Go では数値・文字列・bool はそれぞれ何から始まる？"),
+      note: "zero-values",
       setup: [{ t: "tag", actor: "hero", text: "n", value: "0" }],
       win: [{ t: "print", text: "0 true false" }],
     },
@@ -72,6 +615,8 @@ const labels: LessonDef = {
       output: "7",
       check: { compiles: true, stdout: "7" },
       explain: L("x := 5 creates x; x = x + 2 changes it to 7.", "x := 5 crea x; x = x + 2 lo cambia a 7.", "x := 5 で作って、x = x + 2 で 7 になる。"),
+      hint: L("Follow x line by line: := creates it, = replaces its value. Is + doing math or joining text here?", "Sigue a x línea por línea: := la crea, = reemplaza su valor. ¿Aquí + hace cuentas o une texto?", "x を1行ずつ追おう。:= で作り、= で値を置きかえる。ここの + は計算？文字の連結？"),
+      note: "short-decl",
       setup: [{ t: "tag", actor: "hero", text: "x", value: "5" }],
       win: [{ t: "value", actor: "hero", text: "7" }, { t: "print", text: "7" }],
     },
@@ -88,6 +633,8 @@ const labels: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("\"no new variables on left side of :=\". The second line should be x = 2.", "\"no new variables on left side of :=\". La segunda línea debería ser x = 2.", "「no new variables on left side of :=」。2行目は x = 2 にしよう。"),
+      hint: L("Count the new names on the left of the second :=. What does := require there?", "Cuenta los nombres nuevos a la izquierda del segundo :=. ¿Qué exige := ahí?", "2つ目の := の左に新しい名前はいくつ？:= にはそこに何が必要？"),
+      note: "short-decl",
       win: [{ t: "shake" }],
     },
     {
@@ -99,6 +646,8 @@ const labels: LessonDef = {
       output: "1 3 4",
       check: { compiles: true, stdout: "1 3 4" },
       explain: L("c is new, so := is allowed. b is simply reassigned to 3.", "c es nueva, así que := está permitido. b solo se reasigna a 3.", "c が新しいから := が使える。b は 3 に代入されるだけ。"),
+      hint: L("On the second line, is at least one name new? If so, what happens to the name that already existed?", "En la segunda línea, ¿hay al menos un nombre nuevo? Si es así, ¿qué le pasa al nombre que ya existía?", "2行目に新しい名前は1つでもある？あるなら、もとからある名前はどうなる？"),
+      note: "short-decl",
     },
     say(L(
       "Go keeps tunnels clean: an unused variable or import is a compile ERROR, not a warning.",
@@ -113,6 +662,8 @@ const labels: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("\"declared and not used: y\". Use y or delete it.", "\"declared and not used: y\". Usa y o bórrala.", "「declared and not used: y」。y を使うか消そう。"),
+      hint: L("Check every variable: is each one read somewhere after it's created? Go is strict about that.", "Revisa cada variable: ¿se lee en algún lugar después de crearse? Go es estricto con eso.", "変数を1つずつ確認。作ったあとどこかで使われている？Go はそこに厳しい。"),
+      note: "short-decl",
       setup: [{ t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: "y", value: "2" }],
       win: [{ t: "say", actor: "hero", text: L("Unused! Out!", "¡Sin usar! ¡Fuera!", "未使用！退場！") }, { t: "exit", actor: "ally" }],
     },
@@ -129,6 +680,8 @@ const labels: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("\"mismatched types int and float64\". Go never converts for you.", "\"mismatched types int and float64\". Go nunca convierte por ti.", "「mismatched types int and float64」。Go は勝手に変換しないよ。"),
+      hint: L("Look at the two types being added. Does Go ever convert between them for you?", "Mira los dos tipos que se suman. ¿Go convierte alguna vez entre ellos por ti?", "足している2つの型を見よう。Go は型を勝手に変換してくれる？"),
+      note: "numbers-types",
     },
     {
       kind: "pick",
@@ -138,6 +691,8 @@ const labels: LessonDef = {
       answer: 0,
       check: { compiles: true, stdout: "4.5", wrongFail: true },
       explain: L("float64(a) turns 3 into 3.0, so both sides are float64.", "float64(a) convierte 3 en 3.0, así ambos lados son float64.", "float64(a) で 3 が 3.0 になり、両方 float64 になる。"),
+      hint: L("Both sides of + must have the same type. Which type can hold the .5 of the result?", "Ambos lados de + deben tener el mismo tipo. ¿Qué tipo puede guardar el .5 del resultado?", "+ の両側は同じ型でないとダメ。答えの .5 を持てる型はどれ？"),
+      note: "numbers-types",
       win: [{ t: "print", text: "4.5" }],
     },
     {
@@ -149,6 +704,8 @@ const labels: LessonDef = {
       output: "3 3.5 1",
       check: { compiles: true, stdout: "3 3.5 1" },
       explain: L("int / int drops the decimals: 3. With 7.0 it's float math: 3.5. % is the remainder.", "int / int descarta decimales: 3. Con 7.0 es cálculo float: 3.5. % es el resto.", "int / int は小数を切り捨てて 3。7.0 なら小数計算で 3.5。% は余り。"),
+      hint: L("Check each division's types: two ints, or a number with a decimal point? And % gives what's left over.", "Revisa los tipos de cada división: ¿dos int o un número con punto decimal? Y % da lo que sobra.", "割り算ごとに型を見よう。int 同士？小数点つきの数がある？% は余りだよ。"),
+      note: "numbers-types",
     },
     {
       kind: "predict",
@@ -159,6 +716,8 @@ const labels: LessonDef = {
       output: "2 1",
       check: { compiles: true, stdout: "2 1" },
       explain: L("The right side is read first, then assigned: a swap in one line.", "Primero se lee el lado derecho y luego se asigna: un intercambio en una línea.", "右側を先に読んでから代入する。1行で入れかえ！"),
+      hint: L("Go reads the whole right side before storing anything. What values are on the right at that moment?", "Go lee todo el lado derecho antes de guardar nada. ¿Qué valores hay a la derecha en ese momento?", "Go は右側を全部読んでから代入する。その時点で右側の値は何？"),
+      note: "short-decl",
       setup: [{ t: "tag", actor: "hero", text: "a", value: "1" }, { t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: "b", value: "2" }],
       win: [{ t: "value", actor: "hero", text: "2" }, { t: "value", actor: "ally", text: "1" }],
     },
@@ -171,6 +730,8 @@ const labels: LessonDef = {
       output: "int float64 string",
       check: { compiles: true, stdout: "int float64 string" },
       explain: L("%T prints the type. Whole numbers default to int, decimals to float64.", "%T imprime el tipo. Los enteros son int por defecto, los decimales float64.", "%T は型を表示。整数は int、小数は float64 になる。"),
+      hint: L("%T prints a type name. Which type does Go give a whole number by default? And one with a decimal point?", "%T imprime el nombre de un tipo. ¿Qué tipo da Go por defecto a un entero? ¿Y a uno con punto decimal?", "%T は型名を表示。整数の既定の型は？小数点つきの数は？"),
+      note: "numbers-types",
     },
     say(L(
       "const values never change. Inside const ( ), iota counts 0, 1, 2... handy for named options.",
@@ -186,6 +747,8 @@ const labels: LessonDef = {
       output: "0 1 2",
       check: { compiles: true, stdout: "0 1 2" },
       explain: L("iota starts at 0 and grows by one on each line of the const block.", "iota empieza en 0 y sube uno en cada línea del bloque const.", "iota は 0 から始まり、const ブロックの行ごとに1増える。"),
+      hint: L("iota is a counter inside a const block. What number does it start at, and how much does it grow per line?", "iota es un contador dentro de un bloque const. ¿En qué número empieza y cuánto sube por línea?", "iota は const ブロックの中のカウンター。何から始まり、1行ごとにいくつ増える？"),
+      note: "const-iota",
     },
     {
       kind: "type",
@@ -194,6 +757,8 @@ const labels: LessonDef = {
       answer: "nil",
       check: { compiles: true, stdout: "true" },
       explain: L("A pointer that points nowhere yet is nil.", "Un puntero que aún no apunta a nada es nil.", "まだどこも指していないポインタは nil。"),
+      hint: L("A pointer that points nowhere has a special zero value: Go's word for \"nothing here\".", "Un puntero que no apunta a nada tiene un valor cero especial: la palabra de Go para \"aquí no hay nada\".", "どこも指していないポインタには特別なゼロ値がある。Go で「何もない」を表す言葉。"),
+      note: "zero-values",
       win: [{ t: "print", text: "true" }],
     },
     {
@@ -204,6 +769,8 @@ const labels: LessonDef = {
       expect: "level: 2",
       fallback: [String.raw`\blevel\s*=\s*level\s*\+\s*1`, String.raw`\blevel\s*\+=\s*1`, String.raw`\blevel\+\+`],
       explain: L("level already exists, so change it with = instead of :=.", "level ya existe, así que cámbialo con = en vez de :=.", "level はもうあるから、:= ではなく = で変えよう。"),
+      hint: L("level is created on the first line of main. Which operator changes an existing variable instead of declaring one?", "level se crea en la primera línea de main. ¿Qué operador cambia una variable existente en vez de declarar otra?", "level は main の1行目で作られている。新しく宣言せずに値を変える演算子は？"),
+      note: "short-decl",
     },
   ],
 };
@@ -217,6 +784,7 @@ const functions: LessonDef = {
   xp: 65,
   enemy: "slime",
   enemyName: L("LOOP SLIME", "SLIME BUCLE", "ループスライム"),
+  notes: functionsNotes,
   beats: [
     say(L(
       "A function is an ally you send on a job. Go functions can hand back TWO values at once!",
@@ -250,6 +818,8 @@ const functions: LessonDef = {
       output: "3 2",
       check: { compiles: true, stdout: "3 2" },
       explain: L("17 / 5 is 3 (whole numbers) and 17 % 5 is the remainder 2.", "17 / 5 es 3 (enteros) y 17 % 5 es el resto 2.", "17 / 5 は整数で 3、17 % 5 は余りの 2。"),
+      hint: L("Both numbers are ints, so / drops decimals and % is the remainder. Values come back in the order of return.", "Ambos son int, así que / descarta decimales y % es el resto. Los valores vuelven en el orden del return.", "どちらも int なので / は小数を捨て、% は余り。値は return の順に返る。"),
+      note: "multi-return",
       win: [{ t: "print", text: "3 2" }],
     },
     say(L(
@@ -265,6 +835,8 @@ const functions: LessonDef = {
       answer: 0,
       check: { compiles: true, stdout: "2", wrongFail: true },
       explain: L("_ throws the quotient away. nil can't be assigned, and void would be an unused variable.", "_ descarta el cociente. A nil no se le asigna, y void sería una variable sin usar.", "_ が商を捨てる。nil には代入できないし、void は未使用変数になる。"),
+      hint: L("You need a name that accepts a value and discards it, without counting as an unused variable.", "Necesitas un nombre que acepte un valor y lo descarte, sin contar como variable sin usar.", "値を受けとって捨てる名前が必要。未使用変数にならないものは？"),
+      note: "multi-return",
       win: [{ t: "drop" }, { t: "print", text: "2" }],
     },
     {
@@ -276,6 +848,8 @@ const functions: LessonDef = {
       output: "5",
       check: { compiles: true, stdout: "5" },
       explain: L("(x int) is a NAMED result. A bare return hands back x as it is: 5.", "(x int) es un resultado CON NOMBRE. Un return solo devuelve x tal cual: 5.", "(x int) は名前つき戻り値。何も書かない return は今の x を返す：5。"),
+      hint: L("x is a named result. What does a return with nothing after it hand back?", "x es un resultado con nombre. ¿Qué devuelve un return sin nada después?", "x は名前つき戻り値。何も書かない return は何を返す？"),
+      note: "multi-return",
     },
     say(L(
       "Go has ONE loop word: for. Three parts, just a condition (a 'while'), or range to count.",
@@ -291,6 +865,8 @@ const functions: LessonDef = {
       output: "10",
       check: { compiles: true, stdout: "10" },
       explain: L("1 + 2 + 3 + 4 = 10. The loop stops when i becomes 5.", "1 + 2 + 3 + 4 = 10. El bucle para cuando i llega a 5.", "1 + 2 + 3 + 4 = 10。i が 5 になると止まる。"),
+      hint: L("Write down i on each lap: where does it start, and what's the last value where i <= 4 is still true?", "Anota i en cada vuelta: ¿dónde empieza y cuál es el último valor en que i <= 4 sigue siendo true?", "各周の i を書き出そう。どこから始まり、i <= 4 が true の最後の値は？"),
+      note: "for-loops",
       setup: [{ t: "tag", actor: "hero", text: "sum", value: "0" }],
       win: [{ t: "value", actor: "hero", text: "10" }, { t: "print", text: "10" }],
     },
@@ -303,6 +879,8 @@ const functions: LessonDef = {
       output: "243",
       check: { compiles: true, stdout: "243" },
       explain: L("1, 3, 9, 27, 81, 243. At 243 the condition n < 100 is false.", "1, 3, 9, 27, 81, 243. En 243 la condición n < 100 es falsa.", "1, 3, 9, 27, 81, 243。243 で n < 100 が false になる。"),
+      hint: L("List n after each lap. The check happens before each lap: which first value makes n < 100 false?", "Anota n después de cada vuelta. La condición se revisa antes de cada vuelta: ¿qué valor la hace falsa primero?", "毎周の n を並べよう。条件は毎周の前に調べる。n < 100 が最初に false になる値は？"),
+      note: "for-loops",
     },
     {
       kind: "predict",
@@ -313,6 +891,8 @@ const functions: LessonDef = {
       output: "0 1 2",
       check: { compiles: true, stdout: "0 1 2" },
       explain: L("range 3 counts 0, 1, 2: three laps, starting at zero.", "range 3 cuenta 0, 1, 2: tres vueltas, empezando en cero.", "range 3 は 0, 1, 2 と数える。0 から3周。"),
+      hint: L("range n gives n laps. What number does the counter start at?", "range n da n vueltas. ¿En qué número empieza el contador?", "range n は n 周。カウンターは何から始まる？"),
+      note: "for-loops",
     },
     say(L(
       "switch runs ONE matching case and stops. No break needed; to fall into the next case, write fallthrough.",
@@ -328,6 +908,8 @@ const functions: LessonDef = {
       output: "two",
       check: { compiles: true, stdout: "two" },
       explain: L("Only the matching case runs. Go never falls through by itself.", "Solo corre el caso que coincide. Go nunca cae al siguiente solo.", "合う case だけが動く。Go は勝手に次へ進まない。"),
+      hint: L("Which case matches x? After it runs, does Go continue into the next case on its own?", "¿Qué caso coincide con x? Después de ejecutarlo, ¿Go sigue solo al siguiente caso?", "x に合う case はどれ？実行後、Go は自分で次の case に進む？"),
+      note: "switch",
     },
     {
       kind: "predict",
@@ -338,6 +920,8 @@ const functions: LessonDef = {
       output: "a\nb",
       check: { compiles: true, stdout: "a\nb" },
       explain: L("fallthrough jumps into the next case only (b). Then the switch ends.", "fallthrough salta solo al siguiente caso (b). Luego el switch termina.", "fallthrough は次の case（b）にだけ進む。そこで switch は終わり。"),
+      hint: L("fallthrough continues into the next case. How many extra cases does one fallthrough run?", "fallthrough sigue al siguiente caso. ¿Cuántos casos extra ejecuta un solo fallthrough?", "fallthrough は次の case に進む。1つの fallthrough で余分に動く case はいくつ？"),
+      note: "switch",
     },
     say(L(
       "A variable born in an if or for lives only inside its braces. Outside, it doesn't exist.",
@@ -352,6 +936,8 @@ const functions: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("\"undefined: v\". v lives only inside the if.", "\"undefined: v\". v vive solo dentro del if.", "「undefined: v」。v は if の中だけで生きている。"),
+      hint: L("v is declared in the if's header. Where does a variable declared there stop existing?", "v se declara en la cabecera del if. ¿Dónde deja de existir una variable declarada ahí?", "v は if の頭で宣言されている。そこで作った変数はどこで消える？"),
+      note: "scope",
       win: [{ t: "shake" }],
     },
     {
@@ -363,6 +949,8 @@ const functions: LessonDef = {
       output: "1",
       check: { compiles: true, stdout: "1" },
       explain: L("x := 2 makes a NEW x inside the braces (shadowing). The outer x stays 1.", "x := 2 crea un x NUEVO dentro de las llaves (sombra). El x de afuera sigue en 1.", "x := 2 は波かっこの中に新しい x を作る（シャドーイング）。外の x は 1 のまま。"),
+      hint: L("Inside the braces, := is used with a name that already exists. Is that the same x or a new one?", "Dentro de las llaves se usa := con un nombre que ya existe. ¿Es el mismo x o uno nuevo?", "波かっこの中で、もうある名前に := を使っている。同じ x？新しい x？"),
+      note: "scope",
     },
     say(L(
       "Functions are values too. A function can remember its variables: that's a closure.",
@@ -378,6 +966,8 @@ const functions: LessonDef = {
       output: "3",
       check: { compiles: true, stdout: "3" },
       explain: L("The closure keeps the same c between calls: 1, 2, 3.", "La closure conserva el mismo c entre llamadas: 1, 2, 3.", "クロージャは呼ぶたびに同じ c を使う：1, 2, 3。"),
+      hint: L("Each call of next uses the same c that counter created once. Count the calls.", "Cada llamada a next usa el mismo c que counter creó una sola vez. Cuenta las llamadas.", "next を呼ぶたび、counter が一度だけ作った同じ c を使う。呼んだ回数を数えよう。"),
+      note: "closures",
       setup: [{ t: "enter", actor: "ally" }, { t: "item", kind: "scroll", holder: "ally" }, { t: "tag", actor: "ally", text: "c", value: "0" }],
       win: [{ t: "value", actor: "ally", text: "3" }, { t: "print", text: "3" }],
     },
@@ -388,6 +978,8 @@ const functions: LessonDef = {
       answer: "range",
       check: { compiles: true, stdout: "012" },
       explain: L("for i := range 3 runs with i = 0, 1, 2.", "for i := range 3 corre con i = 0, 1, 2.", "for i := range 3 は i = 0, 1, 2 で回る。"),
+      hint: L("Go's for can count up to a number with one keyword placed before it.", "El for de Go puede contar hasta un número con una palabra clave puesta antes de él.", "Go の for は、数の前にキーワードを1つ置くだけで数えられる。"),
+      note: "for-loops",
       win: [{ t: "print", text: "012" }],
     },
     {
@@ -398,6 +990,8 @@ const functions: LessonDef = {
       expect: "min: 1 max: 9",
       fallback: [String.raw`return\s+lo\s*,\s*hi`],
       explain: L("minMax promises (int, int), so it must return two values: return lo, hi.", "minMax promete (int, int), así que debe devolver dos valores: return lo, hi.", "minMax は (int, int) を返す約束。だから return lo, hi と2つ返そう。"),
+      hint: L("Compare the function's result list with its return line. Do they promise the same number of values?", "Compara la lista de resultados de la función con su línea return. ¿Prometen la misma cantidad de valores?", "関数の戻り値の型と return の行を見比べよう。返す値の数は同じ？"),
+      note: "multi-return",
     },
   ],
 };
@@ -411,6 +1005,7 @@ const runes: LessonDef = {
   xp: 65,
   enemy: "ghost",
   enemyName: L("RUNE GHOST", "FANTASMA RUNA", "ルーンゴースト"),
+  notes: runesNotes,
   beats: [
     say(L(
       "A Go string is a row of BYTES. Plain letters take 1 byte, but é takes 2. And len counts bytes!",
@@ -444,6 +1039,8 @@ const runes: LessonDef = {
       output: "6 5",
       check: { compiles: true, stdout: "6 5" },
       explain: L("é takes 2 bytes in UTF-8: 6 bytes, but only 5 letters (runes).", "é ocupa 2 bytes en UTF-8: 6 bytes, pero solo 5 letras (runas).", "UTF-8 で é は2バイト。6バイトだけど文字（ルーン）は5つ。"),
+      hint: L("One len counts bytes, the other counts characters. Does every letter here take a single byte?", "Un len cuenta bytes y el otro caracteres. ¿Cada letra de aquí ocupa un solo byte?", "片方の len はバイト数、もう片方は文字数。ここの文字はみんな1バイト？"),
+      note: "bytes-len",
     },
     {
       kind: "predict",
@@ -454,6 +1051,8 @@ const runes: LessonDef = {
       output: "103 g",
       check: { compiles: true, stdout: "103 g" },
       explain: L("s[0] is a byte, a number: 103 is 'g'. string(...) turns it back into text.", "s[0] es un byte, un número: 103 es 'g'. string(...) lo vuelve texto.", "s[0] はバイト、つまり数値。103 が 'g'。string(...) で文字に戻る。"),
+      hint: L("Indexing a string gives a byte, and a byte is a number. What does string(...) do to it?", "Indexar un string da un byte, y un byte es un número. ¿Qué le hace string(...)?", "文字列の添字はバイト、つまり数値。string(...) はそれをどうする？"),
+      note: "bytes-len",
     },
     say(L(
       "A letter as a number is a RUNE (an int32). 'A' in single quotes is a rune with value 65.",
@@ -469,6 +1068,8 @@ const runes: LessonDef = {
       output: "65 A",
       check: { compiles: true, stdout: "65 A" },
       explain: L("Println shows a rune as its number. string(r) makes the letter.", "Println muestra la runa como su número. string(r) da la letra.", "Println はルーンを数値で表示。string(r) で文字になる。"),
+      hint: L("A rune is a number with a letter meaning. How does Println show a number? And string(r)?", "Una runa es un número que representa una letra. ¿Cómo muestra Println un número? ¿Y string(r)?", "ルーンは文字を表す数値。Println は数値をどう表示する？string(r) は？"),
+      note: "runes-range",
     },
     {
       kind: "predict",
@@ -479,6 +1080,8 @@ const runes: LessonDef = {
       output: "0:a 1:é 3:!",
       check: { compiles: true, stdout: "0:a 1:é 3:!" },
       explain: L("range walks letter by letter, but i is the BYTE offset. é uses bytes 1 and 2.", "range avanza letra por letra, pero i es la posición en BYTES. é usa los bytes 1 y 2.", "range は1文字ずつ進むけど、i はバイト位置。é は1と2バイト目を使う。"),
+      hint: L("range gives each rune and the byte position where it starts. How many bytes does é take?", "range da cada runa y la posición en bytes donde empieza. ¿Cuántos bytes ocupa é?", "range は各ルーンと、その開始バイト位置をくれる。é は何バイト？"),
+      note: "runes-range",
     },
     say(L(
       "To edit text, copy it into a []byte (or []rune), change the copy, then convert it back.",
@@ -493,6 +1096,8 @@ const runes: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("Strings are immutable: \"cannot assign to s[0]\".", "Los strings son inmutables: \"cannot assign to s[0]\".", "文字列は変更不可：「cannot assign to s[0]」。"),
+      hint: L("Can the bytes of a string be changed after it's created?", "¿Se pueden cambiar los bytes de un string después de crearlo?", "文字列のバイトは作ったあとで変えられる？"),
+      note: "immutable-strings",
     },
     {
       kind: "predict",
@@ -503,6 +1108,8 @@ const runes: LessonDef = {
       output: "Xbc",
       check: { compiles: true, stdout: "Xbc" },
       explain: L("[]byte(\"abc\") is a writable COPY. Changing it is fine.", "[]byte(\"abc\") es una COPIA editable. Cambiarla está bien.", "[]byte(\"abc\") は書きかえできるコピー。変えて OK。"),
+      hint: L("[]byte(...) makes a new slice. Is it read-only like a string, or a copy you can edit?", "[]byte(...) crea un slice nuevo. ¿Es de solo lectura como un string o una copia editable?", "[]byte(...) は新しいスライスを作る。文字列みたいに読みとり専用？編集できるコピー？"),
+      note: "immutable-strings",
       setup: [{ t: "item", kind: "scroll", holder: "hero" }, { t: "enter", actor: "ally" }],
       win: [{ t: "clone", to: "ally" }, { t: "print", text: "Xbc" }],
     },
@@ -519,6 +1126,8 @@ const runes: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("\"mismatched types untyped string and int\". Convert n first.", "\"mismatched types untyped string and int\". Convierte n primero.", "「mismatched types untyped string and int」。先に n を変換しよう。"),
+      hint: L("+ needs both sides to have the same type. What are the two types here?", "+ necesita que ambos lados tengan el mismo tipo. ¿Cuáles son los dos tipos aquí?", "+ は両側が同じ型でないとダメ。ここの2つの型は何？"),
+      note: "strconv",
     },
     {
       kind: "pick",
@@ -528,6 +1137,8 @@ const runes: LessonDef = {
       answer: 0,
       check: { compiles: true, stdout: "42!", wrongFail: true },
       explain: L("Itoa = Integer to ASCII. Atoi goes the other way and also returns an error.", "Itoa = Integer to ASCII. Atoi va al revés y además devuelve un error.", "Itoa は Integer to ASCII。Atoi は逆向きで error も返す。"),
+      hint: L("You need int to text. One option goes the other way (text to int) and also returns an error.", "Necesitas de int a texto. Una opción va al revés (de texto a int) y además devuelve un error.", "必要なのは int → 文字列。逆向き（文字列 → int）で error も返すものがある。"),
+      note: "strconv",
       win: [{ t: "print", text: "42!" }],
     },
     {
@@ -539,6 +1150,8 @@ const runes: LessonDef = {
       output: "ababab true",
       check: { compiles: true, stdout: "ababab true" },
       explain: L("Repeat copies \"ab\" 3 times; \"gopher\" does contain \"ph\".", "Repeat copia \"ab\" 3 veces; \"gopher\" sí contiene \"ph\".", "Repeat は \"ab\" を3回。\"gopher\" には \"ph\" が入っている。"),
+      hint: L("Repeat copies its text n times. Contains asks: does the second text appear inside the first?", "Repeat copia su texto n veces. Contains pregunta: ¿aparece el segundo texto dentro del primero?", "Repeat は文字を n 回くり返す。Contains は2つ目が1つ目の中にあるかを聞く。"),
+      note: "strconv",
     },
     {
       kind: "type",
@@ -547,6 +1160,8 @@ const runes: LessonDef = {
       answer: "rune",
       check: { compiles: true, stdout: "5" },
       explain: L("[]rune splits the string into letters: 5 of them.", "[]rune separa el string en letras: son 5.", "[]rune は文字列を文字に分ける。5つだね。"),
+      hint: L("Converting to a slice of this type splits text into characters instead of bytes.", "Convertir a un slice de este tipo separa el texto en caracteres en vez de bytes.", "この型のスライスに変換すると、バイトではなく文字ごとに分かれる。"),
+      note: "bytes-len",
       win: [{ t: "print", text: "5" }],
     },
     {
@@ -557,6 +1172,8 @@ const runes: LessonDef = {
       expect: "reversed: bña",
       fallback: [String.raw`\[\]rune\s*\(\s*s\s*\)`],
       explain: L("ñ is 2 bytes, and swapping bytes breaks it. []rune(s) swaps whole letters.", "ñ ocupa 2 bytes y al intercambiar bytes se rompe. []rune(s) intercambia letras enteras.", "ñ は2バイト。バイトで入れかえると壊れる。[]rune(s) なら文字ごと入れかえる。"),
+      hint: L("ñ takes 2 bytes, and swapping bytes splits it. Which slice type keeps each letter whole?", "ñ ocupa 2 bytes, e intercambiar bytes la parte. ¿Qué tipo de slice mantiene cada letra entera?", "ñ は2バイト。バイトで入れかえると割れる。文字を丸ごと保つスライスの型は？"),
+      note: "runes-range",
     },
   ],
 };
@@ -570,6 +1187,7 @@ const deferPanic: LessonDef = {
   xp: 70,
   enemy: "go/nil-blob",
   enemyName: L("PANIC BLOB", "BLOB DEL PANIC", "パニックブロブ"),
+  notes: deferNotes,
   beats: [
     say(L(
       "defer saves a call for LATER: it runs when the function ends. Perfect for cleanup, like closing a door.",
@@ -594,6 +1212,8 @@ const deferPanic: LessonDef = {
       output: "hello\nworld",
       check: { compiles: true, stdout: "hello\nworld" },
       explain: L("The deferred call waits until main ends, so world comes last.", "La llamada diferida espera a que termine main, así que world va al final.", "defer した呼び出しは main の終わりまで待つ。だから world が最後。"),
+      hint: L("A deferred call waits. Until when, exactly?", "Una llamada diferida espera. ¿Hasta cuándo, exactamente?", "defer した呼び出しは待つ。正確にはいつまで？"),
+      note: "defer-order",
       win: [{ t: "print", text: "hello" }, { t: "print", text: "world" }],
     },
     {
@@ -605,6 +1225,8 @@ const deferPanic: LessonDef = {
       output: "2 1 0",
       check: { compiles: true, stdout: "2 1 0" },
       explain: L("Defers stack up like scrolls on a shelf: the last one in runs first.", "Los defer se apilan como pergaminos: el último en entrar corre primero.", "defer は棚に積む巻物。最後に積んだものが最初に動く。"),
+      hint: L("Each lap stacks one deferred call. In what order does a stack give things back?", "Cada vuelta apila una llamada diferida. ¿En qué orden devuelve las cosas una pila?", "毎周 defer が1つ積まれる。積んだものはどの順で出てくる？"),
+      note: "defer-order",
     },
     say(L(
       "Careful: defer evaluates its ARGUMENTS right away. It takes a photo of x at the defer line.",
@@ -620,6 +1242,8 @@ const deferPanic: LessonDef = {
       output: "now: 2\ndeferred: 1",
       check: { compiles: true, stdout: "now: 2\ndeferred: 1" },
       explain: L("x was 1 when the defer line ran, and that photo is what prints.", "x valía 1 cuando corrió la línea del defer, y esa foto es lo que se imprime.", "defer の行のとき x は 1。その写真が表示される。"),
+      hint: L("The arguments of a deferred call are evaluated at the defer line. What is x on that line?", "Los argumentos de una llamada diferida se evalúan en la línea del defer. ¿Cuánto vale x en esa línea?", "defer の引数は defer の行で評価される。その行での x は？"),
+      note: "defer-args",
       setup: [{ t: "tag", actor: "hero", text: "x", value: "1" }],
       win: [{ t: "value", actor: "hero", text: "2" }, { t: "print", text: "now: 2" }, { t: "print", text: "deferred: 1" }],
     },
@@ -632,6 +1256,8 @@ const deferPanic: LessonDef = {
       output: "now: 2\ndeferred: 2",
       check: { compiles: true, stdout: "now: 2\ndeferred: 2" },
       explain: L("A deferred closure has no arguments to photograph: it reads x at the end, when x is 2.", "Una closure diferida no tiene argumentos que fotografiar: lee x al final, cuando vale 2.", "defer したクロージャは引数がない。最後に x を読むから 2。"),
+      hint: L("This time nothing is passed as an argument. When does the func body read x?", "Esta vez no se pasa nada como argumento. ¿Cuándo lee x el cuerpo de la func?", "今回は引数で何もわたしていない。関数の中身はいつ x を読む？"),
+      note: "defer-args",
     },
     say(L(
       "panic stops the normal flow and unwinds the stack. Deferred calls still run on the way out.",
@@ -646,6 +1272,8 @@ const deferPanic: LessonDef = {
       answer: 0,
       check: { compiles: true, throws: "panic: boom" },
       explain: L("panic still runs the deferred cleanup, then the program crashes with panic: boom.", "panic igual ejecuta el cleanup diferido y luego el programa cae con panic: boom.", "panic でも defer の cleanup は動く。そのあと panic: boom で落ちる。"),
+      hint: L("A panic unwinds the function. Do deferred calls get to run on the way out?", "Un panic deshace la función. ¿Las llamadas diferidas alcanzan a correr al salir?", "panic は関数を巻きもどす。帰り道で defer は動ける？"),
+      note: "panic",
       win: [{ t: "print", text: "start" }, { t: "print", text: "cleanup" }, { t: "shake" }, { t: "banner", text: L("panic: boom", "panic: boom", "panic: boom") }],
     },
     {
@@ -656,6 +1284,8 @@ const deferPanic: LessonDef = {
       answer: 0,
       check: { compiles: true, throws: "index out of range [5] with length 3" },
       explain: L("A slice's length is only known at runtime, so Go checks then: index out of range [5].", "El largo de un slice se conoce al ejecutar, y Go revisa entonces: index out of range [5].", "スライスの長さは実行時にわかる。だから実行時に index out of range [5]。"),
+      hint: L("A slice's length is only known while the program runs. What does Go do with a bad index then?", "El largo de un slice solo se conoce al ejecutar. ¿Qué hace Go entonces con un índice malo?", "スライスの長さは実行中にしかわからない。そのとき不正な添字はどうなる？"),
+      note: "panic",
       win: [{ t: "attack", from: "enemy", to: "hero" }, { t: "shake" }],
     },
     {
@@ -666,6 +1296,8 @@ const deferPanic: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("An array's size [3] is known at compile time, so index 5 is caught early: out of bounds.", "El tamaño [3] de un array se conoce al compilar, así que el índice 5 se detecta antes.", "配列のサイズ [3] はコンパイル時にわかるから、5 は先に見つかる。"),
+      hint: L("This is an array, with its size in its type. Can the compiler see the bad index before running?", "Esto es un array, con su tamaño en el tipo. ¿Puede el compilador ver el índice malo antes de ejecutar?", "これは型にサイズが入った配列。コンパイラは実行前に不正な添字に気づける？"),
+      note: "panic",
     },
     say(L(
       "recover() catches a panic, but ONLY inside a deferred function. Anywhere else it just returns nil.",
@@ -681,6 +1313,8 @@ const deferPanic: LessonDef = {
       output: "recovered: boom",
       check: { compiles: true, stdout: "recovered: boom" },
       explain: L("The deferred shield calls recover, gets \"boom\" and sets the named result msg.", "El escudo diferido llama a recover, recibe \"boom\" y fija el resultado msg.", "defer の盾が recover で \"boom\" を受けとり、名前つき戻り値 msg に入れる。"),
+      hint: L("The deferred func calls recover while the panic is happening, and it can set the named result.", "La func diferida llama a recover mientras ocurre el panic, y puede fijar el resultado con nombre.", "defer 関数は panic の最中に recover を呼び、名前つき戻り値を変えられる。"),
+      note: "recover",
       setup: [{ t: "item", kind: "shield", holder: "hero" }],
       win: [{ t: "attack", from: "enemy", to: "hero" }, { t: "say", actor: "hero", text: L("Recovered!", "¡Recuperado!", "リカバー！") }],
     },
@@ -693,6 +1327,8 @@ const deferPanic: LessonDef = {
       output: "<nil>",
       check: { compiles: true, stdout: "<nil>" },
       explain: L("Not deferred and nothing is panicking: recover just returns nil.", "No está diferido y nada está en panic: recover solo devuelve nil.", "defer の中でもないし panic もない。recover は nil を返すだけ。"),
+      hint: L("Where does recover work, and is anything panicking here?", "¿Dónde funciona recover, y hay algo en panic aquí?", "recover が働く場所はどこ？ここで panic は起きている？"),
+      note: "recover",
     },
     {
       kind: "predict",
@@ -703,6 +1339,8 @@ const deferPanic: LessonDef = {
       output: "6",
       check: { compiles: true, stdout: "6" },
       explain: L("return 3 sets n to 3, then the deferred func doubles the named result: 6.", "return 3 pone n en 3 y luego la función diferida duplica el resultado: 6.", "return 3 で n が 3 になり、そのあと defer が名前つき戻り値を2倍：6。"),
+      hint: L("Think about order: return fills the named result n, then deferred funcs run. What do they do to n?", "Piensa en el orden: return llena el resultado n y luego corren las funcs diferidas. ¿Qué le hacen a n?", "順番を考えよう：return が n に入れ、そのあと defer が動く。n はどうなる？"),
+      note: "recover",
     },
     {
       kind: "predict",
@@ -712,6 +1350,8 @@ const deferPanic: LessonDef = {
       answer: 0,
       check: { compiles: true, throws: "integer divide by zero" },
       explain: L("Integer division by zero is a runtime panic. (A constant 1 / 0 wouldn't even compile.)", "Dividir enteros por cero es un panic al ejecutar. (Un 1 / 0 constante ni compilaría.)", "整数のゼロ除算は実行時 panic。（定数の 1 / 0 ならコンパイルすら通らない）"),
+      hint: L("b is a variable, not a constant, so the compiler can't know. What does integer division by 0 do at runtime?", "b es una variable, no una constante, así que el compilador no lo sabe. ¿Qué hace la división entera por 0 al ejecutar?", "b は定数じゃなく変数。実行時の整数ゼロ除算はどうなる？"),
+      note: "panic",
       win: [{ t: "shake" }],
     },
     {
@@ -722,6 +1362,8 @@ const deferPanic: LessonDef = {
       expect: "ok: false",
       fallback: [String.raw`defer\s+func\s*\(\s*\)\s*\{[\s\S]*recover\s*\(\s*\)`, String.raw`if\s+b\s*==\s*0\s*\{\s*return\s+0\s*,\s*false`],
       explain: L("A deferred func with recover() catches the divide-by-zero panic and sets ok = false.", "Una función diferida con recover() atrapa el panic de división por cero y pone ok = false.", "recover() つきの defer 関数がゼロ除算の panic をつかまえて ok = false にする。"),
+      hint: L("A panic must be caught inside the same function, by a deferred func that calls one built-in.", "Un panic se atrapa dentro de la misma función, con una func diferida que llama a una función incorporada.", "panic は同じ関数の中で、ある組みこみ関数を呼ぶ defer 関数でつかまえる。"),
+      note: "recover",
     },
   ],
 };
@@ -735,23 +1377,24 @@ const boss: LessonDef = {
   xp: 170,
   enemy: "go/nil-blob",
   enemyName: L("NIL BLOB", "BLOB NIL", "ニルブロブ"),
+  notes: villageBossNotes,
   beats: [
     enemySays(L(
       "BLUB. I AM THE NIL BLOB. I swallow careless gophers. Answer my riddles, or join my zero values!",
       "BLUB. SOY EL BLOB NIL. Me trago a los gophers distraídos. ¡Responde mis acertijos o serás un valor cero!",
       "ブルッ。我はニルブロブ。うっかり者のゴーファーをのみこむ。なぞを解け、さもなくばゼロ値になれ！",
     )),
-    { kind: "predict", time: 15, prompt: PRINT, code: "for i := 0; i < 3; i++ {\n\tdefer func() { fmt.Print(i) }()\n}", options: ["210", "333", "012"], answer: 0, output: "210", check: { compiles: true, stdout: "210" }, explain: L("Each loop lap has its own i (Go 1.22+), and defers run last-in first: 2, 1, 0.", "Cada vuelta tiene su propio i (Go 1.22+), y los defer corren del último al primero: 2, 1, 0.", "周ごとに別の i（Go 1.22 以降）。defer は後から順に：2, 1, 0。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: 'var p *int\nvar s string\nfmt.Println(p == nil, s == "")', options: ["true true", "false true", "true false"], answer: 0, output: "true true", check: { compiles: true, stdout: "true true" }, explain: L("Zero values: a pointer starts at nil, a string at \"\".", "Valores cero: un puntero empieza en nil, un string en \"\".", "ゼロ値：ポインタは nil、文字列は \"\"。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: "func split(sum int) (x, y int) {\n\tx = sum * 4 / 9\n\ty = sum - x\n\treturn\n}\n\nfunc main() {\n\tfmt.Println(split(17))\n}", options: ["7 10", "7.5 9.5", "10 7"], answer: 0, output: "7 10", check: { compiles: true, stdout: "7 10" }, explain: L("68 / 9 is 7 in integers, y is 17 - 7 = 10. The bare return sends both.", "68 / 9 es 7 en enteros, y es 17 - 7 = 10. El return solo envía ambos.", "68 / 9 は整数で 7、y は 17 - 7 = 10。return だけで両方返る。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: 'func trace(s string) string {\n\tfmt.Println("enter", s)\n\treturn s\n}\n\nfunc un(s string) { fmt.Println("leave", s) }\n\nfunc main() {\n\tdefer un(trace("a"))\n\tfmt.Println("in a")\n}', options: [L("enter a, in a, leave a", "enter a, in a, leave a", "enter a → in a → leave a"), L("in a, enter a, leave a", "in a, enter a, leave a", "in a → enter a → leave a")], answer: 0, output: "enter a\nin a\nleave a", check: { compiles: true, stdout: "enter a\nin a\nleave a" }, explain: L("trace(\"a\") is an argument, so it runs right at the defer line. Only un waits.", "trace(\"a\") es un argumento, así que corre en la línea del defer. Solo un espera.", "trace(\"a\") は引数だから defer の行ですぐ動く。待つのは un だけ。") },
-    { kind: "predict", time: 12, prompt: COMPILES, code: "x := 1\ny := 2\nfmt.Println(x)", options: [YES, NO_CE], answer: 1, check: { compiles: false }, explain: L("y is declared and not used: a compile error in Go.", "y se declara y no se usa: error de compilación en Go.", "y は宣言したのに未使用。Go ではコンパイルエラー。") },
-    { kind: "predict", time: 12, prompt: COMPILES, code: 'x := 10\nx = "ten"\nfmt.Println(x)', options: [YES, NO_CE], answer: 1, check: { compiles: false }, explain: L("x is an int forever. A string can't go on an int label.", "x es int para siempre. Un string no cabe en una etiqueta int.", "x はずっと int。int のラベルに文字列は入らない。") },
-    { kind: "predict", time: 12, prompt: COMPILES, code: 'if v := 10; v > 5 {\n\tfmt.Println("big")\n}\nfmt.Println(v)', options: [YES, NO_CE], answer: 1, check: { compiles: false }, explain: L("v only lives inside the if: undefined: v.", "v solo vive dentro del if: undefined: v.", "v は if の中だけ：undefined: v。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: 's := "héllo"\nfmt.Println(len(s), len([]rune(s)))', options: ["6 5", "5 5", "6 6"], answer: 0, output: "6 5", check: { compiles: true, stdout: "6 5" }, explain: L("len counts bytes (é is 2); []rune counts letters.", "len cuenta bytes (é son 2); []rune cuenta letras.", "len はバイト数（é は2）、[]rune は文字数。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: 'x := 1\ndefer fmt.Println("deferred:", x)\nx = 2\nfmt.Println("now:", x)', options: [L("now: 2, then deferred: 1", "now: 2, luego deferred: 1", "now: 2 のあと deferred: 1"), L("now: 2, then deferred: 2", "now: 2, luego deferred: 2", "now: 2 のあと deferred: 2")], answer: 0, output: "now: 2\ndeferred: 1", check: { compiles: true, stdout: "now: 2\ndeferred: 1" }, explain: L("defer photographs its arguments at the defer line: x was 1.", "defer fotografía sus argumentos en la línea del defer: x valía 1.", "defer は defer の行で引数を写真にとる。x は 1 だった。") },
-    { kind: "pick", time: 12, prompt: L("Ignore the quotient", "Ignora el cociente", "商を捨てよう"), code: "func divmod(a, b int) (int, int) {\n\treturn a / b, a % b\n}\n\nfunc main() {\n\t___, r := divmod(9, 4)\n\tfmt.Println(r)\n}", options: ["_", "nil", "void"], answer: 0, check: { compiles: true, stdout: "1", wrongFail: true }, explain: L("_ is the blank identifier: it swallows the value you don't need.", "_ es el identificador vacío: se traga el valor que no necesitas.", "_ はブランク識別子。いらない値をのみこむ。") },
-    { kind: "type", time: 15, prompt: L("Catch the panic", "Atrapa el panic", "panic をつかまえろ"), code: 'defer func() {\n\tif r := ___(); r != nil {\n\t\tfmt.Println("saved:", r)\n\t}\n}()\npanic("blub")', answer: "recover", check: { compiles: true, stdout: "saved: blub" }, explain: L("recover() inside a deferred func stops the panic and returns its value.", "recover() dentro de una función diferida detiene el panic y devuelve su valor.", "defer 関数の中の recover() が panic を止めて値を返す。") },
+    { kind: "predict", time: 15, prompt: PRINT, code: "for i := 0; i < 3; i++ {\n\tdefer func() { fmt.Print(i) }()\n}", options: ["210", "333", "012"], answer: 0, output: "210", check: { compiles: true, stdout: "210" }, explain: L("Each loop lap has its own i (Go 1.22+), and defers run last-in first: 2, 1, 0.", "Cada vuelta tiene su propio i (Go 1.22+), y los defer corren del último al primero: 2, 1, 0.", "周ごとに別の i（Go 1.22 以降）。defer は後から順に：2, 1, 0。"), hint: L("Two rules mix here: each lap has its own i, and deferred calls run last in, first out.", "Aquí se mezclan dos reglas: cada vuelta tiene su propio i, y los defer corren del último al primero.", "2つのルール：周ごとに別の i、defer は後から先に動く。"), note: "recap-defer" },
+    { kind: "predict", time: 12, prompt: PRINT, code: 'var p *int\nvar s string\nfmt.Println(p == nil, s == "")', options: ["true true", "false true", "true false"], answer: 0, output: "true true", check: { compiles: true, stdout: "true true" }, explain: L("Zero values: a pointer starts at nil, a string at \"\".", "Valores cero: un puntero empieza en nil, un string en \"\".", "ゼロ値：ポインタは nil、文字列は \"\"。"), hint: L("Which zero value does each type start with: a pointer and a string?", "¿Con qué valor cero empieza cada tipo: un puntero y un string?", "ポインタと文字列は、それぞれどのゼロ値から始まる？"), note: "recap-variables" },
+    { kind: "predict", time: 15, prompt: PRINT, code: "func split(sum int) (x, y int) {\n\tx = sum * 4 / 9\n\ty = sum - x\n\treturn\n}\n\nfunc main() {\n\tfmt.Println(split(17))\n}", options: ["7 10", "7.5 9.5", "10 7"], answer: 0, output: "7 10", check: { compiles: true, stdout: "7 10" }, explain: L("68 / 9 is 7 in integers, y is 17 - 7 = 10. The bare return sends both.", "68 / 9 es 7 en enteros, y es 17 - 7 = 10. El return solo envía ambos.", "68 / 9 は整数で 7、y は 17 - 7 = 10。return だけで両方返る。"), hint: L("Integer math: sum * 4 / 9 drops the decimals. The bare return sends x and y, in that order.", "Cuentas enteras: sum * 4 / 9 descarta los decimales. El return solo envía x e y, en ese orden.", "整数計算：sum * 4 / 9 は小数を捨てる。return だけで x と y をその順に返す。"), note: "recap-functions" },
+    { kind: "predict", time: 15, prompt: PRINT, code: 'func trace(s string) string {\n\tfmt.Println("enter", s)\n\treturn s\n}\n\nfunc un(s string) { fmt.Println("leave", s) }\n\nfunc main() {\n\tdefer un(trace("a"))\n\tfmt.Println("in a")\n}', options: [L("enter a, in a, leave a", "enter a, in a, leave a", "enter a → in a → leave a"), L("in a, enter a, leave a", "in a, enter a, leave a", "in a → enter a → leave a")], answer: 0, output: "enter a\nin a\nleave a", check: { compiles: true, stdout: "enter a\nin a\nleave a" }, explain: L("trace(\"a\") is an argument, so it runs right at the defer line. Only un waits.", "trace(\"a\") es un argumento, así que corre en la línea del defer. Solo un espera.", "trace(\"a\") は引数だから defer の行ですぐ動く。待つのは un だけ。"), hint: L("trace(\"a\") is an argument of the deferred call. When are arguments evaluated?", "trace(\"a\") es un argumento de la llamada diferida. ¿Cuándo se evalúan los argumentos?", "trace(\"a\") は defer する呼び出しの引数。引数はいつ評価される？"), note: "recap-defer" },
+    { kind: "predict", time: 12, prompt: COMPILES, code: "x := 1\ny := 2\nfmt.Println(x)", options: [YES, NO_CE], answer: 1, check: { compiles: false }, explain: L("y is declared and not used: a compile error in Go.", "y se declara y no se usa: error de compilación en Go.", "y は宣言したのに未使用。Go ではコンパイルエラー。"), hint: L("Is every declared variable used?", "¿Se usa cada variable declarada?", "宣言した変数はすべて使われている？"), note: "recap-variables" },
+    { kind: "predict", time: 12, prompt: COMPILES, code: 'x := 10\nx = "ten"\nfmt.Println(x)', options: [YES, NO_CE], answer: 1, check: { compiles: false }, explain: L("x is an int forever. A string can't go on an int label.", "x es int para siempre. Un string no cabe en una etiqueta int.", "x はずっと int。int のラベルに文字列は入らない。"), hint: L("x's type is set by its first value. Can a value of another type go into it later?", "El tipo de x lo fija su primer valor. ¿Puede entrar después un valor de otro tipo?", "x の型は最初の値で決まる。あとで別の型の値を入れられる？"), note: "recap-variables" },
+    { kind: "predict", time: 12, prompt: COMPILES, code: 'if v := 10; v > 5 {\n\tfmt.Println("big")\n}\nfmt.Println(v)', options: [YES, NO_CE], answer: 1, check: { compiles: false }, explain: L("v only lives inside the if: undefined: v.", "v solo vive dentro del if: undefined: v.", "v は if の中だけ：undefined: v。"), hint: L("Where does a variable declared in an if header live?", "¿Dónde vive una variable declarada en la cabecera de un if?", "if の頭で宣言した変数はどこで生きている？"), note: "recap-variables" },
+    { kind: "predict", time: 12, prompt: PRINT, code: 's := "héllo"\nfmt.Println(len(s), len([]rune(s)))', options: ["6 5", "5 5", "6 6"], answer: 0, output: "6 5", check: { compiles: true, stdout: "6 5" }, explain: L("len counts bytes (é is 2); []rune counts letters.", "len cuenta bytes (é son 2); []rune cuenta letras.", "len はバイト数（é は2）、[]rune は文字数。"), hint: L("One count is bytes, the other characters. How many bytes does é take?", "Una cuenta bytes y la otra caracteres. ¿Cuántos bytes ocupa é?", "片方はバイト、片方は文字の数。é は何バイト？"), note: "recap-strings" },
+    { kind: "predict", time: 15, prompt: PRINT, code: 'x := 1\ndefer fmt.Println("deferred:", x)\nx = 2\nfmt.Println("now:", x)', options: [L("now: 2, then deferred: 1", "now: 2, luego deferred: 1", "now: 2 のあと deferred: 1"), L("now: 2, then deferred: 2", "now: 2, luego deferred: 2", "now: 2 のあと deferred: 2")], answer: 0, output: "now: 2\ndeferred: 1", check: { compiles: true, stdout: "now: 2\ndeferred: 1" }, explain: L("defer photographs its arguments at the defer line: x was 1.", "defer fotografía sus argumentos en la línea del defer: x valía 1.", "defer は defer の行で引数を写真にとる。x は 1 だった。"), hint: L("The defer line takes a photo of its arguments. What was x at that moment?", "La línea del defer toma una foto de sus argumentos. ¿Cuánto valía x en ese momento?", "defer の行で引数の写真をとる。そのとき x はいくつ？"), note: "recap-defer" },
+    { kind: "pick", time: 12, prompt: L("Ignore the quotient", "Ignora el cociente", "商を捨てよう"), code: "func divmod(a, b int) (int, int) {\n\treturn a / b, a % b\n}\n\nfunc main() {\n\t___, r := divmod(9, 4)\n\tfmt.Println(r)\n}", options: ["_", "nil", "void"], answer: 0, check: { compiles: true, stdout: "1", wrongFail: true }, explain: L("_ is the blank identifier: it swallows the value you don't need.", "_ es el identificador vacío: se traga el valor que no necesitas.", "_ はブランク識別子。いらない値をのみこむ。"), hint: L("You need a name that throws a value away without being an unused variable.", "Necesitas un nombre que tire un valor sin ser una variable sin usar.", "未使用変数にならずに値を捨てる名前が必要。"), note: "recap-functions" },
+    { kind: "type", time: 15, prompt: L("Catch the panic", "Atrapa el panic", "panic をつかまえろ"), code: 'defer func() {\n\tif r := ___(); r != nil {\n\t\tfmt.Println("saved:", r)\n\t}\n}()\npanic("blub")', answer: "recover", check: { compiles: true, stdout: "saved: blub" }, explain: L("recover() inside a deferred func stops the panic and returns its value.", "recover() dentro de una función diferida detiene el panic y devuelve su valor.", "defer 関数の中の recover() が panic を止めて値を返す。"), hint: L("Which built-in stops a panic when it's called inside a deferred func?", "¿Qué función incorporada detiene un panic cuando se llama dentro de una func diferida?", "defer 関数の中で呼ぶと panic を止める組みこみ関数は？"), note: "recap-defer" },
     enemySays(L(
       "Blub... you knew every zero, every defer. The Slice Forest lies ahead, where scrolls share secrets.",
       "Blub... conocías cada cero y cada defer. Adelante está el Slice Forest, donde los pergaminos comparten secretos.",
