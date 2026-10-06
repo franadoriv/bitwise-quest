@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import gsap from "gsap";
 import { Sprite } from "@/components/pixel/Sprite";
 import { Settings } from "@/components/ui/Settings";
+import { LegalLinks } from "@/components/ui/LegalLinks";
 import { useOrientation } from "@/components/ui/GameFrame";
 import { useI18n } from "@/components/ui/I18n";
 import { BRAND } from "@/lib/brand";
@@ -41,7 +42,10 @@ export function TitleScreen({ guides }: { guides: string[] }) {
   };
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); press(); } };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof Element && e.target.closest("a, button, input, select, textarea, [contenteditable]")) return;
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); press(); }
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   });
@@ -71,6 +75,7 @@ export function TitleScreen({ guides }: { guides: string[] }) {
       <button className="pixel blink" style={{ fontSize: portrait ? 14 : 18, color: "var(--white)", position: "relative", zIndex: 1, padding: 12 }} onClick={press}>
         {t("title.pressStart")}
       </button>
+      <footer className="title-legal" onClick={(e) => e.stopPropagation()}><LegalLinks /></footer>
     </div>
   );
 }

@@ -7,7 +7,7 @@ Vercel remains stateless. Browser components connect directly to Supabase Auth a
 ## Setup
 
 1. Create a Supabase project and configure its Google provider with the OAuth Client ID and Client Secret from Google Auth Platform (web application).
-2. In Google, authorize the game's HTTPS origin and the Supabase callback `https://<project>.supabase.co/auth/v1/callback`. Use external audience; add test users while in Testing, then publish the consent configuration when ready for everyone.
+2. In Google, authorize the game's HTTPS origin and the Supabase callback `https://<project>.supabase.co/auth/v1/callback`. Use external audience. Set the app homepage to the game root, privacy policy to `/privacy`, and terms of service to `/terms` on the same HTTPS host. Complete the public operator/contact details in `lib/legal.ts` before deployment. Keep only the basic `openid`, `userinfo.email` and `userinfo.profile` scopes. Publish the audience when ready for production. Google's basic-identity-only Testing exception permits users outside the test list; sensitive scopes have different verification and user limits.
 3. In Supabase Auth URL Configuration, set Site URL to the game's HTTPS origin. Allow `https://<game-host>/auth/callback` and `http://localhost:3000/auth/callback` for development. The browser's PKCE callback exchanges the one-time code; no server handles it.
 4. Run [`supabase/migrations/202610060001_cloud_saves.sql`](../supabase/migrations/202610060001_cloud_saves.sql) in the Supabase SQL Editor. The publishable key cannot create the schema. The migration is safely repeatable.
 5. Configure these **public** values in `.env.local` and Vercel Production/Preview, then rebuild:
@@ -18,6 +18,10 @@ Vercel remains stateless. Browser components connect directly to Supabase Auth a
    ```
 
    Keep the Google Client Secret in Supabase's provider settings. Never use a Supabase secret/service-role key in this application. Without the public configuration, local saving still works and the cloud option is disabled.
+
+6. In Supabase Authentication settings, keep **Allow new users to sign up** enabled. Google provider configuration alone does not override disabled signup. After the release deploys, check the public policy URLs and sign in with a Google account that is not a developer/test account. Brand verification is distinct from sensitive-scope verification; Google may request ownership verification for the app's domain. Google recommends an owned domain rather than a shared hosting domain for verification.
+
+References: [Google audience](https://support.google.com/cloud/answer/15549945?hl=en), [Google production requirements](https://developers.google.com/identity/protocols/oauth2/production-readiness/policy-compliance), [Supabase signup settings](https://supabase.com/docs/guides/auth/general-configuration).
 
 ## Data and security
 

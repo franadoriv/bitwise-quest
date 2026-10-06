@@ -17,6 +17,35 @@
   --font-code: var(--font-vt), var(--font-dot), monospace;
 }
 
+.legal-links { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px 14px; font-size: 15px; position: relative; z-index: 1; }
+.legal-links a, .legal-article a { text-decoration: underline; text-underline-offset: 4px; }
+.legal-links a:hover, .legal-article a:hover { color: var(--white); }
+.legal-links a:focus-visible, .legal-article a:focus-visible { outline: 3px dashed var(--gold); outline-offset: 5px; }
+.title-legal { position: absolute; bottom: 20px; left: 16px; right: 16px; z-index: 2; }
+.save-choice-main > .legal-links { margin: 14px 0 10px; }
+.legal-page { padding: 20px 28px; gap: 20px; }
+.legal-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0; }
+.legal-brand { font-size: 14px; color: var(--gold); }
+.legal-scroll { flex: 1; min-height: 0; padding: 6px 20px 30px; }
+.legal-scroll:focus-visible { outline: 2px dashed var(--p2); outline-offset: 2px; }
+.legal-article { max-width: 880px; margin: 0 auto; font-size: 18px; line-height: 1.8; overflow-wrap: anywhere; }
+.legal-eyebrow { color: var(--p2); font-size: 11px; margin-bottom: 14px; }
+.legal-article h1 { color: var(--gold); font-size: 25px; }
+.legal-date { font-size: 14px; margin: 12px 0 22px; }
+.legal-intro { color: var(--white); padding-left: 18px; border-left: 4px solid var(--p2); }
+.legal-article section { margin-top: 28px; }
+.legal-article h2 { color: var(--gold); font-size: 21px; margin-bottom: 7px; }
+.legal-article footer { border-top: 2px solid var(--p1); margin-top: 32px; padding-top: 22px; }
+.legal-providers { display: flex; flex-wrap: wrap; gap: 8px 24px; list-style: none; margin-top: 12px; }
+.portrait .legal-page { padding: 16px; gap: 14px; }
+.portrait .legal-nav { flex-wrap: wrap; }
+.portrait .legal-brand { display: none; }
+.portrait .legal-scroll { padding: 8px 8px 24px; }
+.portrait .legal-article { font-size: 18px; }
+.portrait .legal-article h1 { font-size: 20px; }
+.portrait .legal-article h2 { font-size: 20px; }
+.portrait .title-legal { bottom: 24px; }
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; overflow: hidden; }
 body {
