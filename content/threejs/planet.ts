@@ -15,5 +15,6 @@ export const threejsMoon: PlanetDef = {
     title: L("Low-poly cube who frames scenes", "Cubo low-poly que encuadra escenas", "シーンを構えるローポリ立方体"),
   },
   colors: { surface: "#13261a", accent: "#7ee05a", ring: "#eef6ea" },
+  shape: "cube",
   bugs: ["threejs/leak-blob", "threejs/lost-wanderer", "threejs/gimbal-knot"],
 };

@@ -14,6 +14,7 @@ import { fx } from "@/lib/fx";
 import { music, sfx } from "@/lib/sfx";
 
 const Galaxy3D = dynamic(() => import("./Galaxy3D").then((m) => m.Galaxy3D), { ssr: false });
+type Landing = import("./Galaxy3D").Landing;
 
 export interface MoonEntry { language: LanguageView; lessonSlugs: string[] }
 export interface PlanetEntry extends MoonEntry { moons: MoonEntry[] }
@@ -35,19 +36,25 @@ function Galaxy({ planets }: { planets: PlanetEntry[] }) {
   const done = cur.lessonSlugs.filter((s) => save?.langs[lang.slug]?.lessons[s]?.doneAt).length;
 
   const meshes = useMemo(
-    () => planets.map((p) => ({ slug: p.language.slug, label: tx(p.language.planet.name), surface: p.language.planet.colors.surface, accent: p.language.planet.colors.accent, ring: p.language.planet.colors.ring, moons: p.language.planet.moons, locked: p.language.status !== "active", frameworkMoons: p.moons.map((m) => ({ color: m.language.planet.colors.accent, locked: m.language.status !== "active" })) })),
+    () => planets.map((p) => ({ slug: p.language.slug, label: tx(p.language.planet.name), surface: p.language.planet.colors.surface, accent: p.language.planet.colors.accent, ring: p.language.planet.colors.ring, moons: p.language.planet.moons, locked: p.language.status !== "active", frameworkMoons: p.moons.map((m) => ({ color: m.language.planet.colors.accent, locked: m.language.status !== "active", shape: m.language.planet.shape })) })),
     [planets, tx],
   );
 
   useEffect(() => { music.play("galaxy"); return () => music.stop(); }, []);
   useEffect(() => { gsap.fromTo(panel.current, { y: 24, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3, ease: "back.out(2)" }); }, [selected]);
 
-  const select = (i: number) => { if (i === selected || i < 0 || i >= planets.length) return; sfx.whoosh(); setSelected(i); };
+  const [landing, setLanding] = useState<Landing | null>(null);
+  const select = (i: number) => { if (landing || i === selected || i < 0 || i >= planets.length) return; sfx.whoosh(); setSelected(i); };
   const land = (el: Element | null, target: LanguageView = lang) => {
+    if (landing) return;
     if (target.status !== "active") { sfx.wrong(); fx.shake(el, 8); return; }
     sfx.start();
-    fx.flash("var(--white)", 0.6);
-    setTimeout(() => router.push(`/play/${target.slug}`), 300);
+    // The camera dives into the planet (or moon) with a widening field of view, then the map loads.
+    const moon = cur.moons.findIndex((m) => m.language.slug === target.slug);
+    setLanding({ planet: selected, moon: moon >= 0 ? moon : undefined });
+    router.prefetch(`/play/${target.slug}`);
+    setTimeout(() => fx.flash("var(--white)", 0.8), 700);
+    setTimeout(() => router.push(`/play/${target.slug}`), 900);
   };
   const doneIn = (m: MoonEntry) => m.lessonSlugs.filter((s) => save?.langs[m.language.slug]?.lessons[s]?.doneAt).length;
 
@@ -63,15 +70,16 @@ function Galaxy({ planets }: { planets: PlanetEntry[] }) {
 
   return (
     <div className="screen">
-      <header style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 16px", zIndex: 2 }}>
+      <header style={{ display: "flex", alignItems: "center", gap: portrait ? 8 : 12, padding: "10px 16px", zIndex: 2, flexWrap: "wrap" }}>
         <PlayerChip />
-        <h1 className="pixel" style={{ fontSize: portrait ? 12 : 15, color: "var(--gold)" }}>{t("galaxy.title")}</h1>
+        {/* In portrait the title gets its own row so the buttons stay on screen. */}
+        <h1 className="pixel" style={{ fontSize: portrait ? 12 : 15, color: "var(--gold)", whiteSpace: "nowrap", ...(portrait ? { order: 3, width: "100%" } : {}) }}>{t("galaxy.title")}</h1>
         <div style={{ flex: 1 }} />
         <button className="btn small" onClick={() => { sfx.select(); eject(); router.push("/saves"); }}>{t("card.switch")}</button>
         <Settings />
       </header>
       <div style={{ flex: 1, minHeight: 0, position: "relative", margin: "0 16px" }} className="box">
-        <Galaxy3D planets={meshes} selected={selected} onSelect={select} />
+        <Galaxy3D planets={meshes} selected={selected} onSelect={(i) => (i === selected ? land(null) : select(i))} onSwipe={(dir) => select(selected + dir)} landing={landing} />
         <div style={{ position: "absolute", left: 8, bottom: 8, display: "flex", gap: 4 }}>
           <button className="btn small" onClick={() => select(selected - 1)} aria-label={t("galaxy.prev")}>◀</button>
           <button className="btn small" onClick={() => select(selected + 1)} aria-label={t("galaxy.next")}>▶</button>

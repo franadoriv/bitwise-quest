@@ -19,7 +19,9 @@ export const metadata: Metadata = {
   description: "A retro arcade game for learning programming languages by playing. First cartridge: Rust.",
 };
 
-export const viewport: Viewport = { themeColor: "#2a1206", width: "device-width", initialScale: 1 };
+// The game draws its own 16:9 frame scaled to the screen, so page zoom is disabled (pinch and
+// double-tap); text inside the frame scales with it.
+export const viewport: Viewport = { themeColor: "#2a1206", width: "device-width", initialScale: 1, maximumScale: 1, userScalable: false, viewportFit: "cover" };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const saved = (await cookies()).get("locale")?.value;

@@ -15,5 +15,6 @@ export const railsMoon: PlanetDef = {
     title: L("Little engine of convention", "Locomotora de la convención", "規約をはこぶ小さな機関車"),
   },
   colors: { surface: "#5e0f1c", accent: "#e8404f", ring: "#b9c2cc" },
+  shape: "wheel",
   bugs: ["rails/n-plus-one", "rails/mass-burglar", "rails/callback-knot"],
 };

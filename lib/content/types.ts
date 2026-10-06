@@ -217,9 +217,16 @@ export interface PlanetDef {
   /** Colors for the 3D planet (hex). */
   colors: { surface: string; accent: string; ring?: string };
   moons?: number;
+  /**
+   * Moons only: the 3D shape that hints at what the framework teaches (React an atom, WebGL a
+   * triangle, three.js a wireframe cube, Rails a train wheel). Defaults to a faceted orb.
+   */
+  shape?: MoonShape;
   /** Sprite ids of this planet's bugs, shown on the planet card. */
   bugs: SpriteId[];
 }
+
+export type MoonShape = "orb" | "atom" | "tetra" | "cube" | "wheel";
 
 /** Language of the code in a pack: drives highlighting, JSX and how the validator checks snippets. */
 export type CodeLang = "rust" | "ts" | "tsx" | "go" | "python" | "cpp" | "csharp" | "zig" | "haskell" | "ruby";
