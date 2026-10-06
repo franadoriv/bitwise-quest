@@ -215,6 +215,14 @@ const en = {
   "run.busy": "✋ Too many runs right now. Try again in {secs}s.",
   "run.runtimeError": "✗ IT CRASHED WHILE RUNNING",
   "galaxy.moons": "MOONS",
+  "galaxy.moonOf": "MOON OF {planet}",
+  "galaxy.chooseTitle": "WHERE TO LAND?",
+  "galaxy.chooseHint": "↑↓ preview · ENTER land · ESC close",
+  "galaxy.planetKind": "Planet",
+  "galaxy.moonKind": "Moon",
+  "galaxy.close": "Close",
+  "galaxy.framework": "FRAMEWORK",
+  "galaxy.backTo": "Back to {planet}",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -433,6 +441,14 @@ const es: Messages = {
   "run.busy": "✋ Demasiadas ejecuciones ahora. Reintenta en {secs}s.",
   "run.runtimeError": "✗ FALLÓ AL EJECUTARSE",
   "galaxy.moons": "LUNAS",
+  "galaxy.moonOf": "LUNA DE {planet}",
+  "galaxy.chooseTitle": "ELIGE TU DESTINO",
+  "galaxy.chooseHint": "↑↓ ver · ENTER aterrizar · ESC cerrar",
+  "galaxy.planetKind": "Planeta",
+  "galaxy.moonKind": "Luna",
+  "galaxy.close": "Cerrar",
+  "galaxy.framework": "FRAMEWORK",
+  "galaxy.backTo": "Volver a {planet}",
 };
 
 const ja: Messages = {
@@ -648,6 +664,14 @@ const ja: Messages = {
   "run.busy": "✋ 実行が混み合っています。{secs}秒後にもう一度。",
   "run.runtimeError": "✗ 実行中にエラーが起きた",
   "galaxy.moons": "衛星",
+  "galaxy.moonOf": "{planet}の月",
+  "galaxy.chooseTitle": "どこに着陸する？",
+  "galaxy.chooseHint": "↑↓ 見る・ENTER 着陸・ESC 閉じる",
+  "galaxy.planetKind": "惑星",
+  "galaxy.moonKind": "月",
+  "galaxy.close": "閉じる",
+  "galaxy.framework": "フレームワーク",
+  "galaxy.backTo": "{planet}にもどる",
 };
 
 export const MESSAGES: Record<Locale, Messages> = { en, es, ja };

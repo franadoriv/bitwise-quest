@@ -30,7 +30,13 @@ await step("galaxy", async () => {
   await page.waitForURL("**/galaxy");
   await page.waitForTimeout(2500);
 });
-await step("landing", async () => { await page.locator("button", { hasText: "LAND" }).click(); await page.waitForURL("**/play/rust"); await page.waitForTimeout(3000); });
+await step("landing", async () => {
+  // LAND opens the "Where to land?" modal; the planet is the first card.
+  await page.locator("button", { hasText: "LAND" }).click();
+  await page.locator("#dest-0").click();
+  await page.waitForURL("**/play/rust");
+  await page.waitForTimeout(3000);
+});
 await step("map", async () => { await page.locator("button", { hasText: "I JUST WANT TO SEE THE MAP" }).click(); });
 
 // back to the card, export slot 1

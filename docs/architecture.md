@@ -23,7 +23,8 @@ lib/security/          Abuse protection: limits (token bucket, semaphores, TTL c
         ▼
 lib/save/              Client save system: schema, migrations, binary codec, localStorage slots, pure progress rules
 components/save/       SaveProvider/useSave/RequireSave, MemoryCard (/saves), PlayerChip (autosave light)
-components/galaxy/     Galaxy3D (low-poly planets, rings, framework and decorative moons, starfield) and GalaxyClient (planet card, moon buttons, LAND)
+components/galaxy/     Galaxy3D (low-poly planets, rings, framework and decorative moons, starfield), GalaxyClient (planet card, moon buttons, LAND)
+                       and DestinationModal ("Where to land?": planet and moons as cards)
 components/world/      Three.js planet map (low poly islands) and its HUD, landing intro by the guide
 components/game/       Lesson engine: Stage (SVG+GSAP), beats, LessonGame (orchestrator), TimerModal, NotePanel (guidebook), ResultScreen
 components/exam/       Exam hub and per-topic report
@@ -83,7 +84,7 @@ The galaxy starts on the save's `lastLang`. Planets whose language is `soon` are
 
 ### Planets and moons in the galaxy
 
-`app/galaxy/page.tsx` lists only planets (packs without `parent`) and attaches to each one the packs whose `parent` is its slug. In `Galaxy3D` each framework moon orbits its planet as a larger faceted sphere in the moon's `planet.colors.accent` color, dimmed when the moon is not `active`; `PlanetDef.moons` adds smaller grey decorative moons further out. The planet card lists the moons as buttons (guide sprite, name, `done/total` or "soon") that land on `/play/<moon slug>`. Everything after landing (map, lessons, exams, review, save progress) works on the moon's slug exactly as for a planet.
+`app/galaxy/page.tsx` lists only planets (packs without `parent`) and attaches to each one the packs whose `parent` is its slug. In `Galaxy3D` each framework moon orbits its planet as a larger faceted sphere in the moon's `planet.colors.accent` color, dimmed when the moon is not `active`; `PlanetDef.moons` adds smaller grey decorative moons further out. The planet card lists the moons as buttons (guide sprite, name, `done/total` or "soon"). Tapping a planet or moon in 3D (`Galaxy3D` raycasts the hit and reports `onSelect(planet, moon?)`), a moon button, LAND or Enter opens `DestinationModal` (`components/galaxy/DestinationModal.tsx`): the planet and its moons as cards. The highlighted card is passed back as `selectedMoon`, so the camera follows that moon. Choosing one lands on `/play/<slug>` with the dive described above; nothing lands on a single tap. Everything after landing (map, lessons, exams, review, save progress) works on the moon's slug exactly as for a planet.
 
 ## Lesson flow
 
