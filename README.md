@@ -49,6 +49,8 @@ The whole game, UI and every piece of content, is available in **English**, **Es
 | ![Low poly map](docs/screenshots/map.png) | ![Ownership lesson](docs/screenshots/lesson-act.png) |
 | **Mistakes teach** | **Real compiler** |
 | ![Error feedback](docs/screenshots/lesson-feedback.png) | ![Real code challenge](docs/screenshots/lesson-run.png) |
+| **Loading with real progress** | **Planet Concurra (Go)** |
+| ![Loading screen downloading the Python interpreter](docs/screenshots/loading.png) | ![Galaxy: planet Concurra](docs/screenshots/galaxy-go.png) |
 | **Region boss** | **Entry exam** |
 | ![Boss](docs/screenshots/boss.png) | ![Exam report](docs/screenshots/exam-report.png) |
 | **Game Boy palette** | **NES palette** |
@@ -76,6 +78,7 @@ Each lesson is a series of challenges that take a few seconds each and follow th
 
 - **A galaxy of planets with moons:** each language is a low poly 3D planet (with rings and a starfield) that has its own guide, bugs and story, and each framework of that language is a moon orbiting it, with its own guide, lessons and progress. Land on either to reach a map with one island per region (Three.js), plus animated 2D pixel art scenes driven by GSAP on SVG.
 - **Memory card with 15 save slots,** like a retro console: name your player, autosave as you play, and **export/import** any slot as a `.bwq` file to move it to another browser or keep a backup. Edited or damaged files are rejected.
+- **No dead waits:** before a challenge starts, the game downloads what it needs (the game code, the Python interpreter, three.js) behind an arcade loading screen with real progress, where the guide walks toward the bug and tips rotate. Cached content starts instantly.
 - **Arcade juice:** combos, PERFECT and GREAT speed tiers, particles, screen shake, chiptune music and sound effects synthesized with WebAudio (no audio files).
 - **Persistent progress** in your save: XP, levels, gold, daily streak, stars, per-lesson mastery and play time, kept in the browser (no account, nothing stored on the server).
 - **Spaced repetition:** what you miss comes back as "wandering bugs" in Leitner boxes.
