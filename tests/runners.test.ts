@@ -71,6 +71,10 @@ test("snippet wrapper completes Go, C++ and C# programs", () => {
   const cs = wrapSnippet("csharp", 'using System;\nConsole.WriteLine(1);');
   assert.equal(cs.match(/using System;/g)?.length, 1);
   assert.match(cs, /using System\.Linq;/);
+
+  assert.match(wrapSnippet("zig", 'std.debug.print("hi\\n", .{});'), /^const std = @import\("std"\);\n\npub fn main\(\) !void \{\n {4}std\.debug/);
+  assert.equal(wrapSnippet("haskell", "print 1"), "main :: IO ()\nmain = do\n  print 1\n");
+  assert.equal(wrapSnippet("haskell", "main = print 1"), "main = print 1");
 });
 
 test("highlighter knows every code language", () => {
@@ -79,4 +83,6 @@ test("highlighter knows every code language", () => {
   assert.deepEqual(kinds("def f(): # hi", "python"), ["kw:def", "fn:f", "com:# hi"]);
   assert.deepEqual(kinds("#include <map>\nauto x = nullptr;", "cpp"), ["mac:#include <map>", "kw:auto", "kw:nullptr"]);
   assert.deepEqual(kinds('var s = $"a{b}";', "csharp"), ["kw:var", 'str:$"a{b}"']);
+  assert.deepEqual(kinds("const x = @import(\"std\");", "zig"), ["kw:const", "mac:@import", 'str:"std"']);
+  assert.deepEqual(kinds("f x' = 'a' -- c", "haskell"), ["str:'a'", "com:-- c"]);
 });

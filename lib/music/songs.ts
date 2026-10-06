@@ -505,6 +505,97 @@ const mapThreejs: Song = {
   ],
 };
 
+// ─── MAP zig: Comptia, a crisp F minor forge in 3+3+3+3+2+2 ───────────────
+const mapZig: Song = {
+  title: "Comptime Foundry",
+  bpm: 138, stepsPerBeat: 4, key: "F minor", loop: 1,
+  mix: { lead: t("pulse50", 0.1, { vibrato: 6, gate: 0.75 }), harm: t("pulse12", 0.05, { detune: 9, gate: 0.65 }), bass: t("triangle", 0.23, { gate: 0.6 }), drums: 0.85 },
+  patterns: {
+    ...KIT, ...RESTS,
+    a1: line("F5*3 Ab5*3 C6*3 F5*3 Eb5*2 F5*2 | Db6*3 C6*3 Ab5*3 F5*3 Ab5*4 | Eb6*3 Db6*3 C6*3 Bb5*3 G5*2 Bb5*2 | C6*6 E5*2 G5*4 C6*4"),
+    a2: line("F5*3 Ab5*3 C6*3 F6*3 Eb6*2 C6*2 | Ab5*3 C6*3 Eb6*3 Ab5*3 C6*4 | Bb5*3 Db6*3 F6*3 Db6*3 Bb5*2 Ab5*2 | G5*3 Bb5*3 C6*2 E6*8"),
+    b1: line("Ab5*6 Db6*6 F6*4 | G6*6 Eb6*6 Bb5*4 | G5*3 C6*3 Eb6*3 G6*3 F6*2 Eb6*2 | F6*8 C6*8"),
+    b2: line("Db6*6 F6*6 Bb6*4 | G6*6 Bb5*6 Eb6*4 | C6*3 Eb6*3 Ab6*3 G6*3 F6*2 Eb6*2 | E6*4 G6*4 C7*8"),
+    // "comptime": every note is unrolled into its chord at build time
+    c1: line("F5=037*6 Ab5=047*6 C6=037*4 | Db6=047*6 C6=037*6 Bb5=037*4 | Eb5=047*6 G5=037*6 Bb5=037*4 | C6=047*8 E5*2 G5*2 C6*4"),
+    // "explicit": nothing hidden, one dry hit per group
+    c2: line("F5 - - F5 - - C6 - - Ab5 - - G5 - F5 - | Db6 - - Db6 - - Ab5 - - F5 - - Eb5 - F5 - | Eb6 - - Eb6 - - Bb5 - - G5 - - Bb5 - C6 - | C6*6 B5*2 C6*4 G5*4"),
+    hI: chords("Fm C", "-*3 C*3 -*3 C*3 -*2 C*2"),
+    hA1: chords("Fm Db Eb C", "-*3 C*3 -*3 C*3 -*2 C*2"),
+    hA2: chords("Fm Ab Bbm C", "-*3 C*3 -*3 C*3 -*2 C*2"),
+    hB1: chords("Db Eb Cm Fm", "1 3 5 1 3 5 8 5 3 8 5 3 1 5 1 5"),
+    hB2: chords("Bbm Eb Ab C", "1 3 5 1 3 5 8 5 3 8 5 3 1 5 1 5"),
+    hC: chords("Fm Db Eb C", "C*8 C*8"),
+    hX: chords("Fm Db Eb C", "1 -*15"),
+    bI: bass("Fm C", "1*3 1*3 8*3 1*3 5*2 8*2"),
+    bA1: bass("Fm Db Eb C", "1*3 1*3 8*3 1*3 5*2 8*2"),
+    bA2: bass("Fm Ab Bbm C", "1*3 1*3 8*3 1*3 5*2 8*2"),
+    bB1: bass("Db Eb Cm Fm", "1*3 8*3 1*3 8*3 1*2 5*2"),
+    bB2: bass("Bbm Eb Ab C", "1*3 8*3 1*3 8*3 1*2 5*2"),
+    bC: bass("Fm Db Eb C", B.half),
+    bX: bass("Fm Db Eb C", "1 - - 1 - - 1 - - 1 - - 1 - 1 -"),
+    dForge: drums("k.hm.hk.hs.hk.sh"),
+    dForge2: drums("k.hm.hk.hs.hkkss"),
+    dForgeC: drums("c..m..k..s..k.s."),
+    dDry: drums("k..m..k..s..k.s."),
+    dComp: drums("m..m..m..m..m.m."),
+    fForge: drums("k..s..k..s..TTtt"),
+  },
+  order: [
+    sec("intro", "r2", "hI", "bI", "dComp fForge"),
+    sec("A", "a1 a2", "hA1 hA2", "bA1 bA2", "dForgeC dForge*2 dForge2 dForge*3 fForge"),
+    sec("A harmony", "a1 a2", "~3", "bA1 bA2", "dForgeC dForge dDry dForge2 dForge dDry dForge fForge"),
+    sec("B", "b1 b2", "hB1 hB2", "bB1 bB2", "dForgeC dMetal dForge dMetal2 dForge dMetal dForge f3"),
+    sec("comptime", "c1 c1", "hC hC", "bC bC", "dComp*3 dAnvil dComp*3 fForge"),
+    sec("explicit", "c2", "hX", "bX", "dDry*3 fMetal"),
+    sec("B in G", "b1 b2", "~echo", "bB1 bB2", "dForgeC dForge dMetal dForge2 dForge dMetal dForge fForge", 2),
+    sec("A echo", "a1 a2", "~echo", "bA1 bA2", "dForgeC dForge*2 dForge2 dForge*3 fMetal"),
+  ],
+};
+
+// ─── MAP haskell: Lambdara, serene Ab major with a lydian D natural ───────
+const mapHaskell: Song = {
+  title: "Pure Horizon",
+  bpm: 90, stepsPerBeat: 4, key: "Ab major", loop: 1,
+  mix: { lead: t("pulse12", 0.1, { vibrato: 18, sustain: 0.6 }), harm: t("pulse50", 0.04, { gate: 0.55 }), bass: t("triangle", 0.2, { gate: 0.95 }), drums: 0.35 },
+  patterns: {
+    ...KIT, ...RESTS,
+    a1: line("C6*4 Eb6*4 Ab6*6 G6*2 | F6*4 D6*8 Bb5*4 | C6*4 Ab5*4 F5*4 Ab5*4 | Bb5*6 Ab5*2 F5*8"),
+    a2: line("C6*4 Eb6*4 Ab6*4 C7*4 | Bb6*6 F6*2 D6*8 | Eb6*4 G6*4 Bb6*4 G6*2 F6*2 | Ab6*12 -*4"),
+    // "fold": the same figure applied step by step down the scale
+    b1: line("Ab6*2 G6*2 F6*4 C6*4 F6*4 | F6*2 Eb6*2 Db6*4 Ab5*4 Db6*4 | Eb6*2 Db6*2 C6*4 Ab5*4 C6*4 | Bb5*8 G5*8"),
+    b2: line("G6*2 F6*2 Eb6*4 C6*4 G6*4 | Ab6*2 G6*2 F6*4 C6*4 Ab6*4 | F6*4 D6*4 Bb5*4 D6*4 | Eb6*8 G6*4 Bb6*4"),
+    // "lazy": nothing is evaluated until it is needed
+    c1: line("Eb6*8 -*8 | D6*8 -*8 | C6*8 Bb5*4 -*4 | Ab5*16"),
+    // "infinite list": chords unfold one after another
+    d1: line("Db6=047*8 F6=037*8 | Eb6=047*8 G6=037*8 | C6=037*8 Bb5=047*8 | Ab5=047*16"),
+    hI: chords("Ab Bb", "1*2 5*2 8*2 t*2 8*2 5*2 3*2 5*2"),
+    hA1: chords("Ab Bb Fm Db", "1*2 5*2 8*2 t*2 8*2 5*2 3*2 5*2"),
+    hA2: chords("Ab Bb Eb Ab", "1*2 5*2 8*2 t*2 8*2 5*2 3*2 5*2"),
+    hB1: chords("Fm Db Ab Eb", "1 5 8 5 3 5 8 5 1 5 8 5 3 5 8 t"),
+    hB2: chords("Cm Fm Bb Eb", "1 5 8 5 3 5 8 5 1 5 8 5 3 5 8 t"),
+    hC: chords("Db Bb Fm Ab", H.pad),
+    hD: chords("Db,Fm Eb,Gm Cm,Bb Ab", H.slow),
+    bI: bass("Ab Bb", "1*6 5*6 8*4"),
+    bA1: bass("Ab Bb Fm Db", "1*6 5*6 8*4"),
+    bA2: bass("Ab Bb Eb Ab", "1*6 5*6 8*4"),
+    bB1: bass("Fm Db Ab Eb", "1*8 5*4 3*4"),
+    bB2: bass("Cm Fm Bb Eb", "1*8 5*4 3*4"),
+    bC: bass("Db Bb Fm Ab", B.whole),
+    bD: bass("Db,Fm Eb,Gm Cm,Bb Ab", "1*8 1*8"),
+    dPure: drums("k.....h.....h..."),
+    dPure2: drums("k.....h...s...h."),
+  },
+  order: [
+    sec("intro", "r2", "hI", "bI", "dE dSpace"),
+    sec("A", "a1 a2", "hA1 hA2", "bA1 bA2", "dPure*3 dPure2 dPure*3 dPure2"),
+    sec("fold", "b1 b2", "hB1 hB2", "bB1 bB2", "dPure dPure2 dPure dPure2 dPure dPure2 dPure fSoft"),
+    sec("lazy", "c1", "hC", "bC", "dE*4"),
+    sec("infinite list", "d1 d1", "hD hD", "bD bD", "dSpace*3 dPure2 dSpace*3 fSoft"),
+    sec("A echo", "a1 a2", "~echo", "bA1 bA2", "dSpace2*3 dPure2 dSpace2*3 dPure2"),
+  ],
+};
+
 // ─── LESSON A: light battle groove, E minor ───────────────────────────────
 const lessonA: Song = {
   title: "Bug Hunt",
@@ -710,6 +801,8 @@ export const SONGS: Record<string, Song> = {
   "map:csharp": mapCsharp,
   "map:webgl": mapWebgl,
   "map:threejs": mapThreejs,
+  "map:zig": mapZig,
+  "map:haskell": mapHaskell,
   "lesson:a": lessonA,
   "lesson:b": lessonB,
   boss,

@@ -34,12 +34,13 @@ lib/brand.ts           Game name, logo text and localized tagline (single source
 lib/i18n/              text.ts (locales, Text, L, tx, negotiateLocale) and messages.ts (UI dictionaries)
 lib/                   fx (particles, banners), sfx (WebAudio chiptune), syntax (highlighting), palette, game-rules
 lib/runners/           Code execution. Server runners (via /api/run, registered in index.ts): rust-playground,
-                       go-playground, godbolt-cpp and godbolt-csharp (godbolt.ts), with the shared safe fetch in http.ts.
+                       go-playground, godbolt-cpp, godbolt-csharp, godbolt-zig and godbolt-haskell (godbolt.ts), with the
+                       shared safe fetch in http.ts.
                        Browser runners: js-browser (js-core.ts shared with the validator, js-worker.ts) and py-browser
                        (py-core.ts shared with the validator, py-worker.ts); browser.ts starts both; ids.ts lists browser ids
 lib/music/             Tracker songs (DSL) played by lib/sfx.ts
 scripts/               validate-content.ts, ts-check.ts (tsc --strict batch), snippet-wrap.ts (completes short snippets),
-                       remote-run.ts (Go/C++/C#/Python verification), copy-pyodide.mjs, playtest.mjs, e2e-memory-card.mjs, shots.mjs
+                       remote-run.ts (Go/C++/C#/Zig/Haskell/Python verification), copy-pyodide.mjs, playtest.mjs, e2e-memory-card.mjs, shots.mjs
 tests/                 save, security, js-runner, runners and music tests (npm test)
 ```
 
@@ -162,12 +163,14 @@ runner?
     ├── rust-playground   lib/runners/rust-playground.ts   public Rust Playground (play.rust-lang.org)
     ├── go-playground     lib/runners/go-playground.ts     official Go Playground (go.dev/_/compile)
     ├── godbolt-cpp       lib/runners/godbolt.ts           Compiler Explorer, g++ 14, -std=c++20 -O1
-    └── godbolt-csharp    lib/runners/godbolt.ts           Compiler Explorer, .NET 10 (CoreCLR)
+    ├── godbolt-csharp    lib/runners/godbolt.ts           Compiler Explorer, .NET 10 (CoreCLR)
+    ├── godbolt-zig       lib/runners/godbolt.ts           Compiler Explorer, Zig 0.15.2 (Debug)
+    └── godbolt-haskell   lib/runners/godbolt.ts           Compiler Explorer, GHC 9.8.4
 ```
 
 Browser runner ids are listed in `BROWSER_RUNNER_IDS` (`lib/runners/ids.ts`).
 
-**Server runners.** `POST /api/run` applies the guards described in [security.md](security.md) (rate limits, global quota, concurrency caps, result cache) and picks the language's runner (`lib/runners/index.ts`). Every server runner sends only the player's snippet to its sandbox and nothing else. The Go, C++ and C# runners share `postJson` in `lib/runners/http.ts`: a POST with a timeout (15 s by default, 20 s for Compiler Explorer), no redirects, a fixed `User-Agent`, a 1 MB response cap and JSON parsing; any failure (network, non-2xx, oversized or malformed body, unexpected shape) becomes `available: false` with no upstream details. The Rust runner applies the same rules inline. Each runner cleans its output so it reads like a local build: cargo noise dropped (Rust), ANSI escape codes stripped, sandbox paths renamed to `prog.go`, `main.cpp` or `Program.cs`, and build-tool noise removed. With `BITWISE_RUNNER=off` no external call is made and the beat is validated with its `fallback` regex. When the API answers 429 or 503, `RunBeatView` shows "busy, retry in N s" without costing a heart.
+**Server runners.** `POST /api/run` applies the guards described in [security.md](security.md) (rate limits, global quota, concurrency caps, result cache) and picks the language's runner (`lib/runners/index.ts`). Every server runner sends only the player's snippet to its sandbox and nothing else. The Go and Compiler Explorer (C++, C#, Zig, Haskell) runners share `postJson` in `lib/runners/http.ts`: a POST with a timeout (15 s by default, 20 s for Compiler Explorer, 30 s for Zig, whose compiler is slower), no redirects, a fixed `User-Agent`, a 1 MB response cap and JSON parsing; any failure (network, non-2xx, oversized or malformed body, unexpected shape) becomes `available: false` with no upstream details. The Rust runner applies the same rules inline. Each runner cleans its output so it reads like a local build: cargo noise dropped (Rust), ANSI escape codes stripped, sandbox paths renamed to `prog.go`, `main.cpp`, `Program.cs`, `main.zig` or `Main.hs`, and build-tool noise removed. Zig needs one more step, because `std.debug.print` writes to stderr: an optional `Split` hook in `godbolt.ts` (`splitZig`) counts everything printed on stderr before a panic, or before an `error: Name` returned from `main`, as stdout, and keeps the panic or error as stderr; `cleanZig` then trims the trace to the player's own frames (dropping the standard library's startup frames). `cleanHaskell` also drops the `output.s: ` prefix GHC puts on runtime errors. With `BITWISE_RUNNER=off` no external call is made and the beat is validated with its `fallback` regex. When the API answers 429 or 503, `RunBeatView` shows "busy, retry in N s" without costing a heart.
 
 **Browser runners (`js-browser`, `py-browser`).** JS/TS/TSX and Python run in the player's own browser; the server never receives or executes player code, and `getRunner` in `lib/repo.ts` returns `null` for browser runners, so `/api/run` answers 404 `unknown_language` for those packs.
 

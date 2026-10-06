@@ -7,7 +7,10 @@ type Reply = { code?: unknown; stdout?: unknown; stderr?: unknown; didExecute?: 
 
 const lines = (v: unknown) => (Array.isArray(v) ? (v as Line[]).map((l) => String(l?.text ?? "")).join("\n") : "");
 
-function godbolt(id: string, compiler: string, lang: string, userArguments: string, clean: (s: string) => string): LanguageRunner {
+/** Optional per-language step that decides what counts as program output (see Zig). */
+type Split = (out: { stdout: string; stderr: string; ok: boolean }) => { stdout: string; stderr: string };
+
+function godbolt(id: string, compiler: string, lang: string, userArguments: string, clean: (s: string) => string, split?: Split, timeoutMs = 20_000): LanguageRunner {
   return {
     id,
     async run(code: string): Promise<RunResult> {
@@ -24,16 +27,17 @@ function godbolt(id: string, compiler: string, lang: string, userArguments: stri
         lang,
         allowStoreCodeDebug: false,
       });
-      const data = (await postJson(`https://godbolt.org/api/compiler/${compiler}/compile`, body, "application/json", 20_000)) as Reply | null;
+      const data = (await postJson(`https://godbolt.org/api/compiler/${compiler}/compile`, body, "application/json", timeoutMs)) as Reply | null;
       if (!data || typeof data.code !== "number") return UNAVAILABLE;
       const build = data.buildResult;
       if (build && typeof build.code === "number" && build.code !== 0) {
         return { ok: false, stdout: "", stderr: clean(lines(build.stderr) || lines(build.stdout)) || "Compilation failed", available: true, phase: "compile" };
       }
-      const stdout = lines(data.stdout);
-      const stdoutText = stdout ? stdout + "\n" : "";
       const ok = data.code === 0;
-      return { ok, stdout: stdoutText, stderr: clean(lines(data.stderr)), available: true, ...(ok ? {} : { phase: "runtime" as const }) };
+      const raw = { stdout: lines(data.stdout), stderr: lines(data.stderr), ok };
+      const out = split ? split(raw) : raw;
+      const stdoutText = out.stdout ? out.stdout + "\n" : "";
+      return { ok, stdout: stdoutText, stderr: clean(out.stderr), available: true, ...(ok ? {} : { phase: "runtime" as const }) };
     },
   };
 }
@@ -59,5 +63,39 @@ const cleanCs = (s: string) =>
     .join("\n")
     .trim();
 
+const cleanZig = (s: string) => {
+  const all = stripAnsi(s).split("\n");
+  // Keep the panic and the player's frames; drop the standard library's startup frames.
+  const end = all.findIndex((l) => /^(\/cefs\/|\?\?\?:|Program terminated with signal)/.test(l));
+  return (end === -1 ? all : all.slice(0, end))
+    .map((l) => l.replace(/(?:\/app\/|\.\/)?example\.zig/g, "main.zig").replace(/ 0x[0-9a-f]+ in /, " in "))
+    .filter((l) => !/^(Compiler returned:|Build failed$)/.test(l))
+    .join("\n")
+    .trim();
+};
+
+/**
+ * Zig programs usually print with std.debug.print, which writes to stderr. Everything printed before
+ * a panic (or before an error returned from main, "error: Name") is program output; the panic or
+ * error and its trace are the error.
+ */
+const splitZig: Split = ({ stdout, stderr, ok }) => {
+  const panic = stderr.search(/thread \d+ panic: |^panic: /m);
+  const returned = ok ? -1 : stderr.search(/^error: [A-Za-z_]\w*$/m);
+  const at = panic !== -1 ? panic : returned;
+  const printed = at === -1 ? stderr : stderr.slice(0, at);
+  return { stdout: [stdout, printed.replace(/\n$/, "")].filter(Boolean).join("\n"), stderr: at === -1 ? "" : stderr.slice(at) };
+};
+
+const cleanHaskell = (s: string) =>
+  stripAnsi(s)
+    .split("\n")
+    .map((l) => l.replace(/^<source>:/, "Main.hs:").replace(/^output\.s: /, "").replace(/^\/app\/example\.hs:/, "Main.hs:"))
+    .filter((l) => !/^(Compiler returned:|Build failed$|\[1 of \d\]|Linking )/.test(l))
+    .join("\n")
+    .trim();
+
 export const godboltCpp = godbolt("godbolt-cpp", "g142", "c++", "-std=c++20 -O1", cleanCpp);
 export const godboltCsharp = godbolt("godbolt-csharp", "dotnet100csharpcoreclr", "csharp", "", cleanCs);
+export const godboltZig = godbolt("godbolt-zig", "z0152", "zig", "", cleanZig, splitZig, 30_000);
+export const godboltHaskell = godbolt("godbolt-haskell", "ghc984", "haskell", "", cleanHaskell);
