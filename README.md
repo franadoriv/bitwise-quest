@@ -78,7 +78,7 @@ Each lesson is a series of challenges that take a few seconds each and follow th
 
 ## Features
 
-- **A galaxy of planets with moons:** each language is a low poly 3D planet (with rings and a starfield) that has its own guide, bugs and story, and each framework of that language is a moon orbiting it, with its own guide, lessons and progress. Land on either to reach a map with one island per region (Three.js), plus animated 2D pixel art scenes driven by GSAP on SVG.
+- **A galaxy of planets with moons:** each language is a low poly 3D planet (with rings and a starfield) that has its own guide, bugs and story, and each framework of that language is a moon orbiting it, with its own guide, lessons and progress. Swipe between planets on touch screens; framework moons are shaped after what they teach (React an atom, WebGL a triangle, three.js a cube, Rails a train wheel). Landing dives into the planet with a widening field of view, then reaches a map with one island per region (Three.js), plus animated 2D pixel art scenes driven by GSAP on SVG.
 - **Memory card with 15 save slots,** like a retro console: name your player, autosave as you play, and **export/import** any slot as a `.bwq` file to move it to another browser or keep a backup. Edited or damaged files are rejected.
 - **No dead waits:** before a challenge starts, the game downloads what it needs (the game code, the Python interpreter, three.js) behind an arcade loading screen with real progress, where the guide walks toward the bug and tips rotate. Cached content starts instantly.
 - **Arcade juice:** combos, PERFECT and GREAT speed tiers, particles, screen shake, chiptune music and sound effects synthesized with WebAudio (no audio files).

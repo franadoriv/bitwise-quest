@@ -128,6 +128,7 @@ Each language is a planet with its own guide (mascot), bugs and story. `Language
 | `guide.title` | `L(...)` | One-line personality shown on the planet card, budget 40 |
 | `colors` | `{ surface, accent, ring? }` | `#rrggbb` hex colors for the 3D planet; `ring` adds a ring |
 | `moons` | number? | Moons orbiting the planet in the galaxy |
+| `shape` | `"orb"` \| `"atom"` \| `"tetra"` \| `"cube"` \| `"wheel"`? | Moons only: the 3D shape in the galaxy that hints at what the framework teaches (React `atom`, WebGL `tetra`, three.js `cube`, Rails `wheel`). Defaults to a faceted orb |
 | `bugs` | `SpriteId[]` | This planet's bugs, shown on the planet card. Review runs use the first one; exams pick one by level (junior: 1st, mid: 3rd, senior: 4th, clamped to the list) |
 
 Moons use the same `PlanetDef` shape (Reactia is in `content/react/planet.ts`).

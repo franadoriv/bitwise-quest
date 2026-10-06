@@ -2,14 +2,77 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import gsap from "gsap";
+import type { MoonShape } from "@/lib/content/types";
 
 export interface PlanetMesh {
   slug: string; label: string; surface: string; accent: string; ring?: string;
   /** Decorative moons. */
   moons?: number;
   /** Framework moons (playable): bigger, colored, orbit first. */
-  frameworkMoons?: { color: string; locked: boolean }[];
+  frameworkMoons?: { color: string; locked: boolean; shape?: MoonShape }[];
   locked: boolean;
+}
+
+/** Which world to dive into: a planet, or one of its framework moons. */
+export interface Landing { planet: number; moon?: number }
+
+const edges = (geo: THREE.BufferGeometry, color = 0xfff8ea) =>
+  new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color }));
+
+/** A framework moon whose shape hints at what it teaches. Parts named "spin" rotate on their own. */
+function moonMesh(shape: MoonShape | undefined, color: THREE.Color, locked: boolean): THREE.Object3D {
+  const mat = () => new THREE.MeshLambertMaterial({ color, flatShading: true });
+  const line = locked ? 0x777777 : 0xfff8ea;
+  const g = new THREE.Group();
+  switch (shape) {
+    case "atom": {
+      // React: a nucleus with electron orbits
+      g.add(new THREE.Mesh(new THREE.IcosahedronGeometry(0.32, 1), mat()));
+      [0, Math.PI / 3, -Math.PI / 3].forEach((tilt) => {
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.72, 0.05, 4, 20), new THREE.MeshLambertMaterial({ color: locked ? 0x666666 : 0xfff8ea, flatShading: true }));
+        ring.rotation.set(Math.PI / 2, tilt, 0);
+        g.add(ring);
+      });
+      g.name = "spin";
+      break;
+    }
+    case "tetra": {
+      // WebGL: the triangle, the GPU's basic primitive
+      const geo = new THREE.TetrahedronGeometry(0.85);
+      const m = new THREE.Mesh(geo, mat());
+      m.add(edges(geo, line));
+      m.name = "spin";
+      g.add(m);
+      break;
+    }
+    case "cube": {
+      // three.js: a wireframe-edged cube, the "hello world" of every scene
+      const geo = new THREE.BoxGeometry(0.95, 0.95, 0.95);
+      const m = new THREE.Mesh(geo, mat());
+      m.add(edges(geo, line));
+      m.name = "spin";
+      g.add(m);
+      break;
+    }
+    case "wheel": {
+      // Rails: a locomotive wheel with spokes, rolling along its orbit
+      const wheel = new THREE.Group();
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.12, 4, 14), mat());
+      wheel.add(rim);
+      for (let k = 0; k < 4; k++) {
+        const spoke = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.08, 0.08), new THREE.MeshLambertMaterial({ color: locked ? 0x555555 : 0xb9c2cc, flatShading: true }));
+        spoke.rotation.z = (k * Math.PI) / 4;
+        wheel.add(spoke);
+      }
+      wheel.add(new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.2, 8).rotateX(Math.PI / 2), mat()));
+      wheel.name = "roll";
+      g.add(wheel);
+      break;
+    }
+    default:
+      g.add(new THREE.Mesh(new THREE.IcosahedronGeometry(0.62, 1), mat()));
+  }
+  return g;
 }
 
 const SPACING = 9;
@@ -41,8 +104,9 @@ function planetGroup(p: PlanetMesh): THREE.Group {
   fw.forEach((fm, m) => {
     const c = new THREE.Color(fm.color);
     if (fm.locked) c.multiplyScalar(0.4);
-    const moon = new THREE.Mesh(new THREE.IcosahedronGeometry(0.62, 1), new THREE.MeshLambertMaterial({ color: c, flatShading: true }));
-    moon.userData.orbit = { r: 3.6 + m * 1.1, speed: 0.45 - m * 0.08, phase: m * 2.4 };
+    const moon = moonMesh(fm.shape, c, fm.locked);
+    moon.userData.orbit = { r: 3.7 + m * 1.2, speed: 0.45 - m * 0.08, phase: m * 2.4 };
+    moon.userData.framework = m;
     moon.name = "moon";
     g.add(moon);
   });
@@ -55,12 +119,15 @@ function planetGroup(p: PlanetMesh): THREE.Group {
   return g;
 }
 
-export function Galaxy3D({ planets, selected, onSelect }: { planets: PlanetMesh[]; selected: number; onSelect(i: number): void }) {
+export function Galaxy3D({ planets, selected, onSelect, onSwipe, landing }: { planets: PlanetMesh[]; selected: number; onSelect(i: number): void; onSwipe?(dir: 1 | -1): void; landing?: Landing | null }) {
   const host = useRef<HTMLDivElement>(null);
   const labels = useRef<(HTMLDivElement | null)[]>([]);
   const focusRef = useRef<(i: number) => void>(() => {});
+  const landRef = useRef<(l: Landing) => void>(() => {});
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
+  const onSwipeRef = useRef(onSwipe);
+  onSwipeRef.current = onSwipe;
 
   useEffect(() => {
     const el = host.current!;
@@ -109,6 +176,17 @@ export function Galaxy3D({ planets, selected, onSelect }: { planets: PlanetMesh[
       gsap.fromTo(groups[i].scale, { x: 0.8, y: 0.8, z: 0.8 }, { x: 1, y: 1, z: 1, duration: 0.6, ease: "back.out(3)" });
     };
 
+    // Camera rig: distance and height from the focus, field of view and a sideways drag offset.
+    const cam = { dist: 10.5, lift: 1.6, fov: 40, drag: 0, landing: false };
+    let landTarget: THREE.Object3D | null = null;
+    landRef.current = (l) => {
+      const g = groups[l.planet];
+      landTarget = l.moon == null ? g : (g.children.find((c) => c.name === "moon" && c.userData.framework === l.moon) ?? g);
+      cam.landing = true;
+      // Dive in while the field of view widens: the planet rushes up like a landing.
+      gsap.to(cam, { dist: l.moon == null ? 2.6 : 1.2, lift: 0.15, fov: 82, drag: 0, duration: 0.9, ease: "power3.in" });
+    };
+
     const ray = new THREE.Raycaster();
     const ndc = new THREE.Vector2();
     const pick = (e: PointerEvent) => {
@@ -119,10 +197,33 @@ export function Galaxy3D({ planets, selected, onSelect }: { planets: PlanetMesh[
       while (o && o.userData.index === undefined) o = o.parent;
       return o ? (o.userData.index as number) : -1;
     };
-    const onMove = (e: PointerEvent) => { el.style.cursor = pick(e) >= 0 ? "pointer" : "default"; };
-    const onUp = (e: PointerEvent) => { const i = pick(e); if (i >= 0) onSelectRef.current(i); };
+    // Tap a planet to select it; swipe (or drag with the mouse) to move through the galaxy.
+    let down: { x: number; y: number } | null = null;
+    const onDown = (e: PointerEvent) => { down = { x: e.clientX, y: e.clientY }; };
+    const onMove = (e: PointerEvent) => {
+      if (down) {
+        cam.drag = -(e.clientX - down.x) / Math.max(1, el.clientWidth) * 6;
+        el.style.cursor = "grabbing";
+        return;
+      }
+      el.style.cursor = pick(e) >= 0 ? "pointer" : "default";
+    };
+    const onUp = (e: PointerEvent) => {
+      if (!down) return;
+      const dx = e.clientX - down.x, dy = e.clientY - down.y;
+      down = null;
+      gsap.to(cam, { drag: 0, duration: 0.35, ease: "power2.out" });
+      if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) onSwipeRef.current?.(dx < 0 ? 1 : -1);
+      else if (Math.abs(dx) < 8 && Math.abs(dy) < 8) {
+        const i = pick(e);
+        if (i >= 0) onSelectRef.current(i);
+      }
+    };
+    const onCancel = () => { down = null; gsap.to(cam, { drag: 0, duration: 0.35 }); };
+    el.addEventListener("pointerdown", onDown);
     el.addEventListener("pointermove", onMove);
     el.addEventListener("pointerup", onUp);
+    el.addEventListener("pointercancel", onCancel);
 
     const t0 = performance.now();
     const tmp = new THREE.Vector3();
@@ -135,11 +236,22 @@ export function Galaxy3D({ planets, selected, onSelect }: { planets: PlanetMesh[
         g.children.filter((c) => c.name === "moon").forEach((m) => {
           const o = m.userData.orbit as { r: number; speed: number; phase: number };
           m.position.set(Math.cos(t * o.speed + o.phase) * o.r, Math.sin(t * o.speed + o.phase) * 0.6, Math.sin(t * o.speed + o.phase) * o.r);
+          const spin = m.getObjectByName("spin");
+          if (spin) spin.rotation.set(t * 0.7, t * 1.1, 0);
+          const roll = m.getObjectByName("roll");
+          if (roll) roll.rotation.z = -t * 2.2;
         });
       });
       stars.rotation.z = t * 0.004;
-      camera.position.set(focus.x + Math.sin(t * 0.2) * 0.8, focus.y + 1.6, focus.z + 10.5);
-      camera.lookAt(focus.x, focus.y, focus.z);
+      if (cam.landing && landTarget) {
+        // Follow the target (moons keep orbiting) while diving in.
+        landTarget.getWorldPosition(tmp);
+        focus.lerp(tmp, 0.25);
+      }
+      if (camera.fov !== cam.fov) { camera.fov = cam.fov; camera.updateProjectionMatrix(); }
+      const sway = cam.landing ? 0 : Math.sin(t * 0.2) * 0.8;
+      camera.position.set(focus.x + sway + cam.drag, focus.y + cam.lift, focus.z + cam.dist);
+      camera.lookAt(focus.x + cam.drag * 0.6, focus.y, focus.z);
       renderer.render(scene, camera);
       const w = el.clientWidth, h = el.clientHeight;
       groups.forEach((g, i) => {
@@ -147,7 +259,7 @@ export function Galaxy3D({ planets, selected, onSelect }: { planets: PlanetMesh[
         if (!lab) return;
         tmp.copy(g.position).setY(g.position.y + 3.4).project(camera);
         lab.style.transform = `translate(-50%, -100%) translate(${((tmp.x + 1) / 2) * w}px, ${Math.max(28, ((1 - tmp.y) / 2) * h)}px)`;
-        lab.style.opacity = tmp.z < 1 && Math.abs(tmp.x) < 1.15 ? "1" : "0";
+        lab.style.opacity = !cam.landing && tmp.z < 1 && Math.abs(tmp.x) < 1.15 ? "1" : "0";
       });
       raf = requestAnimationFrame(tick);
     };
@@ -156,10 +268,13 @@ export function Galaxy3D({ planets, selected, onSelect }: { planets: PlanetMesh[
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      el.removeEventListener("pointerdown", onDown);
       el.removeEventListener("pointermove", onMove);
       el.removeEventListener("pointerup", onUp);
+      el.removeEventListener("pointercancel", onCancel);
+      gsap.killTweensOf(cam);
       scene.traverse((o) => {
-        if (o instanceof THREE.Mesh || o instanceof THREE.Points) { o.geometry.dispose(); (o.material as THREE.Material).dispose(); }
+        if (o instanceof THREE.Mesh || o instanceof THREE.Points || o instanceof THREE.LineSegments) { o.geometry.dispose(); (o.material as THREE.Material).dispose(); }
       });
       renderer.dispose();
       el.removeChild(renderer.domElement);
@@ -173,9 +288,14 @@ export function Galaxy3D({ planets, selected, onSelect }: { planets: PlanetMesh[
     focusRef.current(selected);
   }, [selected]);
 
+  useEffect(() => {
+    if (landing) landRef.current(landing);
+  }, [landing]);
+
   return (
     <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden" }}>
-      <div ref={host} style={{ position: "absolute", inset: 0 }} />
+      {/* touch-action none: swipes and taps go to the galaxy, not to browser scrolling or zoom */}
+      <div ref={host} style={{ position: "absolute", inset: 0, touchAction: "none" }} />
       {planets.map((p, i) => (
         <div
           key={p.slug}

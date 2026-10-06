@@ -39,8 +39,20 @@ function ac(): AudioContext | null {
     // a screen may have asked for music before the first click unlocked audio
     if (wanted) setTimeout(() => startWanted(), 0);
   }
-  if (ctx.state === "suspended") void ctx.resume();
+  // "suspended" before a gesture, "interrupted" on iOS after a call or switching apps
+  if (ctx.state !== "running") void ctx.resume();
   return ctx;
+}
+
+/**
+ * iOS treats Web Audio as "ambient" sound, which the silent switch mutes; ask for playback audio
+ * (Safari 16.4+) so the game is heard like a video would be.
+ */
+function preferPlaybackSession() {
+  try {
+    const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
+    if (session && session.type !== "playback") session.type = "playback";
+  } catch {}
 }
 
 function tone(freq: number, dur: number, opts: { type?: OscillatorType; vol?: number; slide?: number; delay?: number; out?: GainNode | null } = {}) {
@@ -80,7 +92,26 @@ function noise(dur: number, vol = 0.3, delay = 0) {
 const N = (semi: number) => 440 * Math.pow(2, semi / 12); // semitones from A4
 
 export const sfx = {
-  unlock: () => { unlocked = true; void ac(); },
+  /**
+   * Call from inside a user gesture. Mobile browsers only start audio from certain gestures
+   * (iOS: touchend/click), so this plays a silent sample to wake the context and reports whether
+   * audio is now running; callers keep listening until it is.
+   */
+  unlock: (): boolean => {
+    unlocked = true;
+    preferPlaybackSession();
+    const c = ac();
+    if (!c) return false;
+    try {
+      const src = c.createBufferSource();
+      src.buffer = c.createBuffer(1, 1, 22050);
+      src.connect(c.destination);
+      src.start(0);
+    } catch {}
+    return c.state === "running";
+  },
+  /** Resumes audio after the page comes back to the foreground. */
+  wake: () => { if (ctx && ctx.state !== "running") void ctx.resume(); },
   blip: (pitch = 0) => tone(N(3 + pitch), 0.04, { vol: 0.12 }),
   text: () => tone(N(-2 + Math.floor(Math.random() * 4)), 0.03, { vol: 0.06 }),
   select: () => { tone(N(7), 0.05, { vol: 0.18 }); tone(N(12), 0.06, { vol: 0.18, delay: 0.05 }); },
