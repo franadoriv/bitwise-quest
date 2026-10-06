@@ -15,7 +15,9 @@ lib/repo.ts            Content reads only, straight from LANGUAGE_PACKS (indexed
 app/                   Next.js routes (App Router). Server pages read lib/repo.ts and pass CONTENT to client components
 app/layout.tsx         Fonts, locale negotiation (cookie / Accept-Language), I18nProvider, SaveProvider, GameFrame
 app/api/*              Endpoints: run (code runner), review-play (beats for due review keys). POST only, guarded
-proxy.ts               Per-request nonce CSP + page rate limit (runs before every page request)
+proxy.ts               Per-request nonce CSP + page rate limit (runs before every page request; skips /pyodide/*)
+next.config.ts         Security headers for every response; immutable caching for /pyodide/*
+public/pyodide/<ver>/  Self-hosted Python runtime (Pyodide), copied from node_modules by scripts/copy-pyodide.mjs (gitignored)
 lib/security/          Abuse protection: limits (token bucket, semaphores, TTL cache), http guards, policies (quotas)
         │
         ▼
@@ -31,11 +33,14 @@ components/pixel/      Built-in pixel art sprites as text grids, getSprite() (bu
 lib/brand.ts           Game name, logo text and localized tagline (single source of truth)
 lib/i18n/              text.ts (locales, Text, L, tx, negotiateLocale) and messages.ts (UI dictionaries)
 lib/                   fx (particles, banners), sfx (WebAudio chiptune), syntax (highlighting), palette, game-rules
-lib/runners/           Code execution: server runners (rust-playground, via /api/run) and the browser runner
-                       js-browser (js-core.ts shared with the validator, js-worker.ts, browser.ts); ids.ts lists browser ids
+lib/runners/           Code execution. Server runners (via /api/run, registered in index.ts): rust-playground,
+                       go-playground, godbolt-cpp and godbolt-csharp (godbolt.ts), with the shared safe fetch in http.ts.
+                       Browser runners: js-browser (js-core.ts shared with the validator, js-worker.ts) and py-browser
+                       (py-core.ts shared with the validator, py-worker.ts); browser.ts starts both; ids.ts lists browser ids
 lib/music/             Tracker songs (DSL) played by lib/sfx.ts
-scripts/               validate-content.ts, ts-check.ts (tsc --strict batch), playtest.mjs, e2e-memory-card.mjs, shots.mjs
-tests/                 save, security, js-runner and music tests (npm test)
+scripts/               validate-content.ts, ts-check.ts (tsc --strict batch), snippet-wrap.ts (completes short snippets),
+                       remote-run.ts (Go/C++/C#/Python verification), copy-pyodide.mjs, playtest.mjs, e2e-memory-card.mjs, shots.mjs
+tests/                 save, security, js-runner, runners and music tests (npm test)
 ```
 
 ## Client save vs server content
@@ -93,7 +98,7 @@ All content arrives at the client with every locale (`Text` values). Components 
 
 | Endpoint | Body | Returns |
 | --- | --- | --- |
-| `POST /api/run` | `{ language, code }` (body ≤ 16 KB, code ≤ 10,000 chars and 400 lines) | Runner result `{ ok, stdout, stderr, available }` (output capped at 8,000 chars each) |
+| `POST /api/run` | `{ language, code }` (body ≤ 16 KB, code ≤ 10,000 chars and 400 lines) | Runner result `{ ok, stdout, stderr, available, phase? }` (output capped at 8,000 chars each) |
 | `POST /api/review-play` | `{ lang, keys }` with keys `"<lessonSlug>#<beatIndex>"` (body ≤ 2 KB) | A review `LessonPlay` with those beats (max 12, question beats except `run`), or 400/404 |
 
 Both endpoints only export `POST` (any other method gets 405), require a same-origin `Origin`, are rate limited per client and answer errors as `{ "error": "<code>" }` with a stable code. The full list of checks, quotas and status codes is in [security.md](security.md).
@@ -146,22 +151,35 @@ Computed on the client by `worldState` in `lib/save/progress.ts`:
 `LessonPlay` carries the pack's `runner` id and `codeLang`. `RunBeatView` (`components/game/beats/RunBeatView.tsx`) picks the path:
 
 ```
-runner in BROWSER_RUNNER_IDS (lib/runners/ids.ts)?
-├── yes (js-browser)  runInBrowser(code, { jsx: codeLang === "tsx" })      lib/runners/browser.ts
-│                     └── new Web Worker (lib/runners/js-worker.ts) per run, terminated after 3 s at most
-│                         └── executeJs (lib/runners/js-core.ts) with modules react, react-dom/server
-└── no (rust-playground)  POST /api/run → guards → getRunner(id) (lib/runners/index.ts) → external sandbox
+runner?
+├── py-browser       runPythonInBrowser(code)                                 lib/runners/browser.ts
+│                    └── one long-lived Web Worker (lib/runners/py-worker.ts), warmed when the exercise opens
+│                        └── runPython (lib/runners/py-core.ts) in Pyodide loaded from /pyodide/<version>/
+├── js-browser       runInBrowser(code, { jsx: codeLang === "tsx" })         lib/runners/browser.ts
+│                    └── new Web Worker (lib/runners/js-worker.ts) per run, terminated after 3 s at most
+│                        └── executeJs (lib/runners/js-core.ts) with modules react, react-dom/server (+ three, lazily)
+└── server runners   POST /api/run → guards → getRunner(id) (lib/runners/index.ts) → external sandbox
+    ├── rust-playground   lib/runners/rust-playground.ts   public Rust Playground (play.rust-lang.org)
+    ├── go-playground     lib/runners/go-playground.ts     official Go Playground (go.dev/_/compile)
+    ├── godbolt-cpp       lib/runners/godbolt.ts           Compiler Explorer, g++ 14, -std=c++20 -O1
+    └── godbolt-csharp    lib/runners/godbolt.ts           Compiler Explorer, .NET 10 (CoreCLR)
 ```
 
-**Server runners.** `POST /api/run` applies the guards described in [security.md](security.md) and picks the language's runner (`lib/runners/index.ts`). The Rust runner (`lib/runners/rust-playground.ts`) sends the player's snippet to the public Rust Playground. With `BITWISE_RUNNER=off` no external call is made and the beat is validated with its `fallback` regex. When the API answers 429 or 503, `RunBeatView` shows "busy, retry in N s" without costing a heart.
+Browser runner ids are listed in `BROWSER_RUNNER_IDS` (`lib/runners/ids.ts`).
 
-**Browser runner (`js-browser`).** JS/TS/TSX runs in the player's own browser; the server never receives or executes player code, and `getRunner` in `lib/repo.ts` returns `null` for browser runners, so `/api/run` answers 404 `unknown_language` for those packs.
+**Server runners.** `POST /api/run` applies the guards described in [security.md](security.md) (rate limits, global quota, concurrency caps, result cache) and picks the language's runner (`lib/runners/index.ts`). Every server runner sends only the player's snippet to its sandbox and nothing else. The Go, C++ and C# runners share `postJson` in `lib/runners/http.ts`: a POST with a timeout (15 s by default, 20 s for Compiler Explorer), no redirects, a fixed `User-Agent`, a 1 MB response cap and JSON parsing; any failure (network, non-2xx, oversized or malformed body, unexpected shape) becomes `available: false` with no upstream details. The Rust runner applies the same rules inline. Each runner cleans its output so it reads like a local build: cargo noise dropped (Rust), ANSI escape codes stripped, sandbox paths renamed to `prog.go`, `main.cpp` or `Program.cs`, and build-tool noise removed. With `BITWISE_RUNNER=off` no external call is made and the beat is validated with its `fallback` regex. When the API answers 429 or 503, `RunBeatView` shows "busy, retry in N s" without costing a heart.
 
-- `lib/runners/js-core.ts` is shared by the worker and the content validator, so a snippet prints the same thing in both. It strips types and converts JSX (classic runtime) and `import`/`export` with sucrase (types are **not** checked at play time), runs the result in strict mode inside an async function (top-level `await` works), captures `console.log/info/debug` to stdout and `console.warn/error` to stderr formatted like Node's `util.inspect` for short values, tracks `setTimeout`/`setInterval` so the run ends when the program and its pending timers finish (pending timers after 2.5 s fail the run), resolves `import` only for `react` and `react-dom/server`, caps output at 8,000 characters and reports errors as `Name: message` text.
-- `lib/runners/js-worker.ts` is the Web Worker: it receives `{ code, jsx }`, calls `executeJs` and posts the result back.
-- `lib/runners/browser.ts` (client only) creates a fresh module worker for every run, terminates it when the result arrives or after a 3 s hard timeout (the only way to stop an infinite synchronous loop), and answers `available: false` if the worker cannot be created, so the beat falls back to its `fallback` regex.
+**Browser runners (`js-browser`, `py-browser`).** JS/TS/TSX and Python run in the player's own browser; the server never receives or executes player code, and `getRunner` in `lib/repo.ts` returns `null` for browser runners, so `/api/run` answers 404 `unknown_language` for those packs.
 
-**Results.** `RunBeatView` turns the runner answer into one of: correct (`stdout` contains `expect`), wrong output, "the compiler complains" (Rust failures and JS `SyntaxError`), "it crashed while running" (any other JS failure: a thrown error, a timeout or timers still pending; `run.runtimeError`), offline pass/fail with `fallback`, or busy (server runners only).
+- `lib/runners/js-core.ts` is shared by the worker and the content validator, so a snippet prints the same thing in both. It strips types and converts JSX (classic runtime) and `import`/`export` with sucrase (types are **not** checked at play time), runs the result in strict mode inside an async function (top-level `await` works), captures `console.log/info/debug` to stdout and `console.warn/error` to stderr formatted like Node's `util.inspect` for short values, tracks `setTimeout`/`setInterval` so the run ends when the program and its pending timers finish (pending timers after 2.5 s fail the run), resolves `import` only for the modules it is given, caps output at 8,000 characters and reports errors as `Name: message` text.
+- `lib/runners/js-worker.ts` is the JS Web Worker: it receives `{ code, jsx }`, provides `react` and `react-dom/server`, and imports `three` lazily only when the snippet imports it (the WebGL and three.js moons: math and scene graph, no GPU in the worker). It then calls `executeJs` and posts the result back. The validator loads `three` the same way.
+- `lib/runners/py-core.ts` is shared by the Python worker and the validator (Pyodide in Node). It pins `PYODIDE_VERSION` (kept in sync with `package.json` by `tests/runners.test.ts`) and installs a small harness: fresh globals per run, the file is named `main.py` and registered in `linecache` so tracebacks show the player's lines, the harness frame is dropped from tracebacks, stdout/stderr are read as raw bytes so output without a final newline is not lost, `asyncio.run()` (and `asyncio.new_event_loop()`) use a small CPython event loop whose selector only sleeps until the next timer, so async code works without WebAssembly stack switching (which some browsers and Node 24 lack), and output is capped at 20,000 characters. A `SyntaxError` is reported with `phase: "compile"`, any other exception with `phase: "runtime"`.
+- `lib/runners/py-worker.ts` is a long-lived module worker that loads `/pyodide/<version>/pyodide.mjs` from the game's own origin and answers `{ id, code }` messages.
+- `lib/runners/browser.ts` (client only) creates a fresh JS worker for every run and terminates it when the result arrives or after a 3 s hard timeout (the only way to stop an infinite synchronous loop). For Python, loading CPython takes a few seconds, so `warmPython()` starts one worker when a Python exercise opens and `runPythonInBrowser` reuses it; its 5 s limit starts once the interpreter is ready, and a stuck worker is terminated and recreated for the next run. Both answer `available: false` if the worker cannot be created or the runtime cannot load, so the beat falls back to its `fallback` regex.
+
+**Python runtime assets.** Pyodide (CPython 3.14 compiled to WebAssembly) is self-hosted, with no third-party CDN. `scripts/copy-pyodide.mjs` runs on `postinstall`, `predev` and `prebuild` and copies five files (`pyodide.mjs`, `pyodide.asm.mjs`, `pyodide.asm.wasm`, `python_stdlib.zip`, `pyodide-lock.json`) from `node_modules/pyodide` to the gitignored `public/pyodide/<version>/`. `next.config.ts` serves `/pyodide/*` with `Cache-Control: public, max-age=31536000, immutable` (the path is versioned), and the `proxy.ts` matcher excludes `pyodide/`, so those static files skip the page rate limit and the per-request CSP. Limitations of Python in the browser: no threads, no network and no `input()`.
+
+**Results.** Every runner sets `RunResult.phase` (`"compile"` or `"runtime"`, `lib/runners/types.ts`) when a run fails. `RunBeatView` turns the runner answer into one of: correct (`stdout` contains `expect`), wrong output, "the compiler complains" (`phase: "compile"`; without a phase, a JS `SyntaxError`), "it crashed while running" (`phase: "runtime"`: a panic, an exception, a timeout or timers still pending; `run.runtimeError`), offline pass/fail with `fallback`, or busy (server runners only).
 
 ## Checklist when changing the architecture
 

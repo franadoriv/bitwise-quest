@@ -70,7 +70,7 @@ test("no two songs share a lead pattern", () => {
 });
 
 test("track names used by screens resolve, with fallbacks", () => {
-  for (const n of ["title", "card", "galaxy", "boss", "exam", "result", "map:rust", "map:typescript", "map:default", "jingle:clear", "jingle:gameover"]) {
+  for (const n of ["title", "card", "galaxy", "boss", "exam", "result", "map:rust", "map:typescript", "map:go", "map:python", "map:cpp", "map:csharp", "map:webgl", "map:threejs", "map:default", "jingle:clear", "jingle:gameover"]) {
     assert.equal(resolveSong(n), n);
   }
   assert.equal(resolveSong("map:react"), "map:default");

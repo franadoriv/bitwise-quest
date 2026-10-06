@@ -115,6 +115,7 @@ body::after {
 .tk-plain { color: var(--p3); }
 
 .codeblock {
+  tab-size: 4; /* Go code is indented with tabs */
   font-family: var(--font-code);
   font-size: 22px;
   line-height: 1.15;

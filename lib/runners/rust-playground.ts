@@ -19,7 +19,9 @@ export const rustPlayground: LanguageRunner = {
       if (text.length > 1_000_000) return { ok: false, stdout: "", stderr: "", available: false };
       const data = JSON.parse(text) as { success?: unknown; stdout?: unknown; stderr?: unknown };
       if (typeof data.success !== "boolean") return { ok: false, stdout: "", stderr: "", available: false };
-      return { ok: data.success, stdout: String(data.stdout ?? ""), stderr: cleanStderr(String(data.stderr ?? "")), available: true };
+      const stderr = cleanStderr(String(data.stderr ?? ""));
+      const phase = data.success ? undefined : /panicked at/.test(stderr) ? "runtime" : "compile";
+      return { ok: data.success, stdout: String(data.stdout ?? ""), stderr, available: true, ...(phase ? { phase } : {}) };
     } catch {
       // Timeouts and network errors are reported as "unavailable"; details stay on the server.
       return { ok: false, stdout: "", stderr: "", available: false };

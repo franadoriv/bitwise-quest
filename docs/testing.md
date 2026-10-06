@@ -3,10 +3,10 @@
 | Command | What it checks | When |
 | --- | --- | --- |
 | `npm run content:check` | Structure: `___` slots, answer indices, unique options, valid effects and actors, `fallback` regexes, exam topics, **every prose field localized in en/es/ja**, text budgets | Whenever you edit `content/` |
-| `npm run content:verify` | All of the above, plus compiles every `check`, every `solution` and every `starter` against the real compiler (Rust Playground for Rust; `tsc --strict` plus the JS runner core for TS/TSX) | Before accepting new content, especially LLM-generated content |
+| `npm run content:verify` | All of the above, plus compiles every `check`, every `solution` and every `starter` against the real compiler (Rust Playground for Rust; `tsc --strict` plus the JS runner core for TS/TSX; Go Playground for Go; Compiler Explorer for C++ and C#; Pyodide in Node for Python). See [How each language is verified](#how-each-language-is-verified) | Before accepting new content, especially LLM-generated content |
 | `npm run typecheck` | TypeScript types, including that every UI dictionary has every message key | After code changes |
 | `npm run shots` | Regenerates the README screenshots in `docs/screenshots/` | After visible UI changes |
-| `npm test` | Unit tests with `node:test`: save system (`tests/save.test.ts`), abuse-protection guards (`tests/security.test.ts`), JS/TS runner (`tests/js-runner.test.ts`) and music (`tests/music.test.ts`) | After any change to `lib/save/`, game rules, `lib/security/`, API routes, `proxy.ts`, `lib/runners/` or `lib/music/` |
+| `npm test` | Unit tests with `node:test`: save system (`tests/save.test.ts`), abuse-protection guards (`tests/security.test.ts`), JS/TS runner (`tests/js-runner.test.ts`), Python runner, snippet wrapper and highlighter (`tests/runners.test.ts`) and music (`tests/music.test.ts`) | After any change to `lib/save/`, game rules, `lib/security/`, API routes, `proxy.ts`, `lib/runners/`, `lib/syntax.ts`, `scripts/snippet-wrap.ts` or `lib/music/` |
 | `npm run playtest -- <path>` | A bot plays the lesson, exam or review in headless Chrome, saves screenshots to `.playtest/` and checks the result was saved | After visual or content changes |
 | `npm run e2e` | End-to-end memory card flow in headless Chrome | After changes to the save system, memory card, galaxy or landing |
 | `npm run build` | Production build | Before delivering |
@@ -38,6 +38,15 @@ When the save format changes, add a fixture test here (see [save-system.md](save
 
 The Web Worker wrapper and the 3 s hard timeout (`lib/runners/js-worker.ts`, `browser.ts`) need a browser: check them by playtesting a TS/TSX `run` beat. Add a test here for any change to `js-core.ts`.
 
+`tests/runners.test.ts` covers the other runner pieces shared by the game and the validator:
+
+- **Pyodide version sync:** `PYODIDE_VERSION` in `lib/runners/py-core.ts` equals the exact `pyodide` version in `package.json` (the worker loads `/pyodide/<version>/`, which `scripts/copy-pyodide.mjs` fills from the installed package).
+- **Python harness** (`runPython`, with Pyodide loaded in Node): stdout is captured; a runtime error has `phase: "runtime"` and a clean traceback that points at `main.py` and hides the harness; a syntax error has `phase: "compile"`; `asyncio.run()` works; a partial last line (`print(..., end=" ")`) stays in its own run; each run gets fresh globals.
+- **Snippet wrapper** (`scripts/snippet-wrap.ts`): Go gets `package main`, the imports it uses and `func main`; C++ gets headers and `int main`; C# gets the missing `using` lines without duplicates; complete programs are left untouched.
+- **Highlighter** (`lib/syntax.ts`): Go, Python, C++ and C# tokenize keywords, functions, comments, preprocessor lines and interpolated strings.
+
+The Python Web Worker, its warm-up and its 5 s limit (`lib/runners/py-worker.ts`, `browser.ts`) need a browser: check them by playtesting a Python `run` beat (after `npm run dev`, which copies Pyodide to `public/pyodide/<version>/`).
+
 `tests/music.test.ts` checks the tracker songs structurally (we cannot listen in CI): every song validates, every channel of every section has the section length, looping songs are long enough, jingles are short one-shots, notes stay in a sensible range, no two songs share a lead pattern, and the track names screens use resolve (with fallbacks).
 
 `tests/security.test.ts` covers the primitives and guards in `lib/security/`:
@@ -60,7 +69,7 @@ After touching an API route, `proxy.ts`, `next.config.ts` or `lib/security/`, ru
 | Flag | Effect |
 | --- | --- |
 | `--verify` | Also runs every snippet on the language runner (this is what `content:verify` adds) |
-| `--lang=<slug>` | Only validates that pack, planet or moon, e.g. `--lang=rust`, `--lang=typescript`, `--lang=react` |
+| `--lang=<slug>` | Only validates that pack, planet or moon, e.g. `--lang=rust`, `--lang=typescript`, `--lang=react`, `--lang=python`, `--lang=go`, `--lang=cpp`, `--lang=csharp`, `--lang=webgl`, `--lang=threejs` |
 | `--only=<substring>` | Only reports and verifies items whose location contains the substring: a region slug (`--only=ownership-forest`), a lesson slug, or `exam:` for all exams (`--only=exam:senior` for one) |
 
 ```bash
@@ -68,14 +77,42 @@ npm run content:check -- --only=let-village
 npm run content:verify -- --lang=rust --only=exam:
 npm run content:verify -- --lang=typescript --only=closure-forest
 npm run content:verify -- --lang=react
+npm run content:verify -- --lang=go --only=exam:
 ```
+
+## How each language is verified
+
+| `codeLang` | Packs | `--verify` runs on | Network | Cache |
+| --- | --- | --- | --- | --- |
+| `rust` | rust | The public Rust Playground (3 in parallel) | Yes | None |
+| `ts`, `tsx` | typescript, react, webgl, threejs | `tsc --strict` (`scripts/ts-check.ts`) plus `executeJs` (`lib/runners/js-core.ts`) | No | None |
+| `go` | go | The game's `go-playground` runner (official Go Playground, 3 in parallel) | Yes | `.snippets/cache-go.json` |
+| `cpp` | cpp | The game's `godbolt-cpp` runner (Compiler Explorer, g++ 14 `-std=c++20 -O1`, 2 in parallel) | Yes | `.snippets/cache-cpp.json` |
+| `csharp` | csharp | The game's `godbolt-csharp` runner (Compiler Explorer, .NET 10, 2 in parallel) | Yes | `.snippets/cache-csharp.json` |
+| `python` | python | `runPython` (`lib/runners/py-core.ts`) with Pyodide loaded in Node from `node_modules/pyodide`, one snippet at a time | No | None |
+
+**Programs.** Short snippets are completed by `wrapSnippet` in `scripts/snippet-wrap.ts` (`___` filled with the answer first): Rust gets `#![allow(unused)]` and `fn main`, Go gets `package main`, the standard imports it detects and `func main`, C++ gets common headers and `int main`, C# gets missing `using` lines; TS/TSX run as module bodies and Python as a script. `check.program` and `run` beats (`solution`, `starter`) are complete programs and are never wrapped.
+
+**Judging rules** (`verifyRunner` in `scripts/validate-content.ts`, used for Go, C++, C# and Python; the TS/TSX and Rust paths apply the same idea):
+
+1. A result is "compiled" when it succeeded or failed with `phase: "runtime"`. `check.compiles` must match.
+2. If it compiled and has `check.throws`, the run must fail and `stderr` must contain that text. `check.throws` works for every language except Rust.
+3. Otherwise any runtime failure is an error (`runtime error: ...`).
+4. `check.stdout` must equal the trimmed output; a `run` `solution` must print (contain) `expect`.
+5. **Starter NOT-mode:** a `run` `starter` is only run; it is an error if it succeeds and already prints `expect`.
+
+**Remote cache.** `scripts/remote-run.ts` keys each Go, C++ and C# program by the first 32 hex characters of its SHA-256 and stores results in `.snippets/cache-<lang>.json` (gitignored). Re-runs only call the sandbox for new or changed programs, which keeps verification fast and polite to the public services. Unavailable results are not cached. At the end, the cache is merged with what is on disk and written to a temporary file that is atomically renamed, so several validators can run at once. Delete the file to force a full re-run (for example after a compiler upgrade upstream).
+
+**Python in Node.** Python needs no network: the validator imports the `pyodide` package and runs every snippet through the same harness as the game's worker (`lib/runners/py-core.ts`), so output, tracebacks and `phase` match what players see. The first load takes a few seconds.
+
+If a sandbox can't be reached, each affected snippet becomes a warning (`runner unavailable`) instead of an error; run again later.
 
 ### How TS/TSX packs are verified
 
 For packs with `codeLang: "ts"` or `"tsx"`, `--verify` runs locally (no network):
 
 1. Every snippet (module body, `___` filled with the answer) is type-checked in **one batch** with the real TypeScript compiler in strict mode (`scripts/ts-check.ts`). Snippets are virtual files in `.snippets/` (nothing is written; the folder is gitignored). Diagnostics are reported as `TS<code> (line N): <message>`.
-2. `check.compiles` must match whether it type-checks. Snippets that type-check and carry `stdout`, `throws` or a `run` `expect` are then executed with `executeJs` from `lib/runners/js-core.ts` (the same core as the game's worker, with `react` and `react-dom/server` available).
+2. `check.compiles` must match whether it type-checks. Snippets that type-check and carry `stdout`, `throws` or a `run` `expect` are then executed with `executeJs` from `lib/runners/js-core.ts` (the same core as the game's worker, with `react` and `react-dom/server` available, and `three` when a snippet imports it).
 3. `check.stdout` must equal the trimmed output; `check.throws` must appear in the runtime error; any other runtime error is an error. A `run` `solution` must print `expect`; a `starter` that type-checks must not.
 
 Typical errors: `expected to type-check but failed: TS2322 (line 2): ...`, `expected a type error but it type-checks`, `stdout "..." ≠ expected "..."`, `expected a runtime error containing "TypeError", got no error`, `runtime error: ReferenceError: React is not defined` (a TSX snippet without `import React from "react"`).
@@ -133,8 +170,8 @@ Uses the same `BASE_URL` and `CHROME_PATH` as the playtest, in English. Steps, w
 - [ ] `npm run content:check` with 0 errors.
 - [ ] `npm run content:verify` with 0 errors for touched content.
 - [ ] `npm run typecheck` passes.
-- [ ] `npm test` passes (save, security, JS runner and music); for save or memory card changes, also `npm run e2e`.
-- [ ] For `lib/runners/` changes, a case in `tests/js-runner.test.ts` and a playtest of a TS/TSX `run` beat.
+- [ ] `npm test` passes (save, security, JS runner, runners and music); for save or memory card changes, also `npm run e2e`.
+- [ ] For `lib/runners/` changes, a case in `tests/js-runner.test.ts` or `tests/runners.test.ts` and a playtest of an affected `run` beat (TS/TSX, Python, or a server-runner language).
 - [ ] For API, `proxy.ts` or `lib/security/` changes, the manual probes in [security.md](security.md#manual-probes) give the expected statuses.
 - [ ] Playtest of an affected lesson; for layout changes, also `--locale=ja` and a portrait `--size`.
 - [ ] `npm run build` for engine/UI changes.

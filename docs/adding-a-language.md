@@ -1,29 +1,29 @@
 # Adding a programming language
 
-This guide is about adding a new **programming language** (a planet such as Go). To add a new **human language** for the UI and content (for example French), see [i18n.md](i18n.md#adding-a-locale).
+This guide is about adding a new **programming language** (a planet such as Zig). To add a new **human language** for the UI and content (for example French), see [i18n.md](i18n.md#adding-a-locale).
 
 Every language is a **planet** in the galaxy, with its own **guide** (a mascot that teaches), its own **bugs** (the enemies) and a short **story**. Adding a language means writing a pack with a planet, its sprites, regions, topics and exams. No engine file changes are needed except syntax highlighting and, optionally, a runner.
 
-Example: Go. Go, Zig and Haskell already have a planet and sprites as "soon" placeholders (`content/<lang>/planet.ts`, `content/<lang>/sprites.ts`), so they appear locked in the galaxy; making one playable means adding its lessons and switching it to `active`.
+Example: Go (`content/go/`, planet Concurra), which started as a "soon" placeholder and is now a full pack. Zig and Haskell still have only a planet and sprites as "soon" placeholders (`content/<lang>/planet.ts`, `content/<lang>/sprites.ts`), so they appear locked in the galaxy; making one playable means adding its lessons and switching it to `active`.
 
 ## Planet or moon?
 
 | You are adding... | It is a... | Example | How |
 | --- | --- | --- | --- |
-| A programming language | **Planet**: a top-level pack | Rust (Oxide), TypeScript/JavaScript (Scriptara), Go | This guide |
-| A framework or library of an existing language | **Moon**: a pack with `parent: "<planet slug>"` | React (Reactia, moon of Scriptara); future: WebGL, three.js, Babylon.js | This guide, plus the differences below. Step by step in the [`add-moon` playbook](playbooks/add-moon/SKILL.md) |
+| A programming language | **Planet**: a top-level pack | Rust (Oxide), TypeScript/JavaScript (Scriptara), Python (Serpentia), C# (Sharpholm), Go (Concurra), C++ (Velocis) | This guide |
+| A framework or library of an existing language | **Moon**: a pack with `parent: "<planet slug>"` | React (Reactia), WebGL (Shadera) and three.js (Scenara), moons of Scriptara; future: Babylon.js | This guide, plus the differences below. Step by step in the [`add-moon` playbook](playbooks/add-moon/SKILL.md) |
 
 A moon is built exactly like a planet (planet/guide/bugs, sprites, regions, topics, exams) with these differences:
 
 - Set `parent` to the planet's slug in the pack. The validator rejects an unknown parent and a moon whose parent is itself a moon.
 - The moon has its **own** slug, guide, bugs, sprites (`<moon slug>/<name>`), routes (`/play/<moon slug>`) and save progress. It does not share lessons or progress with its planet.
-- It usually shares the planet's `runner` and a compatible `codeLang` (React uses `js-browser` and `tsx`, its planet `js-browser` and `ts`).
+- It usually shares the planet's `runner` and a compatible `codeLang` (React uses `js-browser` and `tsx`, WebGL and three.js use `js-browser` and `ts`, their planet `js-browser` and `ts`).
 - It does not appear as a planet in the galaxy: it orbits its planet (accent color, dimmed while `soon`) and appears as a button in the planet card. Its `planet.colors.accent` is the orbiting moon's color; `ring` and `moons` are not drawn for moons.
 - Write the moon's lessons assuming the player knows the planet's language basics, and say so in the first dialog.
 
 ## Steps
 
-1. **Planet.** Design the planet before any lesson (see [Designing the planet](#designing-the-planet)). Write it as a `PlanetDef` (`lib/content/types.ts`), either inline in `index.ts` like `content/rust/index.ts` or in `content/<lang>/planet.ts` like Go, Zig and Haskell:
+1. **Planet.** Design the planet before any lesson (see [Designing the planet](#designing-the-planet)). Write it as a `PlanetDef` (`lib/content/types.ts`), either inline in `index.ts` like `content/rust/index.ts` or in `content/<lang>/planet.ts` like Go, Python, Zig and Haskell:
    ```ts
    import type { PlanetDef } from "../../lib/content/types.ts";
    import { L } from "../../lib/i18n/text.ts";
@@ -49,51 +49,66 @@ A moon is built exactly like a planet (planet/guide/bugs, sprites, regions, topi
      slug: "go", name: "GO",
      tagline: L("Simple concurrency with goroutines", "Concurrencia simple con goroutines", "goroutine でシンプルな並行処理"),
      color: "#0099db",
-     status: "active", runner: "go-playground",
+     status: "active", runner: "go-playground", codeLang: "go",
      planet,
      regions: [/* imported from ./regions/*.ts */],
      topics, exams,
    };
    ```
    Copy the structure of `content/rust/`: `helpers.ts`, `topics.ts`, `exams.ts` and `regions/<slug>.ts` (English kebab-case slugs). All prose is `L(en, es, ja)`; see [content-model.md](content-model.md) and [i18n.md](i18n.md). Lesson `enemy` values should be the planet's bugs (`"go/nil-blob"`), and `speaker: "master"` dialogs are spoken by the guide, so write them in the guide's voice.
-4. **Registration.** In `content/index.ts`, replace `soon("go", ..., goPlanet)` with the imported pack (`import { go } from "./go/index.ts"`).
-5. **Code language and highlighting.** Set `codeLang` on the pack. If the language is not one of `"rust" | "ts" | "tsx"`, add it to `CodeLang` (`lib/content/types.ts`), give it a grammar in `GRAMMARS` in `lib/syntax.ts` (keyed by `codeLang`; keywords and types), and handle it in `codeLangOf` in both `lib/repo.ts` and `scripts/validate-content.ts`. Both default a pack without `codeLang` to `"ts"` (except the `rust` pack), so a new language that leaves it unset would be type-checked as TypeScript. An unknown grammar key falls back to the Rust grammar.
-6. **Runner (optional).** Needed for `run` beats and for verifying `check`. See [Choosing a runner](#choosing-a-runner). Without a runner, use only beats that don't need a compiler and omit `check`.
-7. **Verify** with the checklist below.
+4. **Registration.** In `content/index.ts`, replace the `soon("<slug>", ..., <slug>Planet)` placeholder with the imported pack (as Go did: `import { go } from "./go/index.ts"`).
+5. **Code language and highlighting.** Set `codeLang` on the pack. Existing values are `"rust" | "ts" | "tsx" | "go" | "python" | "cpp" | "csharp"`. For a new one, add it to `CodeLang` (`lib/content/types.ts`), give it a grammar in `GRAMMARS` in `lib/syntax.ts` (keyed by `codeLang`; keywords and types) and, unless it has Rust-like syntax, a lexer in `LEXERS` built with `lexer(comment, string, macro)` (comment, string and macro/decorator patterns; Go, C++, C# and Python are examples). `tests/runners.test.ts` checks that the highlighter knows every code language. `codeLangOf` in `lib/repo.ts` and `scripts/validate-content.ts` defaults a pack without `codeLang` to `"ts"` (except the `rust` pack), so a new language that leaves it unset would be type-checked as TypeScript. An unknown grammar key falls back to the Rust grammar.
+6. **Snippet wrapper.** Lesson snippets are short; `wrapSnippet` in `scripts/snippet-wrap.ts` completes them into full programs for verification (Rust adds `fn main`, Go adds `package main`, the imports it detects and `func main`, C++ adds common headers and `int main`, C# adds missing `using` lines; TS/TSX and Python run as written). Add a case for a new compiled language, and a case in `tests/runners.test.ts`. A `check.program` or a `run` beat's full program is never wrapped.
+7. **Runner (optional).** Needed for `run` beats and for verifying `check`. See [Choosing a runner](#choosing-a-runner). Without a runner, use only beats that don't need a compiler and omit `check`.
+8. **Verify** with the checklist below.
 
 Saves need no change: progress is keyed by language and lesson slug, so a new language simply starts empty in every existing save (see [save-system.md](save-system.md#why-adding-a-language-doesnt-break-saves)).
 
 ## Choosing a runner
 
-A runner executes `run` beats in the game. `content:verify` executes `check` and `run` claims with the same toolchain. There are two kinds:
+A runner executes `run` beats in the game. `content:verify` executes `check` and `run` claims with the same toolchain. Runners that exist today:
+
+| Runner id | Kind | Languages (`codeLang`) | Where player code runs | Files | Verified by `content:verify` with |
+| --- | --- | --- | --- | --- | --- |
+| `rust-playground` | Server | `rust` | Public Rust Playground (play.rust-lang.org) | `lib/runners/rust-playground.ts` | The Rust Playground |
+| `go-playground` | Server | `go` | Official Go Playground (`go.dev/_/compile`) | `lib/runners/go-playground.ts` | The same runner through `scripts/remote-run.ts` (cached) |
+| `godbolt-cpp` | Server | `cpp` | Compiler Explorer, g++ 14 `-std=c++20 -O1` | `lib/runners/godbolt.ts` | The same runner through `scripts/remote-run.ts` (cached) |
+| `godbolt-csharp` | Server | `csharp` | Compiler Explorer, .NET 10 (CoreCLR) | `lib/runners/godbolt.ts` | The same runner through `scripts/remote-run.ts` (cached) |
+| `js-browser` | Browser | `ts`, `tsx` | A disposable Web Worker in the player's browser | `lib/runners/js-core.ts`, `js-worker.ts`, `browser.ts` | `tsc --strict` (`scripts/ts-check.ts`) plus `js-core.ts` in Node |
+| `py-browser` | Browser | `python` | Pyodide (CPython 3.14 in WebAssembly) in a reusable Web Worker in the player's browser | `lib/runners/py-core.ts`, `py-worker.ts`, `browser.ts` | `py-core.ts` with Pyodide in Node, through `scripts/remote-run.ts` |
+
+The two kinds compare like this:
 
 | | Server runner | Browser runner |
 | --- | --- | --- |
-| Example | `rust-playground` (`lib/runners/rust-playground.ts`) | `js-browser` (`lib/runners/browser.ts`, `js-worker.ts`, `js-core.ts`) |
-| Where player code runs | An external sandbox (the public Rust Playground), called from `POST /api/run` | A disposable Web Worker in the player's own browser |
-| Server involvement | `/api/run` with every guard in [security.md](security.md) (rate limits, quotas, cache, timeout) | None: the server never sees the code, and `/api/run` rejects packs with a browser runner (404 `unknown_language`) |
-| Good for | Compiled languages that need a real toolchain (Rust, Go, Zig, Haskell) | Languages that can run in a browser: JS/TS and its frameworks, or anything with a WebAssembly build |
+| Where player code runs | An external sandbox, called from `POST /api/run` | A Web Worker in the player's own browser |
+| Server involvement | `/api/run` with every guard in [security.md](security.md) (rate limits, quotas, cache, timeout) | None (it only serves static files such as the self-hosted Pyodide runtime): the server never sees the code, and `/api/run` rejects packs with a browser runner (404 `unknown_language`) |
+| Good for | Compiled languages that need a real toolchain and have a public sandbox (Rust, Go, C++, C#) | Languages that can run in a browser: JS/TS and its frameworks, or anything with a WebAssembly build (Python) |
 | Registered in | `RUNNERS` in `lib/runners/index.ts` | `BROWSER_RUNNER_IDS` in `lib/runners/ids.ts` |
 
 **Never execute player code on the server process itself.** A server runner forwards the snippet to an isolated external sandbox; a browser runner keeps it in the player's browser.
 
+Every runner returns a `RunResult` (`lib/runners/types.ts`) and, when a run fails, sets `phase: "compile"` or `phase: "runtime"`, which `RunBeatView` uses to show "the compiler complains" or "it crashed while running".
+
 ### Adding a server runner
 
-- Implement `LanguageRunner` (`lib/runners/types.ts`) in `lib/runners/<id>.ts` and register it in `lib/runners/index.ts`. Follow `rust-playground.ts`: timeout, no redirects, response size cap, shape check, failures reported as `available: false`.
-- Add execution to `verify` in `scripts/validate-content.ts`, choosing by `codeLang`, and adjust `buildProgram` if the language needs a wrapper other than `fn main`.
-- Mention the external service to the maintainers; `BITWISE_RUNNER=off` must disable it.
+- Implement `LanguageRunner` (`lib/runners/types.ts`) in `lib/runners/<id>.ts` and register it in `RUNNERS` in `lib/runners/index.ts`. Use `postJson` from `lib/runners/http.ts` (timeout, no redirects, `User-Agent`, 1 MB response cap, JSON parse, `null` on any failure) and return `UNAVAILABLE` when it fails or the reply has an unexpected shape. Follow `go-playground.ts` and `godbolt.ts`.
+- Set `phase` on every failure, and clean the output so it reads like a local build: strip ANSI codes and tool noise, and rename sandbox paths to a normal file name (`prog.go`, `main.cpp`, `Program.cs`).
+- Add the language to `REMOTE` and `VERIFIABLE_LANGS` in `scripts/remote-run.ts`, with a small parallelism, so `content:verify` runs `check` and `run` claims on the same runner (results are cached in `.snippets/cache-<lang>.json`). Add a case to `wrapSnippet` in `scripts/snippet-wrap.ts` if short snippets need a wrapper.
+- Document what is sent to the third party in [security.md](security.md#upstream-runners-server-runners) and mention the external service to the maintainers; `BITWISE_RUNNER=off` must disable it (it does for every runner returned by `getRunner` in `lib/runners/index.ts`).
 
 ### Adding a browser runtime
 
-Follow the `js-browser` pattern:
+Follow the `js-browser` and `py-browser` patterns:
 
-1. **Core** (`lib/runners/<lang>-core.ts`): a pure function `code → { ok, stdout, stderr, available: true }` with no browser or Node specifics, so the game and the validator share it and a snippet prints exactly the same thing in both. Capture output instead of writing to the real console, cap output size, report errors as `stderr` text instead of throwing, and stop when the program and its pending work are finished.
-2. **Worker** (`lib/runners/<lang>-worker.ts`): receives `{ code, ... }` by `postMessage`, calls the core with the modules it may import, and posts the result back.
-3. **Client entry**: extend `lib/runners/browser.ts` (or add a sibling) to create the worker with `new Worker(new URL("./<lang>-worker.ts", import.meta.url), { type: "module" })`, one per run, `terminate()` it after the result or after a hard timeout (3 s for `js-browser`), and resolve `available: false` if the worker cannot start, so the beat falls back to its `fallback` regex.
-4. **Register the id** in `BROWSER_RUNNER_IDS` (`lib/runners/ids.ts`). That makes `RunBeatView` run it in the browser and makes `getRunner` in `lib/repo.ts` refuse it for `/api/run`. Route it in `RunBeatView` if it needs options other than `jsx`.
-5. **Verification**: call the same core from `scripts/validate-content.ts` and add a static checker if the language has one (`scripts/ts-check.ts` runs `tsc --strict` for TS/TSX).
-6. **Tests**: add `tests/<lang>-runner.test.ts` for output formatting, errors, async work and timeouts (see `tests/js-runner.test.ts`).
-7. Keep the worker free of network and storage access you do not need, and read the worker notes in [security.md](security.md#player-code-execution).
+1. **Core** (`lib/runners/<lang>-core.ts`): a pure function `code → { ok, stdout, stderr, available: true, phase? }` with no browser or Node specifics, so the game and the validator share it and a snippet prints exactly the same thing in both. Capture output instead of writing to the real console, cap output size, report errors as `stderr` text instead of throwing, and stop when the program and its pending work are finished.
+2. **Worker** (`lib/runners/<lang>-worker.ts`): receives `{ code, ... }` by `postMessage`, calls the core with the modules it may import, and posts the result back. A heavy runtime (like Pyodide) can stay loaded in a long-lived worker that answers `{ id, code }` messages.
+3. **Client entry**: extend `lib/runners/browser.ts` to create the worker with `new Worker(new URL("./<lang>-worker.ts", import.meta.url), { type: "module" })`. Either one worker per run, terminated after the result or a hard timeout (3 s for `js-browser`), or a warm reusable worker whose time limit starts once the runtime is ready and which is terminated and recreated when a run times out (5 s for `py-browser`, see `warmPython` and `runPythonInBrowser`). Resolve `available: false` if the worker or runtime cannot start, so the beat falls back to its `fallback` regex.
+4. **Runtime assets**: self-host them from the game's origin, never from a third-party CDN. `py-browser` copies Pyodide from `node_modules` to the gitignored `public/pyodide/<version>/` with `scripts/copy-pyodide.mjs` (on `postinstall`, `predev` and `prebuild`), serves it with immutable caching from `next.config.ts` and excludes the path from the `proxy.ts` matcher.
+5. **Register the id** in `BROWSER_RUNNER_IDS` (`lib/runners/ids.ts`). That makes `getRunner` in `lib/repo.ts` refuse it for `/api/run`. Route it in `RunBeatView` (as `py-browser` is) if it needs a different entry point or options other than `jsx`.
+6. **Verification**: call the same core from the validator (`scripts/remote-run.ts` loads Pyodide in Node for Python) and add a static checker if the language has one (`scripts/ts-check.ts` runs `tsc --strict` for TS/TSX).
+7. **Tests**: add cases for output formatting, errors, async work and timeouts (see `tests/js-runner.test.ts` and `tests/runners.test.ts`).
+8. Keep the worker free of network and storage access you do not need, and read the worker notes in [security.md](security.md#player-code-execution).
 
 ## Designing the planet
 
@@ -109,11 +124,12 @@ Order regions by teaching dependency, from concrete to abstract. For each langua
 
 | Language | Suggested regions |
 | --- | --- |
-| Go | Variables and types · Slices and maps · Interfaces · Goroutines and channels · Errors and context |
 | Zig | Types and comptime · Pointers and slices · Allocators · Errors · C interop |
 | Haskell | Expressions and types · Pattern matching · Algebraic data types · Typeclasses · Monads and IO |
 | TypeScript / JavaScript (in progress, `content/typescript/`) | Values and equality · Closures · Prototypes and arrays · Types · Event loop |
 | React moon (in progress, `content/react/`) | JSX · State · Effects · Rendering (context, reducers, memoization, Suspense) |
+
+Go, Python, C++, C#, WebGL and three.js are being written; their region plans come from the research notes in [`docs/research/`](research/) (hiring assessments and curriculum per language).
 
 ## Checklist
 
@@ -121,7 +137,7 @@ Order regions by teaching dependency, from concrete to abstract. For each langua
 - [ ] The guide and every bug have a namespaced 16×16 sprite registered in `content/sprites.ts`; designs are original, not copies of official mascots.
 - [ ] Lessons use the planet's bugs as `enemy`.
 - [ ] The pack sets `codeLang`; a moon sets `parent` to an existing planet.
-- [ ] `npm run content:check` and `npm run content:verify -- --lang=<slug>` with no errors (including translations and sprite checks).
+- [ ] `npm run content:check` and `npm run content:verify -- --lang=<slug>` with no errors (including translations and sprite checks); a new compiled language has a case in `scripts/snippet-wrap.ts`.
 - [ ] A new runner never executes player code on the server process, and has unit tests.
 - [ ] The planet appears in the galaxy (`/galaxy`) as active in every locale, and landing shows the guide's intro the first time.
 - [ ] `npm run playtest -- /play/<slug>/lesson/<first-lesson>` finishes and reports the result as saved.

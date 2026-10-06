@@ -21,9 +21,15 @@ Each programming language is a **planet** in a low-poly 3D galaxy (`/galaxy`), w
 | Planet | Language | Guide | Status |
 | --- | --- | --- | --- |
 | Oxide | Rust | Ferro, crab sensei of the forge | Playable |
-| Concurra | Go | Gopi, cheerful tunnel digger | Under construction |
+| Scriptara | TypeScript / JavaScript | Tyto, wise owl of type safety | Active, content in progress |
+| Serpentia | Python | Pippa, gentle snake of readable code | Active, content in progress |
+| Sharpholm | C# | Hashi, keen fox of the managed realm | Active, content in progress |
+| Concurra | Go | Gopi, cheerful tunnel digger | Active, content in progress |
+| Velocis | C++ | Vecta, swift steel knight of control | Active, content in progress |
 | Comptia | Zig | Iggi, iguana forge engineer | Under construction |
 | Lambdara | Haskell | Lambo, wise owl of pure functions | Under construction |
+
+Scriptara has three framework moons: Reactia (React, guide Orbi), Shadera (WebGL, guide Trix) and Scenara (three.js, guide Polly).
 
 - **The guide** is the planet's teacher and voice: it speaks the lesson dialogs, explains every mistake and greets the player on the first landing with three choices: start from scratch, take the entry exam, or just look at the map.
 - **The bugs** are the language's classic mistakes as monsters (dangling references, deadlocks, leaks...). They are the lesson enemies, and the planet card shows them before landing.
@@ -78,6 +84,12 @@ Everything is synthesized with WebAudio; there are no audio files.
 | `map:default` | World map fallback | 75 s | Adventurous overworld, G major |
 | `map:rust` | Oxide world map | 80 s | Industrial forge, D minor with a hopeful F major middle |
 | `map:typescript` | TypeScript world map | 69 s | Bright and techy, A major, lifts to C |
+| `map:go` | Concurra (Go) world map | 87 s | Brisk and cheerful, C major, two voices weaving like goroutines |
+| `map:python` | Serpentia (Python) world map | 83 s | Friendly swaying 3-3-2 groove, B♭ major, lifts to C |
+| `map:cpp` | Velocis (C++) world map | 76 s | Fast and driving, G minor, galloping bass |
+| `map:csharp` | Sharpholm (C#) world map | 89 s | Regal fanfare and march, D♭ major, lifts to D |
+| `map:webgl` | Shadera (WebGL moon) world map | 76 s | Neon arpeggios, B minor, sections named after the GPU pipeline |
+| `map:threejs` | Scenara (three.js moon) world map | 90 s | Airy and spacious, E major, a weightless break |
 | `lesson:a`, `lesson:b` | Lessons and reviews (random) | 57 s / 67 s | Light battle grooves (E minor, A dorian) |
 | `boss` | Boss lessons | 57 s | Intense and driving, C minor |
 | `exam` | Entry exams | 69 s | Tense, steady clock pulse, D minor |
