@@ -147,6 +147,7 @@ const songFor = (id: string) => {
 };
 
 let wanted: string | null = null; // name the screen asked for ("lesson", "map:rust"...)
+let after: string | null = null; // song to continue with once a one-shot jingle ends
 let player: SongPlayer | null = null;
 let playerSong: string | null = null; // resolved song id of `player`
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -154,7 +155,15 @@ let timer: ReturnType<typeof setInterval> | null = null;
 function tick() {
   if (!ctx || !player) return;
   player.scheduleUntil(ctx.currentTime + LOOKAHEAD);
-  if (player.done) stopTimer(); // one-shot jingle finished
+  if (player.done) {
+    // one-shot jingle finished: continue with the follow-up song, if any
+    stopTimer();
+    if (after) {
+      wanted = after;
+      after = null;
+      startWanted(0.1);
+    }
+  }
 }
 function startTimer() {
   if (timer || typeof document === "undefined" || document.hidden) return;
@@ -207,7 +216,8 @@ export const music = {
    * "lesson" (random variant), "boss", "exam", "result", or a one-shot "jingle:clear" / "jingle:gameover".
    * Calling it again with the same name keeps the song going.
    */
-  play(name: string) {
+  play(name: string, opts: { then?: string } = {}) {
+    after = opts.then ?? null;
     if (wanted === name && player && !player.done) return;
     wanted = name;
     startWanted();
@@ -218,6 +228,7 @@ export const music = {
   },
   stop() {
     wanted = null;
+    after = null;
     haltPlayer(0.25);
   },
   /** Song names available, for debugging. */
