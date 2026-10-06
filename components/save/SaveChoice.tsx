@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import gsap from "gsap";
 import { Sprite } from "@/components/pixel/Sprite";
 import { Settings } from "@/components/ui/Settings";
+import { LegalLinks } from "@/components/ui/LegalLinks";
 import { useI18n } from "@/components/ui/I18n";
 import { BRAND } from "@/lib/brand";
 import { music, sfx } from "@/lib/sfx";
@@ -81,6 +82,7 @@ export function SaveChoice() {
       </div>
       {(!cloud.available || cloud.loginError) && <p role="alert" className="save-login-error">{t(cloud.available ? "cloud.loginError" : "cloud.notConfigured")}</p>}
       <p className="save-choice-foot">{t("cloud.changeLater")}</p>
+      <LegalLinks />
     </main>
   </div>;
 }

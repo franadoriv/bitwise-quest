@@ -1,5 +1,8 @@
 Original prompt: Add optional Google cloud saves through Supabase, alongside local saves with an export/import warning, matching the game's retro design and animations.
 
+- Follow-up: develop → release PR #14 was merged without the pending policy drafts. Add public /privacy and /terms for Google OAuth branding, localized in EN/ES/JA, with links on the title and save-choice screens. The user confirmed Francisco Rivero and franadoriv@gmail.com as the public operator/contact. Publish these through a new develop → release PR.
+- Policy pages verified: content:check (0 errors/warnings), 63 tests, typecheck, production build, memory-card E2E, public-policy initial HTML and navigation across EN/ES/JA landscape/portrait. Skill client screenshot and Japanese/Spanish mobile captures inspected. Policy links work by mouse and keyboard without triggering Start. Browser tests wait for GameFrame hydration before focusing title links; contact links must be in the initial HTML and match their visible address.
+
 - Read the architecture, save system, localization, security rules, and Next.js client/env/CSP guides.
 - Implement browser-only Supabase Auth and cloud sync; keep Vercel stateless and preserve existing local saves.
 - Use account-isolated caches, revision checks, and explicit conflict resolution; prepare owner-only SQL for the user to apply.
