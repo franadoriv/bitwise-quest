@@ -15,5 +15,6 @@ export const reactMoon: PlanetDef = {
     title: L("Little atom who calms renders", "Átomo que calma los renders", "レンダーを鎮める小さな原子"),
   },
   colors: { surface: "#20232a", accent: "#61dafb" },
+  shape: "atom",
   bugs: ["react/rerender-tornado", "react/stale-closure", "react/key-twins"],
 };

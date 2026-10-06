@@ -4,7 +4,7 @@ Bitwise Quest is a public game with two API endpoints, and one of them (`/api/ru
 
 The server is stateless: content is served from memory (`lib/repo.ts`), there is no database, and the server never receives or stores player saves. The only mutable server state is the abuse-protection counters and the run cache described below.
 
-**Player code never runs on the server.** Rust, Go, C++ and C# snippets are forwarded to external sandboxes (the public Rust Playground, the official Go Playground and Compiler Explorer); JS/TS/React and Python snippets run in a Web Worker in the player's own browser and never reach the server. See [Player code execution](#player-code-execution).
+**Player code never runs on the server.** Rust, Go, C++, C#, Zig, Haskell and Ruby snippets (including the Rails moon's, which run as plain Ruby) are forwarded to external sandboxes (the public Rust Playground, the official Go Playground and Compiler Explorer); JS/TS/React and Python snippets run in a Web Worker in the player's own browser and never reach the server. See [Player code execution](#player-code-execution).
 
 ## Map
 
@@ -169,19 +169,22 @@ Every server runner is registered in `lib/runners/index.ts` and reached only thr
 | `go-playground` | `lib/runners/go-playground.ts` | Official Go Playground, `https://go.dev/_/compile` | The snippet as `body`, with `version=2` and `withVet=false` (form-encoded) |
 | `godbolt-cpp` | `lib/runners/godbolt.ts` | Compiler Explorer, `https://godbolt.org/api/compiler/g142/compile` | The snippet as `source`, with g++ 14 and `-std=c++20 -O1`, execution enabled, empty stdin and arguments, `allowStoreCodeDebug: false` |
 | `godbolt-csharp` | `lib/runners/godbolt.ts` | Compiler Explorer, `https://godbolt.org/api/compiler/dotnet100csharpcoreclr/compile` | The snippet as `source`, with .NET 10 (CoreCLR), execution enabled, empty stdin and arguments, `allowStoreCodeDebug: false` |
+| `godbolt-zig` | `lib/runners/godbolt.ts` | Compiler Explorer, `https://godbolt.org/api/compiler/z0152/compile` | The snippet as `source`, with Zig 0.15.2 and no compiler flags (Debug build), execution enabled, empty stdin and arguments, `allowStoreCodeDebug: false` |
+| `godbolt-haskell` | `lib/runners/godbolt.ts` | Compiler Explorer, `https://godbolt.org/api/compiler/ghc984/compile` | The snippet as `source`, with GHC 9.8.4 and no compiler flags, execution enabled, empty stdin and arguments, `allowStoreCodeDebug: false` |
+| `godbolt-ruby` | `lib/runners/godbolt.ts` | Compiler Explorer, `https://godbolt.org/api/compiler/ruby347/compile` | The snippet as `source`, with Ruby 3.4.7 and no interpreter flags (standard library only, no gems), execution enabled, empty stdin and arguments, `allowStoreCodeDebug: false`. Used by the Ruby planet and the Rails moon; Rails moon snippets are plain Ruby, so nothing Rails-specific is sent |
 
-Common rules (the Go, C++ and C# runners use `postJson` in `lib/runners/http.ts`; the Rust runner applies the same rules inline):
+Common rules (the Go, C++, C#, Zig, Haskell and Ruby runners use `postJson` in `lib/runners/http.ts`; the Rust runner applies the same rules inline):
 
 - **Only the player's snippet** and fixed compiler options are sent. No identifiers, IPs, cookies or saves. Requests carry a fixed `User-Agent: bitwise-quest (learning game)`. Each third party's own terms and privacy policy apply to what it receives; review them before enabling a new sandbox.
-- **Timeout**: 15 s (20 s for Compiler Explorer, which compiles and runs in one call), so a slow upstream cannot hold a concurrency slot forever.
+- **Timeout**: 15 s (20 s for Compiler Explorer, which compiles and runs in one call, and 30 s for Zig, whose compiler is slower), so a slow upstream cannot hold a concurrency slot forever.
 - **No redirects** (`redirect: "error"`).
 - **Response size cap**: a body longer than 1,000,000 characters is discarded.
 - **Shape check**: the reply must have the expected fields (`success` boolean for Rust, `Errors` string for Go, numeric `code` for Compiler Explorer); everything else is coerced to strings.
-- **Output cleanup**: ANSI escape codes and build-tool noise (cargo, MSBuild, `Compiler returned:` lines) are removed, and sandbox paths are renamed to `prog.go`, `main.cpp` or `Program.cs`, so no upstream file system details reach the player. Each failure is tagged `phase: "compile"` or `phase: "runtime"`.
+- **Output cleanup**: ANSI escape codes and build-tool noise (cargo, MSBuild, `Compiler returned:` lines) are removed, and sandbox paths are renamed to `prog.go`, `main.cpp`, `Program.cs`, `main.zig`, `Main.hs` or `main.rb`, so no upstream file system details reach the player. Zig traces are cut before the standard library's startup frames (paths under the sandbox's `/cefs/`), GHC's `output.s: ` prefix is dropped, and Ruby's `/app/output.s` path becomes `main.rb`. Each failure is tagged `phase: "compile"` or `phase: "runtime"` (a Ruby `SyntaxError` counts as `compile`).
 - **Errors are reported as unavailable** (`available: false`) with empty output. Timeouts, network errors, non-2xx statuses, oversized or malformed bodies and bad shapes never leak details to the client, and unavailable results are never cached.
 - **Kill switch**: `BITWISE_RUNNER=off` disables every external call; `run` beats are then validated locally with their `fallback` regex.
 
-The content validator (`scripts/remote-run.ts`) calls the same Go, C++ and C# runners at authoring time with the repository's own snippets, a small fixed parallelism and a local result cache (see [testing.md](testing.md)).
+The content validator (`scripts/remote-run.ts`) calls the same Go, C++, C#, Zig, Haskell and Ruby runners at authoring time with the repository's own snippets, a small fixed parallelism and a local result cache (see [testing.md](testing.md)).
 
 ## Player code execution
 
@@ -189,7 +192,7 @@ The content validator (`scripts/remote-run.ts`) calls the same Go, C++ and C# ru
 | --- | --- | --- |
 | `rust-playground` (server runner) | The public Rust Playground's sandbox | `/api/run` forwards the snippet with every guard above; nothing is executed locally |
 | `go-playground` (server runner) | The official Go Playground's sandbox | Same as above |
-| `godbolt-cpp`, `godbolt-csharp` (server runners) | Compiler Explorer's sandbox | Same as above |
+| `godbolt-cpp`, `godbolt-csharp`, `godbolt-zig`, `godbolt-haskell`, `godbolt-ruby` (server runners) | Compiler Explorer's sandbox | Same as above |
 | `js-browser` (browser runner) | A Web Worker in the player's own browser | None. The code is never sent to the server, and `/api/run` refuses these packs (`getRunner` in `lib/repo.ts` returns `null` for ids in `BROWSER_RUNNER_IDS`) |
 | `py-browser` (browser runner) | Pyodide (CPython in WebAssembly) in a Web Worker in the player's own browser | Serves the static Pyodide files only; the code is never sent to the server and `/api/run` refuses these packs |
 
@@ -286,7 +289,7 @@ Set on every response (pages, API and static files):
 | --- | --- |
 | API flooding | Per-client token buckets on every endpoint and on pages; uniform 429 with `Retry-After` |
 | Upstream cost abuse (using the game as a free compiler) | Per-client and instance-wide quotas on `/api/run`, 1 compile in flight per client, 4 in total, result cache, code size limits, origin check, `BITWISE_RUNNER=off` kill switch |
-| Remote code execution through player snippets | Player code never runs in the server process: Rust, Go, C++ and C# go to external sandboxes, JS/TS and Python run in a Web Worker in the player's browser; `/api/run` refuses browser-runner packs |
+| Remote code execution through player snippets | Player code never runs in the server process: Rust, Go, C++, C#, Zig, Haskell and Ruby go to external sandboxes, JS/TS and Python run in a Web Worker in the player's browser; `/api/run` refuses browser-runner packs |
 | A player's snippet freezing the page | Both workers run off the main thread; the JS/TS worker is terminated after 3 s (one disposable worker per run), the Python worker after 5 s and recreated |
 | Third-party script supply chain for the Python runtime | Pyodide is copied from the pinned npm package and served from the game's own origin; no CDN |
 | CSRF / cross-site use of the API | `assertSameOrigin` (required `Origin`, host match or allowlist, `Sec-Fetch-Site`); JSON-only bodies; no auth cookies or sessions to ride |
@@ -354,7 +357,7 @@ curl -i -X POST http://localhost:3000/api/run \
 | `code` with 401 lines or 10,001 characters | 413 `code_too_large` |
 | `"language":"cobol"` | 404 `unknown_language` |
 | `/api/review-play` with 13 keys or a key without `#<n>` | 400 `invalid_keys` |
-| `/api/review-play` with `"lang":"zig"` (not active) | 404 `unknown_language` |
+| `/api/review-play` with `"lang":"elixir"` (no such pack, or not active) | 404 `unknown_language` |
 | `/api/run` with `"language":"python"` or `"typescript"` (browser runner) | 404 `unknown_language` |
 | `GET /pyodide/<version>/pyodide.mjs` | 200 with `Cache-Control: public, max-age=31536000, immutable`, no page rate limit |
 | 9 quick `/api/run` calls from one client | the 9th gets 429 `rate_limited` with `Retry-After` and `RateLimit-*` headers |

@@ -10,25 +10,25 @@ The game and all its content are localized in **English** (primary), **Spanish**
 | --- | --- |
 | [architecture.md](architecture.md) | Understand how Next.js, the in-memory content, the client save, the SVG stage and the 3D galaxy and maps fit together |
 | [save-system.md](save-system.md) | Understand the memory card: save format, migrations, `.bwq` files, progress rules |
-| [content-model.md](content-model.md) | Learn the pack fields, planets and moons, `codeLang`, sprites, every beat kind, `check` (Rust, TS/TSX, Go, C++, C# and Python) and every visual effect, with examples |
+| [content-model.md](content-model.md) | Learn the pack fields, planets and moons, `codeLang`, sprites, every beat kind, `check` (Rust, TS/TSX, Go, C++, C#, Zig, Haskell, Ruby and Python) and every visual effect, with examples |
 | [authoring-lessons.md](authoring-lessons.md) | Add lessons or regions to an existing language |
-| [adding-a-language.md](adding-a-language.md) | Add a new programming language (a planet with its guide and bugs: Zig, Haskell, ...) or a framework moon (React, WebGL, three.js, ...), and choose or add a runner |
+| [adding-a-language.md](adding-a-language.md) | Add a new programming language (a planet with its guide and bugs, like Zig or Haskell) or a framework moon (React, WebGL, three.js, Rails, ...), including a framework no sandbox can run, and choose or add a runner |
 | [exams.md](exams.md) | Understand or extend the entry exam (junior, mid, senior) |
 | [i18n.md](i18n.md) | Understand localization, translate content or add a UI locale |
 | [game-design.md](game-design.md) | Learn the "dopagaki" principles, planets, the memory card, scoring and progression |
 | [security.md](security.md) | Understand the backend abuse protection (rate limits, origin checks, body limits, CSP and headers), where player code runs, and how to add a safe endpoint |
 | [testing.md](testing.md) | Validate content (TS/TSX type-checking, real compilers and sandboxes for every language, the remote result cache), run unit and end-to-end tests, play headless and check the build |
-| [research/](research/) | Supporting research: what companies assess in Rust, TypeScript, React, Go, Python, C++, C#, WebGL and three.js, and the curricula built on it |
+| [research/](research/) | Supporting research: what companies assess in Rust, TypeScript, React, Go, Python, C++, C#, Zig, Haskell, Ruby, Rails, WebGL and three.js, and the curricula built on it |
 
 ## Key ideas in 30 seconds
 
 1. **Content is data.** Everything the player sees lives in `content/<language>/`, including each language's planet, guide and bugs. The engine knows nothing about Rust or TypeScript.
-2. **Planets and moons.** A language is a planet; a framework of it is a moon, a pack with `parent` (React, WebGL and three.js orbit the TypeScript/JavaScript planet).
+2. **Planets and moons.** A language is a planet; a framework of it is a moon, a pack with `parent` (React, WebGL and three.js orbit the TypeScript/JavaScript planet; Rails orbits Ruby).
 3. **The engine is generic.** Seven beat kinds and a vocabulary of visual effects cover any language.
-4. **Everything is verifiable.** Every compiler claim carries a `check` that `npm run content:verify` actually compiles and runs on the same toolchain the game uses: Rust Playground, Go Playground, Compiler Explorer (C++, C#), `tsc --strict` plus the JS runner (TS/TSX) and Pyodide (Python).
+4. **Everything is verifiable.** Every compiler claim carries a `check` that `npm run content:verify` actually compiles and runs on the same toolchain the game uses: Rust Playground, Go Playground, Compiler Explorer (C++, C#, Zig, Haskell, Ruby), `tsc --strict` plus the JS runner (TS/TSX) and Pyodide (Python). Framework facts no sandbox can run (the Rails API) are conceptual questions without a `check`, explained from the framework's official guides.
 5. **Every prose string is localized.** Content uses `L(en, es, ja)`; UI strings live in `lib/i18n/messages.ts`. The validator rejects missing translations.
 6. **The server serves content, the client keeps progress.** The server reads `content/` straight from memory: no database, no disk writes, stateless. All player progress lives in the browser on a 15-slot memory card, keyed by stable slugs, so adding content never breaks a save.
-7. **The API is guarded, and player code never runs on the server.** Every endpoint checks the origin, rate limits per client, caps the body and validates strictly. Rust, Go, C++ and C# snippets go to external sandboxes; JS/TS and Python (Pyodide, self-hosted) run in a Web Worker in the player's browser. See [security.md](security.md).
+7. **The API is guarded, and player code never runs on the server.** Every endpoint checks the origin, rate limits per client, caps the body and validates strictly. Rust, Go, C++, C#, Zig, Haskell and Ruby snippets go to external sandboxes; JS/TS and Python (Pyodide, self-hosted) run in a Web Worker in the player's browser. See [security.md](security.md).
 
 ## Commands
 

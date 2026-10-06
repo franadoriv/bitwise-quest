@@ -4,7 +4,7 @@
 
 ```
 content/<lang>/        Language packs: planet, regions, lessons, topics, exams (pure data, localized with L(en, es, ja)).
-                       A pack with `parent` is a moon (a framework of its planet's language, e.g. content/react)
+                       A pack with `parent` is a moon (a framework of its planet's language, e.g. content/react, content/rails)
 content/<lang>/sprites.ts   Pack pixel sprites (guide, bugs), registered in content/sprites.ts (client-safe)
         │  imported by
         ▼
@@ -34,12 +34,13 @@ lib/brand.ts           Game name, logo text and localized tagline (single source
 lib/i18n/              text.ts (locales, Text, L, tx, negotiateLocale) and messages.ts (UI dictionaries)
 lib/                   fx (particles, banners), sfx (WebAudio chiptune), syntax (highlighting), palette, game-rules
 lib/runners/           Code execution. Server runners (via /api/run, registered in index.ts): rust-playground,
-                       go-playground, godbolt-cpp and godbolt-csharp (godbolt.ts), with the shared safe fetch in http.ts.
+                       go-playground, godbolt-cpp, godbolt-csharp, godbolt-zig, godbolt-haskell and godbolt-ruby (godbolt.ts), with the
+                       shared safe fetch in http.ts.
                        Browser runners: js-browser (js-core.ts shared with the validator, js-worker.ts) and py-browser
                        (py-core.ts shared with the validator, py-worker.ts); browser.ts starts both; ids.ts lists browser ids
 lib/music/             Tracker songs (DSL) played by lib/sfx.ts
 scripts/               validate-content.ts, ts-check.ts (tsc --strict batch), snippet-wrap.ts (completes short snippets),
-                       remote-run.ts (Go/C++/C#/Python verification), copy-pyodide.mjs, playtest.mjs, e2e-memory-card.mjs, shots.mjs
+                       remote-run.ts (Go/C++/C#/Zig/Haskell/Ruby/Python verification), copy-pyodide.mjs, playtest.mjs, e2e-memory-card.mjs, shots.mjs
 tests/                 save, security, js-runner, runners and music tests (npm test)
 ```
 
@@ -87,7 +88,7 @@ The galaxy starts on the save's `lastLang`. Planets whose language is `soon` are
 ## Lesson flow
 
 1. `app/play/[lang]/lesson/[slug]/page.tsx` loads `LessonPlay` (beats, enemy sprite, theme, the planet's `guide`) and the world content from `lib/repo.ts`.
-2. `LessonClient` waits for a save (`RequireSave`), checks `isUnlocked` against it and mounts `LessonGame` on the client only, because it uses audio, GSAP and random shuffling.
+2. `LessonClient` waits for a save (`RequireSave`), checks `isUnlocked` against it and hands the play to the `Preloader` (`components/game/Preloader.tsx`). The Preloader loads `LessonGame` on the client only (it uses audio, GSAP and random shuffling) together with what the challenges need before they can run: the Python runtime (`preparePython`, with real download progress reported by the worker) when the play has Python `run` beats, and the JS worker plus three.js (`prepareJs`) when a `run` starter imports `three`. Reviews also wait for their beats from `/api/review-play`. If everything is ready within 200 ms nothing is shown; otherwise an arcade loading screen appears (the guide walks toward the lesson's bug as data arrives, a segmented bar, one line per download with megabytes for Python, rotating tips) and ends with a short READY! hit. Exams have no `run` beats, so they only wait for the game code. A runtime that fails to load is marked on the screen and the run beats fall back to their offline checks.
 3. `LessonGame` walks the beat queue. For each beat it runs `setup` on the stage, shows the beat component and waits for `solved` or `wrong`.
 4. A correct answer adds points, combo and speed bonus, plays the `win` effects and hits the bug. A wrong answer costs a heart, shows `explain` in a box with the planet's guide and pushes the beat to the end of the queue.
 5. At the end, `completeLesson` (or `completeExam` / `completeReview`) computes the reward on the client and the new save is committed to the active slot. On game over, `recordFailedRun` still stores the misses for review.
@@ -162,12 +163,15 @@ runner?
     ├── rust-playground   lib/runners/rust-playground.ts   public Rust Playground (play.rust-lang.org)
     ├── go-playground     lib/runners/go-playground.ts     official Go Playground (go.dev/_/compile)
     ├── godbolt-cpp       lib/runners/godbolt.ts           Compiler Explorer, g++ 14, -std=c++20 -O1
-    └── godbolt-csharp    lib/runners/godbolt.ts           Compiler Explorer, .NET 10 (CoreCLR)
+    ├── godbolt-csharp    lib/runners/godbolt.ts           Compiler Explorer, .NET 10 (CoreCLR)
+    ├── godbolt-zig       lib/runners/godbolt.ts           Compiler Explorer, Zig 0.15.2 (Debug)
+    ├── godbolt-haskell   lib/runners/godbolt.ts           Compiler Explorer, GHC 9.8.4
+    └── godbolt-ruby      lib/runners/godbolt.ts           Compiler Explorer, Ruby 3.4.7 (standard library only)
 ```
 
 Browser runner ids are listed in `BROWSER_RUNNER_IDS` (`lib/runners/ids.ts`).
 
-**Server runners.** `POST /api/run` applies the guards described in [security.md](security.md) (rate limits, global quota, concurrency caps, result cache) and picks the language's runner (`lib/runners/index.ts`). Every server runner sends only the player's snippet to its sandbox and nothing else. The Go, C++ and C# runners share `postJson` in `lib/runners/http.ts`: a POST with a timeout (15 s by default, 20 s for Compiler Explorer), no redirects, a fixed `User-Agent`, a 1 MB response cap and JSON parsing; any failure (network, non-2xx, oversized or malformed body, unexpected shape) becomes `available: false` with no upstream details. The Rust runner applies the same rules inline. Each runner cleans its output so it reads like a local build: cargo noise dropped (Rust), ANSI escape codes stripped, sandbox paths renamed to `prog.go`, `main.cpp` or `Program.cs`, and build-tool noise removed. With `BITWISE_RUNNER=off` no external call is made and the beat is validated with its `fallback` regex. When the API answers 429 or 503, `RunBeatView` shows "busy, retry in N s" without costing a heart.
+**Server runners.** `POST /api/run` applies the guards described in [security.md](security.md) (rate limits, global quota, concurrency caps, result cache) and picks the language's runner (`lib/runners/index.ts`). Every server runner sends only the player's snippet to its sandbox and nothing else. The Go and Compiler Explorer (C++, C#, Zig, Haskell, Ruby) runners share `postJson` in `lib/runners/http.ts`: a POST with a timeout (15 s by default, 20 s for Compiler Explorer, 30 s for Zig, whose compiler is slower), no redirects, a fixed `User-Agent`, a 1 MB response cap and JSON parsing; any failure (network, non-2xx, oversized or malformed body, unexpected shape) becomes `available: false` with no upstream details. The Rust runner applies the same rules inline. Each runner cleans its output so it reads like a local build: cargo noise dropped (Rust), ANSI escape codes stripped, sandbox paths renamed to `prog.go`, `main.cpp`, `Program.cs`, `main.zig`, `Main.hs` or `main.rb`, and build-tool noise removed. Zig needs one more step, because `std.debug.print` writes to stderr: an optional `Split` hook in `godbolt.ts` (`splitZig`) counts everything printed on stderr before a panic, or before an `error: Name` returned from `main`, as stdout, and keeps the panic or error as stderr; `cleanZig` then trims the trace to the player's own frames (dropping the standard library's startup frames). `cleanHaskell` also drops the `output.s: ` prefix GHC puts on runtime errors. Ruby has no build step, so a syntax error only appears when the script starts: the `Split` hook may also return a `phase`, and `splitRuby` uses it to report a `SyntaxError` as `phase: "compile"` (trimmed to the "syntax errors found" report), while `cleanRuby` renames Compiler Explorer's `/app/output.s` to `main.rb`. With `BITWISE_RUNNER=off` no external call is made and the beat is validated with its `fallback` regex. When the API answers 429 or 503, `RunBeatView` shows "busy, retry in N s" without costing a heart.
 
 **Browser runners (`js-browser`, `py-browser`).** JS/TS/TSX and Python run in the player's own browser; the server never receives or executes player code, and `getRunner` in `lib/repo.ts` returns `null` for browser runners, so `/api/run` answers 404 `unknown_language` for those packs.
 

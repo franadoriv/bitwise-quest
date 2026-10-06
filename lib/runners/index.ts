@@ -2,10 +2,10 @@ import "server-only";
 import type { LanguageRunner } from "./types";
 import { rustPlayground } from "./rust-playground";
 import { goPlayground } from "./go-playground";
-import { godboltCpp, godboltCsharp } from "./godbolt";
+import { godboltCpp, godboltCsharp, godboltHaskell, godboltRuby, godboltZig } from "./godbolt";
 
 const RUNNERS: Record<string, LanguageRunner> = Object.fromEntries(
-  [rustPlayground, goPlayground, godboltCpp, godboltCsharp].map((r) => [r.id, r]),
+  [rustPlayground, goPlayground, godboltCpp, godboltCsharp, godboltZig, godboltHaskell, godboltRuby].map((r) => [r.id, r]),
 );
 
 export function getRunner(id: string | null | undefined): LanguageRunner | null {

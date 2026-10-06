@@ -15,5 +15,6 @@ export const webglMoon: PlanetDef = {
     title: L("Hello-triangle of the pipeline", "Triángulo guía del pipeline", "パイプラインの案内三角形"),
   },
   colors: { surface: "#2a0f24", accent: "#e8307a" },
+  shape: "tetra",
   bugs: ["webgl/black-screen", "webgl/z-fighting", "webgl/shader-goblin"],
 };

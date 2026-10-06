@@ -31,7 +31,7 @@ There is no `main` branch.
    npm run content:verify -- --lang=rust      # compiles every claim against the real compiler
    npm run content:verify -- --lang=react     # TS/TSX packs: tsc --strict + the JS runner, offline
    npm run content:verify -- --lang=python    # Python: Pyodide in Node, offline
-   npm run content:verify -- --lang=go        # Go, C++ (cpp), C# (csharp): the game's sandboxes, cached in .snippets/
+   npm run content:verify -- --lang=go        # Go, C++ (cpp), C# (csharp), Zig, Haskell, Ruby (ruby, rails): the game's sandboxes, cached in .snippets/
    npm run typecheck
    npm test                                   # save, security, JS runner, runners and music unit tests
    npm run playtest -- /play/rust/lesson/<slug> --locale=en   # with npm run dev running
@@ -45,7 +45,8 @@ There is no `main` branch.
 - Never ask about something the game has not taught yet.
 - Every claim about the compiler has a `check`, and every `run` beat has a `solution`.
 - TS/TSX content must type-check under `tsc --strict` where it claims to, and its output must come from the game's runner (`npm run content:verify`). Avoid Node-only globals, the DOM at runtime and anything that depends on effects running in a static React render.
-- Go, C++, C# and Python content is verified on the same runners the game uses; outputs must be deterministic (no hash-map iteration order, timing or C++ undefined behavior), and Python lessons cannot use threads, the network or `input()`. See [`docs/content-model.md`](docs/content-model.md#go-c-c-and-python-packs).
+- Go, C++, C#, Zig, Haskell, Ruby and Python content is verified on the same runners the game uses; outputs must be deterministic (no hash-map iteration order, timing, object addresses or C++ undefined behavior), Python lessons cannot use threads, the network or `input()`, and Ruby has only the standard library (no gems). See [`docs/content-model.md`](docs/content-model.md#go-c-c-zig-haskell-ruby-and-python-packs).
+- Frameworks no sandbox can run, such as Rails, are taught with small plain-language versions of their mechanisms (verified with `check`) plus conceptual questions without `check`, explained from the framework's official guides. See [`docs/adding-a-language.md`](docs/adding-a-language.md#a-framework-without-a-sandbox).
 - **Every piece of prose is localized** with `L(en, es, ja)`. English is the primary language; write it first, then Spanish and Japanese. Code, compiler output and program output are never translated. See [`docs/i18n.md`](docs/i18n.md).
 - Keep text short: dialogs under 140 characters, `say`/`banner` bubbles at most 22 (Japanese gets about 65% of each budget). `npm run content:check` reports anything over budget.
 - UI strings go in `lib/i18n/messages.ts`, never hard-coded in components.
@@ -61,7 +62,7 @@ There is no `main` branch.
 - Every API endpoint uses the guards in `lib/security/`: origin check, per-client rate limit, `readJson` with a byte cap, strict validation with `onlyKeys`, and `errorResponse` with stable error codes. See [`docs/security.md`](docs/security.md#adding-an-endpoint).
 - Quotas live only in `LIMITS` (`lib/security/policies.ts`); update the table in `docs/security.md` when you change one.
 - Never log player code, IP addresses or request bodies, and never return internal error details.
-- Never execute player code on the server. Use an external sandbox behind `/api/run` (Rust Playground, Go Playground, Compiler Explorer) or a browser runner in a Web Worker (JS/TS, Python with self-hosted Pyodide); see [`docs/security.md`](docs/security.md#player-code-execution).
+- Never execute player code on the server. Use an external sandbox behind `/api/run` (Rust Playground, Go Playground, Compiler Explorer for C++, C#, Zig, Haskell and Ruby) or a browser runner in a Web Worker (JS/TS, Python with self-hosted Pyodide); see [`docs/security.md`](docs/security.md#player-code-execution).
 
 ## Checklist for a pull request
 

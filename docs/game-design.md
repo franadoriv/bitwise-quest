@@ -26,10 +26,11 @@ Each programming language is a **planet** in a low-poly 3D galaxy (`/galaxy`), w
 | Sharpholm | C# | Hashi, keen fox of the managed realm | Active, content in progress |
 | Concurra | Go | Gopi, cheerful tunnel digger | Active, content in progress |
 | Velocis | C++ | Vecta, swift steel knight of control | Active, content in progress |
-| Comptia | Zig | Iggi, iguana forge engineer | Under construction |
-| Lambdara | Haskell | Lambo, wise owl of pure functions | Under construction |
+| Comptia | Zig | Iggi, iguana forge engineer | Active, content in progress |
+| Lambdara | Haskell | Lambo, wise owl of pure functions | Active, content in progress |
+| Rubion | Ruby | Kira, gem-hearted fox of happy code | Active, content in progress |
 
-Scriptara has three framework moons: Reactia (React, guide Orbi), Shadera (WebGL, guide Trix) and Scenara (three.js, guide Polly).
+Scriptara has three framework moons: Reactia (React, guide Orbi), Shadera (WebGL, guide Trix) and Scenara (three.js, guide Polly). Rubion has one: Railhaven (Ruby on Rails, guide Chuff, little engine of convention), which teaches Rails under the hood by building small plain-Ruby versions of its mechanisms.
 
 - **The guide** is the planet's teacher and voice: it speaks the lesson dialogs, explains every mistake and greets the player on the first landing with three choices: start from scratch, take the entry exam, or just look at the map.
 - **The bugs** are the language's classic mistakes as monsters (dangling references, deadlocks, leaks...). They are the lesson enemies, and the planet card shows them before landing.
@@ -90,6 +91,10 @@ Everything is synthesized with WebAudio; there are no audio files.
 | `map:csharp` | Sharpholm (C#) world map | 89 s | Regal fanfare and march, D♭ major, lifts to D |
 | `map:webgl` | Shadera (WebGL moon) world map | 76 s | Neon arpeggios, B minor, sections named after the GPU pipeline |
 | `map:threejs` | Scenara (three.js moon) world map | 90 s | Airy and spacious, E major, a weightless break |
+| `map:zig` | Comptia (Zig) world map | 90 s | Crisp, mechanical F minor forge, 3+3+3+3+2+2 syncopation, an arpeggiated "comptime" break |
+| `map:haskell` | Lambdara (Haskell) world map | 96 s | Serene and flowing, A♭ major with a lydian D, a "lazy" break of held notes |
+| `map:ruby` | Rubion (Ruby) world map | 91 s | Joyful and sparkling, swung E♭ major, a "glint" break of lone gem sparkles |
+| `map:rails` | Railhaven (Rails moon) world map | 81 s | Steady locomotive groove, F♯ minor, chugging train bass, a "whistle stop" break and a lift a tone up |
 | `lesson:a`, `lesson:b` | Lessons and reviews (random) | 57 s / 67 s | Light battle grooves (E minor, A dorian) |
 | `boss` | Boss lessons | 57 s | Intense and driving, C minor |
 | `exam` | Entry exams | 69 s | Tense, steady clock pulse, D minor |

@@ -1,5 +1,6 @@
 "use client";
 import type { RunResult } from "./types";
+import type { PyWorkerMessage } from "./py-worker";
 
 /** Runners that execute in the player's browser instead of the server. */
 export { BROWSER_RUNNER_IDS as BROWSER_RUNNERS } from "./ids";
@@ -34,24 +35,34 @@ export function runInBrowser(code: string, opts: { jsx: boolean; timeoutMs?: num
   });
 }
 
-// Python: loading CPython (≈12 MB, cached by the browser) takes a few seconds, so one worker is kept
+// Python: loading CPython (≈13 MB, cached by the browser) takes a few seconds, so one worker is kept
 // warm and reused. The time limit starts once the interpreter is ready.
-let py: { worker: Worker; ready: Promise<boolean> } | null = null;
+export interface LoadProgress { phase: "download" | "boot"; loaded: number; total: number }
+
+interface PyState { worker: Worker; ready: Promise<boolean>; last: LoadProgress | null; listeners: Set<(p: LoadProgress) => void> }
+let py: PyState | null = null;
 let nextId = 1;
 
 function pythonWorker() {
   if (py) return py;
   const worker = new Worker(new URL("./py-worker.ts", import.meta.url), { type: "module" });
-  const ready = new Promise<boolean>((resolve) => {
-    const onReady = (e: MessageEvent<{ type: string; ok?: boolean }>) => {
-      if (e.data.type !== "ready") return;
-      worker.removeEventListener("message", onReady);
-      resolve(!!e.data.ok);
+  const state: PyState = { worker, ready: Promise.resolve(false), last: null, listeners: new Set() };
+  state.ready = new Promise<boolean>((resolve) => {
+    const onMessage = (e: MessageEvent<PyWorkerMessage>) => {
+      if (e.data.type === "progress") {
+        const p = { phase: e.data.phase, loaded: e.data.loaded, total: e.data.total };
+        state.last = p;
+        state.listeners.forEach((l) => l(p));
+      } else if (e.data.type === "ready") {
+        worker.removeEventListener("message", onMessage);
+        state.listeners.clear();
+        resolve(e.data.ok);
+      }
     };
-    worker.addEventListener("message", onReady);
+    worker.addEventListener("message", onMessage);
     worker.addEventListener("error", () => resolve(false), { once: true });
   });
-  py = { worker, ready };
+  py = state;
   return py;
 }
 
@@ -67,6 +78,31 @@ export function warmPython() {
   } catch {
     /* worker unsupported: runs will fall back to offline checks */
   }
+}
+
+/** Loads Python (if needed) and reports download/boot progress. Resolves false if it cannot load. */
+export async function preparePython(onProgress?: (p: LoadProgress) => void): Promise<boolean> {
+  let w: ReturnType<typeof pythonWorker>;
+  try {
+    w = pythonWorker();
+  } catch {
+    return false;
+  }
+  if (onProgress) {
+    if (w.last) onProgress(w.last);
+    w.listeners.add(onProgress);
+  }
+  const ok = await w.ready;
+  if (onProgress) w.listeners.delete(onProgress);
+  if (!ok) resetPython();
+  return ok;
+}
+
+/** Warms the JS runner (and three.js when asked) so the first run does not wait for downloads. */
+export async function prepareJs(opts: { three: boolean }): Promise<boolean> {
+  const code = opts.three ? 'import * as THREE from "three";\nconsole.log(typeof THREE.Vector3);' : 'console.log("ok");';
+  const r = await runInBrowser(code, { jsx: false, timeoutMs: 20_000 });
+  return r.ok;
 }
 
 export async function runPythonInBrowser(code: string, timeoutMs = 5000): Promise<RunResult> {

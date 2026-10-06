@@ -5,13 +5,16 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import type { CodeLang } from "../lib/content/types.ts";
 import type { LanguageRunner, RunResult } from "../lib/runners/types.ts";
 import { goPlayground } from "../lib/runners/go-playground.ts";
-import { godboltCpp, godboltCsharp } from "../lib/runners/godbolt.ts";
+import { godboltCpp, godboltCsharp, godboltHaskell, godboltRuby, godboltZig } from "../lib/runners/godbolt.ts";
 import { runPython, type PyodideLike } from "../lib/runners/py-core.ts";
 
 const REMOTE: Partial<Record<CodeLang, { runner: LanguageRunner; parallel: number }>> = {
   go: { runner: goPlayground, parallel: 3 },
   cpp: { runner: godboltCpp, parallel: 2 },
   csharp: { runner: godboltCsharp, parallel: 2 },
+  zig: { runner: godboltZig, parallel: 2 },
+  haskell: { runner: godboltHaskell, parallel: 2 },
+  ruby: { runner: godboltRuby, parallel: 2 },
 };
 
 const CACHE_DIR = ".snippets";
@@ -31,7 +34,7 @@ async function python(): Promise<PyodideLike> {
   return pyodide;
 }
 
-export const VERIFIABLE_LANGS: CodeLang[] = ["go", "cpp", "csharp", "python"];
+export const VERIFIABLE_LANGS: CodeLang[] = ["go", "cpp", "csharp", "zig", "haskell", "ruby", "python"];
 
 /** Runs every program (in order), returning one result per program. Unavailable runs are not cached. */
 export async function runAll(lang: CodeLang, programs: string[], onProgress?: (done: number) => void): Promise<RunResult[]> {

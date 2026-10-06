@@ -6,7 +6,7 @@
 
 **A retro arcade game for learning programming languages by playing.**
 NES/Game Boy pixel art, constant feedback and a world that reacts to your code.
-Playable now: **Rust**, **TypeScript/JavaScript** (with **React**, **WebGL** and **three.js** moons), **Python**, **Go**, **C++** and **C#**.
+Playable now: **Rust**, **TypeScript/JavaScript** (with **React**, **WebGL** and **three.js** moons), **Python**, **Go**, **C++**, **C#**, **Zig**, **Haskell** and **Ruby** (with its **Rails** moon).
 
 [![CI](https://github.com/franadoriv/bitwise-quest/actions/workflows/ci.yml/badge.svg)](https://github.com/franadoriv/bitwise-quest/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
@@ -41,12 +41,18 @@ The whole game, UI and every piece of content, is available in **English**, **Es
 | ![TypeScript lesson](docs/screenshots/lesson-ts.png) | ![React exercise rendered in a Web Worker](docs/screenshots/lesson-react.png) |
 | **Planet Serpentia: real Python in your browser** | **Planet Concurra (Go)** |
 | ![Python async exercise run with CPython in WebAssembly](docs/screenshots/lesson-python.png) | ![Go panic and recover exercise on the Go Playground](docs/screenshots/lesson-go.png) |
+| **Planet Comptia (Zig): allocators and the leak checker** | **Planet Lambdara (Haskell)** |
+| ![Zig allocator exercise](docs/screenshots/lesson-zig.png) | ![Galaxy: planet Lambdara](docs/screenshots/galaxy-haskell.png) |
+| **Planet Rubion (Ruby): pattern matching** | **Moon Railhaven: Rails strong params, rebuilt in Ruby** |
+| ![Ruby pattern matching exercise](docs/screenshots/lesson-ruby.png) | ![Rails strong params exercise](docs/screenshots/lesson-rails.png) |
 | **Planet Velocis (C++20)** | **Planet Sharpholm (C#, .NET 10)** |
 | ![C++ move semantics exercise](docs/screenshots/lesson-cpp.png) | ![C# records exercise](docs/screenshots/lesson-csharp.png) |
 | **Planet map** | **Code controls the world** |
 | ![Low poly map](docs/screenshots/map.png) | ![Ownership lesson](docs/screenshots/lesson-act.png) |
 | **Mistakes teach** | **Real compiler** |
 | ![Error feedback](docs/screenshots/lesson-feedback.png) | ![Real code challenge](docs/screenshots/lesson-run.png) |
+| **Loading with real progress** | **Planet Concurra (Go)** |
+| ![Loading screen downloading the Python interpreter](docs/screenshots/loading.png) | ![Galaxy: planet Concurra](docs/screenshots/galaxy-go.png) |
 | **Region boss** | **Entry exam** |
 | ![Boss](docs/screenshots/boss.png) | ![Exam report](docs/screenshots/exam-report.png) |
 | **Game Boy palette** | **NES palette** |
@@ -68,12 +74,13 @@ Each lesson is a series of challenges that take a few seconds each and follow th
 | Predict | Guesses what the code prints or whether it compiles |
 | Type | Types the token, with character-by-character feedback |
 | Order | Builds the program line by line |
-| Run | Fixes a real program and runs it: Rust and Go on their official playgrounds, C++ and C# on Compiler Explorer, JS/TS/React/three.js and Python right in the browser |
+| Run | Fixes a real program and runs it: Rust and Go on their official playgrounds, C++, C#, Zig, Haskell and Ruby on Compiler Explorer, JS/TS/React/three.js and Python right in the browser |
 
 ## Features
 
-- **A galaxy of planets with moons:** each language is a low poly 3D planet (with rings and a starfield) that has its own guide, bugs and story, and each framework of that language is a moon orbiting it, with its own guide, lessons and progress. Land on either to reach a map with one island per region (Three.js), plus animated 2D pixel art scenes driven by GSAP on SVG.
+- **A galaxy of planets with moons:** each language is a low poly 3D planet (with rings and a starfield) that has its own guide, bugs and story, and each framework of that language is a moon orbiting it, with its own guide, lessons and progress. Swipe between planets on touch screens; framework moons are shaped after what they teach (React an atom, WebGL a triangle, three.js a cube, Rails a train wheel). Landing dives into the planet with a widening field of view, then reaches a map with one island per region (Three.js), plus animated 2D pixel art scenes driven by GSAP on SVG.
 - **Memory card with 15 save slots,** like a retro console: name your player, autosave as you play, and **export/import** any slot as a `.bwq` file to move it to another browser or keep a backup. Edited or damaged files are rejected.
+- **No dead waits:** before a challenge starts, the game downloads what it needs (the game code, the Python interpreter, three.js) behind an arcade loading screen with real progress, where the guide walks toward the bug and tips rotate. Cached content starts instantly.
 - **Arcade juice:** combos, PERFECT and GREAT speed tiers, particles, screen shake, chiptune music and sound effects synthesized with WebAudio (no audio files).
 - **Persistent progress** in your save: XP, levels, gold, daily streak, stars, per-lesson mastery and play time, kept in the browser (no account, nothing stored on the server).
 - **Spaced repetition:** what you miss comes back as "wandering bugs" in Leitner boxes.
@@ -81,7 +88,7 @@ Each lesson is a series of challenges that take a few seconds each and follow th
 - **Three languages:** English, Español and 日本語 for both UI and content, switchable in-game.
 - **16:9 frame** that scales with the window, with a portrait layout for mobile.
 - **Three palettes:** Orange, Game Boy and NES.
-- **Verified content:** every claim about the compiler is actually compiled or run before it ships: Rust and Go on their official playgrounds, C++ and C# on Compiler Explorer, Python in CPython (WebAssembly), and TypeScript, React, WebGL and three.js with `tsc --strict` plus the game's own runner.
+- **Verified content:** every claim about the compiler is actually compiled or run before it ships: Rust and Go on their official playgrounds, C++, C#, Zig, Haskell and Ruby on Compiler Explorer, Python in CPython (WebAssembly), and TypeScript, React, WebGL and three.js with `tsc --strict` plus the game's own runner.
 - **JS/TS and Python run in your browser:** TypeScript, React, three.js and Python exercises execute in a sandboxed Web Worker on the player's machine, with a hard timeout (Python is CPython compiled to WebAssembly, served by the game itself); the server never runs player code.
 
 ## Planets and moons
@@ -97,8 +104,10 @@ Each lesson is a series of challenges that take a few seconds each and follow th
 | **Concurra** | Planet | Go | Gopi, a tunnel digger | Official Go Playground | Playable: 4 regions + entry exams |
 | **Velocis** | Planet | C++20 | Vecta, a steel knight | Compiler Explorer (g++ 14) | Playable: 4 regions + entry exams |
 | **Sharpholm** | Planet | C# | Hashi, a keen fox | Compiler Explorer (.NET 10) | Playable: 4 regions + entry exams |
-| **Comptia** | Planet | Zig | Iggi | | Under construction |
-| **Lambdara** | Planet | Haskell | Lambo | | Under construction |
+| **Comptia** | Planet | Zig | Iggi, an iguana forge engineer | Compiler Explorer (Zig 0.15) | Playable: 4 regions + entry exams |
+| **Lambdara** | Planet | Haskell | Lambo, a wise owl | Compiler Explorer (GHC 9.8) | Playable: 4 regions + entry exams |
+| **Rubion** | Planet | Ruby | Kira, a gem-hearted fox | Compiler Explorer (Ruby 3.4) | Playable: 4 regions + entry exams |
+| **Railhaven** | Moon of Rubion | Ruby on Rails | Chuff, a little engine | Compiler Explorer (Ruby 3.4): Rails rebuilt in plain Ruby | Playable: 3 regions + entry exams |
 
 Future moons could cover more frameworks, such as Babylon.js, Vue or Django.
 
@@ -136,8 +145,14 @@ Future moons could cover more frameworks, such as Babylon.js, Vue or Django.
 | Concurra (Go) | Gopher Village · Slice Forest · Interface Castle · Channel Tower | 20 | 222 | 12/22 · 14/24 · 15/26 |
 | Velocis (C++) | Value Village · Lifetime Forest · Polymorph Castle · Template Tower | 20 | 227 | 12/22 · 14/24 · 15/26 |
 | Sharpholm (C#) | Value Village · Class Forest · Linq Peaks · Task Tower | 19 | 194 | 12/22 · 14/24 · 15/26 |
+| Comptia (Zig) | Forge Village · Optional Forest · Struct Mountain · Comptime Tower | 20 | 227 | 12/22 · 14/24 · 15/26 |
+| Lambdara (Haskell) | Lambda Village · Fold Forest · Lazy Mountain · Monad Tower | 20 | 201 | 12/22 · 14/24 · 15/26 |
+| Rubion (Ruby) | Object Village · Enumerable Forest · Module Castle · Meta Tower | 20 | 230 | 12/22 · 14/24 · 15/26 |
+| Railhaven (Rails) | Record Village · Association Forest · Controller Castle | 15 | 143 | 12/22 · 14/24 · 15/26 |
 
-Every claim in every world is checked by `npm run content:verify` against the real toolchain: 2,600+ snippets in total. The curricula and exam designs come from research into what companies assess, in [`docs/research/`](docs/research/).
+Rails can't run in any of the game's sandboxes, so Railhaven teaches **Rails under the hood**: the player builds small plain-Ruby versions of Active Record, associations (with a query counter that makes N+1 visible), validations, callbacks, routing, strong params and filters, all verified on real Ruby. Rails API facts are taught as conceptual questions explained from the Rails Guides.
+
+Every claim in every world is checked by `npm run content:verify` against the real toolchain: 3,700+ snippets in total. The curricula and exam designs come from research into what companies assess, in [`docs/research/`](docs/research/).
 
 ## Getting started
 
@@ -163,7 +178,7 @@ Open <http://localhost:3000>, press **START**, pick a memory card slot, name you
 | `npm test` | Unit tests of the save system (codec, migrations, progress rules), the backend abuse protection (rate limits, origin checks, body limits), the JS/TS and Python runners, the snippet wrapper, the highlighter and the music |
 | `npm run e2e` | End-to-end memory card test in headless Chrome (with `npm run dev` running) |
 
-> Rust and Go code challenges send the player's snippet to their official public playgrounds (`play.rust-lang.org`, `go.dev`), and C++ and C# challenges to Compiler Explorer (`godbolt.org`). Only the snippet is sent, through the same quotas and cache. With `BITWISE_RUNNER=off` no external call is made and validation is done locally. JS/TS/React/three.js and Python challenges run in a Web Worker in the player's own browser and never reach the server. The server is stateless and writes nothing to disk; player saves live in the browser's localStorage.
+> Rust and Go code challenges send the player's snippet to their official public playgrounds (`play.rust-lang.org`, `go.dev`), and C++, C#, Zig, Haskell and Ruby (and Rails) challenges to Compiler Explorer (`godbolt.org`). Only the snippet is sent, through the same quotas and cache. With `BITWISE_RUNNER=off` no external call is made and validation is done locally. JS/TS/React/three.js and Python challenges run in a Web Worker in the player's own browser and never reach the server. The server is stateless and writes nothing to disk; player saves live in the browser's localStorage.
 
 > The API is protected against abuse: same-origin checks, per-client and global rate limits, concurrency caps, bounded JSON bodies, strict validation, a per-request nonce Content-Security-Policy and security headers. See [`docs/security.md`](docs/security.md).
 
@@ -202,9 +217,10 @@ AI agents have instructions in [`AGENTS.md`](AGENTS.md) and step-by-step playboo
 - [x] Full localization: English, Español, 日本語
 - [x] Planets with their own guide and bugs, and a 15-slot memory card with export/import
 - [x] TypeScript/JavaScript planet (Scriptara) and its React moon (Reactia), running in the browser
-- [ ] More moons: WebGL, three.js, Babylon.js
-- [ ] More framework moons, such as WebGL, three.js or Babylon.js
-- [ ] Go, Zig and Haskell planets (Concurra, Comptia and Lambdara are already in the galaxy, under construction)
+- [x] Planets Python, Go, C++, C#, Zig and Haskell, and moons WebGL and three.js
+- [x] Planet Ruby with its Rails moon
+- [ ] More framework moons, such as Babylon.js, Vue or Django
+- [ ] More planets, such as Java, Kotlin, Swift or SQL
 - [ ] User accounts and leaderboard
 - [ ] More challenge kinds, such as "find the bug" in longer code
 
