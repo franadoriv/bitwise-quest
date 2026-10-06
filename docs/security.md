@@ -1,5 +1,7 @@
 # Security and abuse protection
 
+Optional cloud saves are browser-only and use Supabase owner-only RLS plus an atomic revision-checked RPC. No Vercel save endpoint exists. Imports have bounded decompression and structural validation. The page CSP permits only the exact configured Supabase HTTPS origin; see [cloud-saves.md](cloud-saves.md) for setup, limits and tests.
+
 Bitwise Quest is a public game with two API endpoints, and one of them (`/api/run`) forwards code to external compiler services. This document explains how the backend protects itself and those upstreams from flooding, cost abuse, cross-site use, oversized payloads, header spoofing, XSS and clickjacking, and what you still need to add in front of it in production.
 
 The server is stateless: content is served from memory (`lib/repo.ts`), there is no database, and the server never receives or stores player saves. The only mutable server state is the abuse-protection counters and the run cache described below.

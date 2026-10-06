@@ -34,7 +34,7 @@ The whole game, UI and every piece of content, is available in **English**, **Es
 
 | Title | Memory card |
 | --- | --- |
-| ![Title screen](docs/screenshots/title.png) | ![Memory card with 15 save slots](docs/screenshots/memory-card.png) |
+| ![Title screen](docs/screenshots/title.png) | ![Memory card with 3 save slots](docs/screenshots/memory-card.png) |
 | **Choose a planet** | **Each planet has its own guide and bugs** |
 | ![Galaxy: planet Oxide](docs/screenshots/galaxy.png) | ![Galaxy: planet Scriptara with its React moon](docs/screenshots/galaxy-ts.png) |
 | **Planet Scriptara (TS/JS)** | **Moon Reactia (React), run in the browser** |
@@ -83,12 +83,12 @@ Each lesson is a series of challenges that take a few seconds each and follow th
 ## Features
 
 - **A galaxy of planets with moons:** each language is a low poly 3D planet (with rings and a starfield) that has its own guide, bugs and story, and each framework of that language is a moon orbiting it, with its own guide, lessons and progress. Swipe between planets on touch screens; framework moons are shaped after what they teach (React an atom, WebGL a triangle, three.js a cube, Rails a train wheel). Landing dives into the planet with a widening field of view, then reaches a map with one island per region (Three.js), plus animated 2D pixel art scenes driven by GSAP on SVG.
-- **Memory card with 15 save slots,** like a retro console: name your player, autosave as you play, and **export/import** any slot as a `.bwq` file to move it to another browser or keep a backup. Edited or damaged files are rejected.
+- **Memory card with 3 save slots,** like a retro console: name your player, autosave as you play, and **export/import** any slot as a `.bwq` file to move it to another browser or keep a backup. Edited or damaged files are rejected.
 - **Help when it's hard:** every lesson has a **guidebook** of long explanations (897 notes with 1,900+ verified code examples, using different values than the questions) that you can open from any question and come back to where you were (the first read costs 25% of that question's points). Every question also has a **hint**, paid with hint tickets (earned with perfect lessons and daily play, or bought with coins), and on multiple choice a hint also strikes out a wrong option.
 - **Pick your pace:** before each lesson choose no timer, relaxed, normal or fast. Faster timers pay a bigger speed bonus, and the time per question grows with its code.
 - **No dead waits:** before a challenge starts, the game downloads what it needs (the game code, the Python interpreter, three.js) behind an arcade loading screen with real progress, where the guide walks toward the bug and tips rotate. Cached content starts instantly.
 - **Arcade juice:** combos, PERFECT and GREAT speed tiers, particles, screen shake, chiptune music and sound effects synthesized with WebAudio (no audio files).
-- **Persistent progress** in your save: XP, levels, gold, daily streak, stars, per-lesson mastery and play time, kept in the browser (no account, nothing stored on the server).
+- **Persistent progress** in your save: XP, levels, gold, daily streak, stars, per-lesson mastery and play time, kept locally without an account, or optionally synced directly to Supabase with Google login.
 - **Spaced repetition:** what you miss comes back as "wandering bugs" in Leitner boxes.
 - **Junior, mid-level and senior entry exams** based on what companies actually assess, with a per-topic report and skipping of regions you already master.
 - **Three languages:** English, Español and 日本語 for both UI and content, switchable in-game.
@@ -173,6 +173,8 @@ npm run dev
 
 Open <http://localhost:3000>, press **START**, pick a memory card slot, name your player and land on a planet.
 
+To enable optional Google cloud saves, follow [`docs/cloud-saves.md`](docs/cloud-saves.md). Local and cloud cards have three slots each and exchange saves through the same `.bwq` files. Previous local slots 4–15 remain available for export.
+
 | Command | Purpose |
 | --- | --- |
 | `npm run dev` | Development server |
@@ -184,7 +186,7 @@ Open <http://localhost:3000>, press **START**, pick a memory card slot, name you
 | `npm test` | Unit tests of the save system (codec, migrations, progress rules), the backend abuse protection (rate limits, origin checks, body limits), the JS/TS and Python runners, the snippet wrapper, the highlighter and the music |
 | `npm run e2e` | End-to-end memory card test in headless Chrome (with `npm run dev` running) |
 
-> Rust and Go code challenges send the player's snippet to their official public playgrounds (`play.rust-lang.org`, `go.dev`), and C++, C#, Zig, Haskell and Ruby (and Rails) challenges to Compiler Explorer (`godbolt.org`). Only the snippet is sent, through the same quotas and cache. With `BITWISE_RUNNER=off` no external call is made and validation is done locally. JS/TS/React/three.js and Python challenges run in a Web Worker in the player's own browser and never reach the server. The server is stateless and writes nothing to disk; player saves live in the browser's localStorage.
+> Rust and Go code challenges send the player's snippet to their official public playgrounds (`play.rust-lang.org`, `go.dev`), and C++, C#, Zig, Haskell and Ruby (and Rails) challenges to Compiler Explorer (`godbolt.org`). Only the snippet is sent, through the same quotas and cache. With `BITWISE_RUNNER=off` no external call is made and validation is done locally. JS/TS/React/three.js and Python challenges run in a Web Worker in the player's own browser and never reach the server. The server is stateless and writes nothing to disk; local saves live in the browser's localStorage; optional cloud saves connect directly to Supabase. See [`docs/cloud-saves.md`](docs/cloud-saves.md).
 
 > The API is protected against abuse: same-origin checks, per-client and global rate limits, concurrency caps, bounded JSON bodies, strict validation, a per-request nonce Content-Security-Policy and security headers. See [`docs/security.md`](docs/security.md).
 
@@ -221,7 +223,7 @@ AI agents have instructions in [`AGENTS.md`](AGENTS.md) and step-by-step playboo
 
 - [x] Rust cartridge: 5 regions and a 3-level entry exam
 - [x] Full localization: English, Español, 日本語
-- [x] Planets with their own guide and bugs, and a 15-slot memory card with export/import
+- [x] Planets with their own guide and bugs, and a three-slot memory card with export/import
 - [x] TypeScript/JavaScript planet (Scriptara) and its React moon (Reactia), running in the browser
 - [x] Planets Python, Go, C++, C#, Zig and Haskell, and moons WebGL and three.js
 - [x] Planet Ruby with its Rails moon

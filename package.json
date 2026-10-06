@@ -24,6 +24,7 @@
     "postinstall": "node scripts/copy-pyodide.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.117.2",
     "gsap": "^3.15.0",
     "next": "16.3.8",
     "pyodide": "314.0.7",
@@ -34,6 +35,7 @@
     "three": "^0.186.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@types/node": "^26.6.4",
     "@types/react": "^19",
     "@types/react-dom": "^19",

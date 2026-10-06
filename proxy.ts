@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { clientKey, rateLimitHeaders } from "@/lib/security/http";
 import { guards } from "@/lib/security/policies";
+import { supabaseOrigin } from "@/lib/cloud/model";
 
 // Runs before every page request: per-client rate limit and a per-request nonce for a strict
 // Content-Security-Policy. API routes enforce their own (stricter) quotas in their handlers.
@@ -15,6 +16,8 @@ export function proxy(request: NextRequest) {
 
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
   const dev = process.env.NODE_ENV === "development";
+  // Only the configured HTTPS project is allowed; no wildcard Supabase or third-party scripts.
+  const cloud = supabaseOrigin(process.env.NEXT_PUBLIC_SUPABASE_URL);
   const csp = [
     "default-src 'self'",
     // Next.js injects the nonce into its own scripts; 'strict-dynamic' lets those load their chunks.
@@ -23,7 +26,7 @@ export function proxy(request: NextRequest) {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self'",
-    `connect-src 'self'${dev ? " ws: wss:" : ""}`,
+    `connect-src 'self'${cloud ? ` ${cloud}` : ""}${dev ? " ws: wss:" : ""}`,
     "media-src 'self'",
     "worker-src 'self' blob:",
     "object-src 'none'",

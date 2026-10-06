@@ -1,6 +1,6 @@
 # Save system (the memory card)
 
-Player progress lives **on the client**, in a retro "memory card" with 15 save slots. The server only serves content (see [architecture.md](architecture.md)). This document covers the data model, the binary file format, storage, the pure progress rules, the UI and how to change the format safely.
+Player progress is managed **on the client**, in a retro "memory card" with three save slots. The app server only serves content (see [architecture.md](architecture.md)). An optional Google cloud card syncs directly from the browser to Supabase, independently of the local card; see [cloud-saves.md](cloud-saves.md). This document covers the save model, file format and pure progress rules.
 
 | Piece | Path | Role |
 | --- | --- | --- |
@@ -18,7 +18,7 @@ Player progress lives **on the client**, in a retro "memory card" with 15 save s
 
 ```ts
 SAVE_VERSION  = 2     // bump on any shape change (see "Changing the save format")
-SLOT_COUNT    = 15    // slots on the memory card
+SLOT_COUNT    = 3     // active slots; old local slots 4–15 stay available for export
 NAME_MAX      = 12    // player name length
 START_TICKETS = 5     // hint tickets in a new save
 TIMER_PREFS   = ["off", "relaxed", "normal", "fast"]  // TimerPref (= TimerMode in lib/game-rules.ts)
@@ -102,14 +102,15 @@ A `.bwq` file is a 20-byte header followed by the payload. All integers are litt
 
 | Key | Value |
 | --- | --- |
-| `bwq:slot:<n>` (`n` = 1..15) | Base64 of the `.bwq` binary |
+| `bwq:slot:<n>` (`n` = 1..3) | Base64 of the `.bwq` binary; old slots 4–15 are preserved |
 | `bwq:active` | Number of the loaded slot |
 
 If localStorage throws (private mode, blocked site data), reads and writes fall back to an in-memory map for the session.
 
 | Function | Purpose |
 | --- | --- |
-| `listSlots()` | All 15 slots; an undecodable slot is returned as `{ save: null, error: <code> }` |
+| `listSlots()` | The three active slots; an undecodable slot is returned as `{ save: null, error: <code> }` |
+| `listLegacySlots()` | Occupied/damaged original local slots 4–15, preserved for export |
 | `readSlot(n)` / `writeSlot(n, save)` | Decode / encode one slot. Writes dispatch a `bwq:slots` window event |
 | `deleteSlot(n)` | Removes the slot (and clears `bwq:active` if it was the active one) |
 | `getActiveSlot()` / `setActiveSlot(n \| null)` | The loaded slot |
@@ -153,7 +154,7 @@ Unlock rules: a region unlocks when the previous region is fully completed (less
 
 ## Memory card screen (`components/save/MemoryCard.tsx`, route `/saves`)
 
-- 15 slots in a grid (5 columns, 3 in portrait), keyboard navigable (arrows, Enter, Escape).
+- Three slots in a grid (3 columns, stacked in portrait), keyboard navigable (arrows, Enter, Escape). Previous local slots appear separately for export.
 - A full slot shows the player name, level, last planet (with that planet's guide sprite), play time and last save date.
 - **Empty slot → NEW GAME** asks for the player name (max `NAME_MAX`), creates the save and goes to the galaxy.
 - **Full slot → CONTINUE**, **EXPORT** (downloads the `.bwq`) or **DELETE** (with a warning naming the player and slot).

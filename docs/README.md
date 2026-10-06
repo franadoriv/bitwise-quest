@@ -10,6 +10,7 @@ The game and all its content are localized in **English** (primary), **Spanish**
 | --- | --- |
 | [architecture.md](architecture.md) | Understand how Next.js, the in-memory content, the client save, the SVG stage and the 3D galaxy and maps fit together |
 | [save-system.md](save-system.md) | Understand the memory card: save format, migrations, `.bwq` files, progress rules |
+| [cloud-saves.md](cloud-saves.md) | Set up optional Google/Supabase cloud saves, account isolation, sync and recovery |
 | [content-model.md](content-model.md) | Learn the pack fields, planets and moons, `codeLang`, sprites, every beat kind, `check` (Rust, TS/TSX, Go, C++, C#, Zig, Haskell, Ruby and Python) and every visual effect, with examples |
 | [authoring-lessons.md](authoring-lessons.md) | Add lessons or regions to an existing language |
 | [adding-a-language.md](adding-a-language.md) | Add a new programming language (a planet with its guide and bugs, like Zig or Haskell) or a framework moon (React, WebGL, three.js, Rails, ...), including a framework no sandbox can run, and choose or add a runner |
@@ -27,7 +28,7 @@ The game and all its content are localized in **English** (primary), **Spanish**
 3. **The engine is generic.** Seven beat kinds and a vocabulary of visual effects cover any language.
 4. **Everything is verifiable.** Every compiler claim carries a `check` that `npm run content:verify` actually compiles and runs on the same toolchain the game uses: Rust Playground, Go Playground, Compiler Explorer (C++, C#, Zig, Haskell, Ruby), `tsc --strict` plus the JS runner (TS/TSX) and Pyodide (Python). Framework facts no sandbox can run (the Rails API) are conceptual questions without a `check`, explained from the framework's official guides.
 5. **Every prose string is localized.** Content uses `L(en, es, ja)`; UI strings live in `lib/i18n/messages.ts`. The validator rejects missing translations.
-6. **The server serves content, the client keeps progress.** The server reads `content/` straight from memory: no database, no disk writes, stateless. All player progress lives in the browser on a 15-slot memory card, keyed by stable slugs, so adding content never breaks a save.
+6. **The server serves content, the client keeps progress.** Vercel reads `content/` from memory: no database or progress endpoints. Three-slot local cards stay in the browser; optional cloud cards sync directly to Supabase with Google login. Saves use stable slugs, so adding content never breaks progress.
 7. **The API is guarded, and player code never runs on the server.** Every endpoint checks the origin, rate limits per client, caps the body and validates strictly. Rust, Go, C++, C#, Zig, Haskell and Ruby snippets go to external sandboxes; JS/TS and Python (Pyodide, self-hosted) run in a Web Worker in the player's browser. See [security.md](security.md).
 
 ## Commands

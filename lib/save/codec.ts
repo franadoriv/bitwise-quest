@@ -14,6 +14,7 @@
 // (any edited byte fails the CRC), but anyone with the game's source can decode them.
 import { SaveError, migrate } from "./migrate.ts";
 import type { SaveData } from "./schema.ts";
+import { MAX_SAVE_BYTES, validateSaveInput } from "./validate.ts";
 
 const MAGIC = [0x42, 0x57, 0x51, 0x21]; // "BWQ!"
 const CONTAINER = 1;
@@ -53,12 +54,27 @@ function xorStream(bytes: Uint8Array, seed: number): Uint8Array {
 const hasStreams = () => typeof CompressionStream !== "undefined" && typeof DecompressionStream !== "undefined";
 
 async function pipe(bytes: Uint8Array, stream: CompressionStream | DecompressionStream): Promise<Uint8Array> {
-  const res = new Response(new Blob([bytes as BlobPart]).stream().pipeThrough(stream));
-  return new Uint8Array(await res.arrayBuffer());
+  const reader = new Blob([bytes as BlobPart]).stream().pipeThrough(stream).getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      total += value.length;
+      if (total > MAX_SAVE_BYTES) { await reader.cancel(); throw new SaveError("format", "Save exceeds the size limit"); }
+      chunks.push(value);
+    }
+  } finally { reader.releaseLock(); }
+  const result = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) { result.set(chunk, offset); offset += chunk.length; }
+  return result;
 }
 
 export async function encodeSave(save: SaveData): Promise<Uint8Array> {
   const json = new TextEncoder().encode(JSON.stringify(save));
+  if (json.length > MAX_SAVE_BYTES) throw new SaveError("format", "Save exceeds the size limit");
   const compress = hasStreams();
   const body = compress ? await pipe(json, new CompressionStream("deflate-raw")) : json;
   const seed = (Math.random() * 0xffffffff) >>> 0;
@@ -76,10 +92,13 @@ export async function encodeSave(save: SaveData): Promise<Uint8Array> {
 }
 
 export async function decodeSave(bytes: Uint8Array): Promise<SaveData> {
+  if (bytes.length > MAX_SAVE_BYTES) throw new SaveError("format", "Save exceeds the size limit");
   if (bytes.length < HEADER || MAGIC.some((m, i) => bytes[i] !== m)) throw new SaveError("format", "Not a Bitwise Quest save file");
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (view.getUint8(4) > CONTAINER) throw new SaveError("newer", "Save file format is newer than this game");
+  if (view.getUint8(4) < CONTAINER) throw new SaveError("corrupt", "Unsupported save container");
   const flags = view.getUint8(7);
+  if (flags & ~FLAG_DEFLATE) throw new SaveError("corrupt", "Unsupported save flags");
   const seed = view.getUint32(8, true);
   const len = view.getUint32(12, true);
   const crc = view.getUint32(16, true);
@@ -89,7 +108,8 @@ export async function decodeSave(bytes: Uint8Array): Promise<SaveData> {
   let json: Uint8Array;
   try {
     json = flags & FLAG_DEFLATE ? await pipe(body, new DecompressionStream("deflate-raw")) : body;
-  } catch {
+  } catch (error) {
+    if (error instanceof SaveError) throw error;
     throw new SaveError("corrupt", "Save file payload cannot be decompressed");
   }
   let raw: unknown;
@@ -98,6 +118,8 @@ export async function decodeSave(bytes: Uint8Array): Promise<SaveData> {
   } catch {
     throw new SaveError("corrupt", "Save file payload is not valid");
   }
+  validateSaveInput(raw);
+  if ((raw as { version: number }).version !== view.getUint16(5, true)) throw new SaveError("corrupt", "Save versions do not match");
   return migrate(raw);
 }
 

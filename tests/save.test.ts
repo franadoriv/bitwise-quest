@@ -1,9 +1,11 @@
 // Run: npm test
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { decodeSave, encodeSave, exportFileName, fromBase64, toBase64 } from "../lib/save/codec.ts";
 import { SaveError, migrate } from "../lib/save/migrate.ts";
 import { SAVE_VERSION, langOf, newSave } from "../lib/save/schema.ts";
+import { MAX_SAVE_BYTES, validateSaveInput } from "../lib/save/validate.ts";
 
 test("encode/decode round-trips a save", async () => {
   const s = newSave("Ada");
@@ -29,6 +31,40 @@ test("any modified byte is rejected", async () => {
 
 test("non-save files are rejected", async () => {
   await assert.rejects(decodeSave(new TextEncoder().encode("hello world, not a save")), (e: SaveError) => e.code === "format");
+});
+
+test("valid checksums do not allow malformed saves or prototype keys", async () => {
+  const invalid = [
+    { ...newSave("Ada"), stats: { xp: -1 } },
+    { ...newSave("Ada"), player: { name: {} } },
+    { ...newSave("Ada"), langs: { rust: { lessons: { x: { stars: 8 } } } } },
+    { ...newSave("Ada"), langs: { rust: { reviews: { x: { due: "tomorrow" } } } } },
+    JSON.parse('{"version":2,"langs":{"__proto__":{"polluted":true}}}'),
+  ];
+  for (const save of invalid) await assert.rejects(decodeSave(await encodeSave(save as never)), (e: SaveError) => e.code === "corrupt");
+  assert.equal(({} as { polluted?: boolean }).polluted, undefined);
+});
+
+test("imports reject oversized files, unsupported flags and mismatched version headers", async () => {
+  await assert.rejects(decodeSave(new Uint8Array(MAX_SAVE_BYTES + 1)), (e: SaveError) => e.code === "format");
+  const flags = await encodeSave(newSave("Ada")); flags[7] |= 128;
+  await assert.rejects(decodeSave(flags), (e: SaveError) => e.code === "corrupt");
+  const version = await encodeSave(newSave("Ada")); version[5] = 1;
+  await assert.rejects(decodeSave(version), (e: SaveError) => e.code === "corrupt");
+});
+
+test("a tiny valid-checksum file cannot expand beyond the import budget", async () => {
+  // A 2 KB fixture with valid magic, flags and CRC expands to 2,000,001 bytes.
+  const bomb = await readFile(new URL("./fixtures/oversized-save.bwq", import.meta.url));
+  assert.ok(bomb.length < 3000);
+  await assert.rejects(decodeSave(bomb), (e: SaveError) => e.code === "format");
+});
+
+test("validation bounds deeply nested imports but preserves safe unknown fields", () => {
+  let deep: object = {};
+  for (let n = 0; n < 55; n++) deep = { child: deep };
+  assert.throws(() => validateSaveInput({ ...newSave("Ada"), future: deep }), (e: SaveError) => e.code === "corrupt");
+  assert.doesNotThrow(() => validateSaveInput({ ...newSave("Ada"), langs: { future: { extra: true } }, future: { harmless: [1, 2, 3] } }));
 });
 
 test("newer saves are refused, older shapes are normalized", () => {

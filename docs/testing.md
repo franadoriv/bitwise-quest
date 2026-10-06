@@ -64,6 +64,8 @@ The Python Web Worker, its warm-up and its 5 s limit (`lib/runners/py-worker.ts`
 
 After touching an API route, `proxy.ts`, `next.config.ts` or `lib/security/`, run the manual probes in [security.md](security.md#manual-probes) against `npm run dev`: hostile requests (no `Origin`, a foreign `Origin`, wrong content type, oversized or malformed bodies, unknown fields, bursts of calls) must get the listed status codes (403, 415, 413, 400, 404, 429, 503, 405), and pages must carry the nonce CSP and the security headers.
 
+`node scripts/security-probes.mjs` runs the hostile-body/origin, rate-limit and CSP/header probes without calling an external compiler. `node scripts/e2e-cloud-saves.mjs` tests cloud cards with mocked Supabase sessions and transport, including account separation, offline conflicts, recovery, cross-mode import/export and EN/ES/JA layouts. It requires the public cloud environment variables in the dev/build process; see [cloud-saves.md](cloud-saves.md). Database security tests run the real migration on ephemeral PostgreSQL (PGlite) as part of `npm test`.
+
 ## Content validator flags
 
 `scripts/validate-content.ts` accepts:
