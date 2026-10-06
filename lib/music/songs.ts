@@ -596,6 +596,94 @@ const mapHaskell: Song = {
   ],
 };
 
+// ─── MAP ruby: a jewel world built for joy, swung and sparkling, Eb major ─
+const mapRuby: Song = {
+  title: "Gemstone Jamboree",
+  bpm: 106, stepsPerBeat: 4, key: "Eb major", loop: 1,
+  mix: { lead: t("pulse25", 0.11, { vibrato: 12, detune: 6, sustain: 0.8 }), harm: t("pulse12", 0.05, { detune: 8, gate: 0.7 }), bass: t("triangle", 0.22, { gate: 0.8 }), drums: 0.6 },
+  patterns: {
+    ...KIT, ...RESTS,
+    // swing is written as long-short pairs (3 + 1 sixteenths)
+    a1: line("Bb5*3 G5 Eb6*3 Bb5 C6*3 Bb5 G5*4 | Ab5*3 C6 F6*3 Eb6 D6*4 Bb5*4 | G5*3 Bb5 Eb6*3 G6 F6*3 Eb6 C6*4 | D6*3 Eb6 F6*3 D6 Bb5*8"),
+    a2: line("Bb5*3 G5 Eb6*3 Bb5 C6*3 Eb6 G6*4 | Ab6*3 G6 F6*3 Eb6 C6*4 Ab5*4 | Bb5*3 C6 D6*3 Eb6 F6*3 G6 Ab6*4 | G6*4 F6*2 D6*2 Eb6*8"),
+    b1: line("C6*2 Eb6*2 Ab6*4 G6*3 F6 Eb6*4 | F6*3 Eb6 D6*3 C6 Bb5*8 | Ab5*2 C6*2 F6*4 Eb6*3 D6 C6*4 | D6*3 F6 Bb6*4 Ab6*2 G6*2 F6*4"),
+    b2: line("G6*3 Ab6 G6*3 Eb6 C6*4 Eb6*4 | D6*3 Eb6 F6*3 Ab6 G6*8 | C6*3 D6 Eb6*3 C6 A5*4 C6*4 | Bb5*4 D6*4 F6*4 Ab6*4"),
+    // "glint": light catching the facets of a gem, one sparkle at a time
+    c1: line("Eb6*2 -*2 Bb6*2 -*6 G6*2 -*2 | F6*2 -*2 C7*2 -*6 Ab6*2 -*2 | G6*2 -*2 Eb7*2 -*6 Bb6*2 -*2 | D7*4 Bb6*4 F6*8"),
+    hI: chords("Eb Bb", "1*3 5 8*3 t 1*3 5 8*3 t"),
+    hA1: chords("Eb Ab,Bb Cm,Ab Bb", "-*2 c*2 -*2 c c -*2 c*2 -*2 c*2"),
+    hA2: chords("Eb Ab Bb Bb,Eb", "-*2 c*2 -*2 c c -*2 c*2 -*2 c*2"),
+    hB1: chords("Ab Gm Fm Bb", "1*3 5 8*3 t 1*3 5 8*3 t"),
+    hB2: chords("Cm Eb F Bb", "1*3 5 8*3 t 1*3 5 8*3 t"),
+    hC: chords("Eb Fm Gm Bb", H.sparkle),
+    bI: bass("Eb Bb", "1*3 1 5*3 5 8*3 8 5*3 3"),
+    bA1: bass("Eb Ab,Bb Cm,Ab Bb", "1*3 1 5*3 5 8*3 8 5*3 3"),
+    bA2: bass("Eb Ab Bb Bb,Eb", "1*3 1 5*3 5 8*3 8 5*3 3"),
+    bB1: bass("Ab Gm Fm Bb", "1*4 3*3 5 8*4 5*3 3"),
+    bB2: bass("Cm Eb F Bb", "1*4 3*3 5 8*4 5*3 3"),
+    bC: bass("Eb Fm Gm Bb", B.whole),
+    dSwing: drums("k..hs..hk..hs..h"),
+    dSwing2: drums("k..hs..hk.khs.hh"),
+    dSwingC: drums("c..hs..hk..hs..h"),
+    dGlint: drums("k......hh......h"),
+    fSwing: drums("k..ss..sT..Tt.tt"),
+  },
+  order: [
+    sec("intro", "r2", "hI", "bI", "dSwing fSwing"),
+    sec("A", "a1 a2", "hA1 hA2", "bA1 bA2", "dSwingC dSwing*2 dSwing2 dSwing*3 fSwing"),
+    sec("B", "b1 b2", "hB1 hB2", "bB1 bB2", "dSwingC dSwing dSwing2 dSwing dSwing dSwing2 dSwing f1"),
+    sec("glint", "c1", "hC", "bC", "dGlint*3 fSoft"),
+    sec("glint echo", "c1", "~echo", "bC", "dGlint dCozy dGlint fSwing"),
+    sec("B in F", "b1 b2", "hB1 hB2", "bB1 bB2", "dSwingC dSwing2 dSwing dSwing2 dSwing dSwing2 dSwing fSwing", 2),
+    sec("A harmony", "a1 a2", "~3", "bA1 bA2", "dSwingC dSwing2*3 dSwing*3 fSwing"),
+  ],
+};
+
+// ─── MAP rails: a steady locomotive groove, F# minor lifting to G# ───────
+const mapRails: Song = {
+  title: "Convention Express",
+  bpm: 118, stepsPerBeat: 4, key: "F# minor", loop: 1,
+  mix: { lead: t("pulse50", 0.1, { vibrato: 8, gate: 0.9 }), harm: t("pulse25", 0.045, { gate: 0.5 }), bass: t("triangle", 0.24, { gate: 0.5 }), drums: 0.8 },
+  patterns: {
+    ...KIT, ...RESTS,
+    a1: line("F#5*2 A5*2 C#6*4 B5*2 A5*2 F#5*4 | E5*2 F#5*2 A5*4 B5*8 | C#6*2 D6*2 E6*4 D6*2 C#6*2 A5*4 | B5*2 C#6*2 B5*2 A5*2 G#5*8"),
+    a2: line("F#5*2 A5*2 C#6*4 F#6*4 E6*2 C#6*2 | D6*2 C#6*2 B5*4 F#5*8 | G#5*2 B5*2 E6*4 D6*2 B5*2 G#5*4 | A5*4 B5*4 C#6*8"),
+    b1: line("D6*4 F#6*4 E6*2 D6*2 A5*4 | E6*4 G#6*4 F#6*2 E6*2 B5*4 | C#6*2 E6*2 A6*4 G#6*2 F#6*2 E6*4 | F#6*6 E6*2 C#6*8"),
+    b2: line("D6*4 F#6*4 A6*4 F#6*4 | E6*4 G#6*4 B6*4 G#6*4 | A6*2 G#6*2 F#6*2 E6*2 D6*2 C#6*2 B5*2 A5*2 | G#5*4 B5*4 F6*8"),
+    // "whistle stop": the train slows, two long calls from the engine
+    c1: line("F#6*6 -*2 F#6*2 -*2 E6*4 | C#6*12 -*4 | D6*6 -*2 D6*2 -*2 E6*4 | C#6*12 -*4"),
+    // "full steam": pistons pumping the chord tones
+    c2: line("F#5*2 F#5 F#5 A5*2 F#5*2 C#6*4 A5*4 | E5*2 E5 E5 G#5*2 E5*2 B5*4 G#5*4 | D5*2 D5 D5 F#5*2 D5*2 A5*4 F#5*4 | C#5*2 C#5 C#5 F5*2 G#5*2 C#6*8"),
+    hA1: chords("F#m E A C#", "-*2 1 5 -*2 8 5 -*2 1 5 -*2 8 5"),
+    hA2: chords("F#m Bm E C#", "-*2 1 5 -*2 8 5 -*2 1 5 -*2 8 5"),
+    hB1: chords("D E A F#m", "C*4 -*4 C*4 -*2 C*2"),
+    hB2: chords("D E Bm,F#m C#", "C*4 -*4 C*4 -*2 C*2"),
+    hC: chords("F#m C# D C#", H.pad),
+    hS: chords("F#m E D C#", "1 8 5 8 1 8 5 8 1 8 5 8 1 8 5 8"),
+    bI: bass("F#m F#m", "1 1 5 1 8 1 5 1 1 1 5 1 8 5 3 5"),
+    bA1: bass("F#m E A C#", "1 1 5 1 8 1 5 1 1 1 5 1 8 5 3 5"),
+    bA2: bass("F#m Bm E C#", "1 1 5 1 8 1 5 1 1 1 5 1 8 5 3 5"),
+    bB1: bass("D E A F#m", "1*2 1*2 5*2 5*2 8*2 8*2 5*2 1 1"),
+    bB2: bass("D E Bm,F#m C#", "1*2 1*2 5*2 5*2 8*2 8*2 5*2 1 1"),
+    bC: bass("F#m C# D C#", "1*2 -*6 1*2 -*6"),
+    bS: bass("F#m E D C#", "1 1 5 1 8 1 5 1 1 1 5 1 8 5 3 5"),
+    dRail: drums("k.hhshh.k.hhshhh"),
+    dRail2: drums("k.hhshh.kkhhshhs"),
+    dRailC: drums("c.hhshh.k.hhshhh"),
+    dClank: drums("m..mm..mm..mm..m"),
+    fRail: drums("k.hhs.ssk.TTttss"),
+  },
+  order: [
+    sec("intro", "r2", "r2", "bI", "dClank fRail"),
+    sec("A", "a1 a2", "hA1 hA2", "bA1 bA2", "dRailC dRail*2 dRail2 dRail*3 fRail"),
+    sec("B", "b1 b2", "hB1 hB2", "bB1 bB2", "dRailC dRail dRail2 dRail dRail dRail2 dRail f1"),
+    sec("whistle stop", "c1", "hC", "bC", "dClank*3 fRail"),
+    sec("full steam", "c2", "hS", "bS", "dClank dRail dRail2 f3"),
+    sec("B up a tone", "b1 b2", "~echo", "bB1 bB2", "dRailC dRail2 dRail dRail2 dRail dRail2 dRail fRail", 2),
+    sec("A harmony", "a1 a2", "~3", "bA1 bA2", "dRailC dRail2*3 dRail*3 fRail"),
+  ],
+};
+
 // ─── LESSON A: light battle groove, E minor ───────────────────────────────
 const lessonA: Song = {
   title: "Bug Hunt",
@@ -803,6 +891,8 @@ export const SONGS: Record<string, Song> = {
   "map:threejs": mapThreejs,
   "map:zig": mapZig,
   "map:haskell": mapHaskell,
+  "map:ruby": mapRuby,
+  "map:rails": mapRails,
   "lesson:a": lessonA,
   "lesson:b": lessonB,
   boss,

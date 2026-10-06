@@ -11,6 +11,8 @@ import { CPP_SPRITES } from "./cpp/sprites.ts";
 import { CSHARP_SPRITES } from "./csharp/sprites.ts";
 import { WEBGL_SPRITES } from "./webgl/sprites.ts";
 import { THREEJS_SPRITES } from "./threejs/sprites.ts";
+import { RUBY_SPRITES } from "./ruby/sprites.ts";
+import { RAILS_SPRITES } from "./rails/sprites.ts";
 
 export const PACK_SPRITES: Record<string, string[]> = {
   ...RUST_SPRITES,
@@ -24,4 +26,6 @@ export const PACK_SPRITES: Record<string, string[]> = {
   ...CSHARP_SPRITES,
   ...WEBGL_SPRITES,
   ...THREEJS_SPRITES,
+  ...RUBY_SPRITES,
+  ...RAILS_SPRITES,
 };
