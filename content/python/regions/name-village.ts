@@ -1,4 +1,4 @@
-import type { Beat, LessonDef, RegionDef, Text } from "../../../lib/content/types.ts";
+import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
 
 // REGION 1 · NAME VILLAGE  (names and values, numbers, strings, truthiness, == vs is)
@@ -9,6 +9,98 @@ const enemySays = (text: Text): Beat => ({ kind: "dialog", speaker: "enemy", tex
 const PRINT = L("What does it print?", "¿Qué imprime?", "何が表示される？");
 const HAPPENS = L("What happens?", "¿Qué pasa?", "どうなる？");
 
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example; the validator checks `output` against the real interpreter. */
+const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code, output, caption });
+/** An example that must raise the given exception at runtime (verified too). */
+const boom = (code: string, error: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: true, throws: error } });
+
+const namesNotes: NoteDef[] = [
+  note("labels", L("Names are labels on values", "Los nombres son etiquetas", "名前は値に貼るラベル"),
+    p(
+      "In Python, a line like score = 4 does two things: it makes the value 4, then sticks the name score on it like a label. There is no keyword before the name: the = sign alone means \"put this label on this value\". From then on, writing score means \"the value the label is on\".",
+      "En Python, una línea como score = 4 hace dos cosas: crea el valor 4 y luego le pega el nombre score como una etiqueta. No hay palabra clave antes del nombre: el signo = solo significa \"pon esta etiqueta en este valor\". Desde ahí, escribir score significa \"el valor donde está la etiqueta\".",
+      "Python で score = 4 と書くと2つのことが起きる。まず値 4 ができて、次に score という名前がラベルとして貼られる。名前の前にキーワードはいらない。= は「このラベルをこの値に貼る」という意味。それ以降、score と書けば「ラベルが貼られた値」のことだよ。",
+    ),
+    ex("score = 4\nscore = score * 3\nprint(score)", "12", L("The right side is computed first, then the label moves", "Primero se calcula el lado derecho y luego se mueve la etiqueta", "右側を先に計算して、ラベルを移す")),
+    p(
+      "Python always works out the right side of = first, using the current values, and only then moves the label. So score = score * 3 reads the old score, multiplies it, and puts the label on the new result. The = is not \"equals\" as in math: it's an instruction that runs once, when its line is reached.",
+      "Python siempre calcula primero el lado derecho del =, con los valores actuales, y solo después mueve la etiqueta. Así, score = score * 3 lee el score viejo, lo multiplica y pone la etiqueta en el resultado nuevo. El = no es \"es igual\" como en matemáticas: es una orden que se ejecuta una vez, al llegar a su línea.",
+      "Python はいつも = の右側を今の値で先に計算し、そのあとでラベルを移す。だから score = score * 3 は古い score を読んでかけ算し、新しい結果にラベルを貼る。= は数学の「等しい」ではなく、その行に来たときに1回だけ動く命令だよ。",
+    ),
+    p(
+      "Two names can sit on the same value. After second = first, both labels point to whatever first was on. If you later write first = something else, only that label moves; second stays where it was. Assignment moves one label at a time and never drags other labels along.",
+      "Dos nombres pueden estar en el mismo valor. Tras second = first, ambas etiquetas apuntan a lo que tenía first. Si luego escribes first = otra cosa, solo esa etiqueta se mueve; second se queda donde estaba. La asignación mueve una etiqueta a la vez y nunca arrastra a las demás.",
+      "2つの名前が同じ値に貼られることもある。second = first のあと、両方のラベルは first が貼られていた値をさす。あとで first = 別の値 と書いても動くのはそのラベルだけで、second はそのまま。代入は1枚ずつラベルを動かし、ほかのラベルを引きずらないよ。",
+    ),
+    ex("red = 8\nblue = red\nred = 20\nprint(red, blue)", "20 8", L("Moving red leaves blue on the old value", "Mover red deja a blue en el valor viejo", "red を動かしても blue は元の値のまま")),
+    p(
+      "You can assign several names in one line: the right side is built first, as a group of values, then each name on the left takes its value in order. This is called unpacking. Because the whole right side is ready before any name moves, names can trade values without a temporary helper.",
+      "Puedes asignar varios nombres en una línea: primero se arma el lado derecho, como un grupo de valores, y luego cada nombre de la izquierda toma su valor en orden. Esto se llama desempaquetar. Como todo el lado derecho está listo antes de mover cualquier nombre, los nombres pueden intercambiar valores sin una variable auxiliar.",
+      "1行で複数の名前に代入できる。まず右側が値のグループとして作られ、左の名前が順番にそれぞれの値を受けとる。これを「アンパック」という。右側が全部できてから名前が動くので、一時的な変数なしで値を交換できるよ。",
+    ),
+    ex("p, q, r = 1, 2, 3\np, q, r = q, r, p\nprint(p, q, r)", "2 3 1", L("Three names rotate their values in one line", "Tres nombres rotan sus valores en una línea", "3つの名前が1行で値を回す")),
+    p(
+      "Common mistakes: using a name before any line has created it raises NameError: name '...' is not defined, because a name exists only after its assignment runs. And names are case-sensitive: Score and score are two different labels.",
+      "Errores comunes: usar un nombre antes de que alguna línea lo cree lanza NameError: name '...' is not defined, porque un nombre existe solo después de que se ejecute su asignación. Y los nombres distinguen mayúsculas: Score y score son dos etiquetas distintas.",
+      "よくあるミス：どの行でも作っていない名前を使うと NameError: name '...' is not defined になる。名前は代入が実行されてはじめて存在するからね。それと、大文字と小文字は区別される。Score と score は別のラベルだよ。",
+    ),
+  ),
+  note("types", L("Every value has a type", "Cada valor tiene un tipo", "値にはそれぞれ型がある"),
+    p(
+      "Every value in Python has a type that says what kind of thing it is. The main ones: int for whole numbers (7), float for numbers with a decimal point (7.0), str for text in quotes (\"7\"), and bool for True and False. 7, 7.0 and \"7\" look alike, but they are three different types.",
+      "Cada valor en Python tiene un tipo que dice qué clase de cosa es. Los principales: int para números enteros (7), float para números con punto decimal (7.0), str para texto entre comillas (\"7\") y bool para True y False. 7, 7.0 y \"7\" se parecen, pero son tres tipos distintos.",
+      "Python の値にはそれぞれ「型」があり、どんな種類のものかを表す。主なものは、整数の int（7）、小数点つきの float（7.0）、引用符で囲んだ文字列の str（\"7\"）、True と False の bool。7、7.0、\"7\" は似ているけど、3つとも別の型だよ。",
+    ),
+    ex("print(type(42).__name__, type(0.5).__name__, type(\"hi\").__name__)", "int float str", L("type(...).__name__ gives the short type name", "type(...).__name__ da el nombre corto del tipo", "type(...).__name__ で型の短い名前がわかる")),
+    p(
+      "The type belongs to the value, not to the name. A label can sit on a number now and on text later, and Python does not complain; this is called dynamic typing. To see what a name is on right now, ask type(name). Adding .__name__ gives just the short type name, like int.",
+      "El tipo pertenece al valor, no al nombre. Una etiqueta puede estar en un número ahora y en un texto después, y Python no se queja; a esto se le llama tipado dinámico. Para ver en qué está un nombre ahora mismo, pregunta type(nombre). Agregar .__name__ da solo el nombre corto del tipo, como int.",
+      "型を持つのは名前ではなく値。ラベルは今は数値に、あとで文字列に貼られてもかまわない。これを動的型付けという。名前がいま何に貼られているかは type(名前) で調べられる。.__name__ をつけると int のような短い型名だけが出るよ。",
+    ),
+    ex("item = 3.5\nitem = False\nprint(type(item).__name__)", "bool", L("Only the value the label is on now counts", "Solo cuenta el valor donde está la etiqueta ahora", "今ラベルが貼られている値だけが大事")),
+    p(
+      "None is a special value that means \"nothing here\" or \"no result\". It is not 0 and not empty text: it's its own thing, with its own type, NoneType. You'll meet it when a function gives nothing back, or when you create a name before you know its value.",
+      "None es un valor especial que significa \"aquí no hay nada\" o \"sin resultado\". No es 0 ni un texto vacío: es algo propio, con su propio tipo, NoneType. Lo verás cuando una función no devuelve nada, o cuando creas un nombre antes de saber su valor.",
+      "None は「何もない」「結果なし」を表す特別な値。0 でも空の文字列でもなく、それ自身の型 NoneType を持っている。何も返さない関数の結果や、値がまだ決まっていない名前を作るときに出会うよ。",
+    ),
+    ex("print(None == 0, None == \"\")", "False False", L("None is neither zero nor empty text", "None no es cero ni texto vacío", "None は 0 でも空文字でもない")),
+    p(
+      "Common mistakes: thinking quotes don't matter (\"3\" is text, not a number) and writing true in lowercase (Python's booleans are True and False, with a capital letter and no quotes). When in doubt, print the type.",
+      "Errores comunes: creer que las comillas no importan (\"3\" es texto, no un número) y escribir true en minúscula (los booleanos de Python son True y False, con mayúscula y sin comillas). Si tienes dudas, imprime el tipo.",
+      "よくあるミス：引用符を気にしないこと（\"3\" は数値ではなく文字列）と、true を小文字で書くこと（Python の真偽値は大文字で始まる True と False、引用符なし）。迷ったら型を表示してみよう。",
+    ),
+  ),
+  note("convert", L("Text and numbers don't mix", "Texto y números no se mezclan", "文字列と数値はまざらない"),
+    p(
+      "Python never mixes text and numbers on its own. Adding a str and an int doesn't give a sum or a longer text: it stops with TypeError: can only concatenate str (not \"int\") to str. Python refuses to guess what you meant, because a wrong guess would hide a bug.",
+      "Python nunca mezcla texto y números por su cuenta. Sumar un str y un int no da una suma ni un texto más largo: se detiene con TypeError: can only concatenate str (not \"int\") to str. Python se niega a adivinar qué quisiste decir, porque adivinar mal escondería un error.",
+      "Python は文字列と数値を勝手にまぜない。str と int を足しても、合計にも長い文字列にもならず、TypeError: can only concatenate str (not \"int\") to str で止まる。まちがった推測はバグを隠すので、Python はあなたの意図を推測しないんだ。",
+    ),
+    boom("print(\"level \" + 2)", "TypeError", L("Crashes: text plus a number", "Falla: texto más un número", "エラー：文字列＋数値")),
+    p(
+      "You choose the conversion yourself. int(\"12\") reads text as a whole number, float(\"1.5\") reads it as a decimal, and str(12) turns a number into text. After converting, + does what you expect: it adds numbers, or glues texts together.",
+      "La conversión la eliges tú. int(\"12\") lee un texto como número entero, float(\"1.5\") lo lee como decimal y str(12) convierte un número en texto. Después de convertir, + hace lo que esperas: suma números o pega textos.",
+      "変換は自分で選ぶ。int(\"12\") は文字列を整数として読み、float(\"1.5\") は小数として読み、str(12) は数値を文字列にする。変換したあとなら + は思ったとおりに動く。数値なら足し算、文字列ならつなげるよ。",
+    ),
+    ex("print(int(\"12\") + 1, str(12) + \"1\")", "13 121", L("Same digits, different results after converting", "Mismos dígitos, resultados distintos tras convertir", "同じ数字でも変換しだいで結果がちがう")),
+    p(
+      "One operator does work between text and an int: * repeats a string. \"ha\" * 3 is \"hahaha\". That's repetition, not math: the text is never turned into a number, and the order doesn't matter (2 * \"ha\" works too).",
+      "Un operador sí funciona entre texto y un int: * repite un string. \"ha\" * 3 es \"hahaha\". Es repetición, no matemáticas: el texto nunca se convierte en número, y el orden no importa (2 * \"ha\" también funciona).",
+      "文字列と int の間で使える演算子がひとつある。* は文字列をくり返す。\"ha\" * 3 は \"hahaha\"。これは計算ではなくくり返しで、文字列が数値になるわけじゃない。順番は逆でも OK（2 * \"ha\" も動く）。",
+    ),
+    ex("print(\"ho\" * 2, 4 * \"-\")", "hoho ----"),
+    p(
+      "Common trap: values read from input or files are text, even when they look like numbers. Convert them once, as soon as you read them, and the rest of the code can do math safely. int() only accepts text that is really a whole number: int(\"abc\") raises ValueError.",
+      "Trampa común: los valores que vienen de la entrada o de archivos son texto, aunque parezcan números. Conviértelos una vez, apenas los leas, y el resto del código podrá hacer cuentas sin problema. int() solo acepta texto que de verdad sea un número entero: int(\"abc\") lanza ValueError.",
+      "よくあるワナ：入力やファイルから読んだ値は、数字に見えても文字列。読んだらすぐに1回変換しておけば、あとのコードで安心して計算できる。int() が受けつけるのは本当に整数の文字列だけ。int(\"abc\") は ValueError になるよ。",
+    ),
+  ),
+];
+
 // ─── 1.1 Labels and chips ──────────────────────────────────────────────────
 const names: LessonDef = {
   slug: "names-and-values",
@@ -18,6 +110,7 @@ const names: LessonDef = {
   xp: 60,
   enemy: "python/indent-gremlin",
   enemyName: L("INDENT GREMLIN", "GREMLIN SANGRÍA", "インデントグレムリン"),
+  notes: namesNotes,
   beats: [
     say(L(
       "Welcome to Name Village! In Python, hp = 10 sticks a NAME, like a label, on the value 10.",
@@ -47,6 +140,8 @@ const names: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Python computes the right side first, with the current hp, and only then moves the label.", "Python calcula primero el lado derecho, con el hp actual, y solo entonces mueve la etiqueta.", "Python は今の hp で右側を先に計算し、そのあとラベルを移すよ。"),
+      note: "labels",
       code: "hp = 10\nhp = hp + 5\nprint(hp)",
       options: ["15", "10", "105"],
       answer: 0,
@@ -64,6 +159,8 @@ const names: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Only the last value the label was put on counts. What kind of value is it?", "Solo cuenta el último valor donde se puso la etiqueta. ¿Qué clase de valor es?", "大事なのはラベルが最後に貼られた値だけ。それはどんな種類の値？"),
+      note: "types",
       code: 'x = 5\nx = "five"\nprint(type(x).__name__)',
       options: ["str", "int", "five"],
       answer: 0,
@@ -76,6 +173,8 @@ const names: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Look at each value's form: a decimal point, quotes or a capitalized word all change the type.", "Mira la forma de cada valor: un punto decimal, comillas o una palabra con mayúscula cambian el tipo.", "値の形を見よう。小数点、引用符、大文字で始まる言葉で型が変わる。"),
+      note: "types",
       code: 'print(type(3).__name__, type(3.0).__name__, type("3").__name__, type(True).__name__)',
       options: ["int float str bool", "int int str bool", "number number text bool"],
       answer: 0,
@@ -91,6 +190,8 @@ const names: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Reassigning a moves only that one label. Where was b put, and did anything move it later?", "Reasignar a mueve solo esa etiqueta. ¿Dónde se puso b, y algo la movió después?", "a に代入し直して動くのは a だけ。b はどこに貼られ、あとで動いた？"),
+      note: "labels",
       code: "a = 1\nb = a\na = 2\nprint(a, b)",
       options: ["2 1", "2 2", "1 1"],
       answer: 0,
@@ -103,6 +204,8 @@ const names: LessonDef = {
     {
       kind: "type",
       prompt: L("Swap the two labels in one line", "Intercambia las dos etiquetas en una línea", "1行で2つのラベルを入れかえよう"),
+      hint: L("The right side is built first, then unpacked into the names on the left, in order.", "Primero se arma el lado derecho y luego se desempaca en los nombres de la izquierda, en orden.", "右側が先にできて、左の名前に順番に分けて入るよ。"),
+      note: "labels",
       code: "a, b = 1, 2\na, b = ___\nprint(a, b)",
       answer: "b, a",
       check: { compiles: true, stdout: "2 1" },
@@ -117,6 +220,8 @@ const names: LessonDef = {
     {
       kind: "predict",
       prompt: HAPPENS,
+      hint: L("One side is text in quotes, the other a number. Does Python convert between them on its own?", "Un lado es texto entre comillas y el otro un número. ¿Python convierte entre ellos por su cuenta?", "片方は引用符の文字列、もう片方は数値。Python は勝手に変換する？"),
+      note: "convert",
       code: 'print("3" + 3)',
       options: ["TypeError", "6", "33"],
       answer: 0,
@@ -127,6 +232,8 @@ const names: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("int() turns the text into a number first. A string times an int is not math.", "int() convierte primero el texto en número. Un string por un int no es matemáticas.", "int() はまず文字列を数値にする。str × int は計算じゃないよ。"),
+      note: "convert",
       code: 'print(int("3") + 3, "3" * 3)',
       options: ["6 333", "6 9", "33 333"],
       answer: 0,
@@ -137,6 +244,8 @@ const names: LessonDef = {
     {
       kind: "predict",
       prompt: L("None means 'no value'. What does it print?", "None significa 'sin valor'. ¿Qué imprime?", "None は「値なし」。何が表示される？"),
+      hint: L("None is its own special value, not 0 or empty text, and it has a type of its own.", "None es un valor especial propio, no 0 ni texto vacío, y tiene un tipo propio.", "None は 0 でも空文字でもない特別な値で、専用の型を持つよ。"),
+      note: "types",
       code: "x = None\nprint(x, type(x).__name__)",
       options: ["None NoneType", "None None", "0 int"],
       answer: 0,
@@ -149,6 +258,8 @@ const names: LessonDef = {
     {
       kind: "run",
       prompt: L("Fix it: it must print total: 15", "Arréglalo: debe imprimir total: 15", "直そう：total: 15 と表示させて"),
+      hint: L("Check what kind of value gold holds. Can it be added to 5 as it is?", "Revisa qué clase de valor guarda gold. ¿Se puede sumar a 5 tal como está?", "gold にはどんな種類の値が入っている？そのまま 5 と足せる？"),
+      note: "convert",
       starter: 'gold = "10"\ntotal = gold + 5\nprint("total:", total)\n',
       solution: 'gold = "10"\ntotal = int(gold) + 5\nprint("total:", total)\n',
       expect: "total: 15",
@@ -157,6 +268,114 @@ const names: LessonDef = {
     },
   ],
 };
+
+const numbersNotes: NoteDef[] = [
+  note("division", L("Dividing: /, //, % and **", "Dividir: /, //, % y **", "割り算：/ // % と **"),
+    p(
+      "Python has three division operators. / is true division and always gives a float, even when the result is whole: 8 / 4 is 2.0. // is floor division: it divides and rounds down to a whole number. % (modulo) gives what's left over after //.",
+      "Python tiene tres operadores de división. / es la división real y siempre da un float, aunque el resultado sea entero: 8 / 4 es 2.0. // es la división entera: divide y redondea hacia abajo a un número entero. % (módulo) da lo que sobra después de //.",
+      "Python の割り算は3種類。/ はふつうの割り算で、割り切れても必ず float になる（8 / 4 は 2.0）。// は「切り捨て割り算」で、割ってから小さい方の整数に丸める。%（剰余）は // のあとの余りだよ。",
+    ),
+    ex("print(9 / 4, 9 // 4, 9 % 4)", "2.25 2 1", L("True division, floor division and remainder", "División real, división entera y resto", "ふつうの割り算、切り捨て、余り")),
+    p(
+      "// and % are a team: for any a and b, (a // b) * b + a % b equals a. With 9 and 4: 2 * 4 + 1 = 9. Use // for \"how many whole groups\" and % for \"how many are left\", like splitting loot or checking whether a number is even (n % 2 == 0).",
+      "// y % son un equipo: para cualquier a y b, (a // b) * b + a % b es igual a a. Con 9 y 4: 2 * 4 + 1 = 9. Usa // para \"cuántos grupos completos\" y % para \"cuántos sobran\", como al repartir un botín o al ver si un número es par (n % 2 == 0).",
+      "// と % はセット。どんな a と b でも (a // b) * b + a % b は a になる。9 と 4 なら 2 * 4 + 1 = 9。「まとまりがいくつ」は //、「いくつ余る」は % を使う。戦利品の山分けや、偶数かどうか（n % 2 == 0）の判定に便利だよ。",
+    ),
+    p(
+      "** is the power operator: 3 ** 2 is 9 and 2 ** 3 is 8. Don't confuse it with ^, which in Python is a bitwise operator, not a power. And remember: / gives a float even when it divides evenly.",
+      "** es el operador de potencia: 3 ** 2 es 9 y 2 ** 3 es 8. No lo confundas con ^, que en Python es un operador de bits, no una potencia. Y recuerda: / da un float aunque la división sea exacta.",
+      "** はべき乗の演算子。3 ** 2 は 9、2 ** 3 は 8。^ と混同しないように。Python の ^ はビット演算でべき乗じゃない。そして / は割り切れても float になることを忘れずに。",
+    ),
+    ex("print(3 ** 2, 2 ** 3, 8 / 2)", "9 8 4.0"),
+    p(
+      "Rounding down means toward minus infinity, not toward zero. For negatives that matters: -9 // 4 is -3, because -2.25 rounded down is -3. Then % follows the team rule: -3 * 4 + 3 = -9, so -9 % 4 is 3. With a positive divisor, % is never negative.",
+      "Redondear hacia abajo significa hacia menos infinito, no hacia cero. Con negativos importa: -9 // 4 es -3, porque -2.25 redondeado hacia abajo es -3. Luego % sigue la regla del equipo: -3 * 4 + 3 = -9, así que -9 % 4 es 3. Con un divisor positivo, % nunca es negativo.",
+      "切り捨ては「0の方向」ではなく「マイナス無限大の方向」。負の数で差が出る。-9 // 4 は -3。-2.25 を下に丸めると -3 だから。% もセットのルールに従い、-3 * 4 + 3 = -9 なので -9 % 4 は 3。割る数が正なら % は負にならないよ。",
+    ),
+    ex("print(-9 // 4, -9 % 4)", "-3 3", L("Floor division rounds toward minus infinity", "La división entera redondea hacia menos infinito", "切り捨てはマイナス無限大の方向")),
+    p(
+      "Common mistake: expecting / to give an int. If you need a whole number (people, coins, slots), use //. int(a / b) also drops the decimals, but toward zero, which gives a different answer for negatives.",
+      "Error común: esperar que / dé un int. Si necesitas un número entero (personas, monedas, espacios), usa //. int(a / b) también descarta los decimales, pero hacia cero, lo que da otra respuesta con negativos.",
+      "よくあるミス：/ で int が出ると思うこと。人数やコインなど整数が必要なら // を使おう。int(a / b) も小数を捨てるけど、0の方向に切るので負の数では答えが変わるよ。",
+    ),
+  ),
+  note("floats", L("Floats are almost exact", "Los floats son casi exactos", "float はほぼ正確"),
+    p(
+      "Floats are stored in binary, and many decimals, like 0.1, have no exact binary form, just as 1/3 has no exact decimal form (0.333...). So Python stores the closest value it can. Usually you don't notice, but tiny errors can show up after arithmetic.",
+      "Los floats se guardan en binario, y muchos decimales, como 0.1, no tienen forma binaria exacta, igual que 1/3 no tiene forma decimal exacta (0.333...). Así que Python guarda el valor más cercano posible. Casi nunca lo notas, pero pueden aparecer errores diminutos después de hacer cuentas.",
+      "float は二進数で保存される。0.1 のような小数の多くは二進数でぴったり表せない。1/3 が十進数で 0.333... になるのと同じだね。だから Python はいちばん近い値を保存する。ふだんは気づかないけど、計算のあとに小さなずれが出ることがあるよ。",
+    ),
+    ex("print(0.1 * 3)", "0.30000000000000004", L("A tiny binary error becomes visible", "Un error binario diminuto se hace visible", "二進数の小さなずれが見える")),
+    p(
+      "That's why comparing floats with == is risky: two calculations that \"should\" be equal can differ in the last digit. math.isclose(a, b) checks that two numbers are close enough to each other, which is the safe way to compare decimals.",
+      "Por eso comparar floats con == es arriesgado: dos cálculos que \"deberían\" ser iguales pueden diferir en el último dígito. math.isclose(a, b) verifica que dos números estén lo bastante cerca, que es la forma segura de comparar decimales.",
+      "だから float を == で比べるのは危ない。「同じはず」の2つの計算でも最後の桁がちがうことがある。math.isclose(a, b) は2つの数が十分近いかを調べる。小数を比べる安全な方法だよ。",
+    ),
+    ex("import math\nprint(1.1 + 2.2 == 3.3, math.isclose(1.1 + 2.2, 3.3))", "False True"),
+    p(
+      "round(x) rounds to the nearest whole number, but exact halves go to the nearest EVEN number: round(0.5) is 0 and round(1.5) is 2. This \"banker's rounding\" avoids pushing totals upward when you round many values. round(x, 2) keeps two decimals.",
+      "round(x) redondea al entero más cercano, pero las mitades exactas van al número PAR más cercano: round(0.5) es 0 y round(1.5) es 2. Este \"redondeo bancario\" evita inflar los totales cuando redondeas muchos valores. round(x, 2) conserva dos decimales.",
+      "round(x) はいちばん近い整数に丸めるが、ちょうど半分のときは近い「偶数」になる。round(0.5) は 0、round(1.5) は 2。この「銀行家の丸め」は、たくさん丸めたときに合計が増えすぎるのを防ぐ。round(x, 2) は小数2桁を残すよ。",
+    ),
+    ex("print(round(0.5), round(1.5), round(4.5), round(4.6))", "0 2 4 5", L("Halves go to the even neighbor; other values round normally", "Las mitades van al vecino par; lo demás redondea normal", "半分は偶数へ、それ以外はふつうに丸める")),
+    p(
+      "Common mistakes: comparing computed decimals with ==, and assuming .5 always rounds up. For money, a safe habit is to count whole cents with int instead of using floats.",
+      "Errores comunes: comparar decimales calculados con == y suponer que .5 siempre redondea hacia arriba. Para dinero, un buen hábito es contar centavos enteros con int en vez de usar floats.",
+      "よくあるミス：計算した小数を == で比べること、.5 はいつも切り上げだと思うこと。お金を扱うなら、float ではなく int で「セント単位」の整数を数えるのが安全だよ。",
+    ),
+  ),
+  note("string-index", L("Indexes and slices of a string", "Índices y cortes de un string", "文字列のインデックスとスライス"),
+    p(
+      "A string is a row of characters, and each one has a position called an index, starting at 0. word[0] is the first character. Negative indexes count from the end: word[-1] is the last character and word[-2] the one before it.",
+      "Un string es una fila de caracteres, y cada uno tiene una posición llamada índice, que empieza en 0. word[0] es el primer carácter. Los índices negativos cuentan desde el final: word[-1] es el último y word[-2] el anterior.",
+      "文字列は文字の並びで、それぞれに「インデックス」という位置番号がある。番号は 0 から始まり、word[0] が最初の文字。負のインデックスは後ろから数える。word[-1] が最後、word[-2] がその1つ前だよ。",
+    ),
+    ex("word = \"dragon\"\nprint(word[0], word[2], word[-1], word[-2])", "d a n o"),
+    p(
+      "A slice word[start:stop] takes the characters from start up to, but not including, stop. So word[1:3] has 2 characters: indexes 1 and 2. Leave out start to begin at 0; leave out stop to go to the end. With step 1, a slice has stop - start characters.",
+      "Un corte word[inicio:fin] toma los caracteres desde inicio hasta fin, sin incluir fin. Así, word[1:3] tiene 2 caracteres: los índices 1 y 2. Omite inicio para empezar en 0; omite fin para llegar al final. Con paso 1, un corte tiene fin - inicio caracteres.",
+      "スライス word[start:stop] は start から stop の「手前」までの文字をとる。だから word[1:3] はインデックス 1 と 2 の2文字。start を省くと 0 から、stop を省くと最後まで。ステップ 1 なら、とれる文字数は stop - start だよ。",
+    ),
+    ex("word = \"dragon\"\nprint(word[1:3], word[:2], word[3:])", "ra dr gon", L("The stop index is never included", "El índice final nunca se incluye", "stop の位置は含まれない")),
+    p(
+      "A third number is the step: word[::2] takes every second character, starting from the first. A step of -1 walks backward, so word[::-1] is the whole string reversed.",
+      "Un tercer número es el paso: word[::2] toma un carácter de cada dos, empezando por el primero. Un paso de -1 recorre al revés, así que word[::-1] es el string completo invertido.",
+      "3つ目の数はステップ。word[::2] は最初の文字から1つおきにとる。ステップ -1 は後ろ向きに進むので、word[::-1] は文字列全体の逆順になるよ。",
+    ),
+    ex("print(\"dragon\"[::2], \"dragon\"[::-1])", "dao nogard"),
+    p(
+      "Strings are immutable: you can read a character, but word[0] = \"D\" raises TypeError. To \"change\" a string, build a new one, for example \"D\" + word[1:]. Common mistake: forgetting that the stop index is excluded, which makes a slice one character shorter than expected.",
+      "Los strings son inmutables: puedes leer un carácter, pero word[0] = \"D\" lanza TypeError. Para \"cambiar\" un string, crea uno nuevo, por ejemplo \"D\" + word[1:]. Error común: olvidar que el índice final se excluye, lo que hace el corte un carácter más corto de lo esperado.",
+      "文字列は変更できない。文字は読めても、word[0] = \"D\" は TypeError。「変えたい」ときは \"D\" + word[1:] のように新しい文字列を作る。よくあるミス：stop が含まれないのを忘れて、スライスが1文字短くなることだよ。",
+    ),
+  ),
+  note("string-tools", L("f-strings and string methods", "f-strings y métodos de string", "f文字列と文字列メソッド"),
+    p(
+      "An f-string is a string with the letter f right before the opening quote. Inside it, anything in {curly braces} is run as Python code, and its result is put into the text. Without the f, the braces are just printed as they are.",
+      "Un f-string es un string con la letra f justo antes de la comilla de apertura. Dentro, todo lo que esté entre {llaves} se ejecuta como código Python y su resultado se pone en el texto. Sin la f, las llaves se imprimen tal cual.",
+      "f文字列は、開き引用符の直前に f をつけた文字列。中の {波かっこ} に書いたものは Python のコードとして計算され、結果が文字列に入る。f がなければ、波かっこはそのまま表示されるよ。",
+    ),
+    ex("hero = \"Kai\"\ngold = 7\nprint(f\"{hero} has {gold * 2} gold\")\nprint(\"{hero}\")", "Kai has 14 gold\n{hero}", L("With and without the f prefix", "Con y sin el prefijo f", "f あり・なし")),
+    p(
+      "Strings come with methods, called with a dot. text.upper() returns an uppercase copy, text.strip() removes spaces at both ends, text.split(sep) cuts the text into a list of pieces at each sep, and sep.join(pieces) glues a list of strings with sep between them.",
+      "Los strings traen métodos, que se llaman con un punto. text.upper() devuelve una copia en mayúsculas, text.strip() quita los espacios de ambos extremos, text.split(sep) corta el texto en una lista de pedazos en cada sep, y sep.join(pedazos) une una lista de strings con sep entre ellos.",
+      "文字列にはドットで呼ぶメソッドがある。text.upper() は大文字のコピー、text.strip() は両端の空白をとる。text.split(sep) は sep ごとに切ってリストにし、sep.join(リスト) は文字列のリストを sep をはさんでつなぐよ。",
+    ),
+    ex("print(\"x:y:z\".split(\":\"), \"+\".join([\"1\", \"2\"]))", "['x', 'y', 'z'] 1+2"),
+    p(
+      "Methods never change the original string, because strings are immutable: they return a new one. Methods can be chained, and each one works on the result of the one before. Note that strip only trims the ends; spaces in the middle stay.",
+      "Los métodos nunca cambian el string original, porque los strings son inmutables: devuelven uno nuevo. Se pueden encadenar, y cada uno trabaja sobre el resultado del anterior. Ojo: strip solo recorta los extremos; los espacios del medio se quedan.",
+      "文字列は変更できないので、メソッドは元の文字列を変えずに新しい文字列を返す。メソッドはつなげて書けて、それぞれ前の結果に対して動く。strip がとるのは両端だけで、真ん中の空白は残るよ。",
+    ),
+    ex("tag = \"  Big Boss  \"\nprint(tag.strip().lower() + \"!\", len(tag))", "big boss! 12", L("Chained calls make a new string; tag is unchanged", "Las llamadas encadenadas crean un string nuevo; tag no cambia", "つなげた呼び出しは新しい文字列。tag はそのまま")),
+    p(
+      "Common mistake: writing join backwards. The separator comes first and the list goes inside: \", \".join(items). Every item must already be a string, or join raises TypeError.",
+      "Error común: escribir join al revés. Primero va el separador y la lista va dentro: \", \".join(items). Cada elemento ya debe ser un string, o join lanza TypeError.",
+      "よくあるミス：join を逆に書くこと。区切り文字が先で、リストはかっこの中：\", \".join(items)。要素はすべて文字列でないと、join は TypeError になるよ。",
+    ),
+  ),
+];
 
 // ─── 1.2 Coins and scrolls ─────────────────────────────────────────────────
 const numbers: LessonDef = {
@@ -167,6 +386,7 @@ const numbers: LessonDef = {
   xp: 65,
   enemy: "slime",
   enemyName: L("COIN SLIME", "LIMO MONEDA", "コインスライム"),
+  notes: numbersNotes,
   beats: [
     say(L(
       "Numbers come in two kinds: int for whole numbers and float for decimals. Let's split 7 coins between 2 heroes.",
@@ -201,6 +421,8 @@ const numbers: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Each operator divides differently: one always gives a float, one rounds down, one gives the remainder.", "Cada operador divide distinto: uno siempre da float, otro redondea abajo y otro da el resto.", "演算子ごとに割り方がちがう。いつも float、切り捨て、余りの3つ。"),
+      note: "division",
       code: "print(7 / 2, 7 // 2, 7 % 2)",
       options: ["3.5 3 1", "3 3 1", "3.5 3.5 1"],
       answer: 0,
@@ -212,6 +434,8 @@ const numbers: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("** is a power, not a multiplication. And what type does / return even when it divides evenly?", "** es potencia, no multiplicación. ¿Y qué tipo devuelve / aunque la división sea exacta?", "** はかけ算ではなくべき乗。/ は割り切れても何型を返す？"),
+      note: "division",
       code: "print(2 ** 10, 10 / 5)",
       options: ["1024 2.0", "20 2", "1024 2"],
       answer: 0,
@@ -222,6 +446,8 @@ const numbers: LessonDef = {
     {
       kind: "predict",
       prompt: L("Negative coins! What does it print?", "¡Monedas negativas! ¿Qué imprime?", "マイナスのコイン！何が表示される？"),
+      hint: L("// rounds toward minus infinity, not toward zero. Then (a // b) * b + a % b must equal a.", "// redondea hacia menos infinito, no hacia cero. Luego (a // b) * b + a % b debe dar a.", "// はマイナス無限大の方向に丸める。(a // b) * b + a % b = a になるはず。"),
+      note: "division",
       code: "print(-7 // 2, -7 % 2)",
       options: ["-4 1", "-3 -1", "-3 1"],
       answer: 0,
@@ -237,6 +463,8 @@ const numbers: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Floats are stored in binary. Can 0.1 be stored exactly?", "Los floats se guardan en binario. ¿Se puede guardar 0.1 de forma exacta?", "float は二進数で保存される。0.1 はぴったり保存できる？"),
+      note: "floats",
       code: "print(0.1 + 0.2 == 0.3)",
       options: ["False", "True"],
       answer: 0,
@@ -247,6 +475,8 @@ const numbers: LessonDef = {
     {
       kind: "pick",
       prompt: L("Compare the decimals safely", "Compara los decimales con seguridad", "小数を安全に比べよう"),
+      hint: L("Exact == is the problem here. Look for the function that compares with a small tolerance.", "El problema aquí es el == exacto. Busca la función que compara con una pequeña tolerancia.", "問題は == のぴったり比較。少しの誤差を許して比べる関数を選ぼう。"),
+      note: "floats",
       code: "import math\nprint(math.___(0.1 + 0.2, 0.3))",
       options: ["isclose", "isequal", "round"],
       answer: 0,
@@ -262,6 +492,8 @@ const numbers: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Indexes start at 0 and negatives count from the end. A slice stops before its second number.", "Los índices empiezan en 0 y los negativos cuentan desde el final. Un corte para antes de su segundo número.", "インデックスは 0 から、負は後ろから。スライスは2つ目の数の手前で止まる。"),
+      note: "string-index",
       code: 's = "python"\nprint(s[0], s[-1], s[1:4], s[::-1])',
       options: ["p n yth nohtyp", "p n pyt nohtyp", "y n yth python"],
       answer: 0,
@@ -273,6 +505,8 @@ const numbers: LessonDef = {
     {
       kind: "type",
       prompt: L("Make it an f-string", "Conviértelo en f-string", "f文字列にしよう"),
+      hint: L("Which prefix before the opening quote makes Python run the code inside the braces?", "¿Qué prefijo antes de la comilla de apertura hace que Python ejecute el código entre llaves?", "開き引用符の前にどんな接頭辞をつけると {} の中が計算される？"),
+      note: "string-tools",
       code: 'name = "Ada"\nlvl = 3\nprint(___"{name} is level {lvl + 1}")',
       answer: "f",
       check: { compiles: true, stdout: "Ada is level 4" },
@@ -282,6 +516,8 @@ const numbers: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Do each call separately: split returns a list, join puts its separator between items, strip trims the ends.", "Una llamada a la vez: split da una lista, join pone su separador entre elementos, strip recorta los extremos.", "1つずつ考えよう。split はリスト、join は区切りをはさむ、strip は両端をとる。"),
+      note: "string-tools",
       code: 'print("a,b,c".split(","), "-".join(["x", "y"]), " hi ".strip().upper())',
       options: ["['a', 'b', 'c'] x-y HI", "abc x-y HI", "['a', 'b', 'c'] -xy  HI "],
       answer: 0,
@@ -292,6 +528,8 @@ const numbers: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("round() treats exact halves in a special way: it doesn't always go up.", "round() trata las mitades exactas de forma especial: no siempre sube.", "round() はちょうど半分のとき特別なルール。いつも切り上げではない。"),
+      note: "floats",
       code: "print(round(2.5), round(3.5))",
       options: ["2 4", "3 4", "2 3"],
       answer: 0,
@@ -302,6 +540,8 @@ const numbers: LessonDef = {
     {
       kind: "run",
       prompt: L("Whole coins only! It must print: each gets 3 coins", "¡Solo monedas enteras! Debe imprimir: each gets 3 coins", "コインは整数で！each gets 3 coins と表示させて"),
+      hint: L("/ gives a decimal like 3.5. Which operator divides and keeps only whole coins?", "/ da un decimal como 3.5. ¿Qué operador divide y deja solo monedas enteras?", "/ だと 3.5 のような小数。割って整数だけ残す演算子は？"),
+      note: "division",
       starter: 'coins = 7\nper_hero = coins / 2\nprint(f"each gets {per_hero} coins")\n',
       solution: 'coins = 7\nper_hero = coins // 2\nprint(f"each gets {per_hero} coins")\n',
       expect: "gets 3 coins",
@@ -310,6 +550,105 @@ const numbers: LessonDef = {
     },
   ],
 };
+
+const truthNotes: NoteDef[] = [
+  note("truthiness", L("Truthy and falsy values", "Valores truthy y falsy", "真とみなす値・偽とみなす値"),
+    p(
+      "if needs a yes or a no, but Python lets you use any value as a condition and converts it with bool(). The rule: zero and empty things are falsy (they act as False): 0, 0.0, \"\", [], {}, set() and None. Everything else is truthy (acts as True).",
+      "if necesita un sí o un no, pero Python te deja usar cualquier valor como condición y lo convierte con bool(). La regla: el cero y lo vacío son falsy (actúan como False): 0, 0.0, \"\", [], {}, set() y None. Todo lo demás es truthy (actúa como True).",
+      "if には「はい」か「いいえ」が必要だが、Python はどんな値も条件に使えて、bool() で変換する。ルールは「ゼロと空っぽは偽」：0、0.0、\"\"、[]、{}、set()、None は False あつかい。それ以外はすべて True あつかいだよ。",
+    ),
+    ex("print(bool(0.0), bool({}), bool(-1), bool(\"no\"))", "False False True True", L("Zero and empty are falsy; anything else is truthy", "Cero y vacío son falsy; lo demás es truthy", "ゼロと空は偽、それ以外は真")),
+    p(
+      "\"Empty\" means \"has no items\", not \"looks like nothing\". A text holding just a space has one character, so it's truthy. The text \"False\" has five letters, so it's truthy too. A list holding a single zero has one item, so it's truthy as well.",
+      "\"Vacío\" significa \"no tiene elementos\", no \"parece nada\". Un texto con solo un espacio tiene un carácter, así que es truthy. El texto \"False\" tiene cinco letras, así que también es truthy. Una lista con un solo cero tiene un elemento, así que también es truthy.",
+      "「空」とは「中身が0個」のことで、「何もなさそう」という意味じゃない。空白1つの文字列は1文字あるので真。\"False\" という文字列も5文字あるので真。0 が1つ入ったリストも要素が1個あるので真だよ。",
+    ),
+    ex("if \"False\":\n    print(\"text with letters is truthy\")", "text with letters is truthy"),
+    p(
+      "Truthiness is handy: if items: reads as \"if the list has something\". But it hides a trap: 0 is a real number that is falsy. When 0 is a valid value (0 lives, a score of 0), a plain truthiness test treats it like \"missing\". Then test is not None, or compare explicitly.",
+      "La veracidad es práctica: if items: se lee \"si la lista tiene algo\". Pero esconde una trampa: 0 es un número real que es falsy. Cuando 0 es un valor válido (0 vidas, un puntaje de 0), una prueba de veracidad simple lo trata como \"falta\". Entonces prueba is not None, o compara de forma explícita.",
+      "真偽の判定は便利で、if items: は「リストに何か入っていれば」と読める。でもワナがある。0 は本物の数なのに偽なんだ。0 が正しい値（残機0、0点）のとき、ただの真偽判定だと「値がない」と同じあつかいになる。そんなときは is not None か、はっきり比べよう。",
+    ),
+    ex("coins = 0\nif coins:\n    print(\"has coins\")\nelse:\n    print(\"falsy!\")", "falsy!", L("A real 0 fails a plain truthiness test", "Un 0 real no pasa una prueba de veracidad simple", "本物の 0 も真偽判定では偽")),
+  ),
+  note("and-or", L("and / or return a value", "and / or devuelven un valor", "and / or は値を返す"),
+    p(
+      "and and or don't always return True or False: they return one of their two values. a or b: if a is truthy, the result is a; otherwise it's b. a and b: if a is falsy, the result is a; otherwise it's b.",
+      "and y or no siempre devuelven True o False: devuelven uno de sus dos valores. a or b: si a es truthy, el resultado es a; si no, es b. a and b: si a es falsy, el resultado es a; si no, es b.",
+      "and と or はいつも True/False を返すわけじゃない。2つの値のどちらかを返す。a or b は、a が真なら a、偽なら b。a and b は、a が偽なら a、真なら b だよ。",
+    ),
+    ex("print(None or \"guest\", \"x\" or \"y\")", "guest x"),
+    ex("print(0 and 99, 4 and \"ok\")", "0 ok", L("and stops at a falsy value, or returns the last one", "and se detiene en un falsy, o devuelve el último", "and は偽で止まるか、最後の値を返す")),
+    p(
+      "They short-circuit: Python stops as soon as it knows the answer. In a or b, if a is truthy, b isn't even looked at. Chains work the same way: a or b or c gives the first truthy value, or the last value if none is truthy; a and b and c stops at the first falsy one.",
+      "Hacen cortocircuito: Python se detiene en cuanto conoce la respuesta. En a or b, si a es truthy, ni siquiera mira b. Las cadenas funcionan igual: a or b or c da el primer valor truthy, o el último si ninguno lo es; a and b and c se detiene en el primer falsy.",
+      "短絡評価といって、答えがわかった時点で Python は止まる。a or b で a が真なら b は見もしない。つなげても同じで、a or b or c は最初の真の値（なければ最後の値）、a and b and c は最初の偽の値で止まるよ。",
+    ),
+    p(
+      "x or default is a common shortcut for \"use x, or a default when x is missing\". It works well when x is None or empty text. But if x can be 0, the shortcut replaces your real 0 with the default, because 0 is falsy.",
+      "x or default es un atajo común para \"usa x, o un valor por defecto si falta x\". Funciona bien cuando x es None o texto vacío. Pero si x puede ser 0, el atajo reemplaza tu 0 real por el valor por defecto, porque 0 es falsy.",
+      "x or デフォルト は「x を使う、なければデフォルト」というよくある書き方。x が None や空文字なら問題ない。でも x が 0 になりうるなら、0 は偽なので本物の 0 がデフォルトに置きかわってしまうよ。",
+    ),
+    ex("name = \"\"\nprint(name or \"anonymous\")", "anonymous"),
+    p(
+      "repr() shows a value the way you would write it in code: strings get their quotes. It's useful to see an empty string as '', which print alone would show as nothing at all.",
+      "repr() muestra un valor como lo escribirías en código: los strings llevan sus comillas. Sirve para ver un string vacío como '', que print solo mostraría como nada.",
+      "repr() は値をコードで書くときの形で見せる。文字列には引用符がつく。print だけでは何も見えない空文字も、repr なら '' と見えるよ。",
+    ),
+    ex("print(repr(\"\"), repr(\"a\"), repr(3))", "'' 'a' 3"),
+  ),
+  note("comparisons", L("Comparing values", "Comparar valores", "値をくらべる"),
+    p(
+      "Comparisons (<, >, <=, >=, ==, !=) give a bool. Python lets you chain them: a < b < c means a < b and b < c, with b computed only once. Each link compares two neighbors, so 1 < 5 > 2 is valid: it means 1 < 5 and 5 > 2.",
+      "Las comparaciones (<, >, <=, >=, ==, !=) dan un bool. Python permite encadenarlas: a < b < c significa a < b and b < c, calculando b una sola vez. Cada eslabón compara dos vecinos, así que 1 < 5 > 2 es válido: significa 1 < 5 and 5 > 2.",
+      "比較（<、>、<=、>=、==、!=）の結果は bool。Python では比較をつなげられる。a < b < c は a < b and b < c のことで、b は1回だけ計算される。となりどうしを比べるので、1 < 5 > 2 も正しく、1 < 5 and 5 > 2 という意味だよ。",
+    ),
+    ex("age = 15\nprint(13 <= age < 20, 0 < age > 100)", "True False", L("Every link of the chain must hold", "Cada eslabón de la cadena debe cumplirse", "つないだ比較はすべて成り立つ必要がある")),
+    p(
+      "bool is a kind of int: True behaves like 1 and False like 0. So True + True is 2, and sum() of a list of bools counts how many are True. Numbers of different types compare by value: 2 == 2.0 is True.",
+      "bool es un tipo de int: True se comporta como 1 y False como 0. Así, True + True es 2, y sum() de una lista de bools cuenta cuántos son True. Los números de distinto tipo se comparan por valor: 2 == 2.0 es True.",
+      "bool は int の一種で、True は 1、False は 0 のようにふるまう。だから True + True は 2 で、bool のリストを sum() すると True の数がわかる。型がちがう数どうしは値で比べるので、2 == 2.0 は True だよ。",
+    ),
+    ex("print(sum([True, False, True, True]), False == 0, 3 == 3.0)", "3 True True"),
+    p(
+      "Strings compare character by character, by code order, not by length or numeric value. \"apple\" < \"banana\" because a comes before b. With digits as text, \"100\" < \"25\" is True, since 1 comes before 2. All uppercase letters come before lowercase ones.",
+      "Los strings se comparan carácter por carácter, por orden de código, no por largo ni por valor numérico. \"apple\" < \"banana\" porque la a va antes que la b. Con dígitos como texto, \"100\" < \"25\" es True, porque el 1 va antes que el 2. Todas las mayúsculas van antes que las minúsculas.",
+      "文字列は長さや数の大きさではなく、1文字ずつ文字コード順で比べる。a は b より前なので \"apple\" < \"banana\"。数字の文字列でも、1 は 2 より前なので \"100\" < \"25\" は True。大文字はすべて小文字より前だよ。",
+    ),
+    ex("print(\"100\" < \"25\", 100 < 25, \"Zed\" < \"abe\")", "True False True", L("Text order is not number order", "El orden del texto no es el orden numérico", "文字列の順番は数の順番とちがう")),
+    p(
+      "Common mistake: comparing text with numbers. == between them is simply False, and < raises TypeError. Convert first with int() or str().",
+      "Error común: comparar texto con números. == entre ellos simplemente da False, y < lanza TypeError. Convierte primero con int() o str().",
+      "よくあるミス：文字列と数値を比べること。== はただ False になり、< は TypeError になる。先に int() か str() で変換しよう。",
+    ),
+    boom("print(5 < \"6\")", "TypeError", L("Ordering a number against text crashes", "Ordenar un número contra un texto falla", "数値と文字列の大小比較はエラー")),
+  ),
+  note("eq-vs-is", L("== versus is", "== frente a is", "== と is のちがい"),
+    p(
+      "== asks \"do these two have the same value?\". is asks \"are these two names on the very same object?\". Two lists built separately with the same items are equal (==), but they are not the same object, so is gives False.",
+      "== pregunta \"¿estos dos tienen el mismo valor?\". is pregunta \"¿estos dos nombres están en el mismísimo objeto?\". Dos listas creadas por separado con los mismos elementos son iguales (==), pero no son el mismo objeto, así que is da False.",
+      "== は「2つの値は同じ？」、is は「2つの名前はまったく同じものに貼られている？」を聞く。同じ中身で別々に作った2つのリストは == では等しいが、同じものではないので is は False だよ。",
+    ),
+    ex("first = list(\"ok\")\nsecond = list(\"ok\")\nprint(first == second, first is second)", "True False", L("Equal contents, two separate objects", "Mismo contenido, dos objetos separados", "中身は同じ、物は別々")),
+    p(
+      "Think of is as \"is this the same scroll?\", while == reads the text written on both scrolls. Assignment never makes a copy: after alias = original, both names are on one object, so alias is original is True.",
+      "Piensa en is como \"¿es el mismo pergamino?\", mientras que == lee el texto escrito en ambos pergaminos. La asignación nunca copia: tras alias = original, los dos nombres están en un solo objeto, así que alias is original es True.",
+      "is は「同じ巻物？」、== は「2本の巻物に書かれた文字が同じ？」と考えよう。代入はコピーを作らない。alias = original のあとは2つの名前が1つの物に貼られているので、alias is original は True だよ。",
+    ),
+    p(
+      "None is a single object: there is exactly one None in the whole program. So the clear, recommended test is x is None (or x is not None), and PEP 8, Python's style guide, asks for it. == None usually works too, but an object can redefine ==, while nothing can fake is.",
+      "None es un objeto único: hay exactamente un None en todo el programa. Por eso la prueba clara y recomendada es x is None (o x is not None), y PEP 8, la guía de estilo de Python, la pide. == None suele funcionar también, pero un objeto puede redefinir ==, mientras que nada puede falsear is.",
+      "None はプログラム全体にちょうど1つしかない。だから x is None（または x is not None）がわかりやすくおすすめの書き方で、Python のスタイルガイド PEP 8 もそう決めている。== None でもたいてい動くが、== は物ごとに作りかえられる。is はごまかせないよ。",
+    ),
+    ex("answer = None\nprint(answer is None, answer is not None)", "True False"),
+    p(
+      "Common mistake: using is to compare numbers or strings. Some small values happen to be the same object, so is seems to work, then fails with other values. For values, always use ==; keep is for None.",
+      "Error común: usar is para comparar números o strings. Algunos valores pequeños resultan ser el mismo objeto, así que is parece funcionar y luego falla con otros valores. Para valores usa siempre ==; deja is para None.",
+      "よくあるミス：数値や文字列を is で比べること。小さな値はたまたま同じ物のことがあり、is が動くように見えても、ほかの値では失敗する。値の比較はいつも ==、is は None 用にとっておこう。",
+    ),
+  ),
+];
 
 // ─── 1.3 Equal or the same? ────────────────────────────────────────────────
 const truth: LessonDef = {
@@ -320,6 +659,7 @@ const truth: LessonDef = {
   xp: 70,
   enemy: "python/none-ghost",
   enemyName: L("NONE GHOST", "FANTASMA NONE", "None ゴースト"),
+  notes: truthNotes,
   beats: [
     say(L(
       "if runs its indented block only when the condition is true. else runs otherwise. Indentation IS the block!",
@@ -334,6 +674,8 @@ const truth: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Zero and empty things are falsy. Is a string holding a character empty? Is a list holding a 0?", "El cero y lo vacío son falsy. ¿Un string con un carácter está vacío? ¿Y una lista con un 0?", "ゼロと空は偽。1文字ある文字列は空？0 が入ったリストは？"),
+      note: "truthiness",
       code: 'print(bool(0), bool(""), bool([]), bool("0"), bool([0]))',
       options: ["False False False True True", "False False False False False", "False True False True True"],
       answer: 0,
@@ -349,6 +691,8 @@ const truth: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("or returns the first truthy value it meets; and returns the first falsy one, or else the last value.", "or devuelve el primer valor truthy que encuentra; and devuelve el primer falsy o, si no hay, el último.", "or は最初の真の値、and は最初の偽の値（なければ最後の値）を返す。"),
+      note: "and-or",
       code: 'print(repr(0 or "default"), repr("" and "x"), 5 and 7)',
       options: ["'default' '' 7", "True False True", "'default' 'x' 5"],
       answer: 0,
@@ -359,6 +703,8 @@ const truth: LessonDef = {
     {
       kind: "predict",
       prompt: L("0 lives is real. What does it print?", "0 vidas es real. ¿Qué imprime?", "残機 0 は本物。何が表示される？"),
+      hint: L("Is 0 truthy or falsy? or only uses its right side when the left side is falsy.", "¿0 es truthy o falsy? or solo usa su lado derecho cuando el izquierdo es falsy.", "0 は真？偽？or は左が偽のときだけ右を使うよ。"),
+      note: "and-or",
       code: "lives = 0\nprint(lives or 3)",
       options: ["3", "0", "True"],
       answer: 0,
@@ -371,6 +717,8 @@ const truth: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Split each chain into pairs joined by and: a < b < c means a < b and b < c.", "Divide cada cadena en pares unidos por and: a < b < c significa a < b and b < c.", "つないだ比較は and でペアに分けよう。a < b < c は a < b and b < c。"),
+      note: "comparisons",
       code: "print(1 < 2 < 3, 3 > 2 > 1, 1 < 3 > 2)",
       options: ["True True True", "True True False", "False False False"],
       answer: 0,
@@ -398,6 +746,8 @@ const truth: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("== compares contents; is asks whether both names point to one object. Which names share an object?", "== compara contenidos; is pregunta si ambos nombres apuntan a un objeto. ¿Qué nombres comparten objeto?", "== は中身、is は同じ物かを比べる。同じ物に貼られた名前はどれ？"),
+      note: "eq-vs-is",
       code: "a = [1, 2]\nb = [1, 2]\nc = a\nprint(a == b, a is b, a is c)",
       options: ["True False True", "True True True", "False False True"],
       answer: 0,
@@ -408,6 +758,8 @@ const truth: LessonDef = {
     {
       kind: "pick",
       prompt: L("The PEP 8 way to test for None", "La forma PEP 8 de probar None", "PEP 8 流の None 判定"),
+      hint: L("Only one None exists, so the style guide prefers checking identity rather than value.", "Solo existe un None, así que la guía de estilo prefiere comparar identidad en vez de valor.", "None は1つだけ。だからスタイルガイドは値より「同じ物か」を調べる方を好む。"),
+      note: "eq-vs-is",
       code: 'x = None\nif x ___ None:\n    print("empty")',
       options: ["is", "=="],
       answer: 0,
@@ -418,6 +770,8 @@ const truth: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("bool is a kind of int: what number does True stand for? And compare 1 and 1.0 by value.", "bool es un tipo de int: ¿qué número representa True? Y compara 1 y 1.0 por su valor.", "bool は int の一種。True はどの数？1 と 1.0 は値で比べよう。"),
+      note: "comparisons",
       code: "print(True + True, True == 1, 1 == 1.0)",
       options: ["2 True True", "True True False", "2 False True"],
       answer: 0,
@@ -428,6 +782,8 @@ const truth: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Text compares character by character, not by numeric size. Compare the first characters.", "El texto se compara carácter por carácter, no por tamaño numérico. Compara los primeros caracteres.", "文字列は数の大きさではなく1文字ずつ比べる。最初の文字を比べよう。"),
+      note: "comparisons",
       code: 'print("10" < "9", 10 < 9)',
       options: ["True False", "False False", "False True"],
       answer: 0,
@@ -438,6 +794,8 @@ const truth: LessonDef = {
     {
       kind: "run",
       prompt: L("0 lives is a value! It must print lives set: 0", "¡0 vidas es un valor! Debe imprimir lives set: 0", "0 も値だよ！lives set: 0 と表示させて"),
+      hint: L("0 is a valid value here, but it's falsy. Which part of the condition rejects it?", "Aquí 0 es un valor válido, pero es falsy. ¿Qué parte de la condición lo rechaza?", "ここでは 0 も正しい値だけど偽。条件のどの部分が 0 を落としている？"),
+      note: "truthiness",
       starter: 'lives = 0\nif lives is not None and lives:\n    print("lives set:", lives)\nelse:\n    print("no value")\n',
       solution: 'lives = 0\nif lives is not None:\n    print("lives set:", lives)\nelse:\n    print("no value")\n',
       expect: "lives set: 0",
@@ -446,6 +804,81 @@ const truth: LessonDef = {
     },
   ],
 };
+
+const bossNotes: NoteDef[] = [
+  note("recap-numbers", L("Recap: numbers and conversions", "Repaso: números y conversiones", "復習：数値と変換"),
+    p(
+      "/ always returns a float, even when the division is exact: 9 / 3 is 3.0, not 3. // rounds down to a whole number and % gives the remainder. When you need a whole result, use //.",
+      "/ siempre devuelve un float, aunque la división sea exacta: 9 / 3 es 3.0, no 3. // redondea hacia abajo a un entero y % da el resto. Cuando necesites un resultado entero, usa //.",
+      "/ は割り切れても必ず float を返す。9 / 3 は 3 ではなく 3.0。// は切り捨てて整数に、% は余り。整数の結果がほしいときは // を使おう。",
+    ),
+    ex("print(type(9 / 3).__name__, 9 / 3, 9 // 3)", "float 3.0 3"),
+    p(
+      "int() turns a float into an int by cutting off the decimals toward zero. It does not round: int(7.8) is 7, while round(7.8) is 8. For negative numbers, \"toward zero\" means the result moves up, not down.",
+      "int() convierte un float en int cortando los decimales hacia cero. No redondea: int(7.8) es 7, mientras que round(7.8) es 8. Con números negativos, \"hacia cero\" significa que el resultado sube, no baja.",
+      "int() は float の小数部分を0の方向に切って int にする。丸めはしない。int(7.8) は 7、round(7.8) は 8。負の数では「0の方向」なので、結果は下ではなく上に動くよ。",
+    ),
+    ex("print(int(7.8), round(7.8), float(\"0.25\"))", "7 8 0.25", L("int() cuts, round() rounds, float() reads decimal text", "int() corta, round() redondea, float() lee texto decimal", "int() は切る、round() は丸める、float() は小数を読む")),
+    p(
+      "int() on text accepts only text that is exactly a whole number, like \"42\". Anything else, such as letters or a decimal point, raises ValueError: invalid literal for int(). float() reads decimal text, and you can pass its result to int() afterwards.",
+      "int() con texto acepta solo texto que sea exactamente un número entero, como \"42\". Cualquier otra cosa, como letras o un punto decimal, lanza ValueError: invalid literal for int(). float() lee texto decimal, y luego puedes pasarle su resultado a int().",
+      "文字列に int() を使えるのは \"42\" のようにぴったり整数の文字列だけ。文字や小数点がまじると ValueError: invalid literal for int() になる。小数の文字列は float() で読み、その結果を int() に渡せばいいよ。",
+    ),
+    boom("print(int(\"forty\"))", "ValueError", L("int() can't read text that isn't a whole number", "int() no lee texto que no sea un entero", "整数でない文字列は int() で読めない")),
+  ),
+  note("recap-strings", L("Recap: indexes, slices, formats", "Repaso: índices, cortes, formatos", "復習：インデックス・スライス・書式"),
+    p(
+      "An index reads one character, and it must exist. In a 3-letter string the valid indexes are 0, 1 and 2 (or -1 to -3). Any other index raises IndexError: string index out of range.",
+      "Un índice lee un carácter, y debe existir. En un string de 3 letras los índices válidos son 0, 1 y 2 (o de -1 a -3). Cualquier otro índice lanza IndexError: string index out of range.",
+      "インデックスは1文字を読み、その位置が存在しなければならない。3文字なら使えるのは 0、1、2（または -1〜-3）。それ以外は IndexError: string index out of range になるよ。",
+    ),
+    boom("print(\"cat\"[3])", "IndexError", L("Index 3 doesn't exist in a 3-letter string", "El índice 3 no existe en un string de 3 letras", "3文字の文字列にインデックス 3 はない")),
+    p(
+      "A slice is forgiving: when start or stop go past the end, it simply stops at the end, and can even give an empty string. So the same out-of-range number crashes as an index but is fine in a slice.",
+      "Un corte es tolerante: cuando inicio o fin pasan del final, simplemente se detiene en el final, e incluso puede dar un string vacío. Así, el mismo número fuera de rango falla como índice pero está bien en un corte.",
+      "スライスはやさしい。start や stop が末尾を超えても末尾で止まり、空文字になることもある。同じ範囲外の数でも、インデックスならエラー、スライスなら大丈夫なんだ。",
+    ),
+    ex("print(\"cat\"[1:99] + \"!\", \"cat\"[5:] == \"\")", "at! True"),
+    p(
+      "Between a string and an int, * repeats the text, and + glues strings together. Python follows math priority, so * runs before +.",
+      "Entre un string y un int, * repite el texto, y + pega strings. Python sigue la prioridad matemática, así que * se ejecuta antes que +.",
+      "文字列と int の間の * は文字列をくり返し、+ は文字列をつなぐ。計算の優先順位どおり、* が + より先に計算されるよ。",
+    ),
+    ex("print(\"-\" * 5 + \">\")", "----->"),
+    p(
+      "In an f-string, a colon after the value starts a format spec: an optional fill character, then the alignment (< left, > right, ^ center), then the total width. The fill character pads the value until it reaches that width.",
+      "En un f-string, dos puntos después del valor empiezan una especificación de formato: un carácter de relleno opcional, luego la alineación (< izquierda, > derecha, ^ centro) y luego el ancho total. El relleno completa el valor hasta llegar a ese ancho.",
+      "f文字列で値のあとにコロンを書くと書式指定になる。順番は「埋める文字（省略可）」「寄せ方（< 左、> 右、^ 中央）」「全体の幅」。値が幅に届くまで埋める文字で埋めるよ。",
+    ),
+    ex("print(f\"{'go':-<6}|\", f\"{7:>3}|\")", "go----|   7|", L("Fill with -, align left, width 6; then right-align a number", "Relleno -, alineado a la izquierda, ancho 6; luego un número a la derecha", "- で埋めて左寄せ幅6、数値は右寄せ")),
+  ),
+  note("recap-truth", L("Recap: truth and comparisons", "Repaso: verdad y comparaciones", "復習：真偽と比較"),
+    p(
+      "Falsy values: 0, 0.0, \"\", [], {}, set() and None. Everything else is truthy, including a string holding just a space and the text \"0\".",
+      "Valores falsy: 0, 0.0, \"\", [], {}, set() y None. Todo lo demás es truthy, incluido un string con solo un espacio y el texto \"0\".",
+      "偽になる値：0、0.0、\"\"、[]、{}、set()、None。それ以外はすべて真。空白1つだけの文字列や、文字列 \"0\" も真だよ。",
+    ),
+    ex("print(bool(set()), bool(\"0\"), bool(0.0))", "False True False"),
+    p(
+      "a or b returns a if it is truthy, otherwise b. In a longer chain, or keeps going until it finds a truthy value and returns it; if none is truthy, it returns the last value.",
+      "a or b devuelve a si es truthy; si no, b. En una cadena más larga, or sigue hasta encontrar un valor truthy y lo devuelve; si ninguno lo es, devuelve el último valor.",
+      "a or b は a が真なら a、そうでなければ b。長くつなげると、or は真の値が見つかるまで進んでそれを返す。どれも偽なら最後の値を返すよ。",
+    ),
+    ex("print(repr(None or 0 or \"\"))", "''", L("All falsy: or returns the last value", "Todos falsy: or devuelve el último valor", "全部偽なら or は最後の値")),
+    p(
+      "Comparisons chain: a < b < c == d means a < b and b < c and c == d. Every link must be True for the whole chain to be True.",
+      "Las comparaciones se encadenan: a < b < c == d significa a < b and b < c and c == d. Cada eslabón debe ser True para que toda la cadena sea True.",
+      "比較はつなげられる。a < b < c == d は a < b and b < c and c == d のこと。全体が True になるには、すべてのつなぎ目が True でなければならないよ。",
+    ),
+    ex("n = 4\nprint(0 < n <= 4 != 5)", "True"),
+    p(
+      "Python never treats text as a number: a number and a string are never equal, even if they show the same digits. Two numbers of different types, like an int and a float, are equal when their values are the same.",
+      "Python nunca trata un texto como número: un número y un string nunca son iguales, aunque muestren los mismos dígitos. Dos números de distinto tipo, como un int y un float, son iguales cuando sus valores coinciden.",
+      "Python は文字列を数値としてあつかわない。同じ数字に見えても、数値と文字列は等しくならない。int と float のように型がちがう数どうしは、値が同じなら等しいよ。",
+    ),
+    ex("print(7 == \"7\", 7 == 7.0, str(7) == \"7\")", "False True True"),
+  ),
+];
 
 // ─── 1.4 Boss: Type Golem ──────────────────────────────────────────────────
 const boss: LessonDef = {
@@ -456,23 +889,24 @@ const boss: LessonDef = {
   xp: 180,
   enemy: "golem",
   enemyName: L("TYPE GOLEM", "GÓLEM DE TIPOS", "タイプゴーレム"),
+  notes: bossNotes,
   beats: [
     enemySays(L(
       "I AM THE TYPE GOLEM. Ints, floats, strings, None... my stones hide every type. Name them, if you can!",
       "SOY EL GÓLEM DE TIPOS. Ints, floats, strings, None... mis piedras esconden cada tipo. ¡Nómbralos si puedes!",
       "我はタイプゴーレム。int、float、str、None…この石にはあらゆる型がひそむ。見破れるか！",
     )),
-    { kind: "predict", time: 12, prompt: PRINT, code: "print(type(10 / 2).__name__, 10 / 2)", options: ["float 5.0", "int 5", "float 5"], answer: 0, output: "float 5.0", check: { compiles: true, stdout: "float 5.0" }, explain: L("/ always returns a float, even for 10 / 2.", "/ siempre devuelve un float, incluso con 10 / 2.", "/ はいつも float。10 / 2 でもね。") },
-    { kind: "predict", time: 12, prompt: HAPPENS, code: 'print("ab"[5])', options: ["IndexError", L("Prints nothing", "No imprime nada", "何も表示しない"), "None"], answer: 0, check: { compiles: true, throws: "IndexError" }, explain: L("\"ab\" has indexes 0 and 1 only. Index 5 is out of range: IndexError.", "\"ab\" solo tiene los índices 0 y 1. El 5 está fuera de rango: IndexError.", "\"ab\" のインデックスは 0 と 1 だけ。5 は範囲外で IndexError。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: 'print("ab"[1:5])', options: ["b", "IndexError", "ab"], answer: 0, output: "b", check: { compiles: true, stdout: "b" }, explain: L("Slices clamp to the string's end instead of crashing. Indexes don't.", "Los cortes se ajustan al final del string en vez de fallar. Los índices no.", "スライスは範囲外でも末尾で止まる。インデックスはエラーになる。") },
-    { kind: "predict", time: 12, prompt: HAPPENS, code: 'print(int("3.5"))', options: ["ValueError", "3", "4"], answer: 0, check: { compiles: true, throws: "ValueError" }, explain: L("int() can't read \"3.5\" as a whole number: ValueError. Use float() first.", "int() no puede leer \"3.5\" como entero: ValueError. Usa float() primero.", "int() は \"3.5\" を整数として読めず ValueError。先に float() を使おう。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: 'print(int(3.9), int(-3.9), float("3.5"))', options: ["3 -3 3.5", "4 -4 3.5", "3 -4 3.5"], answer: 0, output: "3 -3 3.5", check: { compiles: true, stdout: "3 -3 3.5" }, explain: L("int() on a float chops the decimals toward zero: 3.9 → 3, -3.9 → -3.", "int() con un float corta los decimales hacia cero: 3.9 → 3, -3.9 → -3.", "float に int() を使うと0の方向に切る。3.9 → 3、-3.9 → -3。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: 'print([] or {} or 0 or "last")', options: ["last", "[]", "False"], answer: 0, output: "last", check: { compiles: true, stdout: "last" }, explain: L("[], {} and 0 are all falsy, so or keeps going until \"last\".", "[], {} y 0 son falsy, así que or sigue hasta \"last\".", "[]、{}、0 はすべて偽。or は \"last\" まで進むよ。") },
-    { kind: "type", time: 15, prompt: L("Repeat the text 3 times", "Repite el texto 3 veces", "文字列を3回くり返そう"), code: 'print(3 ___ "ab" + "!")', answer: "*", check: { compiles: true, stdout: "ababab!" }, explain: L("int * str repeats the text: ababab, then + adds the !.", "int * str repite el texto: ababab, luego + agrega el !.", "int * str で文字列をくり返して ababab、+ で ! をつなぐ。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: "x = 5\nprint(1 < x < 10 == 10)", options: ["True", "False", "TypeError"], answer: 0, output: "True", check: { compiles: true, stdout: "True" }, explain: L("It chains: 1 < 5 and 5 < 10 and 10 == 10. All true.", "Se encadena: 1 < 5 and 5 < 10 and 10 == 10. Todo verdadero.", "つながって 1 < 5 and 5 < 10 and 10 == 10。すべて真。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: "print(f\"{'hi':*^6}\")", options: ["**hi**", "hi****", "******"], answer: 0, output: "**hi**", check: { compiles: true, stdout: "**hi**" }, explain: L("After the colon: fill with *, ^ centers, width 6. So two stars on each side.", "Tras los dos puntos: relleno *, ^ centra, ancho 6. Dos estrellas a cada lado.", "コロンの後は「* で埋める・^ で中央・幅 6」。両側に * が2つずつ。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: 'print(bool(None), bool(" "))', options: ["False True", "False False", "True True"], answer: 0, output: "False True", check: { compiles: true, stdout: "False True" }, explain: L("None is falsy. \" \" holds a space, so it's not empty: truthy.", "None es falsy. \" \" contiene un espacio, no está vacío: truthy.", "None は偽。\" \" は空白が入っているので空じゃない：真。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: 'print(1 == "1", 1 == 1.0)', options: ["False True", "True True", "False False"], answer: 0, output: "False True", check: { compiles: true, stdout: "False True" }, explain: L("Python never converts text to numbers on its own. 1 and 1.0 are equal numbers.", "Python nunca convierte texto en número por su cuenta. 1 y 1.0 son números iguales.", "Python は文字列を勝手に数値にしない。1 と 1.0 は等しい数値。") },
+    { kind: "predict", time: 12, prompt: PRINT, hint: L("What type does / always return, even when the division is exact?", "¿Qué tipo devuelve siempre /, aunque la división sea exacta?", "/ は割り切れるときでも、いつも何型を返す？"), note: "recap-numbers", code: "print(type(10 / 2).__name__, 10 / 2)", options: ["float 5.0", "int 5", "float 5"], answer: 0, output: "float 5.0", check: { compiles: true, stdout: "float 5.0" }, explain: L("/ always returns a float, even for 10 / 2.", "/ siempre devuelve un float, incluso con 10 / 2.", "/ はいつも float。10 / 2 でもね。") },
+    { kind: "predict", time: 12, prompt: HAPPENS, hint: L("Count the valid indexes of a 2-character string. Does a single index forgive going past the end?", "Cuenta los índices válidos de un string de 2 caracteres. ¿Un índice suelto perdona pasarse del final?", "2文字の文字列で使えるインデックスは？インデックスは範囲外を許す？"), note: "recap-strings", code: 'print("ab"[5])', options: ["IndexError", L("Prints nothing", "No imprime nada", "何も表示しない"), "None"], answer: 0, check: { compiles: true, throws: "IndexError" }, explain: L("\"ab\" has indexes 0 and 1 only. Index 5 is out of range: IndexError.", "\"ab\" solo tiene los índices 0 y 1. El 5 está fuera de rango: IndexError.", "\"ab\" のインデックスは 0 と 1 だけ。5 は範囲外で IndexError。") },
+    { kind: "predict", time: 12, prompt: PRINT, hint: L("Slices behave differently from single indexes when they go past the end.", "Los cortes se comportan distinto que los índices sueltos cuando pasan del final.", "末尾を超えたとき、スライスとインデックスはちがう動きをする。"), note: "recap-strings", code: 'print("ab"[1:5])', options: ["b", "IndexError", "ab"], answer: 0, output: "b", check: { compiles: true, stdout: "b" }, explain: L("Slices clamp to the string's end instead of crashing. Indexes don't.", "Los cortes se ajustan al final del string en vez de fallar. Los índices no.", "スライスは範囲外でも末尾で止まる。インデックスはエラーになる。") },
+    { kind: "predict", time: 12, prompt: HAPPENS, hint: L("int() on text accepts only a whole number written as text. Is that text a whole number?", "int() con texto solo acepta un número entero escrito como texto. ¿Ese texto es un entero?", "文字列に int() を使えるのは整数の文字列だけ。それは整数？"), note: "recap-numbers", code: 'print(int("3.5"))', options: ["ValueError", "3", "4"], answer: 0, check: { compiles: true, throws: "ValueError" }, explain: L("int() can't read \"3.5\" as a whole number: ValueError. Use float() first.", "int() no puede leer \"3.5\" como entero: ValueError. Usa float() primero.", "int() は \"3.5\" を整数として読めず ValueError。先に float() を使おう。") },
+    { kind: "predict", time: 15, prompt: PRINT, hint: L("int() on a float doesn't round: it cuts the decimals off toward zero.", "int() con un float no redondea: corta los decimales hacia cero.", "float に int() を使っても丸めない。0の方向に小数を切るよ。"), note: "recap-numbers", code: 'print(int(3.9), int(-3.9), float("3.5"))', options: ["3 -3 3.5", "4 -4 3.5", "3 -4 3.5"], answer: 0, output: "3 -3 3.5", check: { compiles: true, stdout: "3 -3 3.5" }, explain: L("int() on a float chops the decimals toward zero: 3.9 → 3, -3.9 → -3.", "int() con un float corta los decimales hacia cero: 3.9 → 3, -3.9 → -3.", "float に int() を使うと0の方向に切る。3.9 → 3、-3.9 → -3。") },
+    { kind: "predict", time: 12, prompt: PRINT, hint: L("Check each value in turn: is it empty or zero? or keeps going until it finds a truthy one.", "Revisa cada valor por turno: ¿está vacío o es cero? or sigue hasta encontrar uno truthy.", "値を順に見よう。空かゼロか？or は真の値が見つかるまで進む。"), note: "recap-truth", code: 'print([] or {} or 0 or "last")', options: ["last", "[]", "False"], answer: 0, output: "last", check: { compiles: true, stdout: "last" }, explain: L("[], {} and 0 are all falsy, so or keeps going until \"last\".", "[], {} y 0 son falsy, así que or sigue hasta \"last\".", "[]、{}、0 はすべて偽。or は \"last\" まで進むよ。") },
+    { kind: "type", time: 15, prompt: L("Repeat the text 3 times", "Repite el texto 3 veces", "文字列を3回くり返そう"), hint: L("You need the text three times in a row. Which arithmetic operator does that for strings?", "Necesitas el texto tres veces seguidas. ¿Qué operador aritmético hace eso con strings?", "文字列を3回続けたい。文字列でそれができる算術演算子は？"), note: "recap-strings", code: 'print(3 ___ "ab" + "!")', answer: "*", check: { compiles: true, stdout: "ababab!" }, explain: L("int * str repeats the text: ababab, then + adds the !.", "int * str repite el texto: ababab, luego + agrega el !.", "int * str で文字列をくり返して ababab、+ で ! をつなぐ。") },
+    { kind: "predict", time: 15, prompt: PRINT, hint: L("Break the chain into pairs joined by and, and check each pair with x = 5.", "Divide la cadena en pares unidos por and, y revisa cada par con x = 5.", "つないだ比較を and のペアに分け、x = 5 で1つずつ確かめよう。"), note: "recap-truth", code: "x = 5\nprint(1 < x < 10 == 10)", options: ["True", "False", "TypeError"], answer: 0, output: "True", check: { compiles: true, stdout: "True" }, explain: L("It chains: 1 < 5 and 5 < 10 and 10 == 10. All true.", "Se encadena: 1 < 5 and 5 < 10 and 10 == 10. Todo verdadero.", "つながって 1 < 5 and 5 < 10 and 10 == 10。すべて真。") },
+    { kind: "predict", time: 15, prompt: PRINT, hint: L("Read the spec after the colon as fill, alignment, width. How many fill characters are needed?", "Lee lo que va tras los dos puntos como relleno, alineación, ancho. ¿Cuántos rellenos hacen falta?", "コロンの後は「埋める文字・寄せ方・幅」。埋める文字はいくつ必要？"), note: "recap-strings", code: "print(f\"{'hi':*^6}\")", options: ["**hi**", "hi****", "******"], answer: 0, output: "**hi**", check: { compiles: true, stdout: "**hi**" }, explain: L("After the colon: fill with *, ^ centers, width 6. So two stars on each side.", "Tras los dos puntos: relleno *, ^ centra, ancho 6. Dos estrellas a cada lado.", "コロンの後は「* で埋める・^ で中央・幅 6」。両側に * が2つずつ。") },
+    { kind: "predict", time: 12, prompt: PRINT, hint: L("None is falsy. Is a string that holds a space empty?", "None es falsy. ¿Un string que contiene un espacio está vacío?", "None は偽。空白が入った文字列は空？"), note: "recap-truth", code: 'print(bool(None), bool(" "))', options: ["False True", "False False", "True True"], answer: 0, output: "False True", check: { compiles: true, stdout: "False True" }, explain: L("None is falsy. \" \" holds a space, so it's not empty: truthy.", "None es falsy. \" \" contiene un espacio, no está vacío: truthy.", "None は偽。\" \" は空白が入っているので空じゃない：真。") },
+    { kind: "predict", time: 12, prompt: PRINT, hint: L("Python never treats text as a number. Are an int and a float with the same value equal?", "Python nunca trata un texto como número. ¿Un int y un float con el mismo valor son iguales?", "Python は文字列を数値あつかいしない。同じ値の int と float は等しい？"), note: "recap-truth", code: 'print(1 == "1", 1 == 1.0)', options: ["False True", "True True", "False False"], answer: 0, output: "False True", check: { compiles: true, stdout: "False True" }, explain: L("Python never converts text to numbers on its own. 1 and 1.0 are equal numbers.", "Python nunca convierte texto en número por su cuenta. 1 y 1.0 son números iguales.", "Python は文字列を勝手に数値にしない。1 と 1.0 は等しい数値。") },
     enemySays(L(
       "Crumble... you read every stone. The Collection Forest lies ahead, where lists share secrets.",
       "Me desmorono... leíste cada piedra. Adelante está el Bosque de Colecciones, donde las listas comparten secretos.",

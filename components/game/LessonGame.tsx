@@ -9,7 +9,10 @@ import { isQuestion, type Beat, type Text } from "@/lib/content/types";
 import { fx, wait } from "@/lib/fx";
 import type { LessonPlay, PlayBeat } from "@/lib/repo";
 import { useSave } from "@/components/save/SaveProvider";
-import { completeExam, completeLesson, completeReview, recordFailedRun, type ExamReport, type Reward, type WorldContent } from "@/lib/save/progress";
+import { completeExam, completeLesson, completeReview, recordFailedRun, setTimerPref, spendTicket, type ExamReport, type Reward, type WorldContent } from "@/lib/save/progress";
+import { questionLimitMs, questionPoints, questionSeconds, type TimerMode } from "@/lib/game-rules";
+import { TimerModal } from "./TimerModal";
+import { NotePanel } from "./NotePanel";
 import type { ExamQuestion } from "@/lib/content/types";
 import { ExamReportView } from "@/components/exam/ExamReportView";
 import { useI18n } from "@/components/ui/I18n";
@@ -57,6 +60,15 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
   const [timeLeft, setTimeLeft] = useState(1);
   const [reward, setReward] = useState<Reward | null>(null);
   const [examReport, setExamReport] = useState<ExamReport | null>(null);
+  // Timer chosen in the pre-lesson modal (exams keep their own fixed timer and skip the modal).
+  const [timerMode, setTimerMode] = useState<TimerMode | null>(placement ? "normal" : null);
+  const ready = timerMode != null;
+  // Explanation ("guidebook") and hints for the current question.
+  const [noteOpen, setNoteOpen] = useState<"charged" | "free" | null | false>(false);
+  const [hint, setHint] = useState<Text | null>(null);
+  const [struck, setStruck] = useState<number | null>(null);
+  const usedNotes = useRef(new Set<string>());
+  const pausedAt = useRef(0);
 
   const stats = useRef({ mistakes: 0, maxCombo: 0, correct: 0, attempts: [] as { lesson: string; beat: number; correct: boolean; ms: number }[], placement: [] as { topic: string; correct: boolean }[] });
   const failed = useRef(false);
@@ -70,6 +82,8 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
   const lastInput = useRef(Date.now());
   const phaseRef = useRef<Phase>("intro");
   phaseRef.current = phase;
+  const noteOpenRef = useRef<typeof noteOpen>(false);
+  noteOpenRef.current = noteOpen;
 
   const current = queue[idx];
   const beat: Beat | undefined = current?.beat;
@@ -86,8 +100,9 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
     });
   }, [score]);
 
-  // ── intro ──
+  // ── intro (after the timer choice) ──
   useEffect(() => {
+    if (!ready) return;
     music.play(boss ? "boss" : placement ? "exam" : "lesson");
     let alive = true;
     (async () => {
@@ -105,13 +120,15 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
     })();
     return () => { alive = false; music.stop(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [ready]);
 
   // ── per-beat setup ──
   useEffect(() => {
     if (phase !== "play" || !beat) return;
     failed.current = false;
     setExplain(null);
+    setHint(null);
+    setStruck(null);
     setTimeLeft(1);
     beatStart.current = Date.now();
     lastInput.current = Date.now();
@@ -123,10 +140,12 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idx, phase === "play"]);
 
-  // ── speed timer (bonus; in boss fights running out is a hit) ──
-  const limit = (beat && isQuestion(beat) ? beat.time ?? (beat.kind === "run" ? 120 : 25) : 0) * 1000;
+  // ── speed timer (bonus; in boss fights running out is a hit). Paused while the guidebook is open. ──
+  const mode: TimerMode = timerMode ?? "normal";
+  const limit = !beat || !isQuestion(beat) ? 0 : placement ? (beat.time ?? (beat.kind === "run" ? 120 : 25)) * 1000 : questionLimitMs(beat, mode, boss);
+  const noteKey = current ? `${current.lesson}#${current.index}` : "";
   useEffect(() => {
-    if (phase !== "play" || !limit) return;
+    if (phase !== "play" || !limit || noteOpen !== false) return;
     const id = setInterval(() => {
       if (failed.current) return;
       const left = Math.max(0, 1 - (Date.now() - beatStart.current) / limit);
@@ -135,7 +154,43 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
     }, 100);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idx, phase, limit]);
+  }, [idx, phase, limit, noteOpen]);
+
+  // ── guidebook and hints ──
+  const notes = (current && play.notes?.[current.lesson]) ?? [];
+  const canHelp = !placement && notes.length > 0;
+  const openNote = () => {
+    if (!current || noteOpen !== false) return;
+    pausedAt.current = Date.now();
+    let cost: "charged" | "free" | null = null;
+    if (beat && isQuestion(beat) && phase === "play") {
+      // Reading the explanation during a question costs 25% of it, once per question.
+      cost = usedNotes.current.has(noteKey) ? "free" : "charged";
+      usedNotes.current.add(noteKey);
+    }
+    setNoteOpen(cost);
+  };
+  const closeNote = () => {
+    beatStart.current += Date.now() - pausedAt.current; // the time spent reading doesn't count
+    lastInput.current = Date.now();
+    setNoteOpen(false);
+  };
+  const takeHint = (at: Element | null) => {
+    const sv = saveRef.current;
+    if (!beat || !isQuestion(beat) || hint || phase !== "play" || !sv) return;
+    if (!beat.hint) { fx.float(at, t("lesson.noHint"), "var(--white)", 12); return; }
+    const spent = spendTicket(sv);
+    if (!spent) { sfx.wrong(); fx.shake(at, 6); fx.float(at, t("lesson.noTickets"), "var(--red)", 12); return; }
+    void commit(spent);
+    sfx.coin();
+    fx.burst(at, { count: 10, colors: ["var(--gold)", "var(--white)"] });
+    setHint(beat.hint);
+    // On multiple choice, the hint also strikes out one wrong option.
+    if (beat.kind === "pick" || beat.kind === "predict") {
+      const wrong = beat.options.map((_, i) => i).filter((i) => i !== beat.answer);
+      if (wrong.length > 1) setStruck(wrong[(idx * 7 + wrong.length) % wrong.length]);
+    }
+  };
 
   // ── idle micro-events: never let the screen go quiet ──
   useEffect(() => {
@@ -143,7 +198,7 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
     window.addEventListener("pointerdown", touch);
     window.addEventListener("keydown", touch);
     const id = setInterval(() => {
-      if (phaseRef.current !== "play" || !beat || !isQuestion(beat)) return;
+      if (phaseRef.current !== "play" || !beat || !isQuestion(beat) || noteOpenRef.current !== false) return;
       if (Date.now() - lastInput.current > 9000) {
         lastInput.current = Date.now();
         stage.current?.heroSay(tRef.current(CHEERS[Math.floor(Math.random() * CHEERS.length)]));
@@ -210,10 +265,11 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
       record(true);
       if (placement) { sfx.correct(0); fx.burst(at ?? null); await wait(350); await next(); return; }
       const newCombo = combo + 1;
-      const speed = limit ? Math.max(0, 1 - (Date.now() - beatStart.current) / limit) : 0;
+      const usedNote = usedNotes.current.has(noteKey);
+      const speed = limit && !usedNote ? Math.max(0, 1 - (Date.now() - beatStart.current) / limit) : 0;
       const tierKey: MessageKey = speed > 0.66 ? "lesson.perfect" : speed > 0.33 ? "lesson.great" : "lesson.nice";
       const tier = t(tierKey);
-      const points = Math.round((100 + Math.round(speed * 60)) * (1 + Math.min(newCombo - 1, 10) * 0.1));
+      const points = questionPoints({ speed, combo: newCombo, mode, usedNote });
       setCombo(newCombo);
       stats.current.maxCombo = Math.max(stats.current.maxCombo, newCombo);
       stats.current.correct++;
@@ -269,7 +325,8 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
       setTimeout(() => stage.current?.healEnemy(), 500);
     }
     if (h <= 0) {
-      setTimeout(() => { music.play("jingle:gameover"); setPhase("gameover"); }, 900);
+      // After the game-over jingle, a calm loop keeps playing while the player decides.
+      setTimeout(() => { music.play("jingle:gameover", { then: "card" }); setPhase("gameover"); }, 900);
       if (!review && saveRef.current) {
         void commit(recordFailedRun(saveRef.current, play.languageSlug, play.slug, stats.current.attempts.map((a) => ({ beat: a.beat, correct: a.correct }))));
       }
@@ -349,6 +406,35 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
               <div className="pixel" style={{ fontSize: 9, color: "var(--red)" }}>{t("lesson.almost", { name: tx(play.guide.name).toUpperCase() })}</div>
               <div style={{ fontSize: 18, color: "var(--p0)" }}>{tx(explain)}</div>
               {!placement && isQuestion(beat!) && current.retry < 2 && <div className="pixel" style={{ fontSize: 8, color: "var(--p1)", marginTop: 4 }}>{t("lesson.bugReturns")}</div>}
+              {canHelp && (
+                <button className="btn small" onClick={openNote} style={{ marginTop: 8, display: "flex", gap: 6, alignItems: "center" }}>
+                  <Sprite name="book" size={14} /> {t("lesson.readMore")}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+        {canHelp && beat && phase !== "intro" && phase !== "result" && phase !== "gameover" && (
+          <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", marginBottom: 8, flexWrap: "wrap" }}>
+            <button className="btn small" onClick={openNote} aria-label={t("lesson.explain")} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <Sprite name="book" size={16} /> {t("lesson.explain")}
+              {isQuestion(beat) && phase === "play" && !usedNotes.current.has(noteKey) && <span style={{ color: "var(--red)", fontSize: 8 }}>−25%</span>}
+            </button>
+            {isQuestion(beat) && (
+              <button className="btn small" onClick={(e) => takeHint(e.currentTarget)} disabled={!!hint || phase !== "play"} aria-label={t("lesson.hint")} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <Sprite name="bulb" size={16} /> {t("lesson.hint")}
+                <span style={{ display: "flex", gap: 2, alignItems: "center", fontSize: 9 }}><Sprite name="ticket" size={14} />{save?.stats.tickets ?? 0}</span>
+              </button>
+            )}
+          </div>
+        )}
+        {hint && (
+          <div className="box" style={{ display: "flex", gap: 12, padding: 10, marginBottom: 12, background: "var(--gold)", alignItems: "center" }}>
+            <Sprite name="bulb" size={32} />
+            <div>
+              <div className="pixel" style={{ fontSize: 9, color: "var(--p1)" }}>{t("lesson.hintTitle", { name: tx(play.guide.name).toUpperCase() })}</div>
+              <div style={{ fontSize: 18, color: "var(--p0)" }}>{tx(hint)}</div>
+              {struck != null && <div className="pixel" style={{ fontSize: 8, color: "var(--p1)", marginTop: 4 }}>{t("lesson.hintStruck")}</div>}
             </div>
           </div>
         )}
@@ -358,7 +444,7 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
               {current.retry > 0 && <div className="pixel blink" style={{ fontSize: 10, color: "var(--red)", marginBottom: 8 }}>{t("lesson.bugBack")}</div>}
               {beat.kind === "dialog" && <DialogBeatView beat={beat} ctx={ctx} enemy={play.enemy} enemyName={play.enemyName} guide={play.guide} />}
               {beat.kind === "act" && <ActBeatView beat={beat} ctx={ctx} />}
-              {(beat.kind === "pick" || beat.kind === "predict") && <ChoiceBeatView beat={beat} ctx={ctx} seed={seed} />}
+              {(beat.kind === "pick" || beat.kind === "predict") && <ChoiceBeatView beat={beat} ctx={ctx} seed={seed} struck={struck} />}
               {beat.kind === "type" && <TypeBeatView beat={beat} ctx={ctx} />}
               {beat.kind === "order" && <OrderBeatView beat={beat} ctx={ctx} seed={seed} />}
               {beat.kind === "run" && <RunBeatView beat={beat} ctx={ctx} />}
@@ -367,6 +453,22 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
         </div>
       </main>
 
+      {!ready && (
+        <TimerModal
+          boss={boss}
+          initial={save?.prefs.timer ?? "normal"}
+          baseSeconds={Math.round(
+            play.beats.filter((b) => isQuestion(b.beat) && b.beat.kind !== "run").reduce((sum, b, _i, all) => sum + questionSeconds(b.beat) / all.length, 0) || 20,
+          )}
+          onStart={(m) => {
+            setTimerMode(m);
+            if (saveRef.current && saveRef.current.prefs.timer !== m) void commit(setTimerPref(saveRef.current, m));
+          }}
+        />
+      )}
+      {noteOpen !== false && current && (
+        <NotePanel notes={notes} initialId={beat?.note} lang={play.codeLang} guideSprite={play.guide.sprite} cost={noteOpen} onClose={closeNote} />
+      )}
       {phase === "result" && placement && <ExamReportView report={examReport} lang={play.languageSlug} />}
       {phase === "result" && !placement && (
         <ResultScreen

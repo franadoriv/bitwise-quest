@@ -1,4 +1,4 @@
-import type { Beat, LessonDef, RegionDef, Text } from "../../../lib/content/types.ts";
+import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
 
 // REGION 4 · OBJECT TOWER (classes and attributes, inheritance and dataclasses, generators and
@@ -17,7 +17,116 @@ const exc = (name: string) => L(name, name, name);
 const PRINT = L("What does it print?", "¿Qué imprime?", "何が表示される？");
 const HAPPENS = L("What happens?", "¿Qué pasa?", "どうなる？");
 
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example; the validator checks `output` against the real interpreter. */
+const ex = (src: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code: src, output, caption });
+
 // ─── 4.1 Blueprints: classes and attributes ─────────────────────────────────
+const classesNote = note("classes-self", L("Classes, __init__ and self", "Clases, __init__ y self", "クラスと __init__ と self"),
+  p(
+    "class Name: defines a blueprint. Calling Name(...) builds a brand new instance, and Python immediately calls its __init__ method with the arguments you passed. __init__ sets the new object up; it does not return anything.",
+    "class Nombre: define un plano. Llamar Nombre(...) construye una instancia nueva, y Python llama de inmediato a su método __init__ con los argumentos que pasaste. __init__ prepara el objeto nuevo; no devuelve nada.",
+    "class 名前: で設計図を作る。名前(...) と呼ぶと新しいインスタンスができ、Pythonはすぐにわたした引数で __init__ を呼ぶ。__init__ は新しいオブジェクトを準備するだけで、何も返さないよ。",
+  ),
+  p(
+    "Every method receives the instance itself as its first parameter, called self by convention. self.attr = value sticks an attribute on THAT instance, so each object keeps its own values. obj.attr reads it back, and obj.attr -= 1 changes only that object.",
+    "Todo método recibe la propia instancia como primer parámetro, llamado self por convención. self.attr = valor pega un atributo en ESA instancia, así que cada objeto guarda sus propios valores. obj.attr lo lee, y obj.attr -= 1 cambia solo ese objeto.",
+    "どのメソッドも最初の引数でインスタンス自身を受けとる。名前は慣習で self。self.attr = 値 はそのインスタンスに属性を貼るので、オブジェクトごとに自分の値を持つ。obj.attr で読み、obj.attr -= 1 はその1つだけを変えるよ。",
+  ),
+  ex(code("class Lamp:", "    def __init__(self, room):", "        self.room = room", "        self.on = False", 'a = Lamp("hall")', 'b = Lamp("attic")', "a.on = True", "print(a.room, a.on, b.room, b.on)"), "hall True attic False",
+    L("Each lamp keeps its own attributes", "Cada lámpara guarda sus propios atributos", "ランプごとに自分の属性を持つ")),
+  p(
+    "Methods are called as obj.method(), and Python passes obj as self for you. Inside a method, reach the object's data through self. A bare name like room = room only creates a local variable that vanishes when the method ends; the instance never gets the attribute.",
+    "Los métodos se llaman como obj.metodo(), y Python pasa obj como self por ti. Dentro de un método, llega a los datos del objeto a través de self. Un nombre suelto como room = room solo crea una variable local que desaparece al terminar el método; la instancia nunca recibe el atributo.",
+    "メソッドは obj.メソッド() と呼び、Pythonが obj を self としてわたしてくれる。メソッドの中ではデータに self 経由でアクセスする。room = room のような裸の名前はローカル変数を作るだけで、メソッドが終われば消え、インスタンスには属性がつかないよ。",
+  ),
+  ex(code("class Timer:", "    def __init__(self, secs):", "        self.secs = secs", "    def tick(self):", "        self.secs -= 1", "        return self.secs", "t = Timer(3)", "t.tick()", "print(t.tick())"), "1",
+    L("tick changes the timer's own secs through self", "tick cambia el secs del propio temporizador vía self", "tick は self を通して自分の secs を変える")),
+  p(
+    "Common mistakes: forgetting self in a method's parameter list (calling it then raises TypeError, because Python still passes the instance), and forgetting self. when storing or reading attributes, which leads to AttributeError later.",
+    "Errores comunes: olvidar self en la lista de parámetros de un método (al llamarlo da TypeError, porque Python igual pasa la instancia) y olvidar self. al guardar o leer atributos, lo que luego causa AttributeError.",
+    "よくあるミス：メソッドの引数に self を書き忘れる（Pythonはインスタンスをわたすので呼ぶと TypeError）。属性を読み書きするときに self. を忘れ、あとで AttributeError になる。",
+  ),
+);
+
+const classAttrNote = note("class-attributes", L("Class vs instance attributes", "Atributos de clase y de instancia", "クラス属性とインスタンス属性"),
+  p(
+    "A variable written directly in the class body, outside any method, is a class attribute: it belongs to the class itself and every instance shares it. Reading obj.name looks on the instance first and, if it isn't there, on the class.",
+    "Una variable escrita directamente en el cuerpo de la clase, fuera de los métodos, es un atributo de clase: pertenece a la clase y todas las instancias la comparten. Leer obj.nombre busca primero en la instancia y, si no está, en la clase.",
+    "クラスの本体に直接（メソッドの外に）書いた変数はクラス属性。クラス自身のもので、全インスタンスが共有する。obj.名前 を読むと、まずインスタンス、なければクラスを探すよ。",
+  ),
+  p(
+    "Assigning obj.name = value always writes on that instance. It creates the instance's own attribute, which hides the class one for that object only. The class and the other instances keep the class value. Changing Class.name, on the other hand, is seen by every instance without its own copy.",
+    "Asignar obj.nombre = valor siempre escribe en esa instancia. Crea un atributo propio de la instancia, que oculta el de la clase solo para ese objeto. La clase y las demás instancias conservan el valor de clase. En cambio, cambiar Clase.nombre lo ven todas las instancias sin copia propia.",
+    "obj.名前 = 値 の代入は必ずそのインスタンスに書く。インスタンス専用の属性ができ、そのオブジェクトだけクラスのものを隠す。クラスと他のインスタンスはクラスの値のまま。一方 クラス.名前 を変えると、自分の分を持たない全インスタンスに見えるよ。",
+  ),
+  ex(code("class Car:", "    wheels = 4", "x = Car()", "Car.wheels = 6", "print(x.wheels)", "x.wheels = 3", "print(x.wheels, Car.wheels)"), "6\n3 6",
+    L("x reads the class until it gets its own wheels", "x lee la clase hasta tener su propio wheels", "自分の wheels を持つまで、x はクラスの値を読む")),
+  p(
+    "The trap is a MUTABLE class attribute, like a list. Calling a method on it, such as append, assigns nothing: it changes the one shared list, so every instance sees the change. Containers that belong to each object go in __init__: self.items = [].",
+    "La trampa es un atributo de clase MUTABLE, como una lista. Llamar un método sobre él, como append, no asigna nada: cambia la única lista compartida, así que todas las instancias ven el cambio. Los contenedores de cada objeto van en __init__: self.items = [].",
+    "ワナは変更できるクラス属性、たとえばリスト。append などのメソッド呼び出しは代入ではないので、共有の1つのリストが変わり、全インスタンスに見える。オブジェクトごとの入れ物は __init__ で self.items = [] と作ろう。",
+  ),
+  ex(code("class Shelf:", "    def __init__(self):", "        self.books = []", "a = Shelf()", "b = Shelf()", 'a.books.append("Dune")', "print(a.books, b.books)"), "['Dune'] []",
+    L("A list made in __init__ belongs to one shelf only", "Una lista creada en __init__ es de un solo estante", "__init__ で作ったリストは1つの棚だけのもの")),
+  p(
+    "Rule to remember: class attributes are for shared constants; per-object state is set through self in __init__. When reading code, ask: is this line assigning (a new instance attribute) or mutating (the shared object)?",
+    "Regla para recordar: los atributos de clase son para constantes compartidas; el estado de cada objeto se crea con self en __init__. Al leer código, pregúntate: ¿esta línea asigna (un atributo nuevo de instancia) o modifica (el objeto compartido)?",
+    "覚え方：クラス属性は共有の定数用、オブジェクトごとの状態は __init__ で self に作る。コードを読むときは「この行は代入（新しいインスタンス属性）？それとも中身の変更（共有オブジェクト）？」と考えよう。",
+  ),
+);
+
+const dunderNote = note("dunder", L("Dunder methods: ==, + and repr", "Métodos dunder: ==, + y repr", "ダンダーメソッド：== と + と repr"),
+  p(
+    "Special methods with double underscores (\"dunder\") let your class work with Python's operators and built-ins. a + b calls a.__add__(b), a == b calls a.__eq__(b), print(a) uses __str__, and repr(a) uses __repr__. You never call them by name; the operator does.",
+    "Los métodos especiales con doble guion bajo (\"dunder\") permiten que tu clase funcione con los operadores y funciones de Python. a + b llama a.__add__(b), a == b llama a.__eq__(b), print(a) usa __str__ y repr(a) usa __repr__. No los llamas por nombre; lo hace el operador.",
+    "前後に2つずつアンダースコアがつく特別なメソッド（ダンダー）で、クラスが演算子や組みこみ関数に対応する。a + b は a.__add__(b)、a == b は a.__eq__(b)、print(a) は __str__、repr(a) は __repr__ を呼ぶ。名前で呼ぶのではなく演算子が呼ぶよ。",
+  ),
+  p(
+    "Without __eq__, == falls back to identity: it is True only when both sides are the very same object, exactly like is. Two objects built separately with the same data are NOT equal. Define __eq__ to compare the data. is always asks \"same object?\", whatever __eq__ says.",
+    "Sin __eq__, == recurre a la identidad: solo es True si ambos lados son exactamente el mismo objeto, igual que is. Dos objetos creados por separado con los mismos datos NO son iguales. Define __eq__ para comparar los datos. is siempre pregunta \"¿mismo objeto?\", diga lo que diga __eq__.",
+    "__eq__ がないと == は同一性を調べる。両側がまったく同じオブジェクトのときだけ True で、is と同じだ。同じデータでも別々に作った2つは等しくない。データを比べるには __eq__ を定義する。is は __eq__ に関係なく「同じオブジェクト？」と聞くよ。",
+  ),
+  ex(code("class Coin:", "    def __init__(self, value):", "        self.value = value", "    def __eq__(self, other):", "        return self.value == other.value", "c = Coin(5)", "print(c == Coin(5), c == Coin(9), c is c)"), "True False True",
+    L("__eq__ compares values; is compares identity", "__eq__ compara valores; is compara identidad", "__eq__ は値を、is は同一性を比べる")),
+  p(
+    "__add__ should build and return a NEW object, usually of the same class, so a + b gives a fresh result. __str__ is the friendly view used by print and str(). __repr__ is the developer view used by repr() and whenever the object sits inside a list or dict. If only __repr__ exists, print uses it too.",
+    "__add__ debe crear y devolver un objeto NUEVO, normalmente de la misma clase, para que a + b dé un resultado fresco. __str__ es la vista amigable que usan print y str(). __repr__ es la vista de desarrollador que usan repr() y cualquier lista o dict que contenga el objeto. Si solo existe __repr__, print también lo usa.",
+    "__add__ はふつう同じクラスの新しいオブジェクトを作って返す。__str__ は print や str() が使う読みやすい表示。__repr__ は repr() や、リスト・辞書の中にあるときに使う開発者向けの表示。__repr__ しかなければ print もそれを使うよ。",
+  ),
+  ex(code("class Money:", "    def __init__(self, cents):", "        self.cents = cents", "    def __add__(self, other):", "        return Money(self.cents + other.cents)", "    def __repr__(self):", '        return f"Money({self.cents})"', "print(Money(150) + Money(75))"), "Money(225)",
+    L("+ builds a new Money; print falls back to __repr__", "+ crea un Money nuevo; print recurre a __repr__", "+ で新しい Money、print は __repr__ を使う")),
+  ex(code("class Tag:", "    def __str__(self):", '        return "nice tag"', "    def __repr__(self):", '        return "Tag()"', "t = Tag()", "print(str(t), repr(t))", 'print({"k": t})'), "nice tag Tag()\n{'k': Tag()}",
+    L("Inside a dict, the object shows its __repr__", "Dentro de un dict, el objeto muestra su __repr__", "辞書の中では __repr__ が表示される")),
+);
+
+const propertyNote = note("property", L("@property and setters", "@property y setters", "@property とセッター"),
+  p(
+    "@property turns a method into something you read like an attribute: obj.area runs the method, with no parentheses. Because it runs on every read, the value is always computed from the object's current data; it never goes stale.",
+    "@property convierte un método en algo que se lee como un atributo: obj.area ejecuta el método, sin paréntesis. Como corre en cada lectura, el valor siempre se calcula con los datos actuales del objeto; nunca queda desactualizado.",
+    "@property はメソッドを属性のように読めるものに変える。obj.area でかっこなしにメソッドが動く。読むたびに動くので、値はいつも今のデータから計算され、古くならないよ。",
+  ),
+  ex(code("class Rect:", "    def __init__(self, w, h):", "        self.w, self.h = w, h", "    @property", "    def area(self):", "        return self.w * self.h", "r = Rect(2, 3)", "r.w = 10", "print(r.area)"), "30",
+    L("area is recomputed from the new width", "area se recalcula con el nuevo ancho", "area は新しい幅から計算し直される")),
+  p(
+    "To allow writing, add a setter: decorate a second method of the same name with @name.setter. Then obj.name = value runs that method, which can check, convert or clamp the value. The real data lives in an attribute with a leading underscore, like self._level, a convention that means \"internal\".",
+    "Para permitir escribir, añade un setter: decora un segundo método con el mismo nombre con @nombre.setter. Entonces obj.nombre = valor ejecuta ese método, que puede revisar, convertir o limitar el valor. El dato real vive en un atributo con guion bajo inicial, como self._level, una convención que significa \"interno\".",
+    "書きこみを許すにはセッターを足す。同じ名前の2つ目のメソッドに @名前.setter をつける。すると obj.名前 = 値 でそのメソッドが動き、値を確認・変換・制限できる。本当のデータは self._level のように _ で始まる属性に置く。「内部用」という慣習だよ。",
+  ),
+  ex(code("class Volume:", "    def __init__(self):", "        self._level = 0", "    @property", "    def level(self):", "        return self._level", "    @level.setter", "    def level(self, v):", "        self._level = min(10, v)", "vol = Volume()", "vol.level = 25", "print(vol.level)"), "10",
+    L("The setter caps every write at 10", "El setter limita cada escritura a 10", "セッターが書きこみを 10 までにおさえる")),
+  p(
+    "A property with no setter is read-only: assigning to it raises AttributeError. Common mistake: storing into self.level inside the level setter itself. That assignment calls the setter again, forever, until RecursionError. Store into the underscore attribute instead.",
+    "Una property sin setter es de solo lectura: asignarle lanza AttributeError. Error común: guardar en self.level dentro del propio setter de level. Esa asignación vuelve a llamar al setter, sin fin, hasta un RecursionError. Guarda en el atributo con guion bajo.",
+    "セッターのない property は読み取り専用で、代入すると AttributeError。よくあるミス：level のセッターの中で self.level に代入すること。その代入がまたセッターを呼び、RecursionError まで止まらない。_ つきの属性にしまおう。",
+  ),
+);
+
+const classesNotes: NoteDef[] = [classesNote, classAttrNote, dunderNote, propertyNote];
+
 const classes: LessonDef = {
   slug: "classes-and-attributes",
   title: L("Blueprints", "Planos", "設計図"),
@@ -26,6 +135,7 @@ const classes: LessonDef = {
   xp: 75,
   enemy: "golem",
   enemyName: L("BLUEPRINT GOLEM", "GÓLEM DE PLANOS", "設計図ゴーレム"),
+  notes: classesNotes,
   beats: [
     say(L(
       "Welcome to the Object Tower! A CLASS is a blueprint. Calling it builds an INSTANCE, and __init__ sets it up.",
@@ -51,6 +161,8 @@ const classes: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("__init__ stores the starting values on the instance. Then one line changes that instance's hp.", "__init__ guarda los valores iniciales en la instancia. Luego una línea cambia el hp de esa instancia.", "__init__ が最初の値をインスタンスにしまう。そのあと1行でそのインスタンスの hp が変わる。"),
+      note: "classes-self",
       prompt: PRINT,
       code: code("class Hero:", "    def __init__(self, name):", "        self.name = name", "        self.hp = 10", 'h = Hero("Ada")', "h.hp -= 3", "print(h.name, h.hp)"),
       options: ["Ada 7", "Ada 10", "Hero 7"],
@@ -63,6 +175,8 @@ const classes: LessonDef = {
     },
     {
       kind: "type",
+      hint: L("Look at the method body: which name is used to store power on the new object?", "Mira el cuerpo del método: ¿qué nombre se usa para guardar power en el objeto nuevo?", "メソッドの本体を見よう。新しいオブジェクトに power をしまうのに使っている名前は？"),
+      note: "classes-self",
       prompt: L("Name the instance parameter", "Nombra el parámetro de la instancia", "インスタンスの引数名は？"),
       code: code("class Potion:", "    def __init__(___, power):", "        self.power = power", "print(Potion(5).power)"),
       answer: "self",
@@ -77,6 +191,8 @@ const classes: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("Assigning on an instance creates that instance's own attribute. Who still reads the class value?", "Asignar en una instancia crea un atributo propio de esa instancia. ¿Quién sigue leyendo el valor de clase?", "インスタンスへの代入は、そのインスタンス専用の属性を作る。クラスの値を読み続けるのはだれ？"),
+      note: "class-attributes",
       prompt: PRINT,
       code: code("class Hero:", "    level = 1", "a = Hero()", "b = Hero()", "a.level = 5", "print(a.level, b.level, Hero.level)"),
       options: ["5 1 1", "5 5 5", "5 5 1"],
@@ -88,6 +204,8 @@ const classes: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("append changes a list without assigning. How many team lists exist in this program?", "append cambia una lista sin asignar. ¿Cuántas listas team existen en este programa?", "append は代入せずにリストを変える。このプログラムに team のリストはいくつある？"),
+      note: "class-attributes",
       prompt: PRINT,
       code: code("class Hero:", "    team = []", "    def __init__(self, name):", "        self.team.append(name)", 'a = Hero("Ada")', 'b = Hero("Bo")', "print(a.team, Hero.team is b.team)"),
       options: ["['Ada', 'Bo'] True", "['Ada'] False", "['Ada', 'Bo'] False"],
@@ -108,6 +226,8 @@ const classes: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("A has no __eq__. What does == compare when a class doesn't define it?", "A no tiene __eq__. ¿Qué compara == cuando una clase no lo define?", "A には __eq__ がない。定義がないとき == は何を比べる？"),
+      note: "dunder",
       prompt: PRINT,
       code: code("class A:", "    def __init__(self, n):", "        self.n = n", "print(A(1) == A(1))"),
       options: ["False", "True", "TypeError"],
@@ -119,6 +239,8 @@ const classes: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("+ calls __add__ and == calls __eq__, but is ignores both. How many objects does is see?", "+ llama a __add__ y == a __eq__, pero is ignora ambos. ¿Cuántos objetos ve is?", "+ は __add__、== は __eq__ を呼ぶが、is はどちらも使わない。is が見るオブジェクトはいくつ？"),
+      note: "dunder",
       prompt: PRINT,
       code: code("class Vec:", "    def __init__(self, x, y):", "        self.x, self.y = x, y", "    def __add__(self, o):", "        return Vec(self.x + o.x, self.y + o.y)", "    def __eq__(self, o):", "        return (self.x, self.y) == (o.x, o.y)", "v = Vec(1, 2) + Vec(3, 4)", "print(v.x, v.y, Vec(1, 1) == Vec(1, 1), Vec(1, 1) is Vec(1, 1))"),
       options: ["4 6 True False", "4 6 True True", "4 6 False False"],
@@ -130,6 +252,8 @@ const classes: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("print uses one view of an object; a list shows its items with the other view.", "print usa una vista del objeto; una lista muestra sus elementos con la otra vista.", "print はオブジェクトの一方の表示を使い、リストは中身をもう一方の表示で見せる。"),
+      note: "dunder",
       prompt: PRINT,
       code: code("class Hero:", "    def __init__(self, name):", "        self.name = name", "    def __repr__(self):", '        return f"Hero({self.name!r})"', "    def __str__(self):", '        return f"the hero {self.name}"', 'h = Hero("Ada")', "print(h, [h])"),
       options: ["the hero Ada [Hero('Ada')]", "the hero Ada [the hero Ada]", "Hero('Ada') [Hero('Ada')]"],
@@ -146,6 +270,8 @@ const classes: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("Assigning to h.hp runs the setter. What does the setter actually store?", "Asignar a h.hp ejecuta el setter. ¿Qué guarda realmente el setter?", "h.hp への代入でセッターが動く。セッターが実際にしまう値は？"),
+      note: "property",
       prompt: PRINT,
       code: code("class Hero:", "    def __init__(self, hp):", "        self._hp = hp", "    @property", "    def hp(self):", "        return self._hp", "    @hp.setter", "    def hp(self, value):", "        self._hp = max(0, value)", "h = Hero(5)", "h.hp = -3", "print(h.hp)"),
       options: ["0", "-3", "5"],
@@ -157,6 +283,8 @@ const classes: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("This property has a getter but no setter. What does Python do when you assign to it?", "Esta property tiene getter pero no setter. ¿Qué hace Python cuando le asignas?", "この property には読む関数だけでセッターがない。代入するとPythonはどうする？"),
+      note: "property",
       prompt: HAPPENS,
       code: code("class Hero:", "    @property", "    def hp(self):", "        return 10", "h = Hero()", "h.hp = 5"),
       options: ["AttributeError", L("hp becomes 5", "hp pasa a 5", "hp が 5 になる"), "TypeError"],
@@ -167,6 +295,8 @@ const classes: LessonDef = {
     },
     {
       kind: "run",
+      hint: L("power = power only rebinds a local name. The value must be stored on the instance.", "power = power solo reasigna un nombre local. El valor debe guardarse en la instancia.", "power = power はローカルの名前を付け直すだけ。値はインスタンスにしまう必要がある。"),
+      note: "classes-self",
       prompt: L("Fix the potion: it must print potion of 5", "Arregla la poción: debe imprimir potion of 5", "ポーションを直して potion of 5 と表示しよう"),
       starter: code("class Potion:", "    def __init__(self, power):", "        power = power", "", "    def describe(self):", '        return f"potion of {self.power}"', "", "print(Potion(5).describe())", ""),
       solution: code("class Potion:", "    def __init__(self, power):", "        self.power = power", "", "    def describe(self):", '        return f"potion of {self.power}"', "", "print(Potion(5).describe())", ""),
@@ -182,6 +312,122 @@ const classes: LessonDef = {
 };
 
 // ─── 4.2 Bloodlines: inheritance and dataclasses ────────────────────────────
+const inheritNote = note("inheritance", L("Inheritance and overriding", "Herencia y sobrescritura", "継承とオーバーライド"),
+  p(
+    "class Child(Parent): makes Child inherit every method and attribute of Parent, so a Child object can do everything a Parent can. When you call a method, Python looks in the object's own class first, then in its parent, then the parent's parent, and uses the first one it finds.",
+    "class Hija(Padre): hace que Hija herede todos los métodos y atributos de Padre, así que un objeto Hija puede hacer todo lo que hace un Padre. Al llamar un método, Python busca primero en la clase del objeto, luego en su padre, luego en el padre del padre, y usa el primero que encuentra.",
+    "class 子(親): で、子は親のメソッドと属性をすべて受けつぐ。子のオブジェクトは親にできることが全部できる。メソッドを呼ぶと、Pythonはまずオブジェクト自身のクラス、次に親、その親…と探し、最初に見つけたものを使うよ。",
+  ),
+  p(
+    "To override, define a method with the same name in the child: for child objects, the child's version wins. Parent objects still use the parent's version. Methods the child doesn't redefine are simply inherited, even across several levels.",
+    "Para sobrescribir, define un método con el mismo nombre en la hija: para los objetos hija, gana la versión de la hija. Los objetos padre siguen usando la del padre. Los métodos que la hija no redefine simplemente se heredan, incluso a través de varios niveles.",
+    "オーバーライドするには、子に同じ名前のメソッドを書く。子のオブジェクトでは子の版が勝ち、親のオブジェクトは親の版のまま。子が書き直さないメソッドは、何段あってもそのまま受けつがれるよ。",
+  ),
+  ex(code("class Bird:", "    def move(self):", '        return "fly"', "    def eat(self):", '        return "seeds"', "class Penguin(Bird):", "    def move(self):", '        return "swim"', "print(Penguin().move(), Penguin().eat(), Bird().move())"), "swim seeds fly",
+    L("move is overridden; eat is inherited", "move se sobrescribe; eat se hereda", "move はオーバーライド、eat は継承")),
+  p(
+    "isinstance(obj, Cls) is True when obj's class is Cls or any descendant of it. issubclass(A, B) asks whether class A is B or descends from it. The relation goes one way only: every Square is a Shape, but not every Shape is a Square.",
+    "isinstance(obj, Cls) es True cuando la clase de obj es Cls o cualquier descendiente. issubclass(A, B) pregunta si la clase A es B o desciende de ella. La relación va en un solo sentido: todo Square es un Shape, pero no todo Shape es un Square.",
+    "isinstance(obj, Cls) は obj のクラスが Cls かその子孫なら True。issubclass(A, B) はクラス A が B か、その子孫かを聞く。関係は一方通行で、Square はみな Shape だが、Shape がみな Square とは限らないよ。",
+  ),
+  ex(code("class Shape: pass", "class Polygon(Shape): pass", "class Square(Polygon): pass", "print(isinstance(Square(), Shape))", "print(issubclass(Shape, Square))"), "True\nFalse",
+    L("Descendants count, even two levels down; ancestors don't", "Los descendientes cuentan, aunque estén dos niveles abajo; los ancestros no", "2段下の子孫も数えるが、祖先は数えない")),
+);
+
+const superNote = note("super-init", L("super() and the parent's __init__", "super() y el __init__ del padre", "super() と親の __init__"),
+  p(
+    "If a child class defines its own __init__, it REPLACES the parent's: Python calls only the child's. The parent's setup lines never run, so the attributes they would create don't exist, and reading one later raises AttributeError.",
+    "Si una clase hija define su propio __init__, REEMPLAZA al del padre: Python llama solo al de la hija. Las líneas de preparación del padre nunca corren, así que los atributos que crearían no existen, y leer uno después lanza AttributeError.",
+    "子クラスが自分の __init__ を書くと、親のものは置きかわり、Pythonは子のものだけを呼ぶ。親の準備の行は動かないので、そこで作られるはずの属性はなく、あとで読むと AttributeError になるよ。",
+  ),
+  p(
+    "The fix: call super().__init__(...) inside the child's __init__, passing what the parent needs, and then set the child's own attributes. super() gives you the parent's version of a method, bound to the same object.",
+    "La solución: llama super().__init__(...) dentro del __init__ de la hija, pasando lo que necesita el padre, y luego crea los atributos propios de la hija. super() te da la versión del padre de un método, ligada al mismo objeto.",
+    "直し方：子の __init__ の中で super().__init__(...) を呼び、親に必要なものをわたしてから、子の属性を作る。super() は同じオブジェクトに結びついた、親の版のメソッドをくれるよ。",
+  ),
+  ex(code("class Account:", "    def __init__(self, owner):", "        self.owner = owner", "        self.balance = 0", "class Savings(Account):", "    def __init__(self, owner, rate):", "        super().__init__(owner)", "        self.rate = rate", 's = Savings("Lin", 2)', "print(s.owner, s.balance, s.rate)"), "Lin 0 2",
+    L("The parent sets owner and balance; the child adds rate", "El padre crea owner y balance; la hija añade rate", "親が owner と balance、子が rate を作る")),
+  p(
+    "Why not self.__init__(...)? self is a child object, so that calls the child's own __init__ again, not the parent's. super() works for any method, not only __init__: it lets a child EXTEND the parent's behavior instead of replacing it.",
+    "¿Por qué no self.__init__(...)? self es un objeto hija, así que eso vuelve a llamar al __init__ de la propia hija, no al del padre. super() sirve para cualquier método, no solo __init__: permite que la hija AMPLÍE el comportamiento del padre en vez de reemplazarlo.",
+    "なぜ self.__init__(...) ではだめ？self は子のオブジェクトなので、親ではなく子自身の __init__ がまた呼ばれる。super() は __init__ 以外のどのメソッドにも使え、親の動きを置きかえずに広げられるよ。",
+  ),
+  ex(code("class Greeter:", "    def hello(self):", '        return "hello"', "class Loud(Greeter):", "    def hello(self):", '        return super().hello().upper() + "!"', "print(Loud().hello())"), "HELLO!",
+    L("The child builds on the parent's result", "La hija se apoya en el resultado del padre", "子が親の結果をもとに組み立てる")),
+);
+
+const mroNote = note("mro", L("Multiple parents and the MRO", "Varios padres y el MRO", "複数の親と MRO"),
+  p(
+    "A class can have several parents: class Both(Left, Right). Python then lines up all the classes in a single order, the Method Resolution Order (MRO): the class itself, its parents from left to right, and a shared ancestor only after ALL of its children. object is always last.",
+    "Una clase puede tener varios padres: class Both(Left, Right). Python ordena entonces todas las clases en una sola fila, el Method Resolution Order (MRO): la clase misma, sus padres de izquierda a derecha y un ancestro compartido solo después de TODOS sus hijos. object siempre va al final.",
+    "クラスは親を複数持てる：class Both(Left, Right)。するとPythonは全クラスを1列に並べる。これが MRO（メソッド解決順序）。クラス自身、親を左から右、共通の祖先はその子が全部並んだあと。object はいつも最後だよ。",
+  ),
+  ex(code("class Base: pass", "class Left(Base): pass", "class Right(Base): pass", "class Both(Left, Right): pass", "print([c.__name__ for c in Both.__mro__])"), "['Both', 'Left', 'Right', 'Base', 'object']",
+    L("__mro__ shows the order Python searches", "__mro__ muestra el orden en que busca Python", "__mro__ は Python が探す順番を示す")),
+  p(
+    "super() does NOT mean \"my parent\". It means \"the next class after mine in the MRO of THIS object\". So in a diamond, a method in Left that calls super() may reach Right, a class Left doesn't even know about, because Right comes next in the object's line.",
+    "super() NO significa \"mi padre\". Significa \"la siguiente clase después de la mía en el MRO de ESTE objeto\". Así que en un diamante, un método de Left que llama a super() puede llegar a Right, una clase que Left ni conoce, porque Right es la siguiente en la fila del objeto.",
+    "super() は「自分の親」ではない。「このオブジェクトの MRO で自分の次のクラス」という意味だ。だからひし形の継承では、Left のメソッドが super() を呼ぶと、Left が知らない Right に届くことがある。オブジェクトの列で Right が次だからだよ。",
+  ),
+  p(
+    "That is how cooperative classes run each method exactly once, even when the shared ancestor is reachable through two paths. Rule to remember: write down the MRO first, then follow super() one step along it at a time.",
+    "Así es como las clases cooperativas ejecutan cada método exactamente una vez, aunque el ancestro compartido se alcance por dos caminos. Regla para recordar: escribe primero el MRO y luego sigue super() un paso a la vez por esa fila.",
+    "こうして協調するクラスは、共通の祖先に2つの道で届く場合でも、各メソッドをちょうど1回ずつ動かす。覚え方：まず MRO を書き出し、super() をその列にそって1歩ずつたどろう。",
+  ),
+);
+
+const dataclassNote = note("dataclass", L("@dataclass writes the boilerplate", "@dataclass escribe lo repetitivo", "@dataclass が定型コードを書く"),
+  p(
+    "@dataclass reads the annotated fields in the class body (name: type, with an optional default) and writes __init__, __repr__ and __eq__ for you. Fields with defaults must come after fields without them, just like function parameters.",
+    "@dataclass lee los campos anotados del cuerpo de la clase (nombre: tipo, con un defecto opcional) y escribe __init__, __repr__ y __eq__ por ti. Los campos con defecto deben ir después de los que no lo tienen, igual que los parámetros de una función.",
+    "@dataclass はクラス本体の型注釈つきフィールド（名前: 型、デフォルトは任意）を読み、__init__、__repr__、__eq__ を書いてくれる。関数の引数と同じく、デフォルトつきのフィールドはなしのものの後に置くよ。",
+  ),
+  ex(code("from dataclasses import dataclass", "@dataclass", "class Point:", "    x: int", "    y: int = 0", "p = Point(3)", "print(p)", "print(p == Point(3, 0), p == Point(4))"), "Point(x=3, y=0)\nTrue False",
+    L("A readable repr and a field-by-field ==", "Un repr legible y un == campo por campo", "読みやすい repr と、フィールドごとの ==")),
+  p(
+    "The generated __repr__ shows ClassName(field=value, ...), and __eq__ compares the field values, so two separately built instances with equal fields are ==. A plain class without __eq__ only compares identity.",
+    "El __repr__ generado muestra NombreClase(campo=valor, ...), y __eq__ compara los valores de los campos, así que dos instancias creadas por separado con campos iguales son ==. Una clase normal sin __eq__ solo compara identidad.",
+    "生成される __repr__ は クラス名(フィールド=値, ...) と表示し、__eq__ はフィールドの値を比べる。だから別々に作っても値が同じなら ==。__eq__ のない普通のクラスは同一性しか比べないよ。",
+  ),
+  p(
+    "Mutable defaults: dataclass refuses a list, dict or set as a plain default, raising ValueError when the class is created, to protect you from the shared-default trap. Use field(default_factory=list) instead: it calls the factory for EACH new instance.",
+    "Defectos mutables: dataclass rechaza una lista, dict o set como defecto simple y lanza ValueError al crear la clase, para protegerte de la trampa del defecto compartido. Usa field(default_factory=list): llama a la fábrica para CADA instancia nueva.",
+    "変更できるデフォルト：dataclass はリスト・辞書・集合をそのままデフォルトにすると、クラスを作る時点で ValueError を出し、共有デフォルトのワナから守ってくれる。かわりに field(default_factory=list) を使えば、インスタンスごとに新しく作るよ。",
+  ),
+  ex(code("from dataclasses import dataclass, field", "@dataclass", "class Team:", "    name: str", "    scores: dict = field(default_factory=dict)", 'red = Team("red")', 'blue = Team("blue")', 'red.scores["a"] = 1', "print(red.scores, blue.scores)"), "{'a': 1} {}",
+    L("Each team gets its own dict from the factory", "Cada equipo recibe su propio dict de la fábrica", "チームごとにファクトリーが辞書を作る")),
+  p(
+    "@dataclass(frozen=True) makes instances read-only: assigning to any field raises dataclasses.FrozenInstanceError. Frozen instances are also hashable, so they can be dictionary keys or set members.",
+    "@dataclass(frozen=True) hace las instancias de solo lectura: asignar cualquier campo lanza dataclasses.FrozenInstanceError. Las instancias congeladas además son hashables, así que pueden ser claves de diccionario o elementos de un set.",
+    "@dataclass(frozen=True) はインスタンスを読み取り専用にし、フィールドに代入すると dataclasses.FrozenInstanceError になる。凍結したインスタンスはハッシュ可能なので、辞書のキーや集合の要素にもなれるよ。",
+  ),
+  ex(code("from dataclasses import dataclass", "@dataclass(frozen=True)", "class Cell:", "    row: int", "    col: int", 'walls = {Cell(0, 1): "wall"}', "print(walls[Cell(0, 1)])"), "wall",
+    L("Equal frozen cells find the same dict entry", "Celdas congeladas iguales encuentran la misma entrada", "等しい凍結セルは同じ辞書の項目を見つける")),
+);
+
+const hintsNote = note("type-hints", L("Type hints are not enforced", "Las anotaciones no se imponen", "型ヒントは強制されない"),
+  p(
+    "Annotations like def f(n: int) -> str: describe the types you intend. They help readers, editors and type checkers such as mypy spot mistakes before the program runs.",
+    "Las anotaciones como def f(n: int) -> str: describen los tipos que pretendes. Ayudan a los lectores, a los editores y a verificadores como mypy a detectar errores antes de ejecutar el programa.",
+    "def f(n: int) -> str: のような型注釈は、意図する型を表す。読む人やエディタ、mypy などのチェッカーが、実行前にミスを見つける助けになるよ。",
+  ),
+  p(
+    "But Python itself ignores them at runtime: no conversion, no check, no error. The function runs with whatever value you pass, and every operation follows the REAL type of that value. A wrong type only fails if some operation can't handle it.",
+    "Pero Python mismo las ignora al ejecutar: sin conversión, sin comprobación, sin error. La función corre con el valor que pases, y cada operación sigue el tipo REAL de ese valor. Un tipo equivocado solo falla si alguna operación no puede con él.",
+    "でもPython自身は実行時に注釈を無視する。変換もチェックもエラーもない。関数はわたされた値のまま動き、演算は値の本当の型にしたがう。型がちがっても、ある演算がその型を扱えないときだけ失敗するよ。",
+  ),
+  ex(code("def first(items: list) -> str:", "    return items[0]", 'print(first("xyz"))', "print(first((7, 8)))"), "x\n7",
+    L("A string and a tuple both work: the hint is never checked", "Un texto y una tupla funcionan: la anotación nunca se revisa", "文字列もタプルも動く。ヒントはチェックされない")),
+  p(
+    "Hints are stored in the function's __annotations__ and read by tools, like @dataclass, which uses them to find fields. If you truly need a runtime check, write it yourself with isinstance and raise TypeError. Common mistake: expecting a TypeError just because the value doesn't match the hint.",
+    "Las anotaciones se guardan en __annotations__ de la función y las leen herramientas como @dataclass, que las usa para encontrar campos. Si de verdad necesitas comprobar al ejecutar, escríbelo tú con isinstance y raise TypeError. Error común: esperar un TypeError solo porque el valor no coincide con la anotación.",
+    "注釈は関数の __annotations__ にしまわれ、@dataclass などの道具が読む（フィールド探しに使う）。実行時のチェックが本当に必要なら、isinstance と raise TypeError で自分で書く。よくあるミス：ヒントと合わないだけで TypeError になると思うこと。",
+  ),
+  ex(code("def area(side: float) -> float:", "    return side * side", "print(area.__annotations__)"), "{'side': <class 'float'>, 'return': <class 'float'>}"),
+);
+
+const inheritanceNotes: NoteDef[] = [inheritNote, superNote, mroNote, dataclassNote, hintsNote];
+
 const inheritance: LessonDef = {
   slug: "inheritance-and-dataclasses",
   title: L("Bloodlines", "Linajes", "血すじ"),
@@ -190,6 +436,7 @@ const inheritance: LessonDef = {
   xp: 80,
   enemy: "python/indent-gremlin",
   enemyName: L("HEIR GREMLIN", "GREMLIN HEREDERO", "あとつぎグレムリン"),
+  notes: inheritanceNotes,
   beats: [
     say(L(
       "class Dog(Animal) INHERITS every method of Animal. Define a method with the same name to OVERRIDE it.",
@@ -209,6 +456,8 @@ const inheritance: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("The child's method wins for child objects. And is-a goes only one way: child to parent.", "El método de la hija gana en los objetos hija. Y \"es un\" va en un solo sentido: de hija a padre.", "子のオブジェクトでは子のメソッドが勝つ。「〜である」は子から親への一方通行。"),
+      note: "inheritance",
       prompt: PRINT,
       code: code("class Animal:", "    def speak(self):", '        return "..."', "class Dog(Animal):", "    def speak(self):", '        return "woof"', "print(Dog().speak(), isinstance(Dog(), Animal), issubclass(Animal, Dog))"),
       options: ["woof True False", "woof True True", "... True False"],
@@ -225,6 +474,8 @@ const inheritance: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("Kid defines its own __init__. Does the parent's __init__ still run?", "Kid define su propio __init__. ¿Sigue ejecutándose el __init__ del padre?", "Kid は自分の __init__ を持つ。親の __init__ はまだ動く？"),
+      note: "super-init",
       prompt: HAPPENS,
       code: code("class Base:", "    def __init__(self):", "        self.hp = 10", "class Kid(Base):", "    def __init__(self):", "        self.mp = 5", "print(Kid().hp)"),
       options: ["AttributeError", "10", "None"],
@@ -235,6 +486,8 @@ const inheritance: LessonDef = {
     },
     {
       kind: "pick",
+      hint: L("You need the parent's version of __init__, not Mage's own. Which call reaches the parent?", "Necesitas la versión del padre de __init__, no la de Mage. ¿Qué llamada llega al padre?", "Mage 自身ではなく親の __init__ が要る。親に届く呼び方はどれ？"),
+      note: "super-init",
       prompt: L("Run the parent's setup", "Ejecuta la preparación del padre", "親の準備を呼ぼう"),
       code: code("class Base:", "    def __init__(self, name):", "        self.name = name", "class Mage(Base):", "    def __init__(self, name, mp):", "        ___.__init__(name)", "        self.mp = mp", 'm = Mage("Ada", 9)', "print(m.name, m.mp)"),
       options: ["super()", "self", "Base"],
@@ -254,6 +507,8 @@ const inheritance: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("Write out D's MRO first. Each super() moves to the NEXT class in that line, not to its own parent.", "Escribe primero el MRO de D. Cada super() pasa a la SIGUIENTE clase de esa fila, no a su propio padre.", "まず D の MRO を書き出そう。super() は自分の親ではなく、その列の次のクラスへ進む。"),
+      note: "mro",
       prompt: PRINT,
       code: code("class A:", '    def who(self): return "A"', "class B(A):", '    def who(self): return "B" + super().who()', "class C(A):", '    def who(self): return "C" + super().who()', "class D(B, C):", '    def who(self): return "D" + super().who()', "print(D().who())"),
       options: ["DBCA", "DBA", "DBACA"],
@@ -270,6 +525,8 @@ const inheritance: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("@dataclass writes __repr__ and __eq__ for you. What do they show and compare?", "@dataclass escribe __repr__ y __eq__ por ti. ¿Qué muestran y qué comparan?", "@dataclass は __repr__ と __eq__ を書いてくれる。何を表示し、何を比べる？"),
+      note: "dataclass",
       prompt: PRINT,
       code: code("from dataclasses import dataclass", "@dataclass", "class Item:", "    name: str", "    power: int = 1", 'a = Item("gem", 3)', 'print(a, a == Item("gem", 3))'),
       options: ["Item(name='gem', power=3) True", "Item(name='gem', power=3) False", "Item('gem', 3) True"],
@@ -281,6 +538,8 @@ const inheritance: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("dataclass protects you from the shared-default trap. What does it do with a plain [] default?", "dataclass te protege de la trampa del defecto compartido. ¿Qué hace con un [] como defecto simple?", "dataclass は共有デフォルトのワナから守る。そのままの [] をデフォルトにするとどうなる？"),
+      note: "dataclass",
       prompt: HAPPENS,
       code: code("from dataclasses import dataclass", "@dataclass", "class Bag:", "    items: list = []"),
       options: ["ValueError", L("Every Bag shares one list", "Todas las Bag comparten una lista", "全 Bag で1つのリストを共有"), L("It works fine", "Funciona bien", "問題なく動く")],
@@ -291,6 +550,8 @@ const inheritance: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("default_factory is called for each new instance. Do a and b share one list?", "default_factory se llama para cada instancia nueva. ¿Comparten a y b una lista?", "default_factory はインスタンスごとに呼ばれる。a と b は同じリストを共有する？"),
+      note: "dataclass",
       prompt: PRINT,
       code: code("from dataclasses import dataclass, field", "@dataclass", "class Bag:", "    items: list = field(default_factory=list)", "a = Bag()", "b = Bag()", 'a.items.append("gem")', "print(b.items)"),
       options: ["[]", "['gem']", "None"],
@@ -302,6 +563,8 @@ const inheritance: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("Think about what frozen=True means for a field once the object exists.", "Piensa qué significa frozen=True para un campo una vez que el objeto existe.", "オブジェクトができたあと、frozen=True はフィールドにとって何を意味する？"),
+      note: "dataclass",
       prompt: HAPPENS,
       code: code("from dataclasses import dataclass", "@dataclass(frozen=True)", "class P:", "    x: int", "p = P(1)", "p.x = 2"),
       options: ["FrozenInstanceError", L("p.x becomes 2", "p.x pasa a 2", "p.x が 2 になる"), "TypeError"],
@@ -317,6 +580,8 @@ const inheritance: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("Does Python check hints at runtime? Then think about what * does to a string.", "¿Python revisa las anotaciones al ejecutar? Luego piensa qué hace * con un texto.", "Pythonは実行時にヒントをチェックする？そのうえで文字列に * をするとどうなる？"),
+      note: "type-hints",
       prompt: PRINT,
       code: code("def heal(hp: int) -> int:", "    return hp * 2", 'print(heal("ab"))'),
       options: ["abab", "TypeError", "ab2"],
@@ -328,6 +593,8 @@ const inheritance: LessonDef = {
     },
     {
       kind: "run",
+      hint: L("Knight's __init__ replaces the parent's, so name is never stored. Run the parent's setup first.", "El __init__ de Knight reemplaza al del padre, así que name nunca se guarda. Ejecuta primero la preparación del padre.", "Knight の __init__ が親のものを置きかえ、name がしまわれない。先に親の準備を動かそう。"),
+      note: "super-init",
       prompt: L("Fix the knight: it must print Ada wears 3", "Arregla al caballero: debe imprimir Ada wears 3", "騎士を直して Ada wears 3 と表示しよう"),
       starter: code("class Base:", "    def __init__(self, name):", "        self.name = name", "", "class Knight(Base):", "    def __init__(self, name, armor):", "        self.armor = armor", "", 'k = Knight("Ada", 3)', 'print(f"{k.name} wears {k.armor}")', ""),
       solution: code("class Base:", "    def __init__(self, name):", "        self.name = name", "", "class Knight(Base):", "    def __init__(self, name, armor):", "        super().__init__(name)", "        self.armor = armor", "", 'k = Knight("Ada", 3)', 'print(f"{k.name} wears {k.armor}")', ""),
@@ -343,6 +610,77 @@ const inheritance: LessonDef = {
 };
 
 // ─── 4.3 Lazy enemies and magic doors: generators and context managers ──────
+const iteratorsNote = note("iterators", L("Iterators and next()", "Iteradores y next()", "イテレータと next()"),
+  p(
+    "An iterable is anything you can loop over: a list, a string, a dict, a range. iter(x) gives you an ITERATOR, an object that remembers its position. next(it) hands out the next item; when none are left, it raises StopIteration. A for loop does exactly this, and stops quietly at StopIteration.",
+    "Un iterable es cualquier cosa que puedes recorrer: una lista, un texto, un dict, un range. iter(x) te da un ITERADOR, un objeto que recuerda su posición. next(it) entrega el siguiente elemento; cuando no quedan, lanza StopIteration. Un for hace exactamente esto y se detiene en silencio con StopIteration.",
+    "イテラブルはループで回せるもの全部（リスト・文字列・辞書・range）。iter(x) はイテレータをくれる。今の位置を覚えているオブジェクトだ。next(it) は次の要素をわたし、残りがないと StopIteration を投げる。for はまさにこれをして、StopIteration で静かに止まるよ。",
+  ),
+  ex(code('it = iter("ok")', "print(next(it))", "print(next(it))", 'print(next(it, "done"))'), "o\nk\ndone",
+    L("A second argument to next is returned instead of raising", "Un segundo argumento de next se devuelve en vez de lanzar", "next の2つ目の引数があれば、例外のかわりにそれを返す")),
+  p(
+    "An iterator is single-use: once it has handed out an item, it never gives it again. After it is exhausted, any further use finds nothing: list(it) gives [] and sum(it) gives 0. The original list is untouched, so iter(the_list) makes a fresh iterator from the start.",
+    "Un iterador es de un solo uso: una vez que entrega un elemento, nunca lo vuelve a dar. Cuando se agota, cualquier uso posterior no encuentra nada: list(it) da [] y sum(it) da 0. La lista original no cambia, así que iter(la_lista) crea un iterador nuevo desde el principio.",
+    "イテレータは使いきり。一度わたした要素は二度と出さない。空になったあとは何をしても何も出ず、list(it) は []、sum(it) は 0。元のリストはそのままなので、iter(リスト) でまた最初から新しいイテレータを作れるよ。",
+  ),
+  ex(code("nums = [4, 5, 6]", "it = iter(nums)", "print(sum(it), sum(it))", "print(sum(iter(nums)))"), "15 0\n15",
+    L("The second sum finds the iterator already drained", "La segunda suma encuentra el iterador ya vacío", "2回目の sum では、もう空になっている")),
+  p(
+    "Common mistake: looping twice over the same iterator or generator and expecting the second loop to start again. If you need the items more than once, store them in a list first.",
+    "Error común: recorrer dos veces el mismo iterador o generador y esperar que el segundo recorrido empiece de nuevo. Si necesitas los elementos más de una vez, guárdalos antes en una lista.",
+    "よくあるミス：同じイテレータやジェネレータを2回ループして、2回目もはじめから回ると思うこと。何度も使うなら先にリストにしまおう。",
+  ),
+);
+
+const generatorsNote = note("generators", L("Generators and yield", "Generadores y yield", "ジェネレータと yield"),
+  p(
+    "A function that contains yield is a generator function. Calling it runs NONE of the body: it just returns a generator object. Each next() runs the body until the next yield, hands out that value and pauses right there, keeping its local variables. When the body ends, the generator raises StopIteration.",
+    "Una función que contiene yield es una función generadora. Llamarla NO ejecuta nada del cuerpo: solo devuelve un objeto generador. Cada next() ejecuta el cuerpo hasta el siguiente yield, entrega ese valor y se pausa ahí mismo, conservando sus variables locales. Cuando el cuerpo termina, el generador lanza StopIteration.",
+    "yield を含む関数はジェネレータ関数。呼んでも本体は一切動かず、ジェネレータオブジェクトを返すだけ。next() のたびに次の yield まで本体が動き、その値をわたしてそこで一時停止する。ローカル変数は保たれる。本体が終わると StopIteration だよ。",
+  ),
+  ex(code("def steps():", '    print("begin")', '    yield "a"', '    print("resume")', '    yield "b"', "g = steps()", 'print("created")', "print(next(g))"), "created\nbegin\na",
+    L("The body starts only at the first next(), and pauses at yield", "El cuerpo empieza solo en el primer next() y se pausa en yield", "本体は最初の next() で始まり、yield で止まる")),
+  p(
+    "list(), sum(), max() and for loops keep calling next() until the generator ends, so they consume all of it at once. That is the difference with return: return n stops the function at the first value, while yield n hands out each value and keeps going.",
+    "list(), sum(), max() y los for siguen llamando a next() hasta que el generador termina, así que lo consumen todo de una vez. Esa es la diferencia con return: return n detiene la función en el primer valor, mientras que yield n entrega cada valor y sigue.",
+    "list()、sum()、max()、for はジェネレータが終わるまで next() を呼び続けるので、一気に全部使う。return との違いはここ。return n は最初の値で関数を終えるが、yield n は値を1つずつわたして続けるよ。",
+  ),
+  ex(code("def squares(limit):", "    for k in range(1, limit + 1):", "        yield k * k", "print(list(squares(4)), max(squares(3)))"), "[1, 4, 9, 16] 9"),
+  p(
+    "yield from other hands out every item of another iterable, one by one, as if you wrote a for loop with a yield inside. Generator expressions, written (expr for x in data), are lazy too: nothing is computed until something asks, and the source is read only at that moment.",
+    "yield from otro entrega cada elemento de otro iterable, uno por uno, como si escribieras un for con un yield dentro. Las expresiones generadoras, escritas (expr for x in datos), también son perezosas: nada se calcula hasta que alguien lo pide, y la fuente se lee solo en ese momento.",
+    "yield from 別のもの は、別のイテラブルの要素を1つずつわたす。中に yield がある for と同じだ。(式 for x in データ) と書くジェネレータ式も遅延評価で、だれかが求めるまで何も計算せず、元のデータもそのときに読むよ。",
+  ),
+  ex(code("def chain(a, b):", "    yield from a", "    yield from b", 'print(list(chain("hi", [0])))'), "['h', 'i', 0]"),
+  ex(code("def loud(n):", '    print("computing", n)', "    return n", "gen = (loud(n) for n in [1, 2])", 'print("nothing yet")', "print(sum(gen))"), "nothing yet\ncomputing 1\ncomputing 2\n3",
+    L("The generator expression computes only when sum asks", "La expresión generadora calcula solo cuando sum lo pide", "ジェネレータ式は sum が求めたときに計算する")),
+);
+
+const contextNote = note("context-managers", L("with and context managers", "with y gestores de contexto", "with とコンテキストマネージャ"),
+  p(
+    "with obj as name: calls obj.__enter__() on the way in, and binds its RETURN value to name (which may differ from obj). When the block ends, normally, through return or because of an exception, Python calls obj.__exit__(...). That's why files, locks and connections use with: the cleanup is guaranteed.",
+    "with obj as nombre: llama a obj.__enter__() al entrar y asigna su valor de RETORNO a nombre (que puede ser distinto de obj). Cuando el bloque termina, normalmente, por un return o por una excepción, Python llama a obj.__exit__(...). Por eso archivos, candados y conexiones usan with: la limpieza está garantizada.",
+    "with obj as 名前: は入るときに obj.__enter__() を呼び、その戻り値を名前に入れる（obj とはかぎらない）。ブロックが終わると、ふつうに終わっても return でも例外でも、Pythonは obj.__exit__(...) を呼ぶ。だからファイルやロックは with を使う。後始末が保証されるんだ。",
+  ),
+  ex(code("class Room:", "    def __enter__(self):", '        print("enter")', "        return 99", "    def __exit__(self, *info):", '        print("exit")', "with Room() as n:", '    print("inside", n)', 'print("after")'), "enter\ninside 99\nexit\nafter",
+    L("n gets what __enter__ returned, not the Room", "n recibe lo que devolvió __enter__, no el Room", "n に入るのは Room ではなく __enter__ の戻り値")),
+  p(
+    "If an exception happens inside the block, __exit__ receives its type, value and traceback (all None when there was no error). If __exit__ returns a true value, the exception is swallowed and the program continues after the with. If it returns None, which is what happens with no return at all, the exception keeps flying once __exit__ is done.",
+    "Si ocurre una excepción dentro del bloque, __exit__ recibe su tipo, valor y traceback (todos None si no hubo error). Si __exit__ devuelve un valor verdadero, la excepción se traga y el programa sigue después del with. Si devuelve None, que es lo que pasa sin ningún return, la excepción sigue volando al terminar __exit__.",
+    "ブロックの中で例外が起きると、__exit__ はその型・値・traceback を受けとる（エラーがなければ全部 None）。__exit__ が真の値を返すと例外はのみこまれ、with の後へ進む。None を返す（return がないとそうなる）と、__exit__ のあとも例外は飛び続けるよ。",
+  ),
+  ex(code("class Guard:", "    def __enter__(self):", "        return self", "    def __exit__(self, kind, value, tb):", '        print("saw", kind.__name__)', "        return True", "with Guard():", '    raise KeyError("lost")', 'print("still running")'), "saw KeyError\nstill running",
+    L("Returning True from __exit__ swallows the error", "Devolver True en __exit__ se traga el error", "__exit__ が True を返すとエラーをのみこむ")),
+  p(
+    "@contextlib.contextmanager turns a generator into a context manager: code before the yield is the enter part, the yielded value goes to as, and code after the yield is the exit part. Wrap the yield in try/finally so the exit part also runs after an error.",
+    "@contextlib.contextmanager convierte un generador en un gestor de contexto: el código antes del yield es la parte de entrada, el valor del yield va a as, y el código después del yield es la parte de salida. Envuelve el yield en try/finally para que la salida también corra tras un error.",
+    "@contextlib.contextmanager はジェネレータをコンテキストマネージャに変える。yield の前が入る処理、yield した値が as へ、yield の後が出る処理。エラーのあとでも出る処理が動くように、yield を try/finally で包もう。",
+  ),
+  ex(code("from contextlib import contextmanager", "@contextmanager", "def section(title):", '    print("==", title)', "    try:", "        yield len(title)", "    finally:", '        print("== end")', 'with section("intro") as size:', '    print("size", size)'), "== intro\nsize 5\n== end"),
+);
+
+const generatorsNotes: NoteDef[] = [iteratorsNote, generatorsNote, contextNote];
+
 const generators: LessonDef = {
   slug: "generators-and-context-managers",
   title: L("Lazy enemies, magic doors", "Enemigos perezosos, puertas", "なまけ敵と魔法の扉"),
@@ -351,6 +689,7 @@ const generators: LessonDef = {
   xp: 80,
   enemy: "python/none-ghost",
   enemyName: L("LAZY GHOST", "FANTASMA PEREZOSO", "なまけゴースト"),
+  notes: generatorsNotes,
   beats: [
     say(L(
       "iter() turns a list into an ITERATOR. next() takes one item; when none are left it raises StopIteration.",
@@ -359,6 +698,8 @@ const generators: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("The list has two items. What does next() do when the iterator has nothing left?", "La lista tiene dos elementos. ¿Qué hace next() cuando al iterador no le queda nada?", "リストの要素は2つ。イテレータが空のとき next() はどうする？"),
+      note: "iterators",
       prompt: HAPPENS,
       code: code("it = iter([1, 2])", "print(next(it), next(it))", "next(it)"),
       options: [L("1 2, then StopIteration", "1 2 y luego StopIteration", "1 2 の後 StopIteration"), L("1 2, then None", "1 2 y luego None", "1 2 の後 None"), L("1 2, then 1", "1 2 y luego 1", "1 2 の後 1")],
@@ -369,6 +710,8 @@ const generators: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("An iterator is used up once. What is left for the second list() call?", "Un iterador se agota una vez. ¿Qué le queda a la segunda llamada a list()?", "イテレータは使いきり。2回目の list() には何が残っている？"),
+      note: "iterators",
       prompt: PRINT,
       code: code("it = iter([1, 2, 3])", "print(list(it), list(it))"),
       options: ["[1, 2, 3] []", "[1, 2, 3] [1, 2, 3]", "[] []"],
@@ -394,6 +737,8 @@ const generators: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("Calling gen() runs none of its body. When does the first print inside it happen?", "Llamar gen() no ejecuta nada del cuerpo. ¿Cuándo ocurre el primer print de dentro?", "gen() を呼んでも本体は動かない。中の最初の print はいつ動く？"),
+      note: "generators",
       prompt: PRINT,
       code: code("def gen():", '    print("start")', "    yield 1", '    print("middle")', "    yield 2", "g = gen()", 'print("made")', "print(next(g))", "print(next(g))"),
       options: ["made start 1 middle 2", "start middle made 1 2", "start made 1 middle 2"],
@@ -405,6 +750,8 @@ const generators: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("Trace the loop: which values of n are yielded before the condition stops it?", "Sigue el bucle: ¿qué valores de n se entregan antes de que la condición lo detenga?", "ループを追おう。条件で止まるまでに yield される n はどれ？"),
+      note: "generators",
       prompt: PRINT,
       code: code("def countdown(n):", "    while n > 0:", "        yield n", "        n -= 1", "print(list(countdown(3)), sum(countdown(4)))"),
       options: ["[3, 2, 1] 10", "[3, 2, 1, 0] 10", "[1, 2, 3] 6"],
@@ -416,6 +763,8 @@ const generators: LessonDef = {
     },
     {
       kind: "type",
+      hint: L("You need the keyword that, together with from, hands out every item of another iterable.", "Necesitas la palabra clave que, junto con from, entrega cada elemento de otro iterable.", "from と組んで、別のイテラブルの要素を全部わたすキーワードは？"),
+      note: "generators",
       prompt: L("Hand over a whole list", "Entrega una lista entera", "リストをまるごと渡そう"),
       code: code("def gen():", "    ___ from [1, 2]", "    yield 3", "print(list(gen()))"),
       answer: "yield",
@@ -425,6 +774,8 @@ const generators: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("A generator expression is lazy. When does it actually read nums?", "Una expresión generadora es perezosa. ¿Cuándo lee nums de verdad?", "ジェネレータ式は遅延評価。nums を実際に読むのはいつ？"),
+      note: "generators",
       prompt: PRINT,
       code: code("nums = [1, 2, 3]", "sq = (n * n for n in nums)", "nums.append(4)", "print(list(sq))"),
       options: ["[1, 4, 9, 16]", "[1, 4, 9]", "[]"],
@@ -441,6 +792,8 @@ const generators: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("__enter__ runs on the way in and its return value goes to l. When does __exit__ run?", "__enter__ corre al entrar y su valor de retorno va a l. ¿Cuándo corre __exit__?", "__enter__ は入るときに動き、戻り値は l へ。__exit__ はいつ動く？"),
+      note: "context-managers",
       prompt: PRINT,
       code: code("class Lamp:", "    def __enter__(self):", '        print("on")', '        return "light"', "    def __exit__(self, *exc):", '        print("off")', "with Lamp() as l:", "    print(l)"),
       options: ["on light off", "light on off", "on off light"],
@@ -453,6 +806,8 @@ const generators: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("__exit__ sees the error. What does returning True from __exit__ do to it?", "__exit__ ve el error. ¿Qué le hace devolver True desde __exit__?", "__exit__ はエラーを見ている。__exit__ が True を返すとエラーはどうなる？"),
+      note: "context-managers",
       prompt: PRINT,
       code: code("class Lamp:", "    def __enter__(self):", "        return self", "    def __exit__(self, exc_type, exc, tb):", '        print("off", exc_type.__name__)', "        return True", "with Lamp():", "    1 / 0", 'print("after")'),
       options: ["off ZeroDivisionError after", "ZeroDivisionError", "after"],
@@ -464,6 +819,8 @@ const generators: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("With @contextmanager, code before yield is the way in; code after it is the way out.", "Con @contextmanager, el código antes del yield es la entrada; el de después, la salida.", "@contextmanager では yield の前が入口、後ろが出口。"),
+      note: "context-managers",
       prompt: PRINT,
       code: code("from contextlib import contextmanager", "@contextmanager", "def tag(name):", '    print(f"<{name}>")', "    yield", '    print(f"</{name}>")', 'with tag("b"):', '    print("hi")'),
       options: ["<b> hi </b>", "<b> </b> hi", "hi <b> </b>"],
@@ -475,6 +832,8 @@ const generators: LessonDef = {
     },
     {
       kind: "run",
+      hint: L("return stops at the first even number. Which keyword hands out each value and keeps going?", "return se detiene en el primer par. ¿Qué palabra clave entrega cada valor y sigue?", "return は最初の偶数で止まる。値を1つずつわたして続けるキーワードは？"),
+      note: "generators",
       prompt: L("Make evens a generator: evens: [0, 2, 4, 6]", "Haz de evens un generador: evens: [0, 2, 4, 6]", "evens をジェネレータにしよう"),
       starter: code("def evens(limit):", "    result = []", "    for n in range(limit):", "        if n % 2 == 0:", "            return n", "    return result", "", 'print("evens:", list(evens(7)))', ""),
       solution: code("def evens(limit):", "    for n in range(limit):", "        if n % 2 == 0:", "            yield n", "", 'print("evens:", list(evens(7)))', ""),
@@ -490,6 +849,79 @@ const generators: LessonDef = {
 };
 
 // ─── 4.4 The event loop tower: async and concurrency ────────────────────────
+const coroutinesNote = note("coroutines", L("async def, await and asyncio.run", "async def, await y asyncio.run", "async def・await・run"),
+  p(
+    "async def defines a coroutine function. Calling it does NOT run the body: it only creates a coroutine object, a paused piece of work. The body runs when the coroutine is awaited or handed to the event loop. A coroutine that is never awaited never runs; Python only prints a warning.",
+    "async def define una función corrutina. Llamarla NO ejecuta el cuerpo: solo crea un objeto corrutina, un trabajo en pausa. El cuerpo corre cuando la corrutina se espera con await o se entrega al bucle de eventos. Una corrutina que nunca se espera nunca corre; Python solo imprime una advertencia.",
+    "async def はコルーチン関数を作る。呼んでも本体は動かず、コルーチンオブジェクト（止まった仕事）ができるだけ。本体が動くのは await されたときか、イベントループにわたされたとき。一度も await されないコルーチンは動かず、Pythonは警告を出すだけだよ。",
+  ),
+  p(
+    "asyncio.run(coro) starts the event loop, runs coro to the end and returns its return value: it's the door from normal code into async code. Inside an async def, await other() runs other, waits for it and gives back its result.",
+    "asyncio.run(coro) arranca el bucle de eventos, ejecuta coro hasta el final y devuelve su valor de retorno: es la puerta del código normal al código async. Dentro de un async def, await otra() ejecuta otra, la espera y devuelve su resultado.",
+    "asyncio.run(coro) はイベントループを始め、coro を最後まで動かして戻り値を返す。ふつうのコードから async の世界への入口だ。async def の中では await other() で other を動かして待ち、結果を受けとるよ。",
+  ),
+  ex(code("import asyncio", "async def add(a, b):", "    await asyncio.sleep(0)", "    return a + b", "async def main():", "    total = await add(2, 3)", '    print("total", total)', "    return total * 10", "print(asyncio.run(main()))"), "total 5\n50",
+    L("await gives add's result; asyncio.run gives main's", "await da el resultado de add; asyncio.run, el de main", "await は add の結果、asyncio.run は main の結果を返す")),
+  p(
+    "Forgetting await is the classic bug: value = get() stores a coroutine object, not the value, and a sleep call without await is created and thrown away. Python raises no error, only a warning, so the bug is silent. Whenever you call an async function, ask: where is my await?",
+    "Olvidar await es el error clásico: valor = get() guarda un objeto corrutina, no el valor, y un sleep sin await se crea y se descarta. Python no lanza ningún error, solo una advertencia, así que el fallo es silencioso. Siempre que llames una función async, pregúntate: ¿dónde está mi await?",
+    "await の書き忘れは定番のバグ。value = get() は値ではなくコルーチンオブジェクトをしまい、await なしの sleep は作られて捨てられる。エラーにはならず警告だけなので気づきにくい。async 関数を呼んだら「await はどこ？」と確かめよう。",
+  ),
+  ex(code("import asyncio", "async def get_num():", "    return 4", "async def main():", "    pending = get_num()", "    print(asyncio.iscoroutine(pending))", "    print(await pending)", "asyncio.run(main())"), "True\n4",
+    L("Without await you hold a coroutine; with it, the value", "Sin await tienes una corrutina; con él, el valor", "await なしはコルーチン、await で値になる")),
+);
+
+const tasksNote = note("tasks-gather", L("Running tasks together", "Ejecutar tareas a la vez", "タスクをいっしょに動かす"),
+  p(
+    "The event loop runs one coroutine at a time and switches only at an await. await asyncio.sleep(s) pauses the current task for s seconds and lets others run meanwhile; sleep(0) just hands over the turn.",
+    "El bucle de eventos ejecuta una corrutina a la vez y solo cambia en un await. await asyncio.sleep(s) pausa la tarea actual s segundos y deja correr a otras mientras tanto; sleep(0) solo cede el turno.",
+    "イベントループは一度に1つのコルーチンを動かし、await のところでだけ切りかえる。await asyncio.sleep(s) は今のタスクを s 秒止めて、その間ほかを動かす。sleep(0) は順番をゆずるだけだよ。",
+  ),
+  p(
+    "asyncio.gather(a, b, ...) runs several coroutines concurrently and gives back a list of their results, in the order you PASSED them, no matter which finished first. gather returns an awaitable, so you must await it to get the list.",
+    "asyncio.gather(a, b, ...) ejecuta varias corrutinas a la vez y devuelve una lista con sus resultados, en el orden en que las PASASTE, sin importar cuál terminó primero. gather devuelve un awaitable, así que debes esperarlo con await para obtener la lista.",
+    "asyncio.gather(a, b, ...) は複数のコルーチンを同時に動かし、どれが先に終わっても、わたした順番で結果のリストを返す。gather は awaitable を返すので、リストを得るには await が必要だよ。",
+  ),
+  ex(code("import asyncio", "async def wait_and_say(word, secs):", "    await asyncio.sleep(secs)", '    print("finished", word)', "    return word.upper()", "async def main():", '    out = await asyncio.gather(wait_and_say("x", 0.02), wait_and_say("y", 0))', "    print(out)", "asyncio.run(main())"), "finished y\nfinished x\n['X', 'Y']",
+    L("y finishes first, but the list keeps the call order", "y termina primero, pero la lista conserva el orden", "y が先に終わるが、リストは呼んだ順")),
+  p(
+    "asyncio.create_task(coro) schedules a coroutine to run in the background. It does not start immediately: it starts the next time the current task pauses at an await. await task waits for it to finish and gives its result.",
+    "asyncio.create_task(coro) programa una corrutina para correr en segundo plano. No empieza de inmediato: empieza la próxima vez que la tarea actual se pausa en un await. await tarea espera a que termine y da su resultado.",
+    "asyncio.create_task(coro) はコルーチンを裏で動くよう予約する。すぐには始まらず、今のタスクが次に await で止まったときに始まる。await タスク で終わるのを待って結果を受けとるよ。",
+  ),
+  ex(code("import asyncio", "async def beep():", '    print("beep")', "async def main():", "    t = asyncio.create_task(beep())", '    print("scheduled")', "    await asyncio.sleep(0)", '    print("after pause")', "    await t", "asyncio.run(main())"), "scheduled\nbeep\nafter pause",
+    L("The task runs at main's first pause", "La tarea corre en la primera pausa de main", "タスクは main の最初の一時停止で動く")),
+  p(
+    "asyncio.wait_for(coro, timeout=s) gives up on a coroutine that takes longer than s seconds: it cancels it and raises TimeoutError, which you can catch with try/except. If the coroutine finishes in time, wait_for simply returns its result.",
+    "asyncio.wait_for(coro, timeout=s) abandona una corrutina que tarda más de s segundos: la cancela y lanza TimeoutError, que puedes atrapar con try/except. Si la corrutina termina a tiempo, wait_for simplemente devuelve su resultado.",
+    "asyncio.wait_for(coro, timeout=s) は s 秒より長くかかるコルーチンをあきらめ、キャンセルして TimeoutError を投げる。try/except で捕まえられる。間に合えば、wait_for は結果をそのまま返すよ。",
+  ),
+  ex(code("import asyncio", "async def nap():", "    await asyncio.sleep(0.001)", '    return "rested"', "async def main():", "    print(await asyncio.wait_for(nap(), timeout=1))", "asyncio.run(main())"), "rested",
+    L("Finished within the timeout, so the result comes back", "Terminó dentro del plazo, así que vuelve el resultado", "時間内に終わったので結果が返る")),
+);
+
+const blockingNote = note("blocking-gil", L("Blocking calls, threads and the GIL", "Bloqueos, hilos y el GIL", "ブロッキング・スレッド・GIL"),
+  p(
+    "asyncio uses ONE thread, and tasks take turns only at await. A blocking call like time.sleep(), or a long loop with no await, never gives the turn back: it freezes every other task until it finishes. Inside async code, wait with await asyncio.sleep() and use async libraries.",
+    "asyncio usa UN solo hilo, y las tareas se turnan solo en los await. Una llamada bloqueante como time.sleep(), o un bucle largo sin await, nunca devuelve el turno: congela todas las demás tareas hasta terminar. En código async, espera con await asyncio.sleep() y usa bibliotecas async.",
+    "asyncio はスレッド1本で動き、タスクは await のところでだけ交代する。time.sleep() のようなブロッキング呼び出しや await のない長いループは順番を返さず、終わるまで他の全タスクを止める。async のコードでは await asyncio.sleep() と async 対応のライブラリを使おう。",
+  ),
+  ex(code("import asyncio", "async def worker(name):", '    print(name, "start")', "    total = sum(range(1000))", '    print(name, "end")', "async def main():", '    await asyncio.gather(worker("p"), worker("q"))', "asyncio.run(main())"), "p start\np end\nq start\nq end",
+    L("No await inside, so q waits until p is done", "Sin await dentro, q espera a que p termine", "中に await がないので、q は p が終わるまで待つ")),
+  p(
+    "Standard CPython has a Global Interpreter Lock (GIL): in one process, only one thread runs Python bytecode at a time. Threads still help when the work WAITS (network, disk), because a waiting thread releases the GIL. For heavy pure-Python computation, threads give no speed-up.",
+    "CPython estándar tiene un Global Interpreter Lock (GIL): en un proceso, solo un hilo ejecuta bytecode de Python a la vez. Los hilos siguen ayudando cuando el trabajo ESPERA (red, disco), porque un hilo que espera suelta el GIL. Para cálculos pesados en Python puro, los hilos no aceleran nada.",
+    "標準の CPython には GIL（グローバルインタプリタロック）があり、1つのプロセスで Python のバイトコードを動かせるスレッドは同時に1本だけ。待ち（ネットワーク・ディスク）が多い仕事ではスレッドも役立つ。待つ間は GIL を手放すからだ。重い純 Python の計算は速くならないよ。",
+  ),
+  p(
+    "For CPU-heavy work across several cores, use multiprocessing (or concurrent.futures.ProcessPoolExecutor): each process has its own interpreter and its own GIL. Rule of thumb: lots of waiting → asyncio or threads; lots of computing → processes. Common mistake: thinking Python can't make threads; it can, they just don't run Python code in parallel.",
+    "Para trabajo pesado de CPU en varios núcleos, usa multiprocessing (o concurrent.futures.ProcessPoolExecutor): cada proceso tiene su propio intérprete y su propio GIL. Regla práctica: mucha espera → asyncio o hilos; mucho cálculo → procesos. Error común: creer que Python no puede crear hilos; sí puede, solo que no ejecutan código Python en paralelo.",
+    "複数のコアで重い計算をするなら multiprocessing（や ProcessPoolExecutor）。プロセスごとにインタプリタと GIL を持つ。目安：待ちが多い→asyncio かスレッド、計算が多い→プロセス。よくあるミス：Pythonはスレッドを作れないと思うこと。作れるが、Python コードは並列に動かないだけだよ。",
+  ),
+);
+
+const asyncNotes: NoteDef[] = [coroutinesNote, tasksNote, blockingNote];
+
 const asyncLesson: LessonDef = {
   slug: "async-and-concurrency",
   title: L("The event loop", "El event loop", "イベントループ"),
@@ -498,6 +930,7 @@ const asyncLesson: LessonDef = {
   xp: 85,
   enemy: "ghost",
   enemyName: L("AWAIT PHANTOM", "FANTASMA AWAIT", "await の幻"),
+  notes: asyncNotes,
   beats: [
     say(L(
       "async def makes a COROUTINE function. Calling it runs nothing yet; await runs it. asyncio.run starts the loop.",
@@ -506,6 +939,8 @@ const asyncLesson: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("asyncio.run runs main to the end and gives back what main returned.", "asyncio.run ejecuta main hasta el final y devuelve lo que main retornó.", "asyncio.run は main を最後まで動かし、main の戻り値を返す。"),
+      note: "coroutines",
       prompt: PRINT,
       code: code("import asyncio", "async def main():", '    print("hi")', "    return 7", "print(asyncio.run(main()))"),
       options: ["hi 7", "7", "hi"],
@@ -517,6 +952,8 @@ const asyncLesson: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("Calling an async def function does not run its body. What object do you get instead?", "Llamar una función async def no ejecuta su cuerpo. ¿Qué objeto obtienes en su lugar?", "async def の関数を呼んでも本体は動かない。かわりに何のオブジェクトが手に入る？"),
+      note: "coroutines",
       prompt: PRINT,
       code: code("async def greet():", '    print("hello")', '    return "hi"', "c = greet()", "print(type(c).__name__)", "c.close()"),
       options: ["coroutine", "hello coroutine", "str"],
@@ -545,6 +982,8 @@ const asyncLesson: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("Each await asyncio.sleep(0) hands the turn to the other task. Trace the turns.", "Cada await asyncio.sleep(0) cede el turno a la otra tarea. Sigue los turnos.", "await asyncio.sleep(0) のたびにもう一方へ順番がうつる。順番を追おう。"),
+      note: "tasks-gather",
       prompt: PRINT,
       code: code("import asyncio", "async def tick(name):", "    for i in range(2):", "        print(name, i)", "        await asyncio.sleep(0)", "async def main():", '    await asyncio.gather(tick("a"), tick("b"))', "asyncio.run(main())"),
       options: ["a 0, b 0, a 1, b 1", "a 0, a 1, b 0, b 1", "b 0, a 0, b 1, a 1"],
@@ -556,6 +995,8 @@ const asyncLesson: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("fast finishes first, but in what order does gather put the results?", "fast termina primero, pero ¿en qué orden pone gather los resultados?", "fast が先に終わるが、gather は結果をどの順に並べる？"),
+      note: "tasks-gather",
       prompt: PRINT,
       code: code("import asyncio", "async def job(name, delay):", "    await asyncio.sleep(delay)", "    return name", "async def main():", '    r = await asyncio.gather(job("slow", 0.05), job("fast", 0.01))', "    print(r)", "asyncio.run(main())"),
       options: ["['slow', 'fast']", "['fast', 'slow']", "slow"],
@@ -567,6 +1008,8 @@ const asyncLesson: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("create_task schedules job, but a task only starts when main pauses. Where is main's first pause?", "create_task programa job, pero una tarea solo empieza cuando main se pausa. ¿Dónde está la primera pausa de main?", "create_task は job を予約するが、始まるのは main が止まったとき。main の最初の一時停止は？"),
+      note: "tasks-gather",
       prompt: PRINT,
       code: code("import asyncio", "async def job(n):", "    await asyncio.sleep(0)", '    print("job", n)', "async def main():", "    t = asyncio.create_task(job(1))", '    print("main")', "    await t", "asyncio.run(main())"),
       options: ["main job 1", "job 1 main", "main"],
@@ -578,6 +1021,8 @@ const asyncLesson: LessonDef = {
     },
     {
       kind: "type",
+      hint: L("gather gives back an awaitable. Which keyword turns it into the list of results?", "gather devuelve un awaitable. ¿Qué palabra clave lo convierte en la lista de resultados?", "gather は awaitable を返す。結果のリストに変えるキーワードは？"),
+      note: "coroutines",
       prompt: L("Wait for both results", "Espera ambos resultados", "両方の結果を待とう"),
       code: code("import asyncio", "async def double(n):", "    return n * 2", "async def main():", "    r = ___ asyncio.gather(double(1), double(2))", "    print(r)", "asyncio.run(main())"),
       answer: "await",
@@ -587,6 +1032,8 @@ const asyncLesson: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("slow takes much longer than the timeout. What does wait_for raise, and is it caught?", "slow tarda mucho más que el plazo. ¿Qué lanza wait_for y se atrapa?", "slow は制限時間よりずっと長い。wait_for は何を投げ、それは捕まる？"),
+      note: "tasks-gather",
       prompt: PRINT,
       code: code("import asyncio", "async def slow():", "    await asyncio.sleep(1)", "async def main():", "    try:", "        await asyncio.wait_for(slow(), timeout=0.01)", "    except TimeoutError:", '        print("timeout")', "asyncio.run(main())"),
       options: ["timeout", L("Nothing", "Nada", "何も出ない"), "TimeoutError"],
@@ -603,6 +1050,8 @@ const asyncLesson: LessonDef = {
     )),
     {
       kind: "pick",
+      hint: L("Only one choice gives the turn back to the event loop. Which one is awaited?", "Solo una opción devuelve el turno al bucle de eventos. ¿Cuál lleva await?", "イベントループに順番を返すのは1つだけ。await しているのはどれ？"),
+      note: "blocking-gil",
       prompt: L("Let b start while a waits", "Que b empiece mientras a espera", "a が待つ間に b を始めよう"),
       code: code("import asyncio, time", "async def tick(name):", '    print(name, "start")', "    ___", '    print(name, "end")', "async def main():", '    await asyncio.gather(tick("a"), tick("b"))', "asyncio.run(main())"),
       options: ["await asyncio.sleep(0.01)", "time.sleep(0.01)"],
@@ -618,6 +1067,8 @@ const asyncLesson: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("The work is CPU-heavy pure Python. Which tool avoids the GIL by using separate interpreters?", "El trabajo es Python puro y pesado de CPU. ¿Qué herramienta evita el GIL con intérpretes separados?", "重い計算の純 Python。別々のインタプリタで GIL をさけるのはどれ？"),
+      note: "blocking-gil",
       prompt: L("Best tool for this job?", "¿La mejor herramienta?", "この仕事に最適なのは？"),
       code: code("# Resize 1,000 images using all 8 CPU cores", "# Standard CPython, pure-Python math"),
       options: ["multiprocessing", "threading", "asyncio"],
@@ -627,6 +1078,8 @@ const asyncLesson: LessonDef = {
     },
     {
       kind: "run",
+      hint: L("fetch is async, so calling it gives a coroutine, not the name. What is missing before the call?", "fetch es async, así que llamarla da una corrutina, no el nombre. ¿Qué falta antes de la llamada?", "fetch は async なので、呼ぶとコルーチンが返る。呼び出しの前に足りないものは？"),
+      note: "coroutines",
       prompt: L("Fix main: it must print got ADA", "Arregla main: debe imprimir got ADA", "main を直して got ADA と表示しよう"),
       starter: code("import asyncio", "", "async def fetch(name):", "    await asyncio.sleep(0)", "    return name.upper()", "", "async def main():", '    result = fetch("ada")', '    print("got", result)', "", "asyncio.run(main())", ""),
       solution: code("import asyncio", "", "async def fetch(name):", "    await asyncio.sleep(0)", "    return name.upper()", "", "async def main():", '    result = await fetch("ada")', '    print("got", result)', "", "asyncio.run(main())", ""),
@@ -642,6 +1095,9 @@ const asyncLesson: LessonDef = {
 };
 
 // ─── 4.5 Boss: the event loop lich ──────────────────────────────────────────
+// The boss reuses the region's notes as a recap.
+const bossNotes: NoteDef[] = [classAttrNote, dataclassNote, inheritNote, generatorsNote, contextNote, propertyNote, coroutinesNote, hintsNote, blockingNote];
+
 const boss: LessonDef = {
   slug: "event-loop-lich",
   title: L("The event loop lich", "El liche del event loop", "イベントループのリッチ"),
@@ -650,6 +1106,7 @@ const boss: LessonDef = {
   xp: 200,
   enemy: "dragon",
   enemyName: L("EVENT LOOP LICH", "LICHE DEL LOOP", "ループのリッチ"),
+  notes: bossNotes,
   beats: [
     enemySays(L(
       "I AM THE EVENT LOOP LICH. Shared class lists, lazy generators, forgotten awaits: my tower is built of them. Climb!",
@@ -658,6 +1115,8 @@ const boss: LessonDef = {
     )),
     {
       kind: "predict", time: 15, prompt: PRINT,
+      hint: L("members is written in the class body. Does join create a new list or change a shared one?", "members está en el cuerpo de la clase. ¿join crea una lista nueva o cambia una compartida?", "members はクラス本体にある。join は新しいリストを作る？共有のものを変える？"),
+      note: "class-attributes",
       code: code("class Guild:", "    members = []", "    def join(self, name):", "        self.members.append(name)", "a, b = Guild(), Guild()", 'a.join("Ada")', "print(b.members)"),
       options: ["['Ada']", "[]", "AttributeError"], answer: 0, output: "['Ada']",
       check: { compiles: true, stdout: "['Ada']" },
@@ -665,6 +1124,8 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 15, prompt: PRINT,
+      hint: L("Which of the two classes got a generated __eq__? The other falls back to identity.", "¿Cuál de las dos clases recibió un __eq__ generado? La otra recurre a la identidad.", "2つのうち __eq__ が自動で作られたのはどちら？もう一方は同一性で比べる。"),
+      note: "dataclass",
       code: code("from dataclasses import dataclass", "@dataclass", "class P:", "    x: int", "class Q:", "    def __init__(self, x):", "        self.x = x", "print(P(1) == P(1), Q(1) == Q(1))"),
       options: ["True False", "True True", "False False"], answer: 0, output: "True False",
       check: { compiles: true, stdout: "True False" },
@@ -672,6 +1133,8 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 15, prompt: PRINT,
+      hint: L("C defines nothing, so where does Python find hi? Then follow super() from there.", "C no define nada, así que ¿dónde encuentra Python hi? Luego sigue super() desde ahí.", "C は何も定義していない。hi はどこで見つかる？そこから super() をたどろう。"),
+      note: "inheritance",
       code: code("class A:", '    def hi(self): return "A"', "class B(A):", '    def hi(self): return "B" + super().hi()', "class C(B):", "    pass", "print(C().hi())"),
       options: ["BA", "A", "CBA"], answer: 0, output: "BA",
       check: { compiles: true, stdout: "BA" },
@@ -679,6 +1142,8 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 15, prompt: PRINT,
+      hint: L("Building a generator runs none of its body. Which generator is actually asked for a value?", "Crear un generador no ejecuta nada de su cuerpo. ¿A qué generador se le pide realmente un valor?", "ジェネレータを作っても本体は動かない。実際に値を求められたのはどれ？"),
+      note: "generators",
       code: code("def gen():", '    print("go")', "    yield 1", "g = gen()", "h = gen()", "print(next(g))"),
       options: ["go 1", "go go 1", "1"], answer: 0, output: "go\n1",
       check: { compiles: true, stdout: "go\n1" },
@@ -686,6 +1151,8 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 15, prompt: HAPPENS,
+      hint: L("__exit__ always runs. Does this one return a true value to swallow the error?", "__exit__ siempre corre. ¿Este devuelve un valor verdadero para tragarse el error?", "__exit__ は必ず動く。これはエラーをのみこむ真の値を返している？"),
+      note: "context-managers",
       code: code("class Door:", "    def __enter__(self):", "        return self", "    def __exit__(self, *exc):", '        print("closed")', "with Door():", "    1 / 0"),
       options: [L("closed, then ZeroDivisionError", "closed y luego ZeroDivisionError", "closed の後 ZeroDivisionError"), L("Only closed", "Solo closed", "closed だけ"), L("Only ZeroDivisionError", "Solo ZeroDivisionError", "ZeroDivisionError だけ")], answer: 0,
       check: { compiles: true, throws: "ZeroDivisionError" },
@@ -693,6 +1160,8 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 15, prompt: PRINT,
+      hint: L("A property runs its method on every read. What is _hp at the moment of the read?", "Una property ejecuta su método en cada lectura. ¿Cuánto vale _hp en el momento de leer?", "property は読むたびにメソッドを動かす。読んだ瞬間の _hp はいくつ？"),
+      note: "property",
       code: code("class Hero:", "    def __init__(self):", "        self._hp = 3", "    @property", "    def hp(self):", "        return self._hp * 10", "h = Hero()", "h._hp = 5", "print(h.hp)"),
       options: ["50", "30", "5"], answer: 0, output: "50",
       check: { compiles: true, stdout: "50" },
@@ -700,6 +1169,8 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 15, prompt: PRINT,
+      hint: L("Look closely at the sleep line. Without await, is the coroutine ever run?", "Mira bien la línea del sleep. Sin await, ¿se ejecuta alguna vez la corrutina?", "sleep の行をよく見よう。await がなければコルーチンは動く？"),
+      note: "coroutines",
       code: code("import asyncio", "async def main():", "    asyncio.sleep(0.01)", '    print("done")', "asyncio.run(main())"),
       options: ["done", L("Nothing", "Nada", "何も出ない"), "SyntaxError"], answer: 0, output: "done",
       check: { compiles: true, stdout: "done" },
@@ -707,6 +1178,8 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 15, prompt: PRINT,
+      hint: L("Hints are never checked at runtime. What does + do with a list and itself?", "Las anotaciones nunca se revisan al ejecutar. ¿Qué hace + con una lista y ella misma?", "ヒントは実行時にチェックされない。リスト同士の + はどうなる？"),
+      note: "type-hints",
       code: code("def heal(hp: int) -> int:", "    return hp + hp", "print(heal([1]))"),
       options: ["[1, 1]", "TypeError", "2"], answer: 0, output: "[1, 1]",
       check: { compiles: true, stdout: "[1, 1]" },
@@ -714,12 +1187,16 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 15, prompt: L("What does the GIL mean?", "¿Qué significa el GIL?", "GIL とは？"),
+      hint: L("The GIL is about how many threads run Python bytecode at the same moment.", "El GIL trata de cuántos hilos ejecutan bytecode de Python en el mismo momento.", "GIL は、同時に Python のバイトコードを動かせるスレッドの数の話。"),
+      note: "blocking-gil",
       code: code("# Standard CPython, one process", "# Two threads run pure-Python loops"),
       options: [L("One thread runs Python at a time", "Un hilo corre Python a la vez", "同時に動くのは1スレッド"), L("Python cannot make threads", "Python no puede crear hilos", "スレッドを作れない"), L("Both run on two cores", "Ambos usan dos núcleos", "2コアで同時に動く")], answer: 0,
       explain: L("The GIL lets only one thread execute Python bytecode at a time. Threads still help when waiting on I/O.", "El GIL deja que un solo hilo ejecute bytecode Python a la vez. Los hilos aún ayudan al esperar I/O.", "GIL では Python のバイトコードを実行できるのは同時に1スレッド。I/O 待ちにはスレッドが役立つ。"),
     },
     {
       kind: "order", time: 20, prompt: L("Build a counting generator", "Arma un generador que cuenta", "数えるジェネレータを組もう"),
+      hint: L("Set the counter before the loop, yield inside it, and step the counter after each yield.", "Fija el contador antes del bucle, haz yield dentro y avanza el contador tras cada yield.", "ループの前にカウンタを用意し、中で yield、yield のあとにカウンタを進める。"),
+      note: "generators",
       lines: ["def count_up(n):", "    i = 1", "    while i <= n:", "        yield i", "        i += 1", "print(list(count_up(3)))"],
       check: { compiles: true, stdout: "[1, 2, 3]" },
       explain: L("Start i at 1, loop while i <= n, yield i, then step i up.", "Empieza i en 1, repite mientras i <= n, haz yield i y luego súbelo.", "i を 1 から、i <= n の間ループ、yield i して i を増やす。"),

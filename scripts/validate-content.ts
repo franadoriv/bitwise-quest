@@ -2,7 +2,7 @@
 // (structure + compiles every `check`/`solution` with the language runner).
 // Exit code 1 when anything is wrong, so it can gate CI and LLM-generated content.
 import { LANGUAGE_PACKS } from "../content/index.ts";
-import type { Beat, Effect, LanguagePack, SnippetCheck } from "../lib/content/types.ts";
+import type { Beat, Effect, LanguagePack, LessonDef, SnippetCheck } from "../lib/content/types.ts";
 import { LOCALES, isLocalized, tx, type Text } from "../lib/i18n/text.ts";
 import { PACK_SPRITES } from "../content/sprites.ts";
 import type { CodeLang } from "../lib/content/types.ts";
@@ -161,6 +161,43 @@ function checkBeat(where: string, b: Beat, pack: LanguagePack) {
   }
 }
 
+/**
+ * Lesson notes (the long explanations behind the "📖" button). A lesson that has notes is held to
+ * the full standard: every question has a hint and resolves to one of the lesson's notes.
+ */
+function checkNotes(lw: string, lesson: LessonDef) {
+  const notes = lesson.notes ?? [];
+  const ids = new Set<string>();
+  for (const n of notes) {
+    const nw = `${lw} note:${n.id}`;
+    if (!/^[a-z0-9-]+$/.test(n.id)) err(nw, "note ids are kebab-case");
+    if (ids.has(n.id)) err(nw, "duplicate note id in this lesson");
+    ids.add(n.id);
+    prose(nw, "title", n.title, 40);
+    if (!n.blocks.some((b) => b.t === "code")) warn(nw, "a note should show at least one code example");
+    n.blocks.forEach((b, i) => {
+      if (b.t === "p") prose(`${nw}#${i}`, "text", b.text, 420);
+      else {
+        if (b.caption != null) prose(`${nw}#${i}`, "caption", b.caption, 90);
+        if (b.output != null || b.check) {
+          const check: SnippetCheck = b.check ?? { compiles: true, stdout: b.output };
+          jobs.push({ lang: LANG, where: `${nw}#${i}(code)`, program: buildProgram(b.code, check), compiles: check.compiles, stdout: check.stdout ?? b.output, throws: check.throws });
+        }
+      }
+    });
+  }
+  if (!notes.length) {
+    if (lesson.beats.some((b) => b.kind !== "dialog" && b.kind !== "act")) err(lw, "lesson without notes (every lesson explains its questions in the guidebook)");
+    return;
+  }
+  lesson.beats.forEach((b, i) => {
+    if (b.kind === "dialog" || b.kind === "act") return;
+    const where = `${lw}#${i}(${b.kind})`;
+    if (!b.hint) err(where, "missing hint (lessons with notes give every question a hint)");
+    if (b.note && !ids.has(b.note)) err(where, `unknown note "${b.note}"`);
+  });
+}
+
 checkSprites();
 const slugs = new Set(LANGUAGE_PACKS.map((p) => p.slug));
 for (const pack of LANGUAGE_PACKS) {
@@ -191,6 +228,7 @@ for (const pack of LANGUAGE_PACKS) {
       if (!spriteExists(lesson.enemy)) err(lw, `unknown enemy sprite "${lesson.enemy}"`);
       if (!lesson.beats.some((b) => b.kind !== "dialog" && b.kind !== "act")) err(lw, "lesson without questions");
       lesson.beats.forEach((b, i) => checkBeat(`${lw}#${i}(${b.kind})`, b, pack));
+      checkNotes(lw, lesson);
     }
   }
   prose(pack.slug, "tagline", pack.tagline, 60);

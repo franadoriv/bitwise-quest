@@ -1,4 +1,4 @@
-import type { Beat, LessonDef, RegionDef, Text } from "../../../lib/content/types.ts";
+import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
 
 // REGION 1 · VALUE VILLAGE  (let/const, primitive types, numbers, strings, equality, truthiness)
@@ -11,6 +11,98 @@ const COMPILES = L("Does it compile?", "¿Compila?", "コンパイルできる�
 const YES = L("Yes", "Sí", "はい");
 const NO_TSC = L("No: tsc stops it", "No: tsc lo detiene", "いいえ：tsc が止める");
 
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example; the validator type-checks it and checks `output` against the runner. */
+const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code, output, caption });
+/** An example that must NOT type-check (verified too). */
+const bad = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: false } });
+
+const labelsNotes: NoteDef[] = [
+  note("let-const", L("let, const and reassigning", "let, const y reasignar", "let と const と再代入"),
+    p(
+      "A variable is a label stuck on a value so you can find it again. You create one with let or const, a name, = and the value: let coins = 4; After that, writing coins means \"the value on this label\". The = is not the equals of math: it means \"put this value under this name\".",
+      "Una variable es una etiqueta pegada a un valor para encontrarlo luego. Se crea con let o const, un nombre, = y el valor: let coins = 4; Desde ahí, escribir coins significa \"el valor de esta etiqueta\". El = no es el igual de matemáticas: significa \"guarda este valor con este nombre\".",
+      "変数は値に貼るラベル。あとで見つけるためのものだよ。let か const、名前、=、値の順に書く：let coins = 4; それからは coins と書けば「このラベルの値」という意味。= は数学の「等しい」ではなく「この名前でこの値をしまう」という意味だよ。",
+    ),
+    ex("let coins = 4;\ncoins = coins * 3;\nconsole.log(coins);", "12",
+      L("let allows the label to move to a new value", "let permite mover la etiqueta a otro valor", "let ならラベルを新しい値へ貼りかえられる")),
+    p(
+      "Reassigning means pointing the label at a new value with name = newValue (no let this time). The right side is computed first, using the current value, and then the label moves. let allows this; const does not: a const label is glued to its first value, and TypeScript stops the program with error TS2588 before it runs.",
+      "Reasignar es apuntar la etiqueta a un valor nuevo con nombre = nuevoValor (esta vez sin let). Primero se calcula el lado derecho con el valor actual y luego la etiqueta se mueve. let lo permite; const no: una etiqueta const queda pegada a su primer valor, y TypeScript detiene el programa con el error TS2588 antes de ejecutarlo.",
+      "再代入は、名前 = 新しい値 と書いてラベルを別の値へ貼りかえること（let はもう書かない）。右側が今の値で先に計算され、そのあとラベルが動く。let はOK、const はダメ。const のラベルは最初の値に固定され、実行前に TypeScript がエラー TS2588 で止めるよ。",
+    ),
+    bad("const speed = 2;\nspeed = 3;",
+      L("Does not compile: TS2588, speed is a constant", "No compila: TS2588, speed es una constante", "コンパイル不可：TS2588、speed は定数")),
+    p(
+      "Rule of thumb: start with const, and switch to let only when the code really reassigns the label. Seeing const tells the next reader \"this name always means the same value\", which makes code easier to follow. var is the old keyword: you will meet it in old code, but prefer let and const.",
+      "Regla práctica: empieza con const y cambia a let solo cuando el código realmente reasigna la etiqueta. Ver const le dice al siguiente lector \"este nombre siempre significa el mismo valor\", y eso hace el código más fácil de seguir. var es la palabra antigua: la verás en código viejo, pero prefiere let y const.",
+      "目安：まず const で書き、本当に貼りかえるときだけ let にする。const を見れば「この名前はずっと同じ値」とわかるから読みやすい。var は古いキーワード。古いコードで見かけるけど、let と const を使おう。",
+    ),
+    p(
+      "Common mistake: thinking const freezes the item. const glues the LABEL, not what's inside. An array or object behind a const label can still change: push adds an element, and you can set a property. What you can't do is point the label at a different array.",
+      "Error común: creer que const congela el objeto. const pega la ETIQUETA, no lo que hay dentro. Un array u objeto detrás de una etiqueta const todavía puede cambiar: push agrega un elemento y puedes cambiar una propiedad. Lo que no puedes es apuntar la etiqueta a otro array.",
+      "よくある誤解：const で中身まで固まると思うこと。const が固定するのはラベルで、中身じゃない。const の配列やオブジェクトも push で要素を足したり、プロパティを変えたりできる。できないのは、ラベルを別の配列に貼りかえることだけ。",
+    ),
+    ex('const tools = ["axe"];\ntools.push("rope", "map");\nconsole.log(tools);', "[ 'axe', 'rope', 'map' ]",
+      L("The label stays put; the array behind it grows", "La etiqueta no se mueve; el array crece", "ラベルはそのまま、中の配列が増える")),
+  ),
+  note("types-typeof", L("Value types and typeof", "Tipos de valor y typeof", "値の型と typeof"),
+    p(
+      "Every value has a type: its kind. The basic ones are number (any number, whole or decimal), string (text in quotes), boolean (true or false), undefined and null. JavaScript has just one number type: 2, -8 and 0.5 are all number. There is no separate int or float.",
+      "Todo valor tiene un tipo: su clase. Los básicos son number (cualquier número, entero o decimal), string (texto entre comillas), boolean (true o false), undefined y null. JavaScript tiene un solo tipo de número: 2, -8 y 0.5 son todos number. No hay int ni float por separado.",
+      "どの値にも型（種類）がある。基本は number（整数も小数も）、string（クォートで囲んだ文字）、boolean（true か false）、undefined、null。JavaScript の数値型は1つだけで、2 も -8 も 0.5 も number。int や float の区別はないよ。",
+    ),
+    p(
+      "typeof value gives back the type's name as a string, such as \"number\" or \"boolean\". It's an operator, not a function, so it needs no parentheses. Because the result is a string, you can compare it: typeof x === \"string\".",
+      "typeof valor devuelve el nombre del tipo como string, por ejemplo \"number\" o \"boolean\". Es un operador, no una función, así que no necesita paréntesis. Como el resultado es un string, puedes compararlo: typeof x === \"string\".",
+      "typeof 値 は型の名前を文字列で返す。たとえば \"number\" や \"boolean\"。関数じゃなく演算子だから、かっこはいらない。結果は文字列なので typeof x === \"string\" のように比べられるよ。",
+    ),
+    ex('const word = "7";\nconsole.log(typeof word, typeof 7);', "string number",
+      L("Quotes make text, even when it looks like a number", "Las comillas hacen texto, aunque parezca número", "数字に見えてもクォートがあれば文字列")),
+    p(
+      "undefined means \"nothing was put here yet\". A label created without a value holds undefined until you assign one, and so does a property that was never set. null is a value you put on purpose to say \"empty\". Both mean nothing, but undefined is usually the language's empty and null is yours.",
+      "undefined significa \"aquí todavía no se puso nada\". Una etiqueta creada sin valor guarda undefined hasta que le asignes uno, y lo mismo una propiedad que nunca se definió. null es un valor que pones a propósito para decir \"vacío\". Ambos significan nada, pero undefined suele ser el vacío del lenguaje y null el tuyo.",
+      "undefined は「まだ何も入れていない」。値なしで作ったラベルは代入するまで undefined。一度も設定していないプロパティも同じ。null は「空です」とわざと入れる値。どちらも「なし」だけど、undefined はふつう言語が入れる空、null は自分で入れる空だよ。",
+    ),
+    ex('const pet: { name: string; age?: number } = { name: "Rex" };\nconsole.log(pet.age);', "undefined",
+      L("age was never set, so reading it gives undefined", "age nunca se definió, así que leerla da undefined", "age は設定していないので undefined")),
+    p(
+      "A famous trap: typeof null is \"object\", not \"null\". It's a bug from the very first JavaScript in 1995, kept forever because fixing it would break old websites. So to test for null, compare directly with value === null. typeof is reliable for numbers, strings, booleans, undefined and functions.",
+      "Una trampa famosa: typeof null es \"object\", no \"null\". Es un bug del primer JavaScript de 1995, que se dejó para siempre porque arreglarlo rompería sitios viejos. Para probar null, compara directo con valor === null. typeof es confiable para números, strings, booleanos, undefined y funciones.",
+      "有名なワナ：typeof null は \"null\" ではなく \"object\"。1995年の最初の JavaScript のバグで、直すと古いサイトが壊れるから残されている。null かどうかは 値 === null で直接比べよう。数値・文字列・真偽値・undefined・関数なら typeof は信頼できるよ。",
+    ),
+  ),
+  note("type-annotations", L("Type annotations", "Anotaciones de tipo", "型注釈"),
+    p(
+      "TypeScript is JavaScript plus types. After a name you can write a colon and a type: let speed: number = 2; That's a type annotation, a promise that \"this label will only ever hold numbers\". The checker (tsc) reads it before the program runs.",
+      "TypeScript es JavaScript más tipos. Después de un nombre puedes escribir dos puntos y un tipo: let speed: number = 2; Eso es una anotación de tipo, una promesa de que \"esta etiqueta solo guardará números\". El verificador (tsc) la lee antes de que el programa se ejecute.",
+      "TypeScript は JavaScript に型を足したもの。名前のあとにコロンと型を書ける：let speed: number = 2; これが型注釈で、「このラベルには数値しか入れない」という約束。型チェッカー（tsc）が実行前に読むよ。",
+    ),
+    p(
+      "From then on the checker guards the label. Assigning a value of another type, like a boolean to a number label, is error TS2322, and the program is stopped before it runs. The bug never reaches the player: you see it in the editor instead of as a strange result later.",
+      "Desde ahí el verificador vigila la etiqueta. Asignar un valor de otro tipo, como un booleano a una etiqueta number, es el error TS2322, y el programa se detiene antes de ejecutarse. El bug nunca llega al jugador: lo ves en el editor y no como un resultado raro después.",
+      "それからは型チェッカーがラベルを見張る。number のラベルに boolean を入れるなど別の型を代入するとエラー TS2322 になり、実行前に止まる。バグはプレイヤーに届かず、あとで変な結果になる前にエディタで気づけるよ。",
+    ),
+    bad("let lives: number = 5;\nlives = true;",
+      L("Does not compile: TS2322, a boolean is not a number", "No compila: TS2322, un booleano no es un number", "コンパイル不可：TS2322、boolean は number じゃない")),
+    p(
+      "The basic type names are lowercase: number, string, boolean. Write number, not Number or int. Often you don't need an annotation: let speed = 2 already makes speed a number, because TypeScript infers the type from the first value. Annotations matter most where inference can't see, like function parameters.",
+      "Los nombres de tipos básicos van en minúsculas: number, string, boolean. Escribe number, no Number ni int. A menudo no hace falta anotar: let speed = 2 ya hace de speed un number, porque TypeScript infiere el tipo del primer valor. Las anotaciones importan más donde la inferencia no ve, como en parámetros de funciones.",
+      "基本の型名は小文字：number、string、boolean。Number や int ではなく number と書く。型注釈がなくても let speed = 2 なら speed は number になる。最初の値から TypeScript が型を推論するからね。注釈が一番役立つのは、関数の引数のように推論できない場所だよ。",
+    ),
+    ex('let title: string = "Knight";\ntitle = title + " of Oak";\nconsole.log(title);', "Knight of Oak",
+      L("Same type in, same type out: fine", "Mismo tipo antes y después: todo bien", "同じ型どうしなら OK")),
+    p(
+      "Types are erased when the code runs: an annotation changes nothing at runtime, it only lets tsc catch mistakes early. So a \"Does it compile?\" question asks whether tsc accepts the code before anything runs, not what it would print.",
+      "Los tipos se borran al ejecutar: una anotación no cambia nada en tiempo de ejecución, solo permite a tsc detectar errores antes. Por eso una pregunta \"¿Compila?\" pregunta si tsc acepta el código antes de ejecutar nada, no qué imprimiría.",
+      "型は実行時には消える。型注釈は実行結果を何も変えず、tsc が早めにミスを見つけるためのもの。だから「コンパイルできる？」の問題は、何を表示するかではなく、実行前に tsc が受け入れるかを聞いているよ。",
+    ),
+  ),
+];
+
 // ─── 1.1 Labels and items ──────────────────────────────────────────────────
 const labels: LessonDef = {
   slug: "labels-and-items",
@@ -20,6 +112,7 @@ const labels: LessonDef = {
   xp: 60,
   enemy: "typescript/undefined-ghost",
   enemyName: L("EMPTY GHOST", "FANTASMA VACÍO", "からっぽゴースト"),
+  notes: labelsNotes,
   beats: [
     say(L(
       "Welcome to Value Village! A VARIABLE is a label you stick on a value, so you can find it again.",
@@ -58,6 +151,8 @@ const labels: LessonDef = {
       answer: 0,
       output: "15",
       check: { compiles: true, stdout: "15" },
+      hint: L("Work out the right side first with the current value; then the label moves to the result.", "Calcula primero el lado derecho con el valor actual; luego la etiqueta pasa al resultado.", "まず今の値で右側を計算。そのあとラベルが結果へ動くよ。"),
+      note: "let-const",
       explain: L("hp + 5 is 15, and the label hp now points to 15.", "hp + 5 es 15, y la etiqueta hp ahora apunta a 15.", "hp + 5 は 15。ラベル hp はいま 15 を指しているよ。"),
       setup: [{ t: "tag", actor: "hero", text: "hp", value: "10" }],
       win: [{ t: "value", actor: "hero", text: "15" }, { t: "print", text: "15" }],
@@ -69,6 +164,8 @@ const labels: LessonDef = {
       options: ["let", "const"],
       answer: 0,
       check: { compiles: true, stdout: "Grace", wrongFail: true },
+      hint: L("The second line points name at a new value. Which keyword allows a label to move?", "La segunda línea apunta name a otro valor. ¿Qué palabra permite mover una etiqueta?", "2行目で name を別の値に貼りかえる。ラベルを動かせるキーワードは？"),
+      note: "let-const",
       explain: L("The label is reassigned, so it must be let. const would be error TS2588.", "La etiqueta se reasigna, así que debe ser let. const daría el error TS2588.", "ラベルを貼りかえるから let。const だとエラー TS2588 になるよ。"),
       setup: [{ t: "tag", actor: "hero", text: "name", value: "Ada" }],
       win: [{ t: "value", actor: "hero", text: "Grace" }, { t: "print", text: "Grace" }],
@@ -86,6 +183,8 @@ const labels: LessonDef = {
       answer: 0,
       output: "2",
       check: { compiles: true, stdout: "2" },
+      hint: L("Does push move the label bag, or change the array behind it? Then count the items.", "¿push mueve la etiqueta bag o cambia el array detrás? Luego cuenta los elementos.", "push はラベル bag を動かす？中の配列を変える？そのあと数を数えよう。"),
+      note: "let-const",
       explain: L("push changes the array itself. The label bag never moved, so const is happy.", "push cambia el array en sí. La etiqueta bag nunca se movió, así que const está feliz.", "push は配列の中身を変えるだけ。ラベル bag は動いていないから const でも OK。"),
       setup: [{ t: "item", kind: "scroll", holder: "hero" }, { t: "tag", actor: "hero", text: "bag" }],
       win: [{ t: "value", actor: "hero", text: "2 items" }, { t: "print", text: "2" }],
@@ -103,6 +202,8 @@ const labels: LessonDef = {
       answer: 0,
       output: "number string boolean",
       check: { compiles: true, stdout: "number string boolean" },
+      hint: L("typeof gives the name of each value's kind, as text. What kind is each of the three values?", "typeof da el nombre de la clase de cada valor, como texto. ¿De qué clase es cada uno?", "typeof は値の種類の名前を文字で返す。3つの値はそれぞれ何の種類？"),
+      note: "types-typeof",
       explain: L("typeof returns the type's name as a string. JS has one number type for all numbers.", "typeof devuelve el nombre del tipo como string. JS tiene un solo tipo number para todos los números.", "typeof は型の名前を文字列で返す。数値の型は number ひとつだけだよ。"),
     },
     {
@@ -113,6 +214,8 @@ const labels: LessonDef = {
       answer: 0,
       output: "undefined",
       check: { compiles: true, stdout: "undefined" },
+      hint: L("x was created but never given a value. Which special value means that?", "x se creó pero nunca recibió un valor. ¿Qué valor especial significa eso?", "x は作られたけど値をもらっていない。それを表す特別な値は？"),
+      note: "types-typeof",
       explain: L("A label with no value yet holds undefined: 'nothing was put here'.", "Una etiqueta sin valor guarda undefined: 'aquí no se puso nada'.", "値を入れていないラベルは undefined。「まだ何も入っていない」って意味だよ。"),
       setup: [{ t: "tag", actor: "hero", text: "x" }],
       win: [{ t: "value", actor: "hero", text: "undefined" }, { t: "say", actor: "enemy", text: L("Boo! Empty!", "¡Bu! ¡Vacío!", "ばあ！からっぽ！") }],
@@ -125,6 +228,8 @@ const labels: LessonDef = {
       answer: 0,
       output: "object",
       check: { compiles: true, stdout: "object" },
+      hint: L("This is a famous historic quirk of typeof: the answer is not what the name suggests.", "Es una rareza histórica famosa de typeof: la respuesta no es lo que sugiere el nombre.", "typeof の有名な昔のクセ。答えは名前から想像するものとちがうよ。"),
+      note: "types-typeof",
       explain: L("A famous old bug: typeof null is 'object'. It was never fixed, to keep old sites working.", "Un bug antiguo y famoso: typeof null es 'object'. Nunca se arregló para no romper sitios viejos.", "有名な昔のバグで typeof null は 'object'。古いサイトを壊さないため直されていないんだ。"),
     },
     say(L(
@@ -138,6 +243,8 @@ const labels: LessonDef = {
       code: "let level: ___ = 3;\nconsole.log(level + 1);",
       answer: "number",
       check: { compiles: true, stdout: "4" },
+      hint: L("After the colon goes the type's name, in lowercase. What kind of value is 3?", "Tras los dos puntos va el nombre del tipo, en minúsculas. ¿Qué clase de valor es 3?", "コロンのあとは小文字の型名。3 はどんな種類の値？"),
+      note: "type-annotations",
       explain: L("3 is a number, so the annotation is : number.", "3 es un number, así que la anotación es : number.", "3 は number だから、型注釈は : number だよ。"),
       win: [{ t: "tag", actor: "hero", text: "level: number", value: "3" }, { t: "print", text: "4" }],
     },
@@ -148,6 +255,8 @@ const labels: LessonDef = {
       options: [YES, NO_TSC],
       answer: 1,
       check: { compiles: false },
+      hint: L("level was annotated with a type. Is the new value of that same type?", "level se anotó con un tipo. ¿El valor nuevo es de ese mismo tipo?", "level には型注釈がある。新しい値は同じ型？"),
+      note: "type-annotations",
       explain: L("Error TS2322: a string can't go on a number label. The bug never reaches the player.", "Error TS2322: un string no cabe en una etiqueta number. El bug nunca llega al jugador.", "エラー TS2322：number のラベルに string は入れられない。バグは実行前に止まるよ。"),
       setup: [{ t: "tag", actor: "hero", text: "level: number", value: "3" }],
       win: [{ t: "shake" }, { t: "say", actor: "hero", text: L("Blocked!", "¡Bloqueado!", "ブロック！") }],
@@ -159,12 +268,97 @@ const labels: LessonDef = {
       solution: 'let score = 0;\nscore = score + 10;\nconsole.log("score:", score);\n',
       expect: "score: 10",
       fallback: [String.raw`let\s+score\s*=\s*0`, String.raw`var\s+score\s*=\s*0`, String.raw`let\s+score\s*:\s*number\s*=\s*0`],
+      hint: L("score is reassigned on the second line. Look at the keyword that created it.", "score se reasigna en la segunda línea. Mira la palabra que lo creó.", "2行目で score を貼りかえている。作ったときのキーワードを見よう。"),
+      note: "let-const",
       explain: L("score changes, so its label must be let, not const.", "score cambia, así que su etiqueta debe ser let, no const.", "score は変わるから、ラベルは const じゃなく let にしよう。"),
     },
   ],
 };
 
 // ─── 1.2 Numbers and strings ───────────────────────────────────────────────
+const numbersNotes: NoteDef[] = [
+  note("float-precision", L("Decimals are not exact", "Los decimales no son exactos", "小数は正確じゃない"),
+    p(
+      "JavaScript stores every number in binary (base 2), in 64 bits. Whole numbers are exact, but many decimals, like 0.1, have no exact binary form, just as 1/3 has no exact decimal form (0.3333...). The computer keeps the closest value it can, which is a hair off.",
+      "JavaScript guarda todo número en binario (base 2), en 64 bits. Los enteros son exactos, pero muchos decimales, como 0.1, no tienen forma binaria exacta, igual que 1/3 no tiene forma decimal exacta (0.3333...). La computadora guarda el valor más cercano posible, que queda a un pelo.",
+      "JavaScript はすべての数値を二進数（64ビット）で保存する。整数は正確だけど、0.1 のような多くの小数は二進数でぴったり表せない。1/3 が 0.3333... になるのと同じ。コンピュータは一番近い値を保存するから、ほんの少しずれるんだ。",
+    ),
+    p(
+      "Usually the error is hidden when a number is printed. But arithmetic can make it visible: the tiny errors add up and the result shows extra digits at the end. This isn't a JavaScript bug: almost every language uses the same standard (IEEE 754) and does the same.",
+      "Normalmente el error se oculta al imprimir un número. Pero los cálculos pueden hacerlo visible: los errores diminutos se suman y el resultado muestra dígitos de más al final. No es un bug de JavaScript: casi todos los lenguajes usan el mismo estándar (IEEE 754) y hacen lo mismo.",
+      "ふつうは表示するときにずれが隠れる。でも計算すると小さなずれが積み重なって、最後に余分な桁が出てくることがある。JavaScript のバグではなく、ほとんどの言語が同じ規格（IEEE 754）を使っていて同じことが起きるよ。",
+    ),
+    ex("console.log(0.7 + 0.1);\nconsole.log(1.1 * 3);", "0.7999999999999999\n3.3000000000000003",
+      L("Tiny binary errors become visible", "Los errores binarios diminutos se vuelven visibles", "小さな二進数のずれが見えてくる")),
+    p(
+      "That's why === on decimals is risky: two results that look equal may differ in the last digit. Instead, check that the difference is tiny: Math.abs(a - b) < Number.EPSILON, or a tolerance that fits your problem, like 0.0001. Math.abs drops the sign, so the order of a and b doesn't matter.",
+      "Por eso === con decimales es arriesgado: dos resultados que parecen iguales pueden diferir en el último dígito. Mejor verifica que la diferencia sea mínima: Math.abs(a - b) < Number.EPSILON, o una tolerancia adecuada a tu problema, como 0.0001. Math.abs quita el signo, así que el orden de a y b no importa.",
+      "だから小数を === で比べるのは危ない。同じに見えても最後の桁が違うことがある。代わりに差がとても小さいか確かめよう：Math.abs(a - b) < Number.EPSILON、または 0.0001 のような問題に合った許容範囲。Math.abs は符号を消すので a と b の順番は関係ないよ。",
+    ),
+    ex("const sum = 0.7 + 0.1;\nconsole.log(sum === 0.8);\nconsole.log(Math.abs(sum - 0.8) < 0.0001);", "false\ntrue",
+      L("Compare the gap, not the exact digits", "Compara la distancia, no los dígitos exactos", "桁ではなく差で比べる")),
+    p(
+      "Common mistake: assuming prices or scores with decimals add up exactly. For money, count in whole cents (store 150 instead of 1.5) so all the math stays in exact whole numbers, and only show decimals when printing.",
+      "Error común: suponer que precios o puntajes con decimales se suman exactamente. Para dinero, cuenta en centavos enteros (guarda 150 en vez de 1.5) para que todo el cálculo quede en enteros exactos, y muestra decimales solo al imprimir.",
+      "よくあるミス：小数の値段や点数がぴったり足し算できると思うこと。お金はセント単位の整数で数えよう（1.5 ではなく 150 を保存）。そうすれば計算は正確な整数のまま。小数は表示するときだけにしよう。",
+    ),
+  ),
+  note("number-math", L("Division, NaN and Infinity", "División, NaN e Infinity", "割り算、NaN、Infinity"),
+    p(
+      "Since there is only one number type, / always gives the real result with decimals: 9 / 4 is 2.25, never 2. When you want a whole number, round it yourself: Math.floor rounds down, Math.ceil rounds up, Math.round goes to the nearest and Math.trunc just cuts the decimals off.",
+      "Como hay un solo tipo de número, / siempre da el resultado real con decimales: 9 / 4 es 2.25, nunca 2. Si quieres un entero, redondea tú: Math.floor redondea hacia abajo, Math.ceil hacia arriba, Math.round al más cercano y Math.trunc simplemente corta los decimales.",
+      "数値型は1つだけなので、/ はいつも小数つきの本当の結果を返す。9 / 4 は 2.25 で、2 にはならない。整数がほしいときは自分で丸める：Math.floor は切り下げ、Math.ceil は切り上げ、Math.round は四捨五入、Math.trunc は小数を切り落とすよ。",
+    ),
+    ex("console.log(9 / 4);\nconsole.log(Math.floor(9 / 4), Math.ceil(9 / 4));", "2.25\n2 3"),
+    p(
+      "Math that can't produce a real number doesn't crash: it returns NaN, \"Not a Number\". Zero divided by zero, or turning \"abc\" into a number, gives NaN. Strangely, NaN's type is number: it's a special value inside the number type that means \"this calculation failed\". Any math with NaN gives NaN again.",
+      "Un cálculo que no puede dar un número real no falla: devuelve NaN, \"Not a Number\". Cero entre cero, o convertir \"abc\" en número, da NaN. Curiosamente, el tipo de NaN es number: es un valor especial dentro del tipo number que significa \"este cálculo falló\". Cualquier cálculo con NaN vuelve a dar NaN.",
+      "本当の数が出せない計算でもエラーにはならず、NaN（Not a Number）を返す。0 を 0 で割ったり、\"abc\" を数値にしたりすると NaN。ふしぎなことに NaN の型は number。「計算に失敗した」を表す number の特別な値なんだ。NaN を使った計算はまた NaN になるよ。",
+    ),
+    p(
+      "Dividing a non-zero number by zero isn't an error either: it gives Infinity, or -Infinity for a negative number. JavaScript never throws on division by zero, so check your inputs yourself when zero is possible.",
+      "Dividir un número distinto de cero entre cero tampoco es un error: da Infinity, o -Infinity si es negativo. JavaScript nunca lanza un error al dividir por cero, así que revisa tú las entradas cuando el cero sea posible.",
+      "0 でない数を 0 で割ってもエラーにならず、Infinity（負の数なら -Infinity）になる。JavaScript はゼロ除算でエラーを出さないから、0 がありうるときは自分で入力を確かめよう。",
+    ),
+    ex("console.log(-6 / 0, 5 * Infinity);", "-Infinity Infinity"),
+    p(
+      "NaN is the only value not equal to itself, so x === NaN is always false: never test that way. Use Number.isNaN(x), which is true only for NaN. To read numbers from text, Number(s) needs the WHOLE string to be numeric, while parseInt(s) reads digits from the start and stops at the first non-digit.",
+      "NaN es el único valor que no es igual a sí mismo, así que x === NaN siempre es false: nunca pruebes así. Usa Number.isNaN(x), que es true solo para NaN. Para leer números de un texto, Number(s) necesita que TODO el string sea numérico, mientras que parseInt(s) lee dígitos desde el inicio y para en el primer no dígito.",
+      "NaN は自分自身と等しくない唯一の値。x === NaN はいつも false だから、その方法で調べないで。Number.isNaN(x) を使おう。文字列から数を読むとき、Number(s) は文字列全体が数でないとダメ。parseInt(s) は先頭から数字を読み、数字以外で止まるよ。",
+    ),
+    ex('const broken = Number("abc");\nconsole.log(broken === broken, Number.isNaN(broken));\nconsole.log(parseInt("8.9 kg"), Number(" 12 "));', "false true\n8 12",
+      L("parseInt stops at the dot; Number ignores outer spaces", "parseInt para en el punto; Number ignora espacios", "parseInt は点で止まる。Number は外側の空白を無視")),
+  ),
+  note("strings", L("Strings and templates", "Strings y templates", "文字列とテンプレート"),
+    p(
+      "A string is text. You can write it with double quotes \"hi\", single quotes 'hi' or backticks `hi`. Double and single quotes are the same. Backticks make a TEMPLATE string, which can hold values: write ${ } and put any expression inside. The expression is computed first, then its result is turned into text and placed there.",
+      "Un string es texto. Puedes escribirlo con comillas dobles \"hi\", simples 'hi' o invertidas `hi`. Las dobles y las simples son iguales. Las invertidas crean un string TEMPLATE, que puede llevar valores: escribe ${ } y pon cualquier expresión dentro. Primero se calcula la expresión y luego su resultado se convierte en texto y se coloca ahí.",
+      "文字列はテキスト。\"hi\"、'hi'、`hi` のどれでも書ける。ダブルとシングルのクォートは同じ。バッククォートはテンプレート文字列で、${ } の中に式を書ける。式が先に計算され、その結果が文字になって埋めこまれるよ。",
+    ),
+    ex("const coins = 4;\nconsole.log(`Bag: ${coins * 2} coins`);", "Bag: 8 coins"),
+    p(
+      "Common mistake: using normal quotes with ${ }. Inside \"...\" or '...' the ${ } is just characters and prints as written; only backticks fill in values. Also remember that + with a string glues text: \"1\" + 2 is \"12\", while inside ${ } the math runs before the result joins the text.",
+      "Error común: usar comillas normales con ${ }. Dentro de \"...\" o '...' el ${ } son solo caracteres y se imprime tal cual; solo las comillas invertidas rellenan valores. Recuerda también que + con un string pega texto: \"1\" + 2 es \"12\", mientras que dentro de ${ } el cálculo se hace antes de unirse al texto.",
+      "よくあるミス：ふつうのクォートで ${ } を使うこと。\"...\" や '...' の中の ${ } はただの文字で、そのまま表示される。値が入るのはバッククォートだけ。また + に文字列があると連結になる：\"1\" + 2 は \"12\"。${ } の中なら計算が先だよ。",
+    ),
+    ex('const n = 5;\nconsole.log("${n}", `${n}`, "1" + n);', "${n} 5 15",
+      L("Only backticks fill in ${ }", "Solo las comillas invertidas rellenan ${ }", "${ } が埋まるのはバッククォートだけ")),
+    p(
+      "Strings have methods, functions you call with a dot: toLowerCase gives a lowercase copy, trim removes outer spaces, includes checks whether a piece is inside. Strings can't change in place: every method returns a NEW string and the original stays as it was.",
+      "Los strings tienen métodos, funciones que se llaman con un punto: toLowerCase da una copia en minúsculas, trim quita los espacios de los extremos, includes revisa si un trozo está dentro. Los strings no cambian en el sitio: cada método devuelve un string NUEVO y el original queda igual.",
+      "文字列にはメソッド（ドットで呼ぶ関数）がある。toLowerCase は小文字のコピー、trim は両端の空白を消す、includes は一部が含まれるか調べる。文字列そのものは変えられないので、どのメソッドも新しい文字列を返し、元の文字列はそのままだよ。",
+    ),
+    ex('const shout = "HEY YOU";\nconst calm = shout.toLowerCase();\nconsole.log(calm, shout);', "hey you HEY YOU",
+      L("The original string is unchanged", "El string original no cambia", "元の文字列は変わらない")),
+    p(
+      "replace swaps a piece of a string, but with plain text or a regular expression without flags it changes only the FIRST match. A regular expression goes between slashes, like /a/, and flags go after the last slash: g (global) means every match, i means ignore upper and lower case. replaceAll is another way to change every match of plain text.",
+      "replace cambia un trozo del string, pero con texto simple o una expresión regular sin banderas cambia solo la PRIMERA coincidencia. Una expresión regular va entre barras, como /a/, y las banderas van tras la última barra: g (global) significa todas las coincidencias, i ignora mayúsculas y minúsculas. replaceAll es otra forma de cambiar todas las de un texto simple.",
+      "replace は文字列の一部を置きかえる。でもふつうの文字列やフラグなしの正規表現だと、最初の1つだけ。正規表現は /a/ のようにスラッシュで囲み、最後のスラッシュのあとにフラグを書く。g（グローバル）は全部、i は大文字小文字を区別しない。replaceAll でも全部置きかえられるよ。",
+    ),
+    ex('console.log("banana".replace("a", "o"));\nconsole.log("banana".replaceAll("a", "o"));', "bonana\nbonono"),
+  ),
+];
+
 const numbers: LessonDef = {
   slug: "numbers-and-strings",
   title: L("Numbers and strings", "Números y strings", "数値と文字列"),
@@ -173,6 +367,7 @@ const numbers: LessonDef = {
   xp: 65,
   enemy: "typescript/nan-gremlin",
   enemyName: L("NAN GREMLIN", "GREMLIN NAN", "NaN グレムリン"),
+  notes: numbersNotes,
   beats: [
     say(L(
       "JS has ONE number type for everything: 7, 3.5, -2. It's stored in binary, and that has quirks.",
@@ -202,6 +397,8 @@ const numbers: LessonDef = {
       answer: 0,
       output: "false",
       check: { compiles: true, stdout: "false" },
+      hint: L("Can 0.1 and 0.2 be stored exactly in binary? === needs every last digit to match.", "¿Se pueden guardar 0.1 y 0.2 exactos en binario? === exige que coincida hasta el último dígito.", "0.1 と 0.2 は二進数でぴったり保存できる？=== は最後の桁まで同じでないとダメ。"),
+      note: "float-precision",
       explain: L("0.1 + 0.2 is 0.30000000000000004, which is not exactly 0.3.", "0.1 + 0.2 es 0.30000000000000004, que no es exactamente 0.3.", "0.1 + 0.2 は 0.30000000000000004。ぴったり 0.3 じゃないんだ。"),
       win: [{ t: "print", text: "false" }, { t: "shake" }],
     },
@@ -213,6 +410,8 @@ const numbers: LessonDef = {
       answer: 0,
       output: "3.5 3",
       check: { compiles: true, stdout: "3.5 3" },
+      hint: L("Does / keep the decimals? And which way does Math.floor round?", "¿/ conserva los decimales? ¿Y hacia dónde redondea Math.floor?", "/ は小数を残す？Math.floor はどちらに丸める？"),
+      note: "number-math",
       explain: L("/ never drops decimals. For whole-number division, round down with Math.floor.", "/ nunca descarta decimales. Para división entera, redondea hacia abajo con Math.floor.", "/ は小数を切り捨てない。整数の割り算は Math.floor で切り捨てよう。"),
     },
     say(L(
@@ -228,6 +427,8 @@ const numbers: LessonDef = {
       answer: 0,
       output: "number true",
       check: { compiles: true, stdout: "number true" },
+      hint: L("NaN lives inside one of the basic types. Number.isNaN is the dedicated test for it.", "NaN vive dentro de uno de los tipos básicos. Number.isNaN es la prueba hecha para él.", "NaN は基本の型のどれかの中にいる。Number.isNaN はそのための判定だよ。"),
+      note: "number-math",
       explain: L("NaN is a special number value meaning 'failed math'. Number.isNaN is the safe test.", "NaN es un valor number especial que significa 'cálculo fallido'. Number.isNaN es la prueba segura.", "NaN は「計算失敗」を表す特別な number の値。Number.isNaN で確実に判定できるよ。"),
       setup: [{ t: "enter", actor: "enemy" }, { t: "tag", actor: "enemy", text: "NaN" }],
       win: [{ t: "attack", from: "hero", to: "enemy" }],
@@ -240,6 +441,8 @@ const numbers: LessonDef = {
       answer: 0,
       output: "Infinity NaN",
       check: { compiles: true, stdout: "Infinity NaN" },
+      hint: L("JS doesn't throw here. A non-zero number over zero and zero over zero give two different special values.", "JS no lanza error aquí. Un número no cero entre cero y cero entre cero dan dos valores especiales distintos.", "JS はエラーを出さない。0 でない数÷0 と 0÷0 は別々の特別な値になる。"),
+      note: "number-math",
       explain: L("JS never crashes on division by zero: 10 / 0 is Infinity and 0 / 0 is NaN.", "JS nunca falla al dividir por cero: 10 / 0 es Infinity y 0 / 0 es NaN.", "JS はゼロで割ってもエラーにならない。10 / 0 は Infinity、0 / 0 は NaN だよ。"),
     },
     {
@@ -250,6 +453,8 @@ const numbers: LessonDef = {
       answer: 0,
       output: "42 NaN",
       check: { compiles: true, stdout: "42 NaN" },
+      hint: L("One function stops at the first non-digit; the other needs the whole string to be a number.", "Una función para en el primer no dígito; la otra necesita que todo el string sea un número.", "片方は数字以外で止まる。もう片方は文字列全体が数でないとダメ。"),
+      note: "number-math",
       explain: L("parseInt reads digits until it hits junk. Number needs the WHOLE string to be a number.", "parseInt lee dígitos hasta toparse con basura. Number necesita que TODO el string sea un número.", "parseInt は数字以外が出るまで読む。Number は文字列全体が数でないとダメなんだ。"),
     },
     say(L(
@@ -265,6 +470,8 @@ const numbers: LessonDef = {
       answer: 0,
       output: "HP: 7",
       check: { compiles: true, stdout: "HP: 7" },
+      hint: L("These are backticks. What happens to the code inside ${ } before it joins the text?", "Son comillas invertidas. ¿Qué pasa con el código dentro de ${ } antes de unirse al texto?", "これはバッククォート。${ } の中のコードは文字に入る前にどうなる？"),
+      note: "strings",
       explain: L("Inside ${ } the code runs first: 3 + 4 is 7, then it's placed in the string.", "Dentro de ${ } el código se ejecuta primero: 3 + 4 es 7 y luego se pone en el string.", "${ } の中が先に計算される。3 + 4 = 7 が文字列に入るよ。"),
     },
     {
@@ -273,6 +480,8 @@ const numbers: LessonDef = {
       code: 'console.log("owl".___());',
       answer: "toUpperCase",
       check: { compiles: true, stdout: "OWL" },
+      hint: L("You need the method that turns every letter into a capital. Its opposite is toLowerCase.", "Necesitas el método que pasa cada letra a mayúscula. Su opuesto es toLowerCase.", "全部の文字を大文字にするメソッド。反対は toLowerCase だよ。"),
+      note: "strings",
       explain: L("toUpperCase returns a new string in capitals. Strings never change in place.", "toUpperCase devuelve un string nuevo en mayúsculas. Los strings nunca cambian en el sitio.", "toUpperCase は大文字の新しい文字列を返す。文字列そのものは変わらないよ。"),
       win: [{ t: "print", text: "OWL" }],
     },
@@ -283,6 +492,8 @@ const numbers: LessonDef = {
       options: ["g", "i", "m"],
       answer: 0,
       check: { compiles: true, stdout: "HeLLo" },
+      hint: L("Without a flag, replace changes only the first match. Which flag means every match, everywhere?", "Sin bandera, replace cambia solo la primera coincidencia. ¿Qué bandera significa todas, en todas partes?", "フラグなしの replace は最初の1つだけ。全部を意味するフラグは？"),
+      note: "strings",
       explain: L("The g (global) flag replaces all matches. Without it, only the first l changes: HeLlo.", "La bandera g (global) reemplaza todas las coincidencias. Sin ella solo cambia la primera l: HeLlo.", "g（グローバル）フラグで全部を置換。ないと最初の l だけ変わって HeLlo になるよ。"),
     },
     {
@@ -297,12 +508,91 @@ const numbers: LessonDef = {
         String.raw`total\.toFixed\s*\(\s*\d\s*\)\s*===?\s*"0\.3`,
         String.raw`Math\.round\s*\(\s*total\s*\*\s*10+\s*\)`,
       ],
+      hint: L("=== on decimals checks every digit. Check how far apart the two numbers are instead.", "=== con decimales revisa cada dígito. Revisa mejor qué tan lejos están los dos números.", "小数の === は全部の桁を比べる。代わりに2つの数の差を調べよう。"),
+      note: "float-precision",
       explain: L("Compare the difference: Math.abs(total - 0.3) < Number.EPSILON means 'close enough'.", "Compara la diferencia: Math.abs(total - 0.3) < Number.EPSILON significa 'suficientemente cerca'.", "差で比べよう。Math.abs(total - 0.3) < Number.EPSILON は「十分近い」という意味だよ。"),
     },
   ],
 };
 
 // ─── 1.3 Equal or the same? ────────────────────────────────────────────────
+const equalityNotes: NoteDef[] = [
+  note("strict-equality", L("=== versus ==", "=== contra ==", "=== と =="),
+    p(
+      "=== is strict equality: it's true only when both sides have the same type AND the same value. 4 === 4 is true, but 4 === \"4\" is false, because one is a number and the other a string. No conversions, no surprises. !== is its opposite.",
+      "=== es la igualdad estricta: es true solo cuando ambos lados tienen el mismo tipo Y el mismo valor. 4 === 4 es true, pero 4 === \"4\" es false, porque uno es number y el otro string. Sin conversiones ni sorpresas. !== es su opuesto.",
+      "=== は厳密な等価。型も値も同じときだけ true。4 === 4 は true、4 === \"4\" は false。片方が number、もう片方が string だからね。変換なし、驚きなし。!== はその反対だよ。",
+    ),
+    p(
+      "== is loose equality: when the types differ, it first converts (coerces) one side and then compares. That's why it can say a number equals a string. The conversion rules are long and odd, and even an empty string can equal 0. Village rule: always use === and !==.",
+      "== es la igualdad flexible: si los tipos difieren, primero convierte uno de los lados y luego compara. Por eso puede decir que un número es igual a un string. Las reglas de conversión son largas y raras, e incluso un string vacío puede ser igual a 0. Regla de la aldea: usa siempre === y !==.",
+      "== はゆるい等価。型が違うと先に片方を変換（型強制）してから比べる。だから数値と文字列が等しいことになったりする。変換のルールは長くて奇妙で、空文字が 0 と等しくなることも。村のルール：いつも === と !== を使おう。",
+    ),
+    ex('const x: any = 0;\nconst y: any = "";\nconsole.log(x == y, x === y);', "true false",
+      L("== turns \"\" into 0 first; === doesn't convert", "== convierte \"\" en 0 antes; === no convierte", "== は \"\" を 0 に変換、=== は変換しない")),
+    p(
+      "null and undefined have a special rule: with == they equal each other and nothing else, so x == null catches both. They are still two different types, which === notices. Other operators convert too: + with a string on either side joins text, but -, * and / only do math, so they turn strings into numbers.",
+      "null y undefined tienen una regla especial: con == son iguales entre sí y a nada más, así que x == null atrapa ambos. Aun así son dos tipos distintos, y === lo nota. Otros operadores también convierten: + con un string en cualquier lado pega texto, pero -, * y / solo hacen cálculos, así que convierten los strings en números.",
+      "null と undefined には特別なルールがある。== ではおたがいだけと等しいので、x == null で両方つかまえられる。でも型は別々で、=== はそれを見分ける。ほかの演算子も変換する：+ はどちらかが文字列なら連結、-、*、/ は計算だけなので文字列を数値に変えるよ。",
+    ),
+    ex('const v: any = "8";\nconsole.log(v + 2, v * 2);', "82 16",
+      L("+ joins text; * converts to a number", "+ pega texto; * convierte a número", "+ は連結、* は数値に変換")),
+    p(
+      "TypeScript normally blocks these mixes (comparing a number with a string is error TS2367), but with any it can't help: any switches the checker off for that value. Finally, Object.is(a, b) means \"the very same value\". It matches === except for NaN, which it treats as equal to itself, and the sign of zero, which it tells apart.",
+      "TypeScript normalmente bloquea estas mezclas (comparar un number con un string es el error TS2367), pero con any no puede ayudar: any apaga el verificador para ese valor. Por último, Object.is(a, b) significa \"el mismo valor exacto\". Coincide con === salvo con NaN, que trata como igual a sí mismo, y el signo del cero, que distingue.",
+      "ふつう TypeScript はこういう混ぜ方を止める（number と string の比較はエラー TS2367）。でも any だと見張りが消えて守れない。最後に Object.is(a, b) は「完全に同じ値か」。=== とほぼ同じだけど、NaN は自分と等しいとみなし、0 の符号は区別するよ。",
+    ),
+    bad('console.log(5 === "5");',
+      L("Does not compile: TS2367, number and string never overlap", "No compila: TS2367, number y string no se solapan", "コンパイル不可：TS2367、number と string は重ならない")),
+  ),
+  note("truthy-falsy", L("Truthy and falsy values", "Valores truthy y falsy", "truthy と falsy"),
+    p(
+      "An if, a ternary (cond ? a : b), the ! operator and && / || accept ANY value, not just true or false. JavaScript decides whether the value counts as true (truthy) or false (falsy). Boolean(value) shows you the answer, and !!value is a short way to write the same thing.",
+      "Un if, un ternario (cond ? a : b), el operador ! y && / || aceptan CUALQUIER valor, no solo true o false. JavaScript decide si el valor cuenta como verdadero (truthy) o falso (falsy). Boolean(valor) te muestra la respuesta, y !!valor es una forma corta de escribir lo mismo.",
+      "if、三項演算子（cond ? a : b）、!、&& や || は true と false だけでなく、どんな値でも受けつける。JavaScript がその値を真あつかい（truthy）か偽あつかい（falsy）か決める。Boolean(値) で答えがわかり、!!値 は同じことを短く書いたものだよ。",
+    ),
+    p(
+      "There are only a few falsy values, so learn the list: false, 0, -0, \"\" (the empty string), null, undefined and NaN. EVERYTHING else is truthy: any non-empty string, any non-zero number, and every array and object, even empty ones.",
+      "Hay pocos valores falsy, así que apréndete la lista: false, 0, -0, \"\" (el string vacío), null, undefined y NaN. TODO lo demás es truthy: cualquier string no vacío, cualquier número distinto de cero, y todo array y objeto, aunque estén vacíos.",
+      "falsy な値は少ないので、リストをおぼえよう：false、0、-0、\"\"（空文字）、null、undefined、NaN。それ以外は全部 truthy。空でない文字列、0 以外の数、そして配列とオブジェクトは空でも truthy だよ。",
+    ),
+    ex('console.log(Boolean(-1), Boolean(" "), Boolean(null));', "true true false",
+      L("A space is a character; null is on the falsy list", "Un espacio es un carácter; null está en la lista falsy", "空白も1文字。null は falsy のリストにある")),
+    p(
+      "Common traps: a string that contains characters is truthy whatever the characters say, so text like \"no\" counts as true. Arrays are truthy even when empty; to check for an empty array, test list.length === 0. And 0 is falsy, so if (count) skips a valid count of zero.",
+      "Trampas comunes: un string con caracteres es truthy diga lo que diga, así que un texto como \"no\" cuenta como verdadero. Los arrays son truthy aunque estén vacíos; para saber si un array está vacío, prueba list.length === 0. Y 0 es falsy, así que if (count) se salta un conteo válido de cero.",
+      "よくあるワナ：文字が入った文字列は、中身に関係なく truthy。\"no\" も真あつかい。配列は空でも truthy なので、空かどうかは list.length === 0 で調べよう。0 は falsy だから、if (count) は正しい 0 をとばしてしまうよ。",
+    ),
+    ex('const items: string[] = [];\nif (items) console.log("array exists");\nif (items.length === 0) console.log("but it is empty");', "array exists\nbut it is empty"),
+    p(
+      "Truthiness is handy for asking \"is there something here?\", but it lumps 0 and \"\" together with null and undefined. When 0 or an empty string is a valid value, test exactly what you mean, such as x === null, instead of relying on truthiness.",
+      "La truthiness es útil para preguntar \"¿hay algo aquí?\", pero mete 0 y \"\" en el mismo saco que null y undefined. Cuando 0 o un string vacío son valores válidos, prueba exactamente lo que quieres decir, como x === null, en vez de confiar en la truthiness.",
+      "truthy/falsy は「何かある？」と聞くのに便利。でも 0 や \"\" を null や undefined と同じあつかいにしてしまう。0 や空文字が正しい値のときは、truthy にたよらず x === null のように知りたいことを正確に調べよう。",
+    ),
+  ),
+  note("nullish-fallback", L("Fallbacks: || versus ??", "Respaldos: || contra ??", "代わりの値：|| と ??"),
+    p(
+      "A fallback gives a default when a value is missing: a || b and a ?? b. Both return the left side when it's usable and the right side otherwise. The difference is what counts as \"missing\".",
+      "Un respaldo da un valor por defecto cuando falta un valor: a || b y a ?? b. Ambos devuelven el lado izquierdo si sirve y el derecho si no. La diferencia está en qué cuenta como \"faltante\".",
+      "代わりの値（フォールバック）は値がないときのデフォルト：a || b と a ?? b。どちらも左が使えれば左、だめなら右を返す。ちがうのは、何を「ない」とみなすかだよ。",
+    ),
+    p(
+      "|| (OR) falls back on ANY falsy value: false, 0, \"\", null, undefined, NaN. ?? (nullish coalescing) falls back only on null or undefined. So when 0, \"\" or false are real answers, like a score of zero or an empty nickname, || throws them away and ?? keeps them.",
+      "|| (OR) usa el respaldo con CUALQUIER valor falsy: false, 0, \"\", null, undefined, NaN. ?? (fusión nullish) lo usa solo con null o undefined. Así, cuando 0, \"\" o false son respuestas reales, como un puntaje de cero o un apodo vacío, || los descarta y ?? los conserva.",
+      "||（OR）は falsy なら何でも代わりを使う：false、0、\"\"、null、undefined、NaN。??（null 合体）は null と undefined のときだけ。だから 0 点や空のニックネームのように 0、\"\"、false が本当の答えのとき、|| は捨てて ?? は残すよ。",
+    ),
+    ex("const muted: boolean = false;\nconsole.log(muted || true, muted ?? true);", "true false",
+      L("false is falsy, but it is not null or undefined", "false es falsy, pero no es null ni undefined", "false は falsy だけど null でも undefined でもない")),
+    p(
+      "Rule: use ?? for defaults (\"use this unless the value is missing\") and keep || for true/false logic. ?? arrived in JavaScript in 2020 to fix exactly this bug. A classic mistake is writing count || 1 and then wondering why a real 0 became 1.",
+      "Regla: usa ?? para valores por defecto (\"usa esto salvo que falte el valor\") y deja || para lógica de verdadero/falso. ?? llegó a JavaScript en 2020 para arreglar justo este bug. Un error clásico es escribir count || 1 y luego no entender por qué un 0 real se volvió 1.",
+      "ルール：デフォルトには ??（「値がないときだけこれ」）、|| は true/false の判定に使おう。?? はまさにこのバグを直すため 2020 年に JavaScript に入った。count || 1 と書いて、本当の 0 が 1 になって悩むのは定番のミスだよ。",
+    ),
+    ex('function label(name?: string) {\n  return name ?? "unnamed";\n}\nconsole.log(label(), label("Oak"));', "unnamed Oak",
+      L("A missing argument is undefined, so ?? steps in", "Un argumento que falta es undefined, y ?? actúa", "引数がないと undefined なので ?? が働く")),
+  ),
+];
+
 const equality: LessonDef = {
   slug: "equality-and-truthiness",
   title: L("Equal or the same?", "¿Igual o idéntico?", "等しい？同じ？"),
@@ -311,6 +601,7 @@ const equality: LessonDef = {
   xp: 70,
   enemy: "typescript/any-shifter",
   enemyName: L("ANY SHIFTER", "CAMBIAFORMAS ANY", "any バケ"),
+  notes: equalityNotes,
   beats: [
     say(L(
       "=== compares value AND type, with no tricks. == converts types first, and that brings surprises.",
@@ -349,6 +640,8 @@ const equality: LessonDef = {
       answer: 0,
       output: "53 2",
       check: { compiles: true, stdout: "53 2" },
+      hint: L("Look at each operator alone: one joins text when a string is involved, the other only does math.", "Mira cada operador por separado: uno pega texto si hay un string, el otro solo hace cálculos.", "演算子を1つずつ見よう。片方は文字列があると連結、もう片方は計算だけ。"),
+      note: "strict-equality",
       explain: L("+ with a string glues text: \"53\". - only works on numbers, so \"5\" becomes 5: 2.", "+ con un string pega texto: \"53\". - solo trabaja con números, así que \"5\" pasa a 5: 2.", "+ に文字列があると連結して \"53\"。- は数値だけなので \"5\" は 5 になって 2。"),
       setup: [{ t: "enter", actor: "enemy" }, { t: "tag", actor: "enemy", text: "a: any", value: '"5"' }],
       win: [{ t: "print", text: "53 2" }, { t: "attack", from: "hero", to: "enemy" }],
@@ -361,6 +654,8 @@ const equality: LessonDef = {
       answer: 0,
       output: "true false",
       check: { compiles: true, stdout: "true false" },
+      hint: L("== has a special rule for null and undefined. === also checks the type: are their types the same?", "== tiene una regla especial para null y undefined. === también revisa el tipo: ¿son del mismo tipo?", "== には null と undefined の特別ルールがある。=== は型も見る。型は同じ？"),
+      note: "strict-equality",
       explain: L("== treats null and undefined as the same 'nothing'. === sees two different types.", "== trata null y undefined como la misma 'nada'. === ve dos tipos distintos.", "== は null と undefined を同じ「なし」とみなす。=== は別の型として扱うよ。"),
     },
     say(L(
@@ -376,6 +671,8 @@ const equality: LessonDef = {
       answer: 0,
       output: "false true true",
       check: { compiles: true, stdout: "false true true" },
+      hint: L("Recall the short list of falsy values. Is each value on it? Look closely at what each string holds.", "Recuerda la lista corta de valores falsy. ¿Está cada valor en ella? Mira bien qué contiene cada string.", "falsy の短いリストを思い出そう。それぞれの値は入ってる？文字列の中身をよく見て。"),
+      note: "truthy-falsy",
       explain: L("Only the EMPTY string is falsy. \"0\" has a character, and any array, even empty, is truthy.", "Solo el string VACÍO es falsy. \"0\" tiene un carácter, y todo array, aunque esté vacío, es truthy.", "falsy なのは空文字だけ。\"0\" は1文字あるし、配列は空でも truthy だよ。"),
     },
     {
@@ -385,6 +682,8 @@ const equality: LessonDef = {
       options: ["0", '"false"', "[1]", "{}"],
       answer: 0,
       check: { compiles: true, stdout: "falsy" },
+      hint: L("Only a handful of values are falsy. Check each option against that list; strings and objects need care.", "Solo unos pocos valores son falsy. Compara cada opción con esa lista; cuidado con strings y objetos.", "falsy な値はほんの少し。各選択肢をリストと照らそう。文字列とオブジェクトに注意。"),
+      note: "truthy-falsy",
       explain: L("0 is falsy. \"false\" is a non-empty string, and arrays and objects are always truthy.", "0 es falsy. \"false\" es un string no vacío, y los arrays y objetos siempre son truthy.", "0 は falsy。\"false\" は空じゃない文字列、配列とオブジェクトはいつも truthy。"),
       win: [{ t: "print", text: "falsy" }],
     },
@@ -401,6 +700,8 @@ const equality: LessonDef = {
       answer: 0,
       output: "10 0",
       check: { compiles: true, stdout: "10 0" },
+      hint: L("|| falls back on any falsy value; ?? only on null or undefined. Which groups is 0 in?", "|| usa el respaldo con cualquier falsy; ?? solo con null o undefined. ¿En qué grupos está 0?", "|| は falsy なら何でも、?? は null と undefined だけ。0 はどのグループ？"),
+      note: "nullish-fallback",
       explain: L("0 is falsy, so || picks 10. But 0 is not null or undefined, so ?? keeps 0.", "0 es falsy, así que || elige 10. Pero 0 no es null ni undefined, así que ?? conserva 0.", "0 は falsy だから || は 10。でも null でも undefined でもないから ?? は 0 のまま。"),
       setup: [{ t: "tag", actor: "hero", text: "n", value: "0" }],
       win: [{ t: "print", text: "10 0" }],
@@ -411,6 +712,8 @@ const equality: LessonDef = {
       code: "const score: number | null = null;\nconsole.log(score ___ 0);",
       answer: "??",
       check: { compiles: true, stdout: "0" },
+      hint: L("You need the two-character fallback operator that reacts only to null or undefined.", "Necesitas el operador de respaldo de dos caracteres que solo reacciona a null o undefined.", "null と undefined だけに反応する、2文字の代わりの値の演算子だよ。"),
+      note: "nullish-fallback",
       explain: L("?? is the nullish fallback: it only replaces null and undefined.", "?? es el respaldo nullish: solo reemplaza null y undefined.", "?? は null と undefined だけを置きかえる演算子だよ。"),
     },
     {
@@ -421,6 +724,8 @@ const equality: LessonDef = {
       answer: 0,
       output: "true false",
       check: { compiles: true, stdout: "true false" },
+      hint: L("Object.is checks for the very same value. It differs from === only for NaN and the sign of zero.", "Object.is busca el mismo valor exacto. Difiere de === solo con NaN y el signo del cero.", "Object.is は完全に同じ値かを見る。=== とちがうのは NaN と 0 の符号だけ。"),
+      note: "strict-equality",
       explain: L("Object.is means 'the very same value': NaN equals itself there, and 0 and -0 differ.", "Object.is significa 'el mismo valor exacto': ahí NaN es igual a sí mismo, y 0 y -0 son distintos.", "Object.is は「完全に同じ値か」。NaN は自分と等しく、0 と -0 は別あつかいだよ。"),
     },
     {
@@ -430,12 +735,94 @@ const equality: LessonDef = {
       solution: 'const input = 0;\nconst lives = input ?? 3;\nconsole.log("lives:", lives);\n',
       expect: "lives: 0",
       fallback: [String.raw`input\s*\?\?\s*3`, String.raw`input\s*===?\s*(?:undefined|null)\s*\?\s*3\s*:\s*input`],
+      hint: L("The current operator treats 0 as missing. Use the fallback that reacts only to null or undefined.", "El operador actual trata el 0 como faltante. Usa el respaldo que solo reacciona a null o undefined.", "今の演算子は 0 を「ない」とみなす。null と undefined だけに反応するほうを使おう。"),
+      note: "nullish-fallback",
       explain: L("|| replaced the valid 0. ?? only replaces null or undefined, so 0 stays.", "|| reemplazó el 0 válido. ?? solo reemplaza null o undefined, así que el 0 se queda.", "|| は正しい 0 まで置きかえた。?? なら null と undefined だけだから 0 が残るよ。"),
     },
   ],
 };
 
 // ─── 1.4 Boss: Value Golem ─────────────────────────────────────────────────
+const bossNotes: NoteDef[] = [
+  note("types-recap", L("Recap: types, typeof, let", "Repaso: tipos, typeof, let", "復習：型・typeof・let"),
+    p(
+      "typeof answers with the type's name as a STRING: \"number\", \"string\", \"boolean\", \"undefined\", \"object\" or \"function\". Since that answer is itself a value, you can ask what type THAT value is, too. Remember the old quirk: typeof null is \"object\".",
+      "typeof responde con el nombre del tipo como STRING: \"number\", \"string\", \"boolean\", \"undefined\", \"object\" o \"function\". Como esa respuesta también es un valor, puedes preguntar de qué tipo es ESE valor. Recuerda la rareza antigua: typeof null es \"object\".",
+      "typeof は型の名前を文字列で答える：\"number\"、\"string\"、\"boolean\"、\"undefined\"、\"object\"、\"function\"。その答えも値なので、その値の型を聞くこともできる。昔からのクセ：typeof null は \"object\" だよ。",
+    ),
+    ex("const answer = typeof 3.5;\nconsole.log(answer, answer.length);", "number 6"),
+    p(
+      "let creates a label you may point at a new value later; const glues the label to its first value, and moving it is error TS2588. Choose const by default and let when the code reassigns, such as a counter that goes up.",
+      "let crea una etiqueta que puedes apuntar a otro valor después; const la pega a su primer valor, y moverla es el error TS2588. Elige const por defecto y let cuando el código reasigna, como un contador que sube.",
+      "let はあとで別の値に貼りかえられるラベル。const は最初の値に固定で、動かすとエラー TS2588。ふだんは const、増えていくカウンターのように貼りかえるときは let を選ぼう。",
+    ),
+    bad("const round = 1;\nround = round + 1;",
+      L("Does not compile: TS2588, a const label can't move", "No compila: TS2588, una etiqueta const no se mueve", "コンパイル不可：TS2588、const は動かせない")),
+    p(
+      "Common mistake: mixing up the value and the label. typeof looks at the value; const and let decide whether the label can move.",
+      "Error común: confundir el valor con la etiqueta. typeof mira el valor; const y let deciden si la etiqueta puede moverse.",
+      "よくあるミス：値とラベルをごちゃまぜにすること。typeof が見るのは値。ラベルを動かせるかは const と let が決めるよ。",
+    ),
+  ),
+  note("number-recap", L("Recap: number quirks", "Repaso: rarezas de number", "復習：number のクセ"),
+    p(
+      "Numbers are binary floats: many decimals, like 0.1, are not stored exactly, so a sum can show extra digits at the end. Compare decimals by the size of their difference, never with ===.",
+      "Los números son floats binarios: muchos decimales, como 0.1, no se guardan exactos, así que una suma puede mostrar dígitos de más al final. Compara decimales por el tamaño de su diferencia, nunca con ===.",
+      "数値は二進数の浮動小数点数。0.1 のような多くの小数は正確に保存できないので、足し算の最後に余分な桁が出ることがある。小数は === ではなく差の大きさで比べよう。",
+    ),
+    ex("console.log(0.7 + 0.1);", "0.7999999999999999"),
+    p(
+      "NaN is the number value for failed math. It is not equal to itself, so x === NaN is always false: test it with Number.isNaN. Any math with NaN gives NaN, and turning text like \"x\" into a number gives NaN too.",
+      "NaN es el valor number de un cálculo fallido. No es igual a sí mismo, así que x === NaN siempre es false: pruébalo con Number.isNaN. Cualquier cálculo con NaN da NaN, y convertir un texto como \"x\" en número también da NaN.",
+      "NaN は計算失敗を表す number の値。自分と等しくないので x === NaN はいつも false。Number.isNaN で調べよう。NaN との計算は NaN、\"x\" のような文字を数値にしても NaN だよ。",
+    ),
+    ex('const bad = Number("x");\nconsole.log(Number.isNaN(bad), bad + 1);', "true NaN"),
+    p(
+      "When used in math, the two \"empty\" values convert differently: null becomes 0, but undefined becomes NaN. TypeScript blocks such math on typed values; with any, it can't protect you.",
+      "Al usarse en cálculos, los dos valores \"vacíos\" se convierten distinto: null pasa a 0, pero undefined pasa a NaN. TypeScript bloquea esos cálculos con valores tipados; con any no puede protegerte.",
+      "計算に使うと、2つの「空」の値は別々に変換される。null は 0、undefined は NaN。型のついた値なら TypeScript が止めるけど、any だと守れないよ。",
+    ),
+  ),
+  note("coercion-recap", L("Recap: hidden conversions", "Repaso: conversiones ocultas", "復習：かくれた型変換"),
+    p(
+      "+ joins text when either side is a string. -, * and / only do math, so they turn strings into numbers first. A + in front of a single value (unary plus) also converts it to a number: +\"4\" is 4, and text that isn't a number becomes NaN.",
+      "+ pega texto cuando cualquier lado es un string. -, * y / solo hacen cálculos, así que primero convierten los strings en números. Un + delante de un solo valor (más unario) también lo convierte en número: +\"4\" es 4, y un texto que no es número pasa a NaN.",
+      "+ はどちらかが文字列なら連結する。-、*、/ は計算だけなので、先に文字列を数値に変える。1つの値の前の +（単項プラス）も数値に変換する：+\"4\" は 4、数でない文字は NaN になるよ。",
+    ),
+    ex('const s: any = "6";\nconsole.log(s + 1, s / 2, +"7" + 1);', "61 3 8"),
+    p(
+      "== converts both sides before comparing, following long and odd rules: arrays become strings, strings and booleans become numbers, so very different things can end up \"equal\". === never converts. Always use ===.",
+      "== convierte ambos lados antes de comparar, con reglas largas y raras: los arrays pasan a strings, y los strings y booleanos a números, así que cosas muy distintas pueden acabar \"iguales\". === nunca convierte. Usa siempre ===.",
+      "== は比べる前に両方を変換する。ルールは長くて奇妙で、配列は文字列に、文字列や真偽値は数値になる。だから全然ちがうものが「等しい」ことに。=== は変換しない。いつも === を使おう。",
+    ),
+    p(
+      "Without any, TypeScript blocks most of these traps: math on a string is error TS2362, and comparing a number with a string is TS2367. any switches the checker off, so the old JavaScript surprises come back.",
+      "Sin any, TypeScript bloquea la mayoría de estas trampas: hacer cálculos con un string es el error TS2362, y comparar un number con un string es TS2367. any apaga el verificador, así que vuelven las viejas sorpresas de JavaScript.",
+      "any がなければ TypeScript がほとんどのワナを止める。文字列での計算はエラー TS2362、number と string の比較は TS2367。any は見張りを消すので、昔の JavaScript の驚きがもどってくるよ。",
+    ),
+    bad('console.log(3 === "3");',
+      L("Does not compile: TS2367, number vs string", "No compila: TS2367, number contra string", "コンパイル不可：TS2367、number と string")),
+  ),
+  note("truthy-recap", L("Recap: truthiness and fallbacks", "Repaso: truthiness y respaldos", "復習：truthy と代わりの値"),
+    p(
+      "Falsy values: false, 0, -0, \"\", null, undefined and NaN. Everything else is truthy, including any string with characters, [] and {}. !!value turns any value into its true/false meaning.",
+      "Valores falsy: false, 0, -0, \"\", null, undefined y NaN. Todo lo demás es truthy, incluido cualquier string con caracteres, [] y {}. !!valor convierte cualquier valor en su significado verdadero/falso.",
+      "falsy な値：false、0、-0、\"\"、null、undefined、NaN。それ以外は全部 truthy。文字の入った文字列、[]、{} もね。!!値 でどんな値も true/false に変えられるよ。",
+    ),
+    ex('const word: string = "no";\nconst list: number[] = [];\nconsole.log(!!word, !!NaN, !!list);', "true false true"),
+    p(
+      "|| falls back on any falsy value; ?? falls back only on null or undefined. When 0 or \"\" are valid values, use ?? so they are kept.",
+      "|| usa el respaldo con cualquier valor falsy; ?? solo con null o undefined. Cuando 0 o \"\" son valores válidos, usa ?? para conservarlos.",
+      "|| は falsy なら何でも代わりを使い、?? は null と undefined のときだけ。0 や \"\" が正しい値なら、残すために ?? を使おう。",
+    ),
+    p(
+      "Common mistake: reading a string's words instead of its length. A string is falsy only when it's empty; what the characters say doesn't matter.",
+      "Error común: leer las palabras de un string en vez de su longitud. Un string es falsy solo cuando está vacío; lo que digan sus caracteres no importa.",
+      "よくあるミス：文字列の長さではなく、書いてある言葉で判断すること。文字列が falsy なのは空のときだけ。中身の言葉は関係ないよ。",
+    ),
+  ),
+];
+
 const boss: LessonDef = {
   slug: "value-golem",
   title: L("Boss: Value Golem", "Jefe: Gólem de Valores", "ボス：バリューゴーレム"),
@@ -444,23 +831,24 @@ const boss: LessonDef = {
   xp: 180,
   enemy: "golem",
   enemyName: L("VALUE GOLEM", "GÓLEM DE VALORES", "バリューゴーレム"),
+  notes: bossNotes,
   beats: [
     enemySays(L(
       "I AM THE VALUE GOLEM. My body is made of loose types. Can you tell what each value really is?",
       "SOY EL GÓLEM DE VALORES. Mi cuerpo está hecho de tipos sueltos. ¿Sabes qué es cada valor de verdad?",
       "我はバリューゴーレム。この体はゆるい型でできている。それぞれの値の正体がわかるか？",
     )),
-    { kind: "predict", time: 12, prompt: PRINT, code: "console.log(typeof typeof 1);", options: ["string", "number", "typeof"], answer: 0, output: "string", check: { compiles: true, stdout: "string" }, explain: L("typeof 1 is the string \"number\", and typeof a string is \"string\".", "typeof 1 es el string \"number\", y typeof de un string es \"string\".", "typeof 1 は文字列 \"number\"。文字列の typeof は \"string\" だよ。") },
-    { kind: "pick", time: 12, prompt: L("This label changes", "Esta etiqueta cambia", "このラベルは変わる"), code: "___ lives = 3;\nlives = lives - 1;\nconsole.log(lives);", options: ["let", "const"], answer: 0, check: { compiles: true, stdout: "2", wrongFail: true }, explain: L("Reassigned labels need let.", "Las etiquetas reasignadas necesitan let.", "貼りかえるラベルは let。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: "console.log(0.1 + 0.2);", options: ["0.30000000000000004", "0.3", "0.30"], answer: 0, output: "0.30000000000000004", check: { compiles: true, stdout: "0.30000000000000004" }, explain: L("Binary floats can't store 0.1 exactly.", "Los floats binarios no guardan 0.1 exacto.", "二進数の小数は 0.1 を正確に保存できない。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: 'const a: any = null;\nconst b: any = undefined;\nconsole.log(a + 1, b + 1);', options: ["1 NaN", "NaN NaN", "1 1"], answer: 0, output: "1 NaN", check: { compiles: true, stdout: "1 NaN" }, explain: L("In math, null becomes 0 but undefined becomes NaN.", "En cálculos, null pasa a 0 pero undefined pasa a NaN.", "計算では null は 0、undefined は NaN になる。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: 'console.log("b" + "a" + +"a" + "a");', options: ["baNaNa", "baaa", "ba+aa"], answer: 0, output: "baNaNa", check: { compiles: true, stdout: "baNaNa" }, explain: L("+\"a\" tries to make a number from \"a\": NaN. Then it's glued as text.", "+\"a\" intenta hacer un número de \"a\": NaN. Luego se pega como texto.", "+\"a\" は \"a\" を数値にしようとして NaN。それが文字列に連結される。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: 'const a: any = "3";\nconst b = a * 2;\nconsole.log(typeof b, b);', options: ["number 6", "string 33", "string 6"], answer: 0, output: "number 6", check: { compiles: true, stdout: "number 6" }, explain: L("* only works on numbers, so \"3\" is converted to 3.", "* solo trabaja con números, así que \"3\" se convierte en 3.", "* は数値専用だから \"3\" は 3 に変換される。") },
-    { kind: "predict", time: 12, prompt: COMPILES, code: 'const n: number = "3" * 2;', options: [YES, NO_TSC], answer: 1, check: { compiles: false }, explain: L("TS2362: TypeScript refuses math on a string.", "TS2362: TypeScript rechaza cálculos con un string.", "TS2362：文字列での計算は TypeScript が拒否する。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: "const x: any = [];\nconsole.log(x == false);", options: ["true", "false"], answer: 0, output: "true", check: { compiles: true, stdout: "true" }, explain: L("== turns [] into \"\" and then 0, and false into 0. Use ===!", "== convierte [] en \"\" y luego 0, y false en 0. ¡Usa ===!", "== は [] を \"\" から 0 に、false を 0 に変換する。=== を使おう！") },
-    { kind: "predict", time: 12, prompt: PRINT, code: 'const s: string = "false";\nconst n: number = 0;\nconsole.log(!!s, !!n);', options: ["true false", "false false", "true true"], answer: 0, output: "true false", check: { compiles: true, stdout: "true false" }, explain: L("A non-empty string is truthy; 0 is falsy.", "Un string no vacío es truthy; 0 es falsy.", "空でない文字列は truthy、0 は falsy。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: 'const s: string = "";\nconsole.log([s || "guest", s ?? "guest"]);', options: ["[ 'guest', '' ]", "[ 'guest', 'guest' ]", "[ '', '' ]"], answer: 0, output: "[ 'guest', '' ]", check: { compiles: true, stdout: "[ 'guest', '' ]" }, explain: L("\"\" is falsy, so || falls back. It's not null, so ?? keeps it.", "\"\" es falsy, así que || usa el respaldo. No es null, así que ?? lo conserva.", "\"\" は falsy なので || は代わりを使う。null じゃないので ?? はそのまま。") },
-    { kind: "type", time: 15, prompt: L("The safe NaN test", "La prueba segura de NaN", "安全な NaN 判定"), code: "console.log(Number.___(NaN));", answer: "isNaN", check: { compiles: true, stdout: "true" }, explain: L("Number.isNaN(NaN) is true. NaN === NaN is always false.", "Number.isNaN(NaN) es true. NaN === NaN siempre es false.", "Number.isNaN(NaN) は true。NaN === NaN はいつも false。") },
+    { kind: "predict", time: 12, prompt: PRINT, code: "console.log(typeof typeof 1);", options: ["string", "number", "typeof"], answer: 0, output: "string", check: { compiles: true, stdout: "string" }, hint: L("Work from the inside out: what kind of value does the inner typeof give back?", "Ve de adentro hacia afuera: ¿qué clase de valor devuelve el typeof de adentro?", "内側から考えよう。内側の typeof はどんな種類の値を返す？"), note: "types-recap", explain: L("typeof 1 is the string \"number\", and typeof a string is \"string\".", "typeof 1 es el string \"number\", y typeof de un string es \"string\".", "typeof 1 は文字列 \"number\"。文字列の typeof は \"string\" だよ。") },
+    { kind: "pick", time: 12, prompt: L("This label changes", "Esta etiqueta cambia", "このラベルは変わる"), code: "___ lives = 3;\nlives = lives - 1;\nconsole.log(lives);", options: ["let", "const"], answer: 0, check: { compiles: true, stdout: "2", wrongFail: true }, hint: L("The label gets a new value on the next line.", "La etiqueta recibe un valor nuevo en la línea siguiente.", "次の行でラベルに新しい値が入るよ。"), note: "types-recap", explain: L("Reassigned labels need let.", "Las etiquetas reasignadas necesitan let.", "貼りかえるラベルは let。") },
+    { kind: "predict", time: 12, prompt: PRINT, code: "console.log(0.1 + 0.2);", options: ["0.30000000000000004", "0.3", "0.30"], answer: 0, output: "0.30000000000000004", check: { compiles: true, stdout: "0.30000000000000004" }, hint: L("Decimals are stored in binary, and some of them can't be stored exactly.", "Los decimales se guardan en binario, y algunos no se pueden guardar exactos.", "小数は二進数で保存され、ぴったり保存できないものもある。"), note: "number-recap", explain: L("Binary floats can't store 0.1 exactly.", "Los floats binarios no guardan 0.1 exacto.", "二進数の小数は 0.1 を正確に保存できない。") },
+    { kind: "predict", time: 12, prompt: PRINT, code: 'const a: any = null;\nconst b: any = undefined;\nconsole.log(a + 1, b + 1);', options: ["1 NaN", "NaN NaN", "1 1"], answer: 0, output: "1 NaN", check: { compiles: true, stdout: "1 NaN" }, hint: L("null and undefined turn into different numbers when used in math.", "null y undefined se convierten en números distintos al usarse en cálculos.", "計算に使うと null と undefined は別々の数になる。"), note: "number-recap", explain: L("In math, null becomes 0 but undefined becomes NaN.", "En cálculos, null pasa a 0 pero undefined pasa a NaN.", "計算では null は 0、undefined は NaN になる。") },
+    { kind: "predict", time: 15, prompt: PRINT, code: 'console.log("b" + "a" + +"a" + "a");', options: ["baNaNa", "baaa", "ba+aa"], answer: 0, output: "baNaNa", check: { compiles: true, stdout: "baNaNa" }, hint: L("Find the + with nothing on its left: it tries to turn the next value into a number.", "Busca el + que no tiene nada a su izquierda: intenta convertir el valor siguiente en número.", "左に何もない + を探そう。次の値を数値にしようとするよ。"), note: "coercion-recap", explain: L("+\"a\" tries to make a number from \"a\": NaN. Then it's glued as text.", "+\"a\" intenta hacer un número de \"a\": NaN. Luego se pega como texto.", "+\"a\" は \"a\" を数値にしようとして NaN。それが文字列に連結される。") },
+    { kind: "predict", time: 12, prompt: PRINT, code: 'const a: any = "3";\nconst b = a * 2;\nconsole.log(typeof b, b);', options: ["number 6", "string 33", "string 6"], answer: 0, output: "number 6", check: { compiles: true, stdout: "number 6" }, hint: L("* can't join text. So what does it do to a string before multiplying?", "* no puede pegar texto. Entonces, ¿qué hace con un string antes de multiplicar?", "* は連結できない。かける前に文字列をどうする？"), note: "coercion-recap", explain: L("* only works on numbers, so \"3\" is converted to 3.", "* solo trabaja con números, así que \"3\" se convierte en 3.", "* は数値専用だから \"3\" は 3 に変換される。") },
+    { kind: "predict", time: 12, prompt: COMPILES, code: 'const n: number = "3" * 2;', options: [YES, NO_TSC], answer: 1, check: { compiles: false }, hint: L("There's no any here. Does TypeScript allow math on a string?", "Aquí no hay any. ¿TypeScript permite hacer cálculos con un string?", "ここに any はない。TypeScript は文字列での計算を許す？"), note: "coercion-recap", explain: L("TS2362: TypeScript refuses math on a string.", "TS2362: TypeScript rechaza cálculos con un string.", "TS2362：文字列での計算は TypeScript が拒否する。") },
+    { kind: "predict", time: 12, prompt: PRINT, code: "const x: any = [];\nconsole.log(x == false);", options: ["true", "false"], answer: 0, output: "true", check: { compiles: true, stdout: "true" }, hint: L("== converts both sides before comparing. Follow what [] and false each become.", "== convierte ambos lados antes de comparar. Sigue en qué se convierte [] y en qué false.", "== は比べる前に両方を変換する。[] と false がそれぞれ何になるか追おう。"), note: "coercion-recap", explain: L("== turns [] into \"\" and then 0, and false into 0. Use ===!", "== convierte [] en \"\" y luego 0, y false en 0. ¡Usa ===!", "== は [] を \"\" から 0 に、false を 0 に変換する。=== を使おう！") },
+    { kind: "predict", time: 12, prompt: PRINT, code: 'const s: string = "false";\nconst n: number = 0;\nconsole.log(!!s, !!n);', options: ["true false", "false false", "true true"], answer: 0, output: "true false", check: { compiles: true, stdout: "true false" }, hint: L("A string is falsy only when it's empty. And where is 0 on the falsy list?", "Un string es falsy solo si está vacío. ¿Y está 0 en la lista falsy?", "文字列が falsy なのは空のときだけ。0 は falsy のリストにある？"), note: "truthy-recap", explain: L("A non-empty string is truthy; 0 is falsy.", "Un string no vacío es truthy; 0 es falsy.", "空でない文字列は truthy、0 は falsy。") },
+    { kind: "predict", time: 15, prompt: PRINT, code: 'const s: string = "";\nconsole.log([s || "guest", s ?? "guest"]);', options: ["[ 'guest', '' ]", "[ 'guest', 'guest' ]", "[ '', '' ]"], answer: 0, output: "[ 'guest', '' ]", check: { compiles: true, stdout: "[ 'guest', '' ]" }, hint: L("\"\" is falsy, but is it null or undefined? Each operator reacts to a different group.", "\"\" es falsy, pero ¿es null o undefined? Cada operador reacciona a un grupo distinto.", "\"\" は falsy。でも null か undefined？演算子ごとに反応するグループがちがう。"), note: "truthy-recap", explain: L("\"\" is falsy, so || falls back. It's not null, so ?? keeps it.", "\"\" es falsy, así que || usa el respaldo. No es null, así que ?? lo conserva.", "\"\" は falsy なので || は代わりを使う。null じゃないので ?? はそのまま。") },
+    { kind: "type", time: 15, prompt: L("The safe NaN test", "La prueba segura de NaN", "安全な NaN 判定"), code: "console.log(Number.___(NaN));", answer: "isNaN", check: { compiles: true, stdout: "true" }, hint: L("NaN === NaN never works. Number has a method named after exactly this check.", "NaN === NaN nunca funciona. Number tiene un método con el nombre de justo esta prueba.", "NaN === NaN は使えない。Number にはこの判定そのままの名前のメソッドがある。"), note: "number-recap", explain: L("Number.isNaN(NaN) is true. NaN === NaN is always false.", "Number.isNaN(NaN) es true. NaN === NaN siempre es false.", "Number.isNaN(NaN) は true。NaN === NaN はいつも false。") },
     enemySays(L(
       "Crumble... you saw through every disguise. The forest of closures lies ahead, traveler.",
       "Me desmorono... viste a través de cada disfraz. El bosque de closures te espera, viajero.",

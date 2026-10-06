@@ -1,4 +1,4 @@
-import type { LessonDef, RegionDef } from "../../../lib/content/types.ts";
+import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
 import { say, enemySays } from "../../rust/helpers.ts";
 
@@ -13,6 +13,493 @@ const HAPPENS = L("What happens?", "¿Qué pasa?", "どうなる？");
 const YES = L("Yes", "Sí", "はい");
 const NO_CE = L("No: compile error", "No: error de compilación", "いいえ：コンパイルエラー");
 
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example; the validator checks `output` against the real compiler. */
+const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code, output, caption });
+/** An example that must NOT compile (verified too). */
+const bad = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: false } });
+/** An example that compiles and then panics with the given message (verified too). */
+const crash = (code: string, throws: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: true, throws } });
+
+const arraysNotes: NoteDef[] = [
+  note("arrays-values", L("Arrays are copied whole", "Los arrays se copian enteros", "配列は丸ごとコピー"),
+    p(
+      "An array is a fixed row of slots of one type, written [N]T: a [4]string holds exactly 4 strings, forever. Arrays are values, like ints: assigning one to another variable, or passing it to a function, copies every slot. The copy and the original are independent.",
+      "Un array es una fila fija de slots de un tipo, escrita [N]T: un [4]string guarda exactamente 4 strings, para siempre. Los arrays son valores, como los int: asignarlo a otra variable, o pasarlo a una función, copia cada slot. La copia y el original son independientes.",
+      "配列は同じ型のマスが決まった数だけ並んだもので、[N]T と書く。[4]string はずっと4つの文字列を持つ。配列は int と同じ「値」なので、別の変数に代入したり関数にわたしたりすると全マスがコピーされる。コピーと元は別もの。",
+    ),
+    ex('week := [2]string{"mon", "tue"}\nplan := week\nplan[1] = "off"\nfmt.Println(week, plan)', "[mon tue] [mon off]",
+      L("plan is a full copy, so week doesn't change", "plan es una copia entera, así que week no cambia", "plan は丸ごとコピーなので week は変わらない")),
+    p(
+      "The length is part of the type: [3]int and [4]int are different types, so you can't assign one to the other or pass one where the other is expected. That's one reason arrays are rare in everyday Go: slices are more flexible.",
+      "El largo es parte del tipo: [3]int y [4]int son tipos distintos, así que no puedes asignar uno al otro ni pasar uno donde se espera el otro. Es una razón por la que los arrays son raros en el Go diario: los slices son más flexibles.",
+      "長さも型の一部。[3]int と [4]int は別の型なので、代入したり、片方を求める場所にもう片方をわたしたりできない。ふだんの Go で配列があまり使われない理由の1つ。スライスのほうが柔軟。",
+    ),
+    bad("var small [2]bool\nvar big [5]bool\nsmall = big\nfmt.Println(small)",
+      L("Does not compile: [5]bool is not [2]bool", "No compila: [5]bool no es [2]bool", "コンパイル不可：[5]bool は [2]bool ではない")),
+    p(
+      "Because a function receives a copy, changes it makes to an array parameter are lost when it returns. To let a function change your array, pass a slice of it, arr[:], or a pointer to it, &arr.",
+      "Como una función recibe una copia, los cambios que hace a un parámetro array se pierden al terminar. Para que una función cambie tu array, pásale un slice de él, arr[:], o un puntero, &arr.",
+      "関数はコピーを受けとるので、配列の引数に加えた変更は関数が終わると消える。関数に配列を変えさせたいなら、スライス arr[:] かポインタ &arr をわたそう。",
+    ),
+    ex("func reset(t [2]int) { t[0] = 0 }\n\nfunc main() {\n\ttally := [2]int{8, 9}\n\treset(tally)\n\tfmt.Println(tally)\n}", "[8 9]",
+      L("reset changed its own copy only", "reset solo cambió su propia copia", "reset は自分のコピーを変えただけ")),
+    p(
+      "Writing [...] instead of a number lets the compiler count the items: [...]int{1, 2, 3} is an ARRAY of type [3]int, not a slice. Arrays of comparable things can also be compared with ==, slot by slot.",
+      "Escribir [...] en vez de un número deja que el compilador cuente los elementos: [...]int{1, 2, 3} es un ARRAY de tipo [3]int, no un slice. Los arrays de cosas comparables también se comparan con ==, slot por slot.",
+      "数のかわりに [...] と書くと、コンパイラが要素を数える。[...]int{1, 2, 3} はスライスではなく [3]int 型の配列。比べられる要素の配列は == でマスごとに比べられる。",
+    ),
+    ex("pair := [...]int{4, 4}\nfmt.Println(len(pair), pair == [2]int{4, 4})", "2 true"),
+  ),
+  note("slice-sharing", L("Slices share their array", "Los slices comparten su array", "スライスは配列を共有する"),
+    p(
+      "A slice, written []T with no number, is a window onto an array that lives somewhere else. The slice itself is a tiny header: a pointer to the array, a length and a capacity. Assigning a slice or passing it to a function copies the header, not the items.",
+      "Un slice, escrito []T sin número, es una ventana a un array que vive en otro lado. El slice en sí es un header pequeño: un puntero al array, un largo y una capacidad. Asignar un slice o pasarlo a una función copia el header, no los elementos.",
+      "スライスは数なしの []T と書き、別の場所にある配列をのぞく窓。スライス自体は小さなヘッダー（配列へのポインタ、長さ、容量）だけ。代入や関数へのわたしでコピーされるのはヘッダーで、中身ではない。",
+    ),
+    p(
+      "So two slices can look at the same array: a change made through one is visible through the other. That's also how a function that receives a slice can change the caller's items.",
+      "Así, dos slices pueden mirar el mismo array: un cambio hecho por uno se ve por el otro. También es así como una función que recibe un slice puede cambiar los elementos de quien la llamó.",
+      "だから2つのスライスが同じ配列を見ることがある。片方からの変更はもう片方からも見える。スライスを受けとった関数が、呼んだ側の要素を変えられるのも同じ理由。",
+    ),
+    ex('team := []string{"ann", "bo"}\nalias := team\nalias[1] = "cy"\nfmt.Println(team)', "[ann cy]",
+      L("alias and team are two windows onto one array", "alias y team son dos ventanas a un array", "alias と team は1つの配列をのぞく2つの窓")),
+    ex('func shout(words []string) { words[0] = "HEY" }\n\nfunc main() {\n\tmsg := []string{"hey", "you"}\n\tshout(msg)\n\tfmt.Println(msg)\n}', "[HEY you]",
+      L("The function got a window onto msg's array", "La función recibió una ventana al array de msg", "関数は msg の配列への窓を受けとった")),
+    p(
+      "Slices can't be compared with ==, except with nil: Go would have to decide whether == means \"same window\" or \"same items\", so it allows neither. Compare the items in a loop, or use slices.Equal.",
+      "Los slices no se pueden comparar con ==, salvo con nil: Go tendría que decidir si == significa \"misma ventana\" o \"mismos elementos\", así que no permite ninguno. Compara los elementos en un bucle o usa slices.Equal.",
+      "スライスは nil 以外と == で比べられない。== が「同じ窓」なのか「同じ中身」なのか決めないといけないので、Go はどちらも許さない。中身はループで比べるか slices.Equal を使おう。",
+    ),
+    ex("got := []int{1, 2}\nfmt.Println(slices.Equal(got, []int{1, 2}), got == nil)", "true false"),
+    p(
+      "Common mistake: thinking b := a copies a slice's items. It makes a second window onto the same array. To get independent items, make a new slice and copy into it (next lesson).",
+      "Error común: creer que b := a copia los elementos de un slice. Crea una segunda ventana al mismo array. Para tener elementos independientes, crea un slice nuevo y copia en él (próxima lección).",
+      "よくあるミス：b := a でスライスの中身がコピーされると思うこと。同じ配列への2つ目の窓ができるだけ。別々の中身がほしいなら、新しいスライスを作ってコピーする（次のレッスン）。",
+    ),
+  ),
+  note("len-cap", L("Length, capacity and slicing", "Largo, capacidad y rebanado", "長さ・容量・切り出し"),
+    p(
+      "A slice has a length, len(s): how many items you can see and index. It also has a capacity, cap(s): how many slots the array has from the slice's start to the array's end. make([]T, len, cap) creates a slice with a new array, and its visible items start at their zero value.",
+      "Un slice tiene un largo, len(s): cuántos elementos puedes ver e indexar. También tiene una capacidad, cap(s): cuántos slots tiene el array desde el inicio del slice hasta el final del array. make([]T, len, cap) crea un slice con un array nuevo, y sus elementos visibles empiezan en su valor cero.",
+      "スライスには長さ len(s)（見えて添字で使える数）と、容量 cap(s)（スライスの始まりから配列の終わりまでのマス数）がある。make([]T, 長さ, 容量) は新しい配列つきのスライスを作り、見える要素はゼロ値から始まる。",
+    ),
+    ex('buf := make([]string, 2, 6)\nfmt.Println(len(buf), cap(buf), buf[0] == "")', "2 6 true",
+      L("2 visible empty strings, room for 6", "2 strings vacíos visibles, espacio para 6", "見えるのは空文字列2つ、空きは6つ分")),
+    p(
+      "s[lo:hi] makes a new window from index lo up to, but NOT including, hi. Its length is hi - lo. Its capacity runs from lo to the end of the original array, so it can be bigger than its length. A missing lo means 0; a missing hi means len(s).",
+      "s[lo:hi] crea una ventana nueva desde el índice lo hasta hi, SIN incluir hi. Su largo es hi - lo. Su capacidad va desde lo hasta el final del array original, así que puede ser mayor que su largo. Si falta lo es 0; si falta hi es len(s).",
+      "s[lo:hi] は添字 lo から hi の手前まで（hi は含まない）の新しい窓。長さは hi - lo。容量は lo から元の配列の終わりまでなので、長さより大きいこともある。lo がなければ 0、hi がなければ len(s)。",
+    ),
+    ex("row := []int{10, 20, 30, 40, 50, 60}\npart := row[2:4]\nfmt.Println(part, len(part), cap(part))", "[30 40] 2 4",
+      L("Indexes 2 and 3; capacity counts to the end of row", "Índices 2 y 3; la capacidad cuenta hasta el final de row", "添字 2 と 3。容量は row の最後まで")),
+    ex("row := []int{10, 20, 30}\nfmt.Println(row[:2], row[2:])", "[10 20] [30]"),
+    p(
+      "A slice declared with var s []T and nothing else is nil: no array at all, length and capacity 0. It still works with len, range and append, and fmt prints it as [], the same as an empty slice.",
+      "Un slice declarado con var s []T y nada más es nil: no tiene array, largo y capacidad 0. Igual funciona con len, range y append, y fmt lo imprime como [], igual que un slice vacío.",
+      "var s []T とだけ書いたスライスは nil。配列がなく、長さも容量も 0。それでも len・range・append は使え、fmt は空のスライスと同じく [] と表示する。",
+    ),
+    p(
+      "Common mistakes: including the end index (s[1:3] has 2 items, not 3), and assuming cap equals len after slicing. Count the slots from the window's start to the end of the array.",
+      "Errores comunes: incluir el índice final (s[1:3] tiene 2 elementos, no 3) y suponer que cap es igual a len después de rebanar. Cuenta los slots desde el inicio de la ventana hasta el final del array.",
+      "よくあるミス：終わりの添字を含めてしまう（s[1:3] は3つではなく2つ）、切り出したあとも cap と len が同じだと思う。容量は窓の始まりから配列の終わりまでのマスを数えよう。",
+    ),
+  ),
+];
+
+const appendNotes: NoteDef[] = [
+  note("append-result", L("append returns the new slice", "append devuelve el slice nuevo", "append は新しいスライスを返す"),
+    p(
+      "append(s, items...) adds items at the end of a slice and RETURNS the resulting slice. It can't change the length stored in your variable, because s holds its own copy of the header. So you always store the result: s = append(s, x).",
+      "append(s, items...) agrega elementos al final de un slice y DEVUELVE el slice resultante. No puede cambiar el largo guardado en tu variable, porque s tiene su propia copia del header. Por eso siempre guardas el resultado: s = append(s, x).",
+      "append(s, 要素...) はスライスの最後に要素を足し、結果のスライスを返す。s は自分のヘッダーのコピーを持っているので、append は変数の中の長さを変えられない。だからいつも s = append(s, x) と結果を受けとる。",
+    ),
+    ex('tools := []string{"axe"}\ntools = append(tools, "rope", "lamp")\nfmt.Println(tools, len(tools))', "[axe rope lamp] 3",
+      L("append can add several items at once", "append puede agregar varios elementos a la vez", "append は一度に複数足せる")),
+    p(
+      "Calling append without using its result is a compile error: \"append(...) is not used\". Go refuses it because throwing the result away is almost always a bug.",
+      "Llamar a append sin usar su resultado es un error de compilación: \"append(...) is not used\". Go lo rechaza porque tirar el resultado casi siempre es un bug.",
+      "append の結果を使わないとコンパイルエラー「append(...) is not used」。結果を捨てるのはほぼ必ずバグなので、Go は許さない。",
+    ),
+    bad('tools := []string{"axe"}\nappend(tools, "rope")\nfmt.Println(tools)',
+      L("Does not compile: the result of append is dropped", "No compila: se tira el resultado de append", "コンパイル不可：append の結果を捨てている")),
+    p(
+      "The same applies to functions: a function that appends to its parameter changes only its local copy of the header, and the caller's slice keeps its old length. Have the function return the new slice and assign it in the caller.",
+      "Lo mismo pasa con las funciones: una función que hace append a su parámetro solo cambia su copia local del header, y el slice de quien llama conserva su largo viejo. Haz que la función devuelva el slice nuevo y asígnalo en quien llama.",
+      "関数でも同じ。引数に append する関数は自分のヘッダーのコピーを変えるだけで、呼んだ側のスライスの長さは元のまま。関数から新しいスライスを返して、呼んだ側で代入しよう。",
+    ),
+    ex('func withMap(list []string) []string {\n\treturn append(list, "map")\n}\n\nfunc main() {\n\tbag := []string{"axe"}\n\tbag = withMap(bag)\n\tfmt.Println(bag)\n}', "[axe map]"),
+    p(
+      "Common mistake: writing b := append(a, x) and then using a, expecting the new item. a still has its old length; the new item is only visible through b.",
+      "Error común: escribir b := append(a, x) y luego usar a esperando el elemento nuevo. a sigue con su largo viejo; el elemento nuevo solo se ve a través de b.",
+      "よくあるミス：b := append(a, x) のあとで a に新しい要素があると思うこと。a の長さは元のまま。新しい要素は b からしか見えない。",
+    ),
+  ),
+  note("append-aliasing", L("When append overwrites", "Cuando append sobrescribe", "append が上書きするとき"),
+    p(
+      "append first checks the capacity. If the array behind the slice has a free slot after the last item, append writes the new item into THAT slot of the same array. Any other slice that sees that slot sees the new value: whatever was there is overwritten.",
+      "append primero revisa la capacidad. Si el array detrás del slice tiene un slot libre después del último elemento, append escribe el nuevo elemento en ESE slot del mismo array. Cualquier otro slice que vea ese slot ve el valor nuevo: lo que había ahí se sobrescribe.",
+      "append はまず容量を調べる。スライスの裏の配列で、最後の要素のあとに空きマスがあれば、append は同じ配列のそのマスに書く。そのマスが見える別のスライスにも新しい値が見え、もとの値は上書きされる。",
+    ),
+    ex("base := []int{5, 6, 7, 8, 9}\nhead := base[:3]\nhead = append(head, 0)\nfmt.Println(base)", "[5 6 7 0 9]",
+      L("head had room, so append wrote into base's array", "head tenía espacio y append escribió en el array de base", "head に空きがあり、base の配列に書いた")),
+    p(
+      "That's why two appends to the same slice with spare room write the very same slot: the second one overwrites the first, and both results show the last value written.",
+      "Por eso dos append al mismo slice con espacio libre escriben el mismo slot: el segundo sobrescribe al primero, y ambos resultados muestran el último valor escrito.",
+      "だから空きのある同じスライスに2回 append すると、まったく同じマスに書く。2回目が1回目を上書きし、どちらの結果にも最後に書いた値が見える。",
+    ),
+    p(
+      "If there's no room (len equals cap), append allocates a NEW, bigger array, copies the items and adds the new one there. From then on the result and the old slice are independent. The runtime chooses the new capacity, so never rely on its exact value.",
+      "Si no hay espacio (len igual a cap), append reserva un array NUEVO y más grande, copia los elementos y agrega ahí el nuevo. Desde ese momento el resultado y el slice viejo son independientes. El runtime elige la nueva capacidad, así que nunca dependas de su valor exacto.",
+      "空きがない（len と cap が同じ）とき、append は新しい大きな配列を用意し、要素をコピーしてそこに足す。それ以降、結果と古いスライスは別もの。新しい容量はランタイムが決めるので、正確な値をあてにしないこと。",
+    ),
+    ex("full := []int{5, 6}\ngrown := append(full, 7)\ngrown[0] = 0\nfmt.Println(full, grown)", "[5 6] [0 6 7]",
+      L("full had no room: grown got a new array", "full no tenía espacio: grown recibió un array nuevo", "full は満杯：grown は新しい配列")),
+    p(
+      "The full slice expression s[lo:hi:max] also limits the capacity to max - lo. With no spare room, the next append is forced to move to a new array and can't overwrite the original. Rule: before predicting append, ask \"is there spare capacity?\"",
+      "La expresión completa s[lo:hi:max] además limita la capacidad a max - lo. Sin espacio libre, el siguiente append está obligado a mudarse a un array nuevo y no puede sobrescribir el original. Regla: antes de predecir append, pregunta \"¿hay capacidad libre?\".",
+      "s[lo:hi:max] という書き方は容量も max - lo に制限する。空きがないので、次の append は新しい配列に引っ越すしかなく、元を上書きできない。ルール：append を予想する前に「空き容量はある？」と考えよう。",
+    ),
+    ex("base := []int{5, 6, 7, 8}\nsafe := base[:1:1]\nsafe = append(safe, 0)\nfmt.Println(base, safe)", "[5 6 7 8] [5 0]",
+      L("Capacity 1 means append must move out", "Capacidad 1 obliga a append a mudarse", "容量 1 なので append は引っ越す")),
+  ),
+  note("copy-builtin", L("copy fills what fits", "copy llena lo que cabe", "copy は入る分だけ"),
+    p(
+      "copy(dst, src) copies items from src into dst, starting at index 0 of both, and returns how many it copied: the smaller of len(dst) and len(src). It never grows dst and never appends. dst must already have the length you need.",
+      "copy(dst, src) copia elementos de src a dst, empezando en el índice 0 de ambos, y devuelve cuántos copió: el menor entre len(dst) y len(src). Nunca agranda dst ni agrega al final. dst ya debe tener el largo que necesitas.",
+      "copy(dst, src) は src の要素を dst に、どちらも添字 0 からコピーし、コピーした数を返す。数は len(dst) と len(src) の小さいほう。dst をのばしたり追加したりはしないので、dst は先に必要な長さにしておく。",
+    ),
+    ex("dst := make([]int, 4)\nn := copy(dst, []int{6, 7})\nfmt.Println(n, dst)", "2 [6 7 0 0]",
+      L("Only 2 items to copy; the other slots stay 0", "Solo hay 2 para copiar; los otros slots siguen en 0", "コピーするのは2つだけ。残りは 0 のまま")),
+    p(
+      "A nil or empty dst has length 0, so copy copies nothing and returns 0, without panicking. The usual pattern is to make dst with the right length first: dst := make([]T, len(src)).",
+      "Un dst nil o vacío tiene largo 0, así que copy no copia nada y devuelve 0, sin panic. El patrón habitual es crear dst con el largo correcto primero: dst := make([]T, len(src)).",
+      "nil や空の dst は長さ 0 なので、copy は何もコピーせず 0 を返す（panic はしない）。ふつうは先に dst := make([]T, len(src)) で正しい長さを用意する。",
+    ),
+    ex("src := []int{3, 1, 4}\ndup := make([]int, len(src))\ncopy(dup, src)\ndup[0] = 0\nfmt.Println(src, dup)", "[3 1 4] [0 1 4]",
+      L("dup has its own array: src is safe", "dup tiene su propio array: src está a salvo", "dup は自分の配列を持つ。src は無事")),
+    p(
+      "After copy, dst keeps its own array, so changing it never affects src. That's how you break sharing when you need an independent slice. (slices.Clone(s) does the same in one call.)",
+      "Después de copy, dst conserva su propio array, así que cambiarlo nunca afecta a src. Así se rompe el compartir cuando necesitas un slice independiente. (slices.Clone(s) hace lo mismo en una llamada.)",
+      "copy のあとも dst は自分の配列を持つので、変えても src には影響しない。独立したスライスがほしいとき、こうして共有を断つ。（slices.Clone(s) なら1回の呼び出しで同じことができる）",
+    ),
+    p(
+      "Common mistake: declaring var dst []T, calling copy(dst, src) and expecting the items to be there. Length 0 means room for 0 items.",
+      "Error común: declarar var dst []T, llamar a copy(dst, src) y esperar que los elementos estén ahí. Largo 0 significa espacio para 0 elementos.",
+      "よくあるミス：var dst []T と宣言して copy(dst, src) を呼び、中身が入ると思うこと。長さ 0 は0個分の場所しかない。",
+    ),
+  ),
+  note("slice-tools", L("range copies, ... spreads", "range copia, ... esparce", "range はコピー、... は展開"),
+    p(
+      "for i, v := range s gives you the index i and a COPY of each item in v. Changing v changes only that copy, never the slice. To modify the items, write through the index: s[i] = ...",
+      "for i, v := range s te da el índice i y una COPIA de cada elemento en v. Cambiar v solo cambia esa copia, nunca el slice. Para modificar los elementos, escribe a través del índice: s[i] = ...",
+      "for i, v := range s は添字 i と、各要素のコピー v をくれる。v を変えてもコピーが変わるだけで、スライスは変わらない。要素を変えるなら添字を使って s[i] = ... と書く。",
+    ),
+    ex("prices := []int{5, 8}\nfor i := range prices {\n\tprices[i] += 1\n}\nfmt.Println(prices)", "[6 9]",
+      L("Writing through the index changes the slice", "Escribir por el índice cambia el slice", "添字経由で書けばスライスが変わる")),
+    p(
+      "append(a, b...) adds all the items of slice b, one by one: the ... spreads the slice into separate arguments. With slicing, it removes an item: append(s[:i], s[i+1:]...) keeps everything before i and after it. It reuses s's array, so the old s changes too.",
+      "append(a, b...) agrega todos los elementos del slice b, uno por uno: los ... esparcen el slice en argumentos separados. Con rebanado, quita un elemento: append(s[:i], s[i+1:]...) conserva todo lo de antes y después de i. Reusa el array de s, así que el s viejo también cambia.",
+      "append(a, b...) はスライス b の要素を1つずつ全部足す。... がスライスを別々の引数に広げる。切り出しと組み合わせると要素を消せる：append(s[:i], s[i+1:]...) は i の前とあとを残す。s の配列を再利用するので、古い s も変わる。",
+    ),
+    ex('letters := []string{"p", "q", "r", "s"}\nletters = append(letters[:2], letters[3:]...)\nfmt.Println(letters)', "[p q s]",
+      L("Index 2 is skipped", "Se salta el índice 2", "添字 2 が飛ばされる")),
+    p(
+      "The slices package (Go 1.21+) has ready-made helpers. Some act on the slice in place and return nothing, like the one that sorts and slices.Reverse; others answer questions, like slices.Contains(s, v) and slices.Index(s, v), which gives the position or -1.",
+      "El paquete slices (Go 1.21+) trae ayudas listas. Algunas actúan sobre el slice ahí mismo y no devuelven nada, como la que ordena y slices.Reverse; otras responden preguntas, como slices.Contains(s, v) y slices.Index(s, v), que da la posición o -1.",
+      "slices パッケージ（Go 1.21 以降）には便利な関数がある。並べかえる関数や slices.Reverse のように、その場で処理して何も返さないものと、slices.Contains(s, v) や slices.Index(s, v)（位置か -1 を返す）のように答えを返すものがある。",
+    ),
+    ex("nums := []int{9, 4, 7}\nslices.Reverse(nums)\nfmt.Println(nums, slices.Index(nums, 9), slices.Index(nums, 5))", "[7 4 9] 2 -1"),
+    p(
+      "Common mistake: modifying v in a range loop and expecting the slice to change. The code compiles, so nothing warns you; only the output shows the items stayed the same.",
+      "Error común: modificar v en un bucle range y esperar que el slice cambie. El código compila, así que nada te avisa; solo la salida muestra que los elementos no cambiaron.",
+      "よくあるミス：range ループで v を変えて、スライスが変わると思うこと。コンパイルは通るので何も警告されず、出力を見て初めて変わっていないとわかる。",
+    ),
+  ),
+];
+
+const mapsNotes: NoteDef[] = [
+  note("map-basics", L("Maps: keys to values", "Maps: claves y valores", "マップ：キーと値"),
+    p(
+      "A map stores pairs: each key points to one value. map[string]int maps string keys to int values. Create one with a literal, map[string]int{\"a\": 1}, or with make. m[k] = v adds or replaces a value, len(m) counts the keys and delete(m, k) removes one.",
+      "Un map guarda pares: cada clave apunta a un valor. map[string]int une claves string con valores int. Créalo con un literal, map[string]int{\"a\": 1}, o con make. m[k] = v agrega o reemplaza un valor, len(m) cuenta las claves y delete(m, k) quita una.",
+      "マップはペアを保存する。キー1つが値1つを指す。map[string]int は string のキーと int の値。リテラル map[string]int{\"a\": 1} か make で作る。m[k] = v で追加・置きかえ、len(m) でキーの数、delete(m, k) で削除。",
+    ),
+    ex('stock := map[string]int{"apple": 4}\nstock["pear"] = 2\nstock["apple"] = 9\nfmt.Println(len(stock), stock["apple"])', "2 9",
+      L("A new key adds; an existing key is replaced", "Una clave nueva agrega; una existente se reemplaza", "新しいキーは追加、あるキーは置きかえ")),
+    p(
+      "Reading a key that isn't there is not an error: you get the zero value of the value type (0 for int, \"\" for string, false for bool). delete on a missing key is fine too: it simply does nothing.",
+      "Leer una clave que no está no es un error: obtienes el valor cero del tipo del valor (0 para int, \"\" para string, false para bool). delete con una clave ausente también está bien: simplemente no hace nada.",
+      "ないキーを読んでもエラーにならず、値の型のゼロ値（int は 0、string は \"\"、bool は false）が返る。ないキーの delete も OK で、何もしないだけ。",
+    ),
+    ex('stock := map[string]int{"apple": 4}\ndelete(stock, "kiwi")\nfmt.Println(stock["kiwi"], len(stock))', "0 1"),
+    p(
+      "That zero value makes counting easy: m[k]++ reads 0 the first time a key appears, adds 1 and stores it. There's no need to check whether the key exists first.",
+      "Ese valor cero facilita contar: m[k]++ lee 0 la primera vez que aparece una clave, suma 1 y lo guarda. No hace falta revisar antes si la clave existe.",
+      "このゼロ値のおかげで数えるのがかんたん。m[k]++ は初めてのキーなら 0 を読み、1 足して保存する。先にキーがあるか調べる必要はない。",
+    ),
+    ex("tally := map[rune]int{}\nfor _, ch := range \"noon\" {\n\ttally[ch]++\n}\nfmt.Println(tally['o'], tally['n'], tally['x'])", "2 2 0",
+      L("Counting letters, starting from the zero value", "Contar letras desde el valor cero", "ゼロ値から文字を数える")),
+    p(
+      "Common mistake: expecting nil or a panic for a missing key. Go returns the zero value instead, which is why you sometimes need comma-ok to tell \"missing\" from \"stored zero\".",
+      "Error común: esperar nil o un panic con una clave ausente. Go devuelve el valor cero, por eso a veces necesitas comma-ok para distinguir \"ausente\" de \"cero guardado\".",
+      "よくあるミス：ないキーで nil や panic を期待すること。Go はゼロ値を返す。だから「ない」と「0 が入っている」を区別するには comma-ok が必要なことがある。",
+    ),
+  ),
+  note("comma-ok", L("Is the key there? comma-ok", "¿Está la clave? comma-ok", "キーはある？comma-ok"),
+    p(
+      "Since a missing key returns the zero value, m[k] alone can't tell you whether a 0 was stored or the key is missing. The comma-ok form answers that: v, ok := m[k]. v is the value (or the zero value) and ok is a bool, true only if the key exists.",
+      "Como una clave ausente devuelve el valor cero, m[k] solo no puede decirte si se guardó un 0 o si falta la clave. La forma comma-ok lo responde: v, ok := m[k]. v es el valor (o el valor cero) y ok es un bool, true solo si la clave existe.",
+      "ないキーもゼロ値を返すので、m[k] だけでは 0 が入っているのか、キーがないのかわからない。comma-ok の形 v, ok := m[k] で答えがわかる。v は値（またはゼロ値）、ok は bool で、キーがあるときだけ true。",
+    ),
+    ex('ages := map[string]int{"baby": 0}\nage, found := ages["baby"]\nfmt.Println(age, found)\n_, found = ages["ghost"]\nfmt.Println(found)', "0 true\nfalse",
+      L("Same zero value, but found tells them apart", "Mismo valor cero, pero found los distingue", "同じゼロ値でも found で区別できる")),
+    p(
+      "It's often written inside an if, so the variables only live there: if v, ok := m[k]; ok { ... }. The name ok is just a convention; any name works.",
+      "Suele escribirse dentro de un if, para que las variables vivan solo ahí: if v, ok := m[k]; ok { ... }. El nombre ok es solo una costumbre; cualquier nombre sirve.",
+      "よく if の中に書いて、変数をそこだけで使う：if v, ok := m[k]; ok { ... }。ok という名前は習慣で、どんな名前でもいい。",
+    ),
+    ex('colors := map[string]string{"sky": "blue"}\nif c, ok := colors["sea"]; ok {\n\tfmt.Println("sea is", c)\n} else {\n\tfmt.Println("no sea")\n}', "no sea"),
+    p(
+      "Common mistake: using the value alone to decide whether a key exists, like if m[k] != 0. That fails as soon as 0 is a real stored value. When \"missing\" and \"zero\" mean different things, use ok.",
+      "Error común: usar solo el valor para decidir si una clave existe, como if m[k] != 0. Falla en cuanto 0 es un valor guardado de verdad. Cuando \"ausente\" y \"cero\" significan cosas distintas, usa ok.",
+      "よくあるミス：if m[k] != 0 のように値だけでキーがあるかを判断すること。本当に 0 が入っているとまちがえる。「ない」と「ゼロ」で意味がちがうなら ok を使おう。",
+    ),
+  ),
+  note("nil-maps", L("nil maps: read yes, write no", "Maps nil: leer sí, escribir no", "nil マップ：読めるが書けない"),
+    p(
+      "var m map[K]V declares a map variable but creates no map: its zero value is nil. A nil map behaves like an empty map for reading: m[k] gives the zero value, len(m) is 0 and range does zero laps.",
+      "var m map[K]V declara una variable map pero no crea ningún map: su valor cero es nil. Un map nil se comporta como uno vacío al leer: m[k] da el valor cero, len(m) es 0 y range da cero vueltas.",
+      "var m map[K]V はマップの変数を宣言するだけで、マップは作らない。ゼロ値は nil。nil マップは読むだけなら空のマップと同じ：m[k] はゼロ値、len(m) は 0、range は0周。",
+    ),
+    ex('var flags map[string]bool\nfor range flags {\n\tfmt.Println("never")\n}\nfmt.Println(flags["zed"], len(flags))', "false 0",
+      L("Reading a nil map is safe", "Leer un map nil es seguro", "nil マップを読むのは安全")),
+    p(
+      "Writing is different: there's no storage behind a nil map, so m[k] = v panics with \"assignment to entry in nil map\". The compiler can't catch it, because whether a map is nil is only known while the program runs.",
+      "Escribir es distinto: no hay almacenamiento detrás de un map nil, así que m[k] = v hace panic con \"assignment to entry in nil map\". El compilador no puede detectarlo, porque si un map es nil solo se sabe al ejecutar.",
+      "書くのは別。nil マップの裏には保存場所がないので、m[k] = v は panic「assignment to entry in nil map」。マップが nil かどうかは実行中にしかわからないので、コンパイラは見つけられない。",
+    ),
+    crash('var flags map[string]bool\nflags["zed"] = true\nfmt.Println(flags)', "assignment to entry in nil map",
+      L("Compiles, then panics at the write", "Compila y luego hace panic al escribir", "コンパイルは通り、書きこみで panic")),
+    p(
+      "Create the map before writing, either with make(map[K]V) or with a literal like map[K]V{}. Both give a real, empty map ready for writes.",
+      "Crea el map antes de escribir, con make(map[K]V) o con un literal como map[K]V{}. Ambos dan un map real y vacío, listo para escribir.",
+      "書く前にマップを作ろう。make(map[K]V) でも、map[K]V{} のようなリテラルでもいい。どちらも書きこみできる本物の空マップになる。",
+    ),
+    ex('flags := map[string]bool{}\nflags["zed"] = true\nfmt.Println(flags)', "map[zed:true]"),
+    p(
+      "Common mistake: declaring a map with var and writing to it right away. When you see that panic, look for the line where the map should have been created.",
+      "Error común: declarar un map con var y escribir en él enseguida. Cuando veas ese panic, busca la línea donde el map debió crearse.",
+      "よくあるミス：var でマップを宣言してすぐ書きこむこと。この panic を見たら、マップを作るべきだった行を探そう。",
+    ),
+  ),
+  note("map-order", L("Map order is random", "El orden de un map es aleatorio", "マップの順番はランダム"),
+    p(
+      "A map has no order. When you range over a map, Go deliberately starts at a random position, so the order can change from one run to the next. Never write code that depends on it.",
+      "Un map no tiene orden. Cuando recorres un map con range, Go empieza a propósito en una posición aleatoria, así que el orden puede cambiar de una ejecución a otra. Nunca escribas código que dependa de él.",
+      "マップには順番がない。range で回すと、Go はわざとランダムな位置から始めるので、実行のたびに順番が変わりうる。順番に頼るコードは書かないこと。",
+    ),
+    p(
+      "fmt is the exception: fmt.Println and friends print maps with their keys sorted, so printing a whole map gives the same text every time.",
+      "fmt es la excepción: fmt.Println y compañía imprimen los maps con las claves ordenadas, así que imprimir un map entero da el mismo texto cada vez.",
+      "例外は fmt。fmt.Println などはキーを並べてマップを表示するので、マップ全体を表示すると毎回同じ文字になる。",
+    ),
+    ex('pets := map[string]int{"dog": 2, "cat": 5, "ant": 9}\nfmt.Println(pets)', "map[ant:9 cat:5 dog:2]",
+      L("fmt sorts the keys when printing a map", "fmt ordena las claves al imprimir un map", "fmt はマップの表示でキーを並べる")),
+    p(
+      "When you need a stable order in a loop, collect the keys into a slice, sort that slice with the sort function that matches its element type, then loop over the sorted keys.",
+      "Cuando necesitas un orden estable en un bucle, junta las claves en un slice, ordénalo con la función de sort que corresponde a su tipo de elemento y luego recorre las claves ordenadas.",
+      "ループで安定した順番がほしいときは、キーをスライスに集め、要素の型に合う sort 関数で並べ、並べたキーでループする。",
+    ),
+    ex('ids := map[int]string{30: "c", 10: "a", 20: "b"}\nkeys := []int{}\nfor k := range ids {\n\tkeys = append(keys, k)\n}\nsort.Ints(keys)\nfmt.Println(keys)', "[10 20 30]",
+      L("int keys, so sort.Ints", "Claves int, así que sort.Ints", "int のキーなので sort.Ints")),
+    p(
+      "Common mistake: assuming the order you wrote in the literal is kept. It isn't, in loops or anywhere else; only fmt's sorted printing looks stable.",
+      "Error común: suponer que se mantiene el orden en que escribiste el literal. No se mantiene, ni en bucles ni en ningún otro lado; solo la impresión ordenada de fmt parece estable.",
+      "よくあるミス：リテラルに書いた順番が保たれると思うこと。ループでもどこでも保たれない。安定して見えるのは fmt の並べた表示だけ。",
+    ),
+  ),
+  note("map-refs-keys", L("Maps are shared; keys compare", "Maps compartidos; claves comparables", "マップは共有、キーは比較"),
+    p(
+      "A map variable is a small reference to the map's storage. Assigning it or passing it to a function doesn't copy the pairs: both names refer to the same map, so a function can add or change keys and the caller sees it.",
+      "Una variable map es una pequeña referencia al almacenamiento del map. Asignarla o pasarla a una función no copia los pares: ambos nombres se refieren al mismo map, así que una función puede agregar o cambiar claves y quien llama lo ve.",
+      "マップの変数は、マップの保存場所を指す小さな参照。代入や関数へのわたしでペアはコピーされず、どちらの名前も同じマップを指す。だから関数がキーを足したり変えたりすると、呼んだ側にも見える。",
+    ),
+    ex('func reward(bank map[string]int) { bank["gold"] += 5 }\n\nfunc main() {\n\tbank := map[string]int{"gold": 1}\n\treward(bank)\n\tfmt.Println(bank["gold"])\n}', "6",
+      L("reward changed the caller's map", "reward cambió el map de quien llama", "reward は呼んだ側のマップを変えた")),
+    p(
+      "Keys must be comparable with ==, because the map uses == to find them. Numbers, strings, bools, pointers, arrays and structs of comparable fields all work. Slices, maps and functions can't be keys: \"invalid map key type\".",
+      "Las claves deben compararse con ==, porque el map usa == para encontrarlas. Números, strings, bools, punteros, arrays y structs de campos comparables funcionan. Slices, maps y funciones no pueden ser claves: \"invalid map key type\".",
+      "マップは == でキーを探すので、キーは == で比べられる型でないとダメ。数値・文字列・bool・ポインタ・配列・比べられるフィールドの構造体は OK。スライス・マップ・関数はキーにできない：「invalid map key type」。",
+    ),
+    ex('type cell struct{ row, col int }\nboard := map[cell]string{{1, 2}: "rook"}\nfmt.Println(board[cell{1, 2}])', "rook",
+      L("A struct of ints is a fine key", "Un struct de ints es una buena clave", "int の構造体はキーにできる")),
+    bad("lookup := map[[]string]int{}\nfmt.Println(lookup)",
+      L("Does not compile: a slice can't be a key", "No compila: un slice no puede ser clave", "コンパイル不可：スライスはキーにできない")),
+    p(
+      "Common mistake: thinking a function gets its own copy of a map, as it does with an array or a struct. Maps, like slices, share their storage.",
+      "Error común: creer que una función recibe su propia copia de un map, como pasa con un array o un struct. Los maps, como los slices, comparten su almacenamiento.",
+      "よくあるミス：配列や構造体のように、関数がマップのコピーを受けとると思うこと。マップはスライスと同じく保存場所を共有する。",
+    ),
+  ),
+];
+
+const structsNotes: NoteDef[] = [
+  note("struct-values", L("Structs are values", "Los structs son valores", "構造体は値"),
+    p(
+      "A struct groups named fields into one type: type Pet struct { Name string; Age int }. Build one with a literal, Pet{\"rex\", 3} or Pet{Name: \"rex\", Age: 3}, and read fields with a dot: p.Name. A struct declared with var starts with every field at its zero value.",
+      "Un struct agrupa campos con nombre en un tipo: type Pet struct { Name string; Age int }. Se crea con un literal, Pet{\"rex\", 3} o Pet{Name: \"rex\", Age: 3}, y los campos se leen con un punto: p.Name. Un struct declarado con var empieza con cada campo en su valor cero.",
+      "構造体は名前つきフィールドを1つの型にまとめる：type Pet struct { Name string; Age int }。リテラル Pet{\"rex\", 3} や Pet{Name: \"rex\", Age: 3} で作り、p.Name のようにドットで読む。var で宣言した構造体は全フィールドがゼロ値。",
+    ),
+    ex('type Pet struct {\n\tName string\n\tAge  int\n}\nvar empty Pet\nfmt.Println(empty.Age, empty.Name == "")\nfmt.Printf("%v %+v\\n", Pet{"rex", 3}, Pet{"kit", 1})', "0 true\n{rex 3} {Name:kit Age:1}",
+      L("%+v adds the field names", "%+v agrega los nombres de los campos", "%+v はフィールド名もつける")),
+    p(
+      "Like arrays, structs are values: q := p copies every field. Changing the copy leaves the original alone. Passing a struct to a function copies it too.",
+      "Como los arrays, los structs son valores: q := p copia cada campo. Cambiar la copia deja el original intacto. Pasar un struct a una función también lo copia.",
+      "配列と同じく構造体は値。q := p で全フィールドがコピーされ、コピーを変えても元はそのまま。関数にわたしてもコピーされる。",
+    ),
+    ex('type Pet struct{ Name string }\nmine := Pet{"rex"}\nyours := mine\nyours.Name = "max"\nfmt.Println(mine.Name, yours.Name)', "rex max"),
+    p(
+      "Structs whose fields are all comparable can be compared with ==: they're equal when every field is equal. A struct with a slice or map field can't use ==.",
+      "Los structs cuyos campos son todos comparables se pueden comparar con ==: son iguales cuando cada campo es igual. Un struct con un campo slice o map no puede usar ==.",
+      "フィールドがすべて比べられる構造体は == で比べられ、全フィールドが等しければ等しい。スライスやマップのフィールドを持つ構造体は == を使えない。",
+    ),
+    ex('type Pet struct{ Name string }\nfmt.Println(Pet{"rex"} == Pet{"rex"}, Pet{"rex"} == Pet{"max"})', "true false"),
+    p(
+      "Common mistake: expecting q := p to create a second name for the same struct. It creates a copy. To share one struct, use a pointer: r := &p, then changes through r reach p.",
+      "Error común: esperar que q := p cree un segundo nombre para el mismo struct. Crea una copia. Para compartir un struct, usa un puntero: r := &p, y los cambios a través de r llegan a p.",
+      "よくあるミス：q := p で同じ構造体に別名がつくと思うこと。できるのはコピー。1つの構造体を共有するならポインタ r := &p を使い、r 経由の変更が p に届く。",
+    ),
+  ),
+  note("copy-traps", L("Shallow copies and range", "Copias superficiales y range", "浅いコピーと range"),
+    p(
+      "Copying a struct copies its fields as they are. If a field is a slice or a map, what gets copied is the slice header or the map reference, not the items. Both copies still share the same items underneath: it's a shallow copy.",
+      "Copiar un struct copia sus campos tal como están. Si un campo es un slice o un map, lo que se copia es el header del slice o la referencia del map, no los elementos. Ambas copias siguen compartiendo los mismos elementos: es una copia superficial.",
+      "構造体のコピーはフィールドをそのままコピーする。フィールドがスライスやマップなら、コピーされるのはヘッダーや参照で、中身ではない。2つのコピーは同じ中身を共有したまま。これが浅いコピー。",
+    ),
+    ex('type Team struct{ members []string }\nred := Team{members: []string{"ann", "bo"}}\nblue := red\nblue.members[1] = "zed"\nfmt.Println(red.members)', "[ann zed]",
+      L("The slice inside is shared by both teams", "El slice de adentro lo comparten ambos equipos", "中のスライスは2チームで共有")),
+    p(
+      "for _, v := range items gives v as a copy of each struct. Setting v.Field changes only that copy, and the slice stays the same. Write through the index instead: items[i].Field = ...",
+      "for _, v := range items da v como copia de cada struct. Cambiar v.Field solo cambia esa copia, y el slice queda igual. Escribe por el índice: items[i].Field = ...",
+      "for _, v := range items の v は各構造体のコピー。v.Field を変えてもコピーが変わるだけで、スライスはそのまま。添字を使って items[i].Field = ... と書こう。",
+    ),
+    ex("type Lamp struct{ On bool }\nlamps := []Lamp{{}, {}}\nfor i := range lamps {\n\tlamps[i].On = true\n}\nfmt.Println(lamps)", "[{true} {true}]",
+      L("Through the index, the real elements change", "Por el índice cambian los elementos reales", "添字経由なら本物の要素が変わる")),
+    p(
+      "Common mistake: assuming a copy is deep (that it duplicated the slice's items too), or that a range variable is the item itself. In both cases ask: what exactly was copied, the items or only a header?",
+      "Error común: suponer que una copia es profunda (que también duplicó los elementos del slice), o que la variable de range es el elemento mismo. En ambos casos pregunta: ¿qué se copió exactamente, los elementos o solo un header?",
+      "よくあるミス：コピーが深い（スライスの中身まで複製した）と思うこと、range の変数が要素そのものだと思うこと。どちらも「何がコピーされた？中身？ヘッダーだけ？」と考えよう。",
+    ),
+  ),
+  note("pointers", L("Pointers: & and *", "Punteros: & y *", "ポインタ：& と *"),
+    p(
+      "A pointer holds the address of a variable. &x gives a pointer to x (of type *int if x is an int), and *p follows the pointer to read or write the value it points to. Through a pointer, a function can change the caller's variable instead of a copy.",
+      "Un puntero guarda la dirección de una variable. &x da un puntero a x (de tipo *int si x es int), y *p sigue al puntero para leer o escribir el valor apuntado. Con un puntero, una función puede cambiar la variable de quien llama en vez de una copia.",
+      "ポインタは変数の住所を持つ。&x は x へのポインタ（x が int なら型は *int）、*p はポインタをたどって指す先の値を読み書きする。ポインタを使えば、関数はコピーではなく呼んだ側の変数を変えられる。",
+    ),
+    ex("func addTen(p *int) { *p += 10 }\n\nfunc main() {\n\tcoins := 1\n\taddTen(&coins)\n\tfmt.Println(coins)\n}", "11",
+      L("addTen writes through the address of coins", "addTen escribe a través de la dirección de coins", "addTen は coins の住所に書きこむ")),
+    p(
+      "new(T) creates a zero-valued T and returns a pointer to it. With a pointer to a struct you can write p.Field directly: Go follows the pointer for you, so (*p).Field is never needed.",
+      "new(T) crea un T en valor cero y devuelve un puntero a él. Con un puntero a struct puedes escribir p.Field directamente: Go sigue el puntero por ti, así que (*p).Field nunca hace falta.",
+      "new(T) はゼロ値の T を作り、そのポインタを返す。構造体へのポインタなら p.Field と直接書ける。Go が自動でたどるので (*p).Field と書く必要はない。",
+    ),
+    ex("type Box struct{ W int }\nb := new(Box)\nb.W = 6\nfmt.Println(*b, b.W)", "{6} 6"),
+    p(
+      "A pointer's zero value is nil: it points nowhere. Reading or writing through a nil pointer panics with \"nil pointer dereference\". Check p != nil before using a pointer that might be unset.",
+      "El valor cero de un puntero es nil: no apunta a nada. Leer o escribir a través de un puntero nil hace panic con \"nil pointer dereference\". Revisa p != nil antes de usar un puntero que podría no estar asignado.",
+      "ポインタのゼロ値は nil で、どこも指していない。nil ポインタをたどって読み書きすると panic「nil pointer dereference」。設定されていないかもしれないポインタは、使う前に p != nil を確認しよう。",
+    ),
+    crash("var count *int\nfmt.Println(*count + 1)", "nil pointer dereference",
+      L("Following a nil pointer panics", "Seguir un puntero nil hace panic", "nil ポインタをたどると panic")),
+    p(
+      "Returning a pointer to a local variable is safe in Go. The compiler notices the variable outlives the function and keeps it alive on the heap, so unlike C there's no dangling pointer.",
+      "Devolver un puntero a una variable local es seguro en Go. El compilador nota que la variable vive más que la función y la mantiene viva en el heap, así que, a diferencia de C, no hay punteros colgantes.",
+      "ローカル変数へのポインタを返しても Go では安全。変数が関数より長く生きることにコンパイラが気づき、ヒープに置いて生かしておく。C とちがい、ぶら下がりポインタにならない。",
+    ),
+    ex("func newCount() *int {\n\tn := 7\n\treturn &n\n}\n\nfunc main() {\n\tfmt.Println(*newCount())\n}", "7"),
+  ),
+  note("receivers", L("Value vs pointer receivers", "Receptor valor vs puntero", "値とポインタのレシーバ"),
+    p(
+      "A method is a function attached to a type, with a receiver written before its name: func (d Door) Open(). The receiver works like a parameter. With a value receiver, (d Door), the method gets a COPY, so changes to d are lost when it returns.",
+      "Un método es una función unida a un tipo, con un receptor escrito antes de su nombre: func (d Door) Open(). El receptor funciona como un parámetro. Con un receptor por valor, (d Door), el método recibe una COPIA, así que los cambios a d se pierden al terminar.",
+      "メソッドは型にくっついた関数で、名前の前にレシーバを書く：func (d Door) Open()。レシーバは引数と同じ。値レシーバ (d Door) ならメソッドはコピーを受けとるので、d への変更は終わると消える。",
+    ),
+    p(
+      "With a pointer receiver, (d *Door), the method gets the address of the real value and can change it. When you call it on a variable, door.Open(), Go passes &door for you automatically.",
+      "Con un receptor puntero, (d *Door), el método recibe la dirección del valor real y puede cambiarlo. Cuando lo llamas sobre una variable, door.Open(), Go pasa &door por ti automáticamente.",
+      "ポインタレシーバ (d *Door) なら、メソッドは本物の値の住所を受けとり、変えられる。変数で door.Open() と呼ぶと、Go が自動で &door をわたす。",
+    ),
+    ex("type Lamp struct{ lit bool }\nfunc (l Lamp) TryOn() { l.lit = true }\nfunc (l *Lamp) On()   { l.lit = true }\n\nfunc main() {\n\tvar a, b Lamp\n\ta.TryOn()\n\tb.On()\n\tfmt.Println(a.lit, b.lit)\n}", "false true",
+      L("Only the pointer receiver changes the real lamp", "Solo el receptor puntero cambia la lámpara real", "本物を変えるのはポインタレシーバだけ")),
+    p(
+      "Go can only take the address of something that has one: a variable, a slice element, a field reached through a pointer. A literal like Lamp{} or a value stored in a map has no address, so calling a pointer method on it is a compile error.",
+      "Go solo puede tomar la dirección de algo que la tiene: una variable, un elemento de slice, un campo alcanzado por un puntero. Un literal como Lamp{} o un valor guardado en un map no tiene dirección, así que llamar un método puntero sobre él es un error de compilación.",
+      "Go が住所をとれるのは住所があるものだけ：変数、スライスの要素、ポインタ経由のフィールド。Lamp{} のようなリテラルやマップに入った値には住所がないので、ポインタメソッドを呼ぶとコンパイルエラー。",
+    ),
+    bad('type Lamp struct{ lit bool }\n\nfunc (l *Lamp) On() { l.lit = true }\n\nfunc main() {\n\tlamps := map[string]Lamp{"hall": {}}\n\tlamps["hall"].On()\n}',
+      L("Does not compile: a map value has no address", "No compila: un valor de map no tiene dirección", "コンパイル不可：マップの値には住所がない")),
+    p(
+      "Rule of thumb: if a method must change the receiver, give it a pointer receiver. Common mistake: a method that \"does nothing\". It sets a field and compiles fine, but the field never changes. Check whether the receiver has a *.",
+      "Regla práctica: si un método debe cambiar el receptor, dale un receptor puntero. Error común: un método que \"no hace nada\". Asigna un campo y compila bien, pero el campo nunca cambia. Revisa si el receptor tiene *.",
+      "目安：レシーバを変えるメソッドにはポインタレシーバを。よくあるミス：「何もしない」メソッド。フィールドに代入してコンパイルも通るのに、値が変わらない。レシーバに * があるか確認しよう。",
+    ),
+  ),
+];
+
+const forestBossNotes: NoteDef[] = [
+  note("recap-append", L("Recap: append and sharing", "Repaso: append y compartir", "復習：append と共有"),
+    p(
+      "A slice is a window onto an array. If it has spare capacity, append writes into the shared array, so other slices of that array see the change, and two appends from the same slice write the same slot. With no room left, append moves to a new, bigger array whose exact capacity is up to the runtime.",
+      "Un slice es una ventana a un array. Si tiene capacidad libre, append escribe en el array compartido, así que otros slices de ese array ven el cambio, y dos append desde el mismo slice escriben el mismo slot. Sin espacio, append se muda a un array nuevo y más grande cuya capacidad exacta decide el runtime.",
+      "スライスは配列の窓。空き容量があれば append は共有の配列に書くので、同じ配列の別スライスにも見え、同じスライスからの2回の append は同じマスに書く。空きがなければ新しい大きな配列に引っ越し、正確な容量はランタイムしだい。",
+    ),
+    p(
+      "s[:0] keeps the array but shows nothing, so appending to it reuses the same slots from the start. append(a, b...) spreads b's items one by one.",
+      "s[:0] conserva el array pero no muestra nada, así que hacer append sobre él reusa los mismos slots desde el inicio. append(a, b...) esparce los elementos de b uno por uno.",
+      "s[:0] は配列を残したまま何も見せない。そこに append すると、同じマスを先頭から再利用する。append(a, b...) は b の要素を1つずつ広げて足す。",
+    ),
+    ex("src := []int{4, 5, 6}\nkeep := src[:0]\nkeep = append(keep, 9)\nfmt.Println(src, keep)", "[9 5 6] [9]",
+      L("keep writes into src's slot 0", "keep escribe en el slot 0 de src", "keep は src の0番に書く")),
+  ),
+  note("recap-copy-nil", L("Recap: nil rows and copy", "Repaso: filas nil y copy", "復習：nil の行と copy"),
+    p(
+      "make([][]T, n) creates the outer slice with n rows, and each row is a zero-value slice: nil until you make it. copy(dst, src) fills dst's own array, up to the shorter length, so changing dst afterwards never reaches src.",
+      "make([][]T, n) crea el slice externo con n filas, y cada fila es un slice en valor cero: nil hasta que la crees. copy(dst, src) llena el array propio de dst, hasta el largo menor, así que cambiar dst después nunca llega a src.",
+      "make([][]T, n) は外側のスライスを n 行で作り、各行はゼロ値のスライス、つまり make するまで nil。copy(dst, src) は短いほうの長さまで dst 自身の配列を埋めるので、あとで dst を変えても src には届かない。",
+    ),
+    ex('rows := make([][]string, 3)\nrows[0] = []string{"x"}\nfmt.Println(len(rows[0]), rows[1] == nil)', "1 true",
+      L("Only the row you filled is non-nil", "Solo la fila que llenaste no es nil", "埋めた行だけが nil ではない")),
+  ),
+  note("recap-maps", L("Recap: map keys and values", "Repaso: claves y valores de maps", "復習：マップのキーと値"),
+    p(
+      "Map keys must be comparable with ==: arrays and structs of comparable fields work, slices don't. Writing to a nil map panics, so make it first.",
+      "Las claves de un map deben compararse con ==: los arrays y los structs de campos comparables sirven, los slices no. Escribir en un map nil hace panic, así que créalo primero.",
+      "マップのキーは == で比べられる型だけ。配列や比べられるフィールドの構造体は OK、スライスはダメ。nil マップに書くと panic なので先に make しよう。",
+    ),
+    p(
+      "Map values aren't addressable: m[k].Field = v does not compile. Copy the value out, change the copy, and store it back.",
+      "Los valores de un map no son direccionables: m[k].Field = v no compila. Copia el valor afuera, cambia la copia y vuelve a guardarla.",
+      "マップの値には住所がないので、m[k].Field = v はコンパイルできない。値を取り出して、変えて、戻そう。",
+    ),
+    ex('type Hero struct{ HP int }\nparty := map[string]Hero{"kai": {HP: 3}}\nh := party["kai"]\nh.HP = 8\nparty["kai"] = h\nfmt.Println(party["kai"].HP)', "8",
+      L("Copy out, change, store back", "Copiar, cambiar, guardar de nuevo", "取り出す・変える・戻す")),
+  ),
+  note("recap-receivers", L("Recap: receivers", "Repaso: receptores", "復習：レシーバ"),
+    p(
+      "A value receiver works on a copy, so its changes disappear; a pointer receiver changes the real value, and Go adds the & for you on a variable. To predict a field's final value, count only the pointer-receiver calls.",
+      "Un receptor por valor trabaja sobre una copia, así que sus cambios desaparecen; un receptor puntero cambia el valor real, y Go agrega el & por ti en una variable. Para predecir el valor final de un campo, cuenta solo las llamadas con receptor puntero.",
+      "値レシーバはコピーに作用するので変更は消える。ポインタレシーバは本物を変え、変数なら Go が & をつけてくれる。フィールドの最終値を予想するには、ポインタレシーバの呼び出しだけを数えよう。",
+    ),
+    ex("type Steps struct{ n int }\nfunc (s Steps) Peek()  { s.n += 100 }\nfunc (s *Steps) Walk() { s.n++ }\n\nfunc main() {\n\tvar s Steps\n\ts.Walk()\n\ts.Peek()\n\tfmt.Println(s.n)\n}", "1",
+      L("Peek's +100 is lost on a copy", "El +100 de Peek se pierde en una copia", "Peek の +100 はコピーで消える")),
+  ),
+];
+
 // ─── 2.1 Arrays and slices ─────────────────────────────────────────────────
 const arrays: LessonDef = {
   slug: "arrays-and-slices",
@@ -22,6 +509,7 @@ const arrays: LessonDef = {
   xp: 65,
   enemy: "slime",
   enemyName: L("SLICE SLIME", "SLIME REBANADA", "スライススライム"),
+  notes: arraysNotes,
   beats: [
     say(L(
       "Welcome to Slice Forest! An ARRAY is a chest with a fixed number of slots: [3]int. Give it away and it's COPIED.",
@@ -47,6 +535,8 @@ const arrays: LessonDef = {
       output: "1 9",
       check: { compiles: true, stdout: "1 9" },
       explain: L("Arrays are values: b := a copies all three slots, so a is untouched.", "Los arrays son valores: b := a copia los tres slots, así que a no cambia.", "配列は値。b := a で3マスともコピーされるから a はそのまま。"),
+      hint: L("a is an array, written with a size. What happens to its slots when you assign it to b?", "a es un array, escrito con tamaño. ¿Qué pasa con sus slots cuando lo asignas a b?", "a はサイズつきの配列。b に代入すると、マスはどうなる？"),
+      note: "arrays-values",
     },
     say(L(
       "A SLICE is a window onto an array: []int, no size. Copying a slice copies the window, NOT the items.",
@@ -62,6 +552,8 @@ const arrays: LessonDef = {
       output: "9 9",
       check: { compiles: true, stdout: "9 9" },
       explain: L("a and b are two windows onto the SAME array. Paint through one, both see it.", "a y b son dos ventanas al MISMO array. Si pintas por una, ambas lo ven.", "a と b は同じ配列をのぞく2つの窓。片方で塗れば両方に見える。"),
+      hint: L("This time a has no size: it's a slice. Does b := a copy the items, or the window onto them?", "Esta vez a no tiene tamaño: es un slice. ¿b := a copia los elementos o la ventana hacia ellos?", "今回の a はサイズなし、つまりスライス。b := a は中身をコピーする？窓をコピーする？"),
+      note: "slice-sharing",
       setup: [{ t: "item", kind: "scroll", holder: "ally" }, { t: "enter", actor: "ally" }, { t: "tag", actor: "hero", text: "a" }],
       win: [{ t: "lend", to: "hero", mut: true }, { t: "print", text: "9 9" }],
     },
@@ -79,6 +571,8 @@ const arrays: LessonDef = {
       output: "3 5 [0 0 0]",
       check: { compiles: true, stdout: "3 5 [0 0 0]" },
       explain: L("3 visible items, all zero values, with room for 5 in the array.", "3 elementos visibles, todos en cero, con espacio para 5 en el array.", "見えるのは3つ（全部ゼロ値）、配列には5つ分の空き。"),
+      hint: L("make takes the type, then the length, then the capacity. What value do the visible items start with?", "make recibe el tipo, luego el largo y luego la capacidad. ¿Con qué valor empiezan los elementos visibles?", "make の引数は型、長さ、容量の順。見える要素は何の値から始まる？"),
+      note: "len-cap",
     },
     {
       kind: "predict",
@@ -89,6 +583,8 @@ const arrays: LessonDef = {
       output: "[1 2] 2 4",
       check: { compiles: true, stdout: "[1 2] 2 4" },
       explain: L("a[1:3] takes indexes 1 and 2. Its capacity runs to the end of a: 4 slots.", "a[1:3] toma los índices 1 y 2. Su capacidad llega al final de a: 4 slots.", "a[1:3] は 1 と 2 番。容量は a の最後までの4マス。"),
+      hint: L("a[1:3] starts at index 1 and stops before 3. Capacity counts from the window's start to the end of a.", "a[1:3] empieza en el índice 1 y para antes del 3. La capacidad cuenta desde el inicio de la ventana hasta el final de a.", "a[1:3] は1番から始まり3番の手前まで。容量は窓の始まりから a の最後まで。"),
+      note: "len-cap",
     },
     {
       kind: "predict",
@@ -99,6 +595,8 @@ const arrays: LessonDef = {
       output: "[2 3] [1] [1 2 3]",
       check: { compiles: true, stdout: "[2 3] [1] [1 2 3]" },
       explain: L("A missing start means 0; a missing end means len. The end index is not included.", "Si falta el inicio es 0; si falta el final es len. El índice final no se incluye.", "開始なしは 0、終わりなしは len。終わりの番号は含まない。"),
+      hint: L("A missing start means 0 and a missing end means the length. The end index itself is never included.", "Si falta el inicio es 0 y si falta el final es el largo. El índice final nunca se incluye.", "開始なしは 0、終わりなしは長さ。終わりの番号そのものは含まない。"),
+      note: "len-cap",
     },
     {
       kind: "predict",
@@ -109,6 +607,8 @@ const arrays: LessonDef = {
       output: "true 0 []",
       check: { compiles: true, stdout: "true 0 []" },
       explain: L("A slice's zero value is nil: no array behind it, length 0. It prints as [].", "El valor cero de un slice es nil: sin array detrás, largo 0. Se imprime como [].", "スライスのゼロ値は nil。裏に配列なし、長さ 0。表示は []。"),
+      hint: L("Nothing was assigned to s. What is a slice's zero value, and how does fmt print an empty slice?", "No se asignó nada a s. ¿Cuál es el valor cero de un slice y cómo imprime fmt un slice vacío?", "s には何も代入していない。スライスのゼロ値は？空のスライスを fmt はどう表示する？"),
+      note: "len-cap",
     },
     {
       kind: "predict",
@@ -118,6 +618,8 @@ const arrays: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("The length is part of an array's type: [4]int is not [3]int.", "El largo es parte del tipo del array: [4]int no es [3]int.", "長さも配列の型の一部。[4]int と [3]int は別の型。"),
+      hint: L("Is an array's length part of its type? Compare the types on each side of =.", "¿El largo de un array es parte de su tipo? Compara los tipos a cada lado del =.", "配列の長さは型の一部？= の両側の型を比べよう。"),
+      note: "arrays-values",
     },
     {
       kind: "predict",
@@ -128,6 +630,8 @@ const arrays: LessonDef = {
       output: "[0 6] [5 6]",
       check: { compiles: true, stdout: "[0 6] [5 6]" },
       explain: L("zeroS gets a window onto x's array; zeroA gets a full copy of y.", "zeroS recibe una ventana al array de x; zeroA recibe una copia entera de y.", "zeroS は x の配列への窓を受けとり、zeroA は y の丸ごとコピーを受けとる。"),
+      hint: L("One function receives a slice, the other an array. Which gets a copy, and which a window onto main's data?", "Una función recibe un slice y la otra un array. ¿Cuál recibe una copia y cuál una ventana a los datos de main?", "片方はスライス、片方は配列を受けとる。コピーを受けとるのは？main のデータへの窓は？"),
+      note: "slice-sharing",
     },
     {
       kind: "predict",
@@ -137,6 +641,8 @@ const arrays: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("Slices can only be compared to nil. Arrays like [2]int can use ==.", "Los slices solo se comparan con nil. Los arrays como [2]int sí pueden usar ==.", "スライスは nil としか比べられない。[2]int のような配列なら == OK。"),
+      hint: L("Can two slices be compared with ==? Think about the one thing Go lets you compare a slice to.", "¿Se pueden comparar dos slices con ==? Piensa en lo único con lo que Go deja comparar un slice.", "スライス同士を == で比べられる？Go がスライスと比べるのを許す唯一のものを考えよう。"),
+      note: "slice-sharing",
     },
     {
       kind: "type",
@@ -145,6 +651,8 @@ const arrays: LessonDef = {
       answer: "...",
       check: { compiles: true, stdout: "3" },
       explain: L("[...] makes an ARRAY whose length is counted from the items: [3]string.", "[...] crea un ARRAY cuyo largo se cuenta de los elementos: [3]string.", "[...] は要素の数から長さを決める配列：[3]string。"),
+      hint: L("You want an array, not a slice, without writing the count. What goes in the brackets so Go counts?", "Quieres un array, no un slice, sin escribir la cantidad. ¿Qué va entre corchetes para que Go cuente?", "スライスではなく配列がほしい、でも数は書かない。Go に数えさせるには角かっこに何を書く？"),
+      note: "arrays-values",
       win: [{ t: "print", text: "3" }],
     },
     {
@@ -155,6 +663,8 @@ const arrays: LessonDef = {
       expect: "filled: [7 7 7]",
       fallback: [String.raw`func\s+fill\s*\(\s*a\s+\[\]int\s*\)[\s\S]*fill\s*\(\s*a\s*\[\s*:\s*\]\s*\)`, String.raw`func\s+fill\s*\(\s*a\s+\*\[3\]int\s*\)[\s\S]*fill\s*\(\s*&a\s*\)`],
       explain: L("fill got a COPY of the array. Pass a slice a[:] (a window) so it fills the real one.", "fill recibía una COPIA del array. Pasa un slice a[:] (una ventana) para llenar el real.", "fill は配列のコピーを受けとっていた。窓のスライス a[:] をわたせば本物が埋まる。"),
+      hint: L("fill receives an array, which is a copy. How can it receive something that shares main's array instead?", "fill recibe un array, que es una copia. ¿Cómo puede recibir algo que comparta el array de main?", "fill は配列、つまりコピーを受けとる。main の配列を共有するものを受けとるには？"),
+      note: "arrays-values",
     },
   ],
 };
@@ -168,6 +678,7 @@ const appendCopy: LessonDef = {
   xp: 70,
   enemy: "go/race-twins",
   enemyName: L("ALIAS TWINS", "GEMELOS ALIAS", "エイリアス双子"),
+  notes: appendNotes,
   beats: [
     say(L(
       "append adds items and RETURNS the new slice. Always catch it: s = append(s, x).",
@@ -201,6 +712,8 @@ const appendCopy: LessonDef = {
       output: "[1 2 3] 3",
       check: { compiles: true, stdout: "[1 2 3] 3" },
       explain: L("append returned a slice with 3 items, and we stored it back in s.", "append devolvió un slice de 3 elementos y lo guardamos de nuevo en s.", "append が3つのスライスを返し、それを s に入れ直した。"),
+      hint: L("append returns a new slice, and here the result is stored back in s. How many items are there now?", "append devuelve un slice nuevo, y aquí el resultado se guarda de nuevo en s. ¿Cuántos elementos hay ahora?", "append は新しいスライスを返し、ここでは s に入れ直している。要素はいくつ？"),
+      note: "append-result",
     },
     {
       kind: "predict",
@@ -210,6 +723,8 @@ const appendCopy: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("\"append(s, 3) (value of type []int) is not used\". Write s = append(s, 3).", "\"append(s, 3) (value of type []int) is not used\". Escribe s = append(s, 3).", "「append(s, 3) ... is not used」。s = append(s, 3) と書こう。"),
+      hint: L("Look at the second line. What happens to append's result there? Go is strict about ignored results.", "Mira la segunda línea. ¿Qué pasa ahí con el resultado de append? Go es estricto con los resultados ignorados.", "2行目を見よう。append の結果はどうなっている？Go は無視された結果に厳しい。"),
+      note: "append-result",
     },
     say(L(
       "If the array behind a slice has ROOM, append writes into it. Other slices of that array see the change!",
@@ -225,6 +740,8 @@ const appendCopy: LessonDef = {
       output: "[1 2 99 4]",
       check: { compiles: true, stdout: "[1 2 99 4]" },
       explain: L("s had room (cap 4), so append wrote 99 into a's slot 2.", "s tenía espacio (cap 4), así que append escribió 99 en el slot 2 de a.", "s には空き（cap 4）があったから、append が a の2番に 99 を書いた。"),
+      hint: L("s := a[:2] has len 2 but cap 4. When there's room, where does append write the new item?", "s := a[:2] tiene len 2 pero cap 4. Cuando hay espacio, ¿dónde escribe append el elemento nuevo?", "s := a[:2] は len 2、cap 4。空きがあるとき、append は新しい要素をどこに書く？"),
+      note: "append-aliasing",
       setup: [{ t: "item", kind: "scroll", holder: "hero" }, { t: "tag", actor: "hero", text: "a" }, { t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: "s" }],
       win: [{ t: "lend", to: "ally", mut: true }, { t: "say", actor: "enemy", text: L("Same scroll! Hee!", "¡Mismo pergamino!", "同じ巻物！ヒヒ！") }, { t: "print", text: "[1 2 99 4]" }],
     },
@@ -237,6 +754,8 @@ const appendCopy: LessonDef = {
       output: "2 2",
       check: { compiles: true, stdout: "2 2" },
       explain: L("Both appends wrote slot 3 of the SAME array. The second one won: 2.", "Ambos append escribieron el slot 3 del MISMO array. Ganó el segundo: 2.", "2つの append が同じ配列の3番に書いた。後のほうが勝って 2。"),
+      hint: L("a has spare capacity, so neither append moves. Which slot do both write, and which one writes last?", "a tiene capacidad libre, así que ningún append se muda. ¿Qué slot escriben ambos y cuál escribe al final?", "a には空きがあるので、どちらの append も引っ越さない。両方が書くマスは？最後に書くのは？"),
+      note: "append-aliasing",
     },
     say(L(
       "No room left? append moves the items to a NEW, bigger array. After that, the slices stop sharing.",
@@ -252,6 +771,8 @@ const appendCopy: LessonDef = {
       output: "1 9",
       check: { compiles: true, stdout: "1 9" },
       explain: L("a was full (cap 3), so append made a new array for b. Changing b leaves a alone.", "a estaba lleno (cap 3), así que append creó un array nuevo para b. Cambiar b no toca a.", "a は満杯（cap 3）だったから、b は新しい配列。b を変えても a はそのまま。"),
+      hint: L("a is full: its len equals its cap. What must append do to fit one more? Do a and b still share after that?", "a está lleno: su len es igual a su cap. ¿Qué debe hacer append para que quepa uno más? ¿Siguen compartiendo a y b?", "a は満杯（len と cap が同じ）。もう1つ入れるため append は何をする？そのあと a と b は共有？"),
+      note: "append-aliasing",
       setup: [{ t: "item", kind: "scroll", holder: "hero" }, { t: "enter", actor: "ally" }],
       win: [{ t: "clone", to: "ally" }, { t: "banner", text: L("NEW ARRAY", "ARRAY NUEVO", "新しい配列") }],
     },
@@ -269,6 +790,8 @@ const appendCopy: LessonDef = {
       output: "[1 2 3 4] [1 2 99]",
       check: { compiles: true, stdout: "[1 2 3 4] [1 2 99]" },
       explain: L("s has cap 2, so append can't touch a. It copies to a new array.", "s tiene cap 2, así que append no puede tocar a. Copia a un array nuevo.", "s の cap は 2。append は a にさわれず、新しい配列にコピーする。"),
+      hint: L("The third number in a[:2:2] limits the capacity. Does s have any spare room for append?", "El tercer número de a[:2:2] limita la capacidad. ¿Le queda a s espacio libre para append?", "a[:2:2] の3つ目の数は容量を制限する。s に append 用の空きはある？"),
+      note: "append-aliasing",
     },
     say(L(
       "copy(dst, src) copies as many items as fit: the shorter of the two. It returns how many it copied.",
@@ -284,6 +807,8 @@ const appendCopy: LessonDef = {
       output: "2 [7 8]",
       check: { compiles: true, stdout: "2 [7 8]" },
       explain: L("dst has only 2 slots, so copy fills those 2 and stops. copy never grows a slice.", "dst solo tiene 2 slots, así que copy llena esos 2 y para. copy nunca agranda un slice.", "dst は2マスだけ。copy はそこを埋めて止まる。スライスはのびない。"),
+      hint: L("copy only copies as many items as fit in the shorter slice. How long is dst?", "copy solo copia los elementos que caben en el slice más corto. ¿Qué largo tiene dst?", "copy は短いほうに入る分だけコピーする。dst の長さは？"),
+      note: "copy-builtin",
     },
     {
       kind: "predict",
@@ -294,6 +819,8 @@ const appendCopy: LessonDef = {
       output: "0 []",
       check: { compiles: true, stdout: "0 []" },
       explain: L("A nil slice has length 0, so there is room for nothing. Use make first.", "Un slice nil tiene largo 0, así que no cabe nada. Usa make primero.", "nil スライスは長さ 0 で何も入らない。先に make しよう。"),
+      hint: L("A nil slice has length 0. How many items fit into it? Does copy ever grow dst?", "Un slice nil tiene largo 0. ¿Cuántos elementos caben? ¿copy agranda dst alguna vez?", "nil スライスの長さは 0。いくつ入る？copy は dst をのばす？"),
+      note: "copy-builtin",
     },
     {
       kind: "predict",
@@ -304,6 +831,8 @@ const appendCopy: LessonDef = {
       output: "[1 2 3]",
       check: { compiles: true, stdout: "[1 2 3]" },
       explain: L("range hands you a COPY of each item in x. To change the slice, write xs[i] *= 10.", "range te da una COPIA de cada elemento en x. Para cambiar el slice, escribe xs[i] *= 10.", "range の x は各要素のコピー。スライスを変えるなら xs[i] *= 10。"),
+      hint: L("Inside range, is x the item stored in the slice, or a copy of it?", "Dentro de range, ¿x es el elemento guardado en el slice o una copia de él?", "range の中の x はスライスの要素そのもの？それともコピー？"),
+      note: "slice-tools",
     },
     {
       kind: "predict",
@@ -314,6 +843,8 @@ const appendCopy: LessonDef = {
       output: "[1 3 4 5]",
       check: { compiles: true, stdout: "[1 3 4 5]" },
       explain: L("s[2:]... spreads 3, 4, 5 after s[:1]: index 1 (the 2) is removed.", "s[2:]... esparce 3, 4, 5 después de s[:1]: se quita el índice 1 (el 2).", "s[2:]... で 3, 4, 5 を s[:1] のあとに広げる。1番（2）が消える。"),
+      hint: L("s[:1] keeps the items before index 1, and s[2:]... adds everything from index 2 on. Which item is skipped?", "s[:1] conserva los elementos antes del índice 1, y s[2:]... agrega todo desde el índice 2. ¿Qué elemento se salta?", "s[:1] は1番より前、s[2:]... は2番以降を足す。飛ばされる要素は？"),
+      note: "slice-tools",
     },
     {
       kind: "pick",
@@ -323,6 +854,8 @@ const appendCopy: LessonDef = {
       answer: 0,
       check: { compiles: true, stdout: "[1 2 3] true", wrongFail: true },
       explain: L("slices.Sort sorts in place. The slices package also has Contains, Index and more.", "slices.Sort ordena ahí mismo. El paquete slices también tiene Contains, Index y más.", "slices.Sort はその場で並べかえる。slices には Contains や Index もある。"),
+      hint: L("The slices package names functions that act on a slice in place with a plain verb, and they return nothing.", "El paquete slices nombra con un verbo simple a las funciones que actúan sobre el slice ahí mismo, y no devuelven nada.", "slices パッケージでは、その場で処理する関数はシンプルな動詞の名前で、何も返さない。"),
+      note: "slice-tools",
       win: [{ t: "print", text: "[1 2 3] true" }],
     },
     {
@@ -333,6 +866,8 @@ const appendCopy: LessonDef = {
       expect: "len: 2",
       fallback: [String.raw`return\s+append\s*\(\s*s\s*,\s*v\s*\)[\s\S]*s\s*=\s*add\s*\(`, String.raw`s\s*=\s*append\s*\(\s*s\s*,\s*2\s*\)`],
       explain: L("add changed only its own copy of the header. Return the new slice and store it: s = add(s, 2).", "add solo cambió su propia copia del header. Devuelve el slice nuevo y guárdalo: s = add(s, 2).", "add は自分の header のコピーを変えただけ。新しいスライスを返して s = add(s, 2) で受けとろう。"),
+      hint: L("add appends to its own copy of the slice header. How can main get the longer slice back?", "add hace append sobre su propia copia del header. ¿Cómo puede main recibir el slice más largo?", "add は自分のヘッダーのコピーに append する。main が長いスライスを受けとるには？"),
+      note: "append-result",
     },
   ],
 };
@@ -346,6 +881,7 @@ const maps: LessonDef = {
   xp: 70,
   enemy: "go/nil-blob",
   enemyName: L("NIL MAP BLOB", "BLOB MAPA NIL", "nil マップブロブ"),
+  notes: mapsNotes,
   beats: [
     say(L(
       "A MAP links keys to values, like pockets with name tags: map[string]int. A missing key gives the zero value.",
@@ -380,6 +916,8 @@ const maps: LessonDef = {
       output: "2 2 0",
       check: { compiles: true, stdout: "2 2 0" },
       explain: L("Two keys now. A missing key like \"zzz\" just gives int's zero value: 0.", "Ahora hay dos claves. Una clave ausente como \"zzz\" da el valor cero de int: 0.", "キーは2つ。\"zzz\" のようなないキーは int のゼロ値 0。"),
+      hint: L("How many keys are stored after the assignment? And what does a missing key give for int values?", "¿Cuántas claves hay después de la asignación? ¿Y qué da una clave ausente con valores int?", "代入のあとキーはいくつ？int の値で、ないキーは何を返す？"),
+      note: "map-basics",
     },
     say(L(
       "But is 0 stored, or missing? Ask with comma-ok: v, ok := m[k]. ok is true only if the key is there.",
@@ -395,6 +933,8 @@ const maps: LessonDef = {
       output: "0 true 0 false",
       check: { compiles: true, stdout: "0 true 0 false" },
       explain: L("Both values are 0, but ok tells them apart: \"a\" exists, \"zzz\" doesn't.", "Ambos valores son 0, pero ok los distingue: \"a\" existe, \"zzz\" no.", "どちらも値は 0。でも ok で区別できる：\"a\" はある、\"zzz\" はない。"),
+      hint: L("Both values may look the same. ok reports one thing: is the key actually in the map?", "Ambos valores pueden verse iguales. ok informa una sola cosa: ¿la clave está de verdad en el map?", "値は同じに見えるかも。ok が教えるのは1つ：キーが本当にあるか。"),
+      note: "comma-ok",
       setup: [{ t: "enter", actor: "ally" }],
       win: [{ t: "say", actor: "ally", text: L("Found? yes / no", "¿Está? sí / no", "ある？はい/いいえ") }],
     },
@@ -407,6 +947,8 @@ const maps: LessonDef = {
       output: "0 0 true",
       check: { compiles: true, stdout: "0 0 true" },
       explain: L("A nil map acts like an empty map for READING: zero values and length 0.", "Un map nil se comporta como uno vacío al LEER: valores cero y largo 0.", "nil マップは読むだけなら空のマップと同じ：ゼロ値で長さ 0。"),
+      hint: L("m is declared but never made, so it's nil. Is READING from a nil map allowed?", "m se declara pero nunca se crea, así que es nil. ¿Se permite LEER de un map nil?", "m は宣言だけで make していないから nil。nil マップから読むのは OK？"),
+      note: "nil-maps",
     },
     {
       kind: "predict",
@@ -416,6 +958,8 @@ const maps: LessonDef = {
       answer: 0,
       check: { compiles: true, throws: "assignment to entry in nil map" },
       explain: L("Writing to a nil map panics: assignment to entry in nil map. Create it with make.", "Escribir en un map nil hace panic: assignment to entry in nil map. Créalo con make.", "nil マップへの書きこみは panic：assignment to entry in nil map。make で作ろう。"),
+      hint: L("This time the code WRITES to a map that was never made. Can the compiler know it's nil?", "Esta vez el código ESCRIBE en un map que nunca se creó. ¿Puede el compilador saber que es nil?", "今回はまだ作っていないマップに書きこんでいる。コンパイラは nil だとわかる？"),
+      note: "nil-maps",
       win: [{ t: "attack", from: "enemy", to: "hero" }, { t: "shake" }],
     },
     {
@@ -427,6 +971,8 @@ const maps: LessonDef = {
       output: "1",
       check: { compiles: true, stdout: "1" },
       explain: L("delete removes \"a\". Deleting a missing key does nothing, no panic.", "delete quita \"a\". Borrar una clave ausente no hace nada, sin panic.", "delete で \"a\" が消える。ないキーの delete は何もしない（panic なし）。"),
+      hint: L("One delete removes a real key; the other key doesn't exist. Is deleting a missing key an error?", "Un delete quita una clave real; la otra clave no existe. ¿Borrar una clave ausente es un error?", "1つ目の delete は実在するキー、2つ目はないキー。ないキーの delete はエラー？"),
+      note: "map-basics",
     },
     say(L(
       "Map order is RANDOM on purpose! fmt.Println sorts keys for you, but a for range loop does not.",
@@ -442,6 +988,8 @@ const maps: LessonDef = {
       output: "map[a:1 b:2 c:3]",
       check: { compiles: true, stdout: "map[a:1 b:2 c:3]" },
       explain: L("fmt prints maps with sorted keys, so the output is stable. Loops are not.", "fmt imprime los maps con claves ordenadas, así la salida es estable. Los bucles no.", "fmt はキーを並べて表示するから毎回同じ。ループはそうはいかない。"),
+      hint: L("Map loops have a random order, but fmt treats printing a map specially. How does it order the keys?", "Los bucles sobre maps tienen orden aleatorio, pero fmt trata especial la impresión de un map. ¿Cómo ordena las claves?", "ループの順番はランダム。でも fmt はマップの表示を特別にあつかう。キーをどう並べる？"),
+      note: "map-order",
     },
     {
       kind: "pick",
@@ -451,6 +999,8 @@ const maps: LessonDef = {
       answer: 0,
       check: { compiles: true, stdout: "[a b c]", wrongFail: true },
       explain: L("The keys come out in random order; sort.Strings puts them in a stable order.", "Las claves salen en orden aleatorio; sort.Strings las deja en un orden estable.", "キーはランダムに出てくる。sort.Strings で毎回同じ順にできる。"),
+      hint: L("Look at the element type of the keys slice. Which sort function matches that type?", "Mira el tipo de elemento del slice keys. ¿Qué función de sort corresponde a ese tipo?", "keys スライスの要素の型を見よう。その型に合う sort 関数は？"),
+      note: "map-order",
       win: [{ t: "print", text: "[a b c]" }],
     },
     {
@@ -462,6 +1012,8 @@ const maps: LessonDef = {
       output: "1",
       check: { compiles: true, stdout: "1" },
       explain: L("A map value points at shared pockets, so add's change is seen by main.", "Un map apunta a bolsillos compartidos, así que main ve el cambio de add.", "マップは共有ポケットを指している。だから add の変更が main に見える。"),
+      hint: L("Does passing a map to a function copy its pairs, or share the same map?", "¿Pasar un map a una función copia sus pares o comparte el mismo map?", "マップを関数にわたすと、中身がコピーされる？同じマップを共有する？"),
+      note: "map-refs-keys",
     },
     {
       kind: "predict",
@@ -471,6 +1023,8 @@ const maps: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("Keys must be comparable with ==. Slices aren't: invalid map key type []int.", "Las claves deben compararse con ==. Los slices no: invalid map key type []int.", "キーは == で比べられる型だけ。スライスはダメ：invalid map key type []int。"),
+      hint: L("A map finds keys using ==. Can values of the key type here be compared with ==?", "Un map encuentra las claves usando ==. ¿Los valores del tipo de clave de aquí se pueden comparar con ==?", "マップは == でキーを探す。ここのキーの型の値は == で比べられる？"),
+      note: "map-refs-keys",
     },
     {
       kind: "predict",
@@ -481,6 +1035,8 @@ const maps: LessonDef = {
       output: "3 1 0",
       check: { compiles: true, stdout: "3 1 0" },
       explain: L("counts[w]++ starts each word from the zero value 0. \"z\" was never seen: 0.", "counts[w]++ empieza cada palabra desde el valor cero 0. \"z\" nunca apareció: 0.", "counts[w]++ はゼロ値 0 から数える。\"z\" は一度も出ていないから 0。"),
+      hint: L("counts[w]++ starts a new key from the zero value. Count each word; what about one never seen?", "counts[w]++ empieza una clave nueva desde el valor cero. Cuenta cada palabra; ¿y una que nunca apareció?", "counts[w]++ は新しいキーならゼロ値から数える。単語を数えよう。一度も出ない単語は？"),
+      note: "map-basics",
     },
     {
       kind: "type",
@@ -489,6 +1045,8 @@ const maps: LessonDef = {
       answer: "make",
       check: { compiles: true, stdout: "10" },
       explain: L("make creates a real, empty map ready for writes.", "make crea un map real y vacío, listo para escribir.", "make は書きこみできる本物の空マップを作る。"),
+      hint: L("A map must be created before you write to it. Which built-in creates maps, slices and channels?", "Un map debe crearse antes de escribir en él. ¿Qué función incorporada crea maps, slices y canales?", "書く前にマップを作る必要がある。マップ・スライス・チャネルを作る組みこみ関数は？"),
+      note: "nil-maps",
       win: [{ t: "print", text: "10" }],
     },
     {
@@ -499,6 +1057,8 @@ const maps: LessonDef = {
       expect: "unique: 2",
       fallback: [String.raw`make\s*\(\s*map\s*\[\s*string\s*\]\s*bool`, String.raw`map\s*\[\s*string\s*\]\s*bool\s*\{\s*\}`],
       explain: L("var seen map... is nil, and writing to it panics. make(map[string]bool) creates it.", "var seen map... es nil, y escribir en él hace panic. make(map[string]bool) lo crea.", "var seen map... は nil。書くと panic。make(map[string]bool) で作ろう。"),
+      hint: L("var seen map... declares a nil map. What do you need before writing seen[w] = true?", "var seen map... declara un map nil. ¿Qué necesitas antes de escribir seen[w] = true?", "var seen map... は nil マップ。seen[w] = true の前に何が必要？"),
+      note: "nil-maps",
     },
   ],
 };
@@ -512,6 +1072,7 @@ const structs: LessonDef = {
   xp: 75,
   enemy: "golem",
   enemyName: L("STRUCT GOLEM", "GÓLEM STRUCT", "構造体ゴーレム"),
+  notes: structsNotes,
   beats: [
     say(L(
       "A STRUCT bundles named fields: type P struct{ X, Y int }. Like arrays, structs are VALUES: copied whole.",
@@ -539,6 +1100,8 @@ const structs: LessonDef = {
       output: "{1 7} {9 2}",
       check: { compiles: true, stdout: "{1 7} {9 2}" },
       explain: L("q is a copy, so q.X = 9 stays in q. r points at p, so r.Y = 7 changes p.", "q es una copia, así que q.X = 9 queda en q. r apunta a p, así que r.Y = 7 cambia p.", "q はコピーだから q.X = 9 は q だけ。r は p を指すから r.Y = 7 で p が変わる。"),
+      hint: L("q := p copies the struct; r := &p points at p. Which variable does each change land in?", "q := p copia el struct; r := &p apunta a p. ¿En qué variable cae cada cambio?", "q := p は構造体のコピー、r := &p は p を指す。それぞれの変更はどの変数に入る？"),
+      note: "struct-values",
     },
     {
       kind: "predict",
@@ -549,6 +1112,8 @@ const structs: LessonDef = {
       output: "{0 0}\n{X:1 Y:2}",
       check: { compiles: true, stdout: "{0 0}\n{X:1 Y:2}" },
       explain: L("A zero struct has every field at its zero value. %+v also prints field names.", "Un struct cero tiene cada campo en su valor cero. %+v también imprime los nombres.", "ゼロ値の構造体は全フィールドがゼロ値。%+v はフィールド名も表示する。"),
+      hint: L("var p P sets every field to its zero value. %+v prints the values plus something extra.", "var p P pone cada campo en su valor cero. %+v imprime los valores y algo más.", "var p P は全フィールドをゼロ値にする。%+v は値に何かを足して表示する。"),
+      note: "struct-values",
     },
     say(L(
       "&x gives a POINTER to x; *p reads or writes what it points at. A function can change your variable through one.",
@@ -564,6 +1129,8 @@ const structs: LessonDef = {
       output: "8",
       check: { compiles: true, stdout: "8" },
       explain: L("double gets x's address and writes through it: x becomes 8.", "double recibe la dirección de x y escribe a través de ella: x pasa a 8.", "double は x の住所を受けとって書きこむ。x は 8 になる。"),
+      hint: L("double receives &x, the address of x. What does *n *= 2 change?", "double recibe &x, la dirección de x. ¿Qué cambia *n *= 2?", "double は &x、つまり x の住所を受けとる。*n *= 2 は何を変える？"),
+      note: "pointers",
       setup: [{ t: "tag", actor: "hero", text: "x", value: "4" }, { t: "enter", actor: "ally" }],
       win: [{ t: "lend", to: "ally", mut: true }, { t: "value", actor: "hero", text: "8" }],
     },
@@ -576,6 +1143,8 @@ const structs: LessonDef = {
       output: "3",
       check: { compiles: true, stdout: "3" },
       explain: L("new(int) makes a zeroed int and returns a pointer to it. *p = 3 fills it.", "new(int) crea un int en cero y devuelve un puntero a él. *p = 3 lo llena.", "new(int) はゼロの int を作ってポインタを返す。*p = 3 で入れる。"),
+      hint: L("new(int) gives a pointer to a fresh int. *p reads or writes the int it points to.", "new(int) da un puntero a un int nuevo. *p lee o escribe el int al que apunta.", "new(int) は新しい int へのポインタをくれる。*p で指す先の int を読み書きする。"),
+      note: "pointers",
     },
     {
       kind: "predict",
@@ -585,6 +1154,8 @@ const structs: LessonDef = {
       answer: 0,
       check: { compiles: true, throws: "nil pointer dereference" },
       explain: L("p points nowhere (nil). Reaching through it panics: nil pointer dereference.", "p no apunta a nada (nil). Acceder a través de él hace panic: nil pointer dereference.", "p はどこも指していない（nil）。たどると panic：nil pointer dereference。"),
+      hint: L("p is a pointer that was never set. What is its zero value, and what happens if you follow it?", "p es un puntero que nunca se asignó. ¿Cuál es su valor cero y qué pasa si lo sigues?", "p は一度も設定していないポインタ。ゼロ値は？それをたどるとどうなる？"),
+      note: "pointers",
       win: [{ t: "attack", from: "enemy", to: "hero" }, { t: "shake" }],
     },
     say(L(
@@ -601,6 +1172,8 @@ const structs: LessonDef = {
       output: "0\n1",
       check: { compiles: true, stdout: "0\n1" },
       explain: L("IncV polishes a copy, so c.n stays 0. IncP gets &c (Go adds it), so c.n becomes 1.", "IncV pule una copia, así que c.n sigue en 0. IncP recibe &c (Go lo agrega), así c.n pasa a 1.", "IncV はコピーをみがくだけで c.n は 0。IncP は &c を受けとる（Go が自動で）から 1 になる。"),
+      hint: L("Check each method's receiver: does it get a copy of c, or a pointer to the real c?", "Revisa el receptor de cada método: ¿recibe una copia de c o un puntero al c real?", "メソッドごとにレシーバを確認：c のコピー？本物の c へのポインタ？"),
+      note: "receivers",
       setup: [{ t: "item", kind: "gem", holder: "hero" }, { t: "tag", actor: "hero", text: "c.n", value: "0" }, { t: "enter", actor: "ally" }],
       win: [{ t: "clone", to: "ally" }, { t: "lend", to: "ally", mut: true }, { t: "value", actor: "hero", text: "1" }],
     },
@@ -612,6 +1185,8 @@ const structs: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("A literal like Counter{} has no address, so Go can't take &: cannot call pointer method Inc.", "Un literal como Counter{} no tiene dirección, así que Go no puede tomar &: cannot call pointer method Inc.", "Counter{} のようなリテラルには住所がなく & がとれない：cannot call pointer method Inc。"),
+      hint: L("Inc needs a pointer, so Go must take an address. Does a literal like Counter{} have one?", "Inc necesita un puntero, así que Go debe tomar una dirección. ¿Un literal como Counter{} tiene una?", "Inc はポインタが必要で、Go は住所をとる必要がある。Counter{} のようなリテラルに住所はある？"),
+      note: "receivers",
     },
     {
       kind: "predict",
@@ -622,6 +1197,8 @@ const structs: LessonDef = {
       output: "&{1 2} {1 2}",
       check: { compiles: true, stdout: "&{1 2} {1 2}" },
       explain: L("Returning &p of a local is safe in Go: the compiler keeps p alive on the heap.", "Devolver &p de una variable local es seguro en Go: el compilador mantiene p vivo en el heap.", "ローカル変数の &p を返しても安全。コンパイラが p をヒープに置いてくれる。"),
+      hint: L("Go isn't C: what does the compiler do with a local variable whose address leaves the function?", "Go no es C: ¿qué hace el compilador con una variable local cuya dirección sale de la función?", "Go は C とちがう。住所が関数の外に出るローカル変数を、コンパイラはどうする？"),
+      note: "pointers",
     },
     {
       kind: "predict",
@@ -632,6 +1209,8 @@ const structs: LessonDef = {
       output: "true",
       check: { compiles: true, stdout: "true" },
       explain: L("Structs of comparable fields compare field by field with ==.", "Los structs con campos comparables se comparan campo por campo con ==.", "比べられるフィールドだけの構造体は == でフィールドごとに比べられる。"),
+      hint: L("Can structs be compared with ==? Check whether all their fields are comparable types.", "¿Se pueden comparar structs con ==? Revisa si todos sus campos son de tipos comparables.", "構造体は == で比べられる？フィールドがすべて比べられる型か確認しよう。"),
+      note: "struct-values",
     },
     {
       kind: "predict",
@@ -642,6 +1221,8 @@ const structs: LessonDef = {
       output: "key",
       check: { compiles: true, stdout: "key" },
       explain: L("Copying the struct copies the slice WINDOW, not the array. Both boxes share it.", "Copiar el struct copia la VENTANA del slice, no el array. Ambas cajas lo comparten.", "構造体のコピーはスライスの窓だけをコピー。配列は2つの箱で共有される。"),
+      hint: L("b := a copies the struct, but its items field is a slice. What does copying a slice copy?", "b := a copia el struct, pero su campo items es un slice. ¿Qué se copia al copiar un slice?", "b := a は構造体をコピーする。でも items はスライス。スライスのコピーで何がコピーされる？"),
+      note: "copy-traps",
     },
     {
       kind: "predict",
@@ -652,6 +1233,8 @@ const structs: LessonDef = {
       output: "[{ann} {bob}]",
       check: { compiles: true, stdout: "[{ann} {bob}]" },
       explain: L("u is a copy of each struct. To edit, use users[i].Name = \"x\".", "u es una copia de cada struct. Para editar, usa users[i].Name = \"x\".", "u は各構造体のコピー。変えるなら users[i].Name = \"x\"。"),
+      hint: L("In the range loop, u receives each element. Is it the element itself or a copy?", "En el bucle range, u recibe cada elemento. ¿Es el elemento mismo o una copia?", "range ループで u は各要素を受けとる。それは要素そのもの？コピー？"),
+      note: "copy-traps",
     },
     {
       kind: "type",
@@ -660,6 +1243,8 @@ const structs: LessonDef = {
       answer: "*",
       check: { compiles: true, stdout: "1" },
       explain: L("A pointer receiver (c *Counter) works on the real counter, not a copy.", "Un receptor puntero (c *Counter) trabaja sobre el contador real, no una copia.", "ポインタレシーバ (c *Counter) はコピーじゃなく本物を変える。"),
+      hint: L("To change the real counter, the receiver must be a pointer type. Which symbol makes a pointer type?", "Para cambiar el contador real, el receptor debe ser de tipo puntero. ¿Qué símbolo forma un tipo puntero?", "本物を変えるにはレシーバをポインタ型に。ポインタ型を作る記号は？"),
+      note: "receivers",
       win: [{ t: "print", text: "1" }],
     },
     {
@@ -670,6 +1255,8 @@ const structs: LessonDef = {
       expect: "balance: 150",
       fallback: [String.raw`func\s*\(\s*a\s+\*\s*Account\s*\)\s*Deposit`],
       explain: L("A value receiver deposits into a copy. Use a pointer receiver: func (a *Account).", "Un receptor por valor deposita en una copia. Usa un receptor puntero: func (a *Account).", "値レシーバはコピーに入金するだけ。ポインタレシーバ func (a *Account) にしよう。"),
+      hint: L("Deposit adds to a, but is that a copy of acc or acc itself? Look at the receiver's type.", "Deposit suma a a, pero ¿es una copia de acc o acc mismo? Mira el tipo del receptor.", "Deposit は a に足す。その a は acc のコピー？acc 本人？レシーバの型を見よう。"),
+      note: "receivers",
     },
   ],
 };
@@ -683,23 +1270,24 @@ const boss: LessonDef = {
   xp: 180,
   enemy: "dragon",
   enemyName: L("ALIAS HYDRA", "HIDRA ALIAS", "エイリアスヒドラ"),
+  notes: forestBossNotes,
   beats: [
     enemySays(L(
       "HISSS. I AM THE ALIAS HYDRA. My heads share one body. Cut one, and the others feel it!",
       "HISSS. SOY LA HIDRA ALIAS. Mis cabezas comparten un cuerpo. ¡Corta una y las demás lo sienten!",
       "シャー。我はエイリアスヒドラ。頭はみな一つの体を共有する。ひとつ切れば、ほかも感じるぞ！",
     )),
-    { kind: "predict", time: 18, prompt: PRINT, code: "s := []int{1, 2, 3}\nt := s[:0]\nfor _, v := range s {\n\tif v != 2 {\n\t\tt = append(t, v)\n\t}\n}\nfmt.Println(s, t)", options: ["[1 3 3] [1 3]", "[1 2 3] [1 3]", "[1 3] [1 3]"], answer: 0, output: "[1 3 3] [1 3]", check: { compiles: true, stdout: "[1 3 3] [1 3]" }, explain: L("t shares s's array, so the filter overwrote s in place. The last 3 is left over.", "t comparte el array de s, así que el filtro sobrescribió s. Queda el último 3.", "t は s の配列を共有。フィルタが s を上書きして、最後の 3 が残る。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: "s := make([]int, 2, 3)\nt := append(s, 5)\nu := append(s, 6)\nfmt.Println(t, u, len(s))", options: ["[0 0 6] [0 0 6] 2", "[0 0 5] [0 0 6] 2", "[0 0 5] [0 0 6] 3"], answer: 0, output: "[0 0 6] [0 0 6] 2", check: { compiles: true, stdout: "[0 0 6] [0 0 6] 2" }, explain: L("s had room, so both appends wrote the SAME slot 2. The 6 overwrote the 5.", "s tenía espacio, así que ambos append escribieron el MISMO slot 2. El 6 pisó al 5.", "s に空きがあり、2つの append が同じ2番に書いた。6 が 5 を上書き。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: "a := []int{1, 2, 3, 4}\ns := a[:2]\ns = append(s, 99)\nfmt.Println(a)", options: ["[1 2 99 4]", "[1 2 3 4]", "[1 2 3 4 99]"], answer: 0, output: "[1 2 99 4]", check: { compiles: true, stdout: "[1 2 99 4]" }, explain: L("s had spare capacity, so append wrote into a's array.", "s tenía capacidad libre, así que append escribió en el array de a.", "s に空き容量があったから、append は a の配列に書いた。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: "s := make([]int, 0, 1)\ns = append(s, 1, 2)\nfmt.Println(len(s), cap(s) >= 2)", options: ["2 true", "1 false", L("It panics", "Hace panic", "panic する")], answer: 0, output: "2 true", check: { compiles: true, stdout: "2 true" }, explain: L("append grows the array as needed. The exact new cap is up to the runtime.", "append agranda el array lo necesario. El cap exacto lo decide el runtime.", "append は必要なだけ配列をのばす。正確な cap はランタイムしだい。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: "s := []int{1, 2, 3}\ns = append(s, s...)\nfmt.Println(s)", options: ["[1 2 3 1 2 3]", "[1 2 3 [1 2 3]]", NO_CE], answer: 0, output: "[1 2 3 1 2 3]", check: { compiles: true, stdout: "[1 2 3 1 2 3]" }, explain: L("s... spreads the items, so append adds 1, 2, 3 one by one.", "s... esparce los elementos, así que append agrega 1, 2, 3 uno a uno.", "s... で要素を広げるから、1, 2, 3 が1つずつ追加される。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: 'm := map[[2]int]string{{0, 0}: "origin"}\nfmt.Println(m[[2]int{0, 0}])', options: ["origin", NO_CE, L("Empty line", "Línea vacía", "空行")], answer: 0, output: "origin", check: { compiles: true, stdout: "origin" }, explain: L("Arrays are comparable, so [2]int works as a map key. Slices wouldn't.", "Los arrays son comparables, así que [2]int sirve como clave. Los slices no.", "配列は比べられるからキーにできる。スライスは無理。") },
-    { kind: "predict", time: 12, prompt: HAPPENS, code: 'var m map[string]int\nm["x"] = 1\nfmt.Println(m)', options: [L("It panics", "Hace panic", "panic する"), "map[x:1]", NO_CE], answer: 0, check: { compiles: true, throws: "assignment to entry in nil map" }, explain: L("Writing to a nil map panics. make it first.", "Escribir en un map nil hace panic. Créalo con make.", "nil マップに書くと panic。先に make しよう。") },
-    { kind: "predict", time: 15, prompt: COMPILES, code: 'type Point struct{ X, Y int }\nm := map[string]Point{"p": {1, 2}}\nm["p"].X = 5\nfmt.Println(m)', options: [YES, NO_CE], answer: 1, check: { compiles: false }, explain: L("Map values aren't addressable. Copy out, change, store back: p := m[\"p\"]; p.X = 5; m[\"p\"] = p.", "Los valores de un map no son direccionables. Copia, cambia y guarda: p := m[\"p\"]; p.X = 5; m[\"p\"] = p.", "マップの値には住所がない。取り出して変えて戻そう：p := m[\"p\"]; p.X = 5; m[\"p\"] = p。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: "type Counter struct{ n int }\n\nfunc (c Counter) IncV()  { c.n++ }\nfunc (c *Counter) IncP() { c.n++ }\n\nfunc main() {\n\tvar c Counter\n\tc.IncP()\n\tc.IncV()\n\tc.IncP()\n\tfmt.Println(c.n)\n}", options: ["2", "3", "1"], answer: 0, output: "2", check: { compiles: true, stdout: "2" }, explain: L("Only the two pointer-receiver calls change c. IncV works on a copy.", "Solo las dos llamadas con receptor puntero cambian c. IncV trabaja en una copia.", "c を変えるのはポインタレシーバの2回だけ。IncV はコピー。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: "grid := make([][]int, 2)\nfmt.Println(grid[0] == nil, len(grid))", options: ["true 2", "false 2", "true 0"], answer: 0, output: "true 2", check: { compiles: true, stdout: "true 2" }, explain: L("make gives 2 rows, each a zero-value slice: nil until you make it.", "make da 2 filas, cada una un slice en valor cero: nil hasta que lo crees.", "make で2行。各行はゼロ値のスライス、つまり nil。") },
-    { kind: "type", time: 15, prompt: L("Copy so they don't share", "Copia para no compartir", "共有しないようにコピー"), code: "a := []int{1, 2, 3}\nb := make([]int, len(a))\n___(b, a)\nb[0] = 9\nfmt.Println(a[0], b[0])", answer: "copy", check: { compiles: true, stdout: "1 9" }, explain: L("copy fills b's own array, so changing b leaves a untouched.", "copy llena el array propio de b, así que cambiar b no toca a.", "copy は b 自身の配列を埋める。b を変えても a はそのまま。") },
+    { kind: "predict", time: 18, prompt: PRINT, code: "s := []int{1, 2, 3}\nt := s[:0]\nfor _, v := range s {\n\tif v != 2 {\n\t\tt = append(t, v)\n\t}\n}\nfmt.Println(s, t)", options: ["[1 3 3] [1 3]", "[1 2 3] [1 3]", "[1 3] [1 3]"], answer: 0, output: "[1 3 3] [1 3]", check: { compiles: true, stdout: "[1 3 3] [1 3]" }, explain: L("t shares s's array, so the filter overwrote s in place. The last 3 is left over.", "t comparte el array de s, así que el filtro sobrescribió s. Queda el último 3.", "t は s の配列を共有。フィルタが s を上書きして、最後の 3 が残る。"), hint: L("t starts as s[:0]: the same array with length 0. Each append writes into s's array from slot 0.", "t empieza como s[:0]: el mismo array con largo 0. Cada append escribe en el array de s desde el slot 0.", "t は s[:0]：同じ配列で長さ 0。append するたび s の配列の0番から書く。"), note: "recap-append" },
+    { kind: "predict", time: 15, prompt: PRINT, code: "s := make([]int, 2, 3)\nt := append(s, 5)\nu := append(s, 6)\nfmt.Println(t, u, len(s))", options: ["[0 0 6] [0 0 6] 2", "[0 0 5] [0 0 6] 2", "[0 0 5] [0 0 6] 3"], answer: 0, output: "[0 0 6] [0 0 6] 2", check: { compiles: true, stdout: "[0 0 6] [0 0 6] 2" }, explain: L("s had room, so both appends wrote the SAME slot 2. The 6 overwrote the 5.", "s tenía espacio, así que ambos append escribieron el MISMO slot 2. El 6 pisó al 5.", "s に空きがあり、2つの append が同じ2番に書いた。6 が 5 を上書き。"), hint: L("s has len 2 and cap 3. Where does each append write its item, and which one writes last?", "s tiene len 2 y cap 3. ¿Dónde escribe cada append su elemento y cuál escribe al final?", "s は len 2、cap 3。それぞれの append はどこに書く？最後に書くのはどっち？"), note: "recap-append" },
+    { kind: "predict", time: 12, prompt: PRINT, code: "a := []int{1, 2, 3, 4}\ns := a[:2]\ns = append(s, 99)\nfmt.Println(a)", options: ["[1 2 99 4]", "[1 2 3 4]", "[1 2 3 4 99]"], answer: 0, output: "[1 2 99 4]", check: { compiles: true, stdout: "[1 2 99 4]" }, explain: L("s had spare capacity, so append wrote into a's array.", "s tenía capacidad libre, así que append escribió en el array de a.", "s に空き容量があったから、append は a の配列に書いた。"), hint: L("s := a[:2] has spare capacity. Where does append put 99?", "s := a[:2] tiene capacidad libre. ¿Dónde pone append el 99?", "s := a[:2] には空き容量がある。append は 99 をどこに置く？"), note: "recap-append" },
+    { kind: "predict", time: 15, prompt: PRINT, code: "s := make([]int, 0, 1)\ns = append(s, 1, 2)\nfmt.Println(len(s), cap(s) >= 2)", options: ["2 true", "1 false", L("It panics", "Hace panic", "panic する")], answer: 0, output: "2 true", check: { compiles: true, stdout: "2 true" }, explain: L("append grows the array as needed. The exact new cap is up to the runtime.", "append agranda el array lo necesario. El cap exacto lo decide el runtime.", "append は必要なだけ配列をのばす。正確な cap はランタイムしだい。"), hint: L("There's room for 1 but 2 items are added. Can append grow the array? cap is only checked with >=.", "Hay espacio para 1 pero se agregan 2. ¿Puede append agrandar el array? cap solo se revisa con >=.", "空きは1つなのに2つ追加。append は配列をのばせる？cap は >= で調べるだけ。"), note: "recap-append" },
+    { kind: "predict", time: 12, prompt: PRINT, code: "s := []int{1, 2, 3}\ns = append(s, s...)\nfmt.Println(s)", options: ["[1 2 3 1 2 3]", "[1 2 3 [1 2 3]]", NO_CE], answer: 0, output: "[1 2 3 1 2 3]", check: { compiles: true, stdout: "[1 2 3 1 2 3]" }, explain: L("s... spreads the items, so append adds 1, 2, 3 one by one.", "s... esparce los elementos, así que append agrega 1, 2, 3 uno a uno.", "s... で要素を広げるから、1, 2, 3 が1つずつ追加される。"), hint: L("The ... after s spreads its items. Does append add one slice, or each item?", "Los ... después de s esparcen sus elementos. ¿append agrega un slice o cada elemento?", "s のあとの ... は要素を広げる。append が足すのはスライス1つ？要素1つずつ？"), note: "recap-append" },
+    { kind: "predict", time: 12, prompt: PRINT, code: 'm := map[[2]int]string{{0, 0}: "origin"}\nfmt.Println(m[[2]int{0, 0}])', options: ["origin", NO_CE, L("Empty line", "Línea vacía", "空行")], answer: 0, output: "origin", check: { compiles: true, stdout: "origin" }, explain: L("Arrays are comparable, so [2]int works as a map key. Slices wouldn't.", "Los arrays son comparables, así que [2]int sirve como clave. Los slices no.", "配列は比べられるからキーにできる。スライスは無理。"), hint: L("Map keys must be comparable with ==. Is an array like [2]int comparable?", "Las claves de un map deben compararse con ==. ¿Un array como [2]int es comparable?", "マップのキーは == で比べられる型。[2]int のような配列は比べられる？"), note: "recap-maps" },
+    { kind: "predict", time: 12, prompt: HAPPENS, code: 'var m map[string]int\nm["x"] = 1\nfmt.Println(m)', options: [L("It panics", "Hace panic", "panic する"), "map[x:1]", NO_CE], answer: 0, check: { compiles: true, throws: "assignment to entry in nil map" }, explain: L("Writing to a nil map panics. make it first.", "Escribir en un map nil hace panic. Créalo con make.", "nil マップに書くと panic。先に make しよう。"), hint: L("m is declared with var and never made. What happens when you write to it?", "m se declara con var y nunca se crea. ¿Qué pasa al escribir en él?", "m は var で宣言しただけで make していない。書きこむとどうなる？"), note: "recap-maps" },
+    { kind: "predict", time: 15, prompt: COMPILES, code: 'type Point struct{ X, Y int }\nm := map[string]Point{"p": {1, 2}}\nm["p"].X = 5\nfmt.Println(m)', options: [YES, NO_CE], answer: 1, check: { compiles: false }, explain: L("Map values aren't addressable. Copy out, change, store back: p := m[\"p\"]; p.X = 5; m[\"p\"] = p.", "Los valores de un map no son direccionables. Copia, cambia y guarda: p := m[\"p\"]; p.X = 5; m[\"p\"] = p.", "マップの値には住所がない。取り出して変えて戻そう：p := m[\"p\"]; p.X = 5; m[\"p\"] = p。"), hint: L("m[\"p\"] gives a copy of the stored struct. Can you assign to a field of a map value directly?", "m[\"p\"] da una copia del struct guardado. ¿Puedes asignar directamente a un campo de un valor de map?", "m[\"p\"] は保存された構造体のコピー。マップの値のフィールドに直接代入できる？"), note: "recap-maps" },
+    { kind: "predict", time: 15, prompt: PRINT, code: "type Counter struct{ n int }\n\nfunc (c Counter) IncV()  { c.n++ }\nfunc (c *Counter) IncP() { c.n++ }\n\nfunc main() {\n\tvar c Counter\n\tc.IncP()\n\tc.IncV()\n\tc.IncP()\n\tfmt.Println(c.n)\n}", options: ["2", "3", "1"], answer: 0, output: "2", check: { compiles: true, stdout: "2" }, explain: L("Only the two pointer-receiver calls change c. IncV works on a copy.", "Solo las dos llamadas con receptor puntero cambian c. IncV trabaja en una copia.", "c を変えるのはポインタレシーバの2回だけ。IncV はコピー。"), hint: L("Count only the calls that can change c: which receivers are pointers?", "Cuenta solo las llamadas que pueden cambiar c: ¿qué receptores son punteros?", "c を変えられる呼び出しだけ数えよう。ポインタレシーバはどれ？"), note: "recap-receivers" },
+    { kind: "predict", time: 12, prompt: PRINT, code: "grid := make([][]int, 2)\nfmt.Println(grid[0] == nil, len(grid))", options: ["true 2", "false 2", "true 0"], answer: 0, output: "true 2", check: { compiles: true, stdout: "true 2" }, explain: L("make gives 2 rows, each a zero-value slice: nil until you make it.", "make da 2 filas, cada una un slice en valor cero: nil hasta que lo crees.", "make で2行。各行はゼロ値のスライス、つまり nil。"), hint: L("make([][]int, 2) makes the outer slice. What is each inner slice before you make it?", "make([][]int, 2) crea el slice externo. ¿Qué es cada slice interno antes de crearlo?", "make([][]int, 2) は外側のスライスを作る。内側のスライスは make する前は何？"), note: "recap-copy-nil" },
+    { kind: "type", time: 15, prompt: L("Copy so they don't share", "Copia para no compartir", "共有しないようにコピー"), code: "a := []int{1, 2, 3}\nb := make([]int, len(a))\n___(b, a)\nb[0] = 9\nfmt.Println(a[0], b[0])", answer: "copy", check: { compiles: true, stdout: "1 9" }, explain: L("copy fills b's own array, so changing b leaves a untouched.", "copy llena el array propio de b, así que cambiar b no toca a.", "copy は b 自身の配列を埋める。b を変えても a はそのまま。"), hint: L("b already has its own array of the right length. Which built-in fills it from a?", "b ya tiene su propio array del largo correcto. ¿Qué función incorporada lo llena desde a?", "b はもう正しい長さの自分の配列を持っている。a から中身を埋める組みこみ関数は？"), note: "recap-copy-nil" },
     enemySays(L(
       "Hisss... you cut through every shared head. The Interface Castle awaits, where shields wear crests.",
       "Hisss... cortaste cada cabeza compartida. El Interface Castle te espera, donde los escudos llevan emblemas.",

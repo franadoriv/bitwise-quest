@@ -1,4 +1,4 @@
-import type { LessonDef, RegionDef } from "../../../lib/content/types.ts";
+import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
 import { say, enemySays } from "../../rust/helpers.ts";
 
@@ -21,6 +21,473 @@ const zmain = (top: string, body: string) =>
 
 const POINT = "const Point = struct {\n    x: i32,\n    y: i32 = 0,\n\n    fn sum(self: Point) i32 {\n        return self.x + self.y;\n    }\n\n    fn moveRight(self: *Point, d: i32) void {\n        self.x += d;\n    }\n};";
 
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example; the validator checks `output` against the real compiler. */
+const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code, output, caption });
+/** An example that must NOT compile (verified too). */
+const bad = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: false } });
+/** An example that compiles and then panics with this message (verified too). */
+const boom = (code: string, throws: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: true, throws } });
+
+const LAMP = "const Lamp = struct {\n    watts: u32,\n    fn double(self: Lamp) u32 { return self.watts * 2; }\n    fn dim(self: *Lamp) void { self.watts -= 10; }\n};";
+
+const structsNotes: NoteDef[] = [
+  note("struct-fields", L("Struct fields and defaults", "Campos de struct y valores por defecto", "struct のフィールドとデフォルト"),
+    p(
+      "A struct groups several values under one name. Each field has a name and a type: struct { heal: u32, uses: u8 }. The struct is the blueprint; a value is built with a literal that names each field with a dot: Potion{ .heal = 20, .uses = 1 }.",
+      "Un struct agrupa varios valores bajo un nombre. Cada campo tiene nombre y tipo: struct { heal: u32, uses: u8 }. El struct es el plano; un valor se construye con un literal que nombra cada campo con un punto: Potion{ .heal = 20, .uses = 1 }.",
+      "struct はいくつかの値をひとつの名前にまとめる。各フィールドには名前と型がある：struct { heal: u32, uses: u8 }。struct は設計図で、値はドットでフィールド名を書くリテラルで作る：Potion{ .heal = 20, .uses = 1 }。",
+    ),
+    p(
+      "A field can have a DEFAULT, written after its type: uses: u8 = 1. When you build a value you may leave that field out and it gets the default. A field WITHOUT a default must always be given, or the compiler stops with missing struct field.",
+      "Un campo puede tener un valor POR DEFECTO, escrito tras su tipo: uses: u8 = 1. Al construir un valor puedes omitir ese campo y recibe el valor por defecto. Un campo SIN valor por defecto siempre debe darse, o el compilador se detiene con missing struct field.",
+      "フィールドは型のあとにデフォルト値を書ける：uses: u8 = 1。値を作るときそのフィールドは省略でき、デフォルトが入る。デフォルトのないフィールドは必ず書く。書かないと missing struct field で止まる。",
+    ),
+    ex('const Potion = struct { heal: u32, uses: u8 = 1 };\nconst small = Potion{ .heal = 20 };\nconst big = Potion{ .heal = 50, .uses = 3 };\nstd.debug.print("{d} {d} {d}\\n", .{ small.uses, big.heal, big.uses });', "1 50 3",
+      L("small skips uses and gets the default 1", "small omite uses y recibe el valor por defecto 1", "small は uses を省略してデフォルトの 1")),
+    bad("const Potion = struct { heal: u32, uses: u8 = 1 };\nconst odd = Potion{ .uses = 2 };\n_ = odd;",
+      L("Does not compile: heal has no default", "No compila: heal no tiene valor por defecto", "コンパイル不可：heal にデフォルトがない")),
+    p(
+      "To see a whole struct at once, print it with {any}. Zig writes it field by field in the same shape as a literal, with a dot before the braces and before each field name. {d} only works for single numbers, not for a struct.",
+      "Para ver un struct entero, imprímelo con {any}. Zig lo escribe campo por campo con la misma forma de un literal, con un punto antes de las llaves y antes de cada nombre de campo. {d} solo sirve para números sueltos, no para un struct.",
+      "struct 全体を見るには {any} で表示する。Zig はリテラルと同じ形で、波かっこの前と各フィールド名の前にドットをつけて書く。{d} は数ひとつ用で struct には使えない。",
+    ),
+    ex('const Gem = struct { carats: u8, shiny: bool = true };\nconst g = Gem{ .carats = 3 };\nstd.debug.print("{any}\\n", .{g});', ".{ .carats = 3, .shiny = true }"),
+    p(
+      "Common mistakes: writing heal = 20 without the dot (struct literals always use .name = value), or expecting a missing field to become 0. Zig never fills a field silently: either it has a default in the blueprint, or you must write it.",
+      "Errores comunes: escribir heal = 20 sin el punto (los literales de struct siempre usan .nombre = valor) o esperar que un campo omitido valga 0. Zig nunca rellena un campo a escondidas: o tiene valor por defecto en el plano, o debes escribirlo.",
+      "よくあるミス：ドットなしで heal = 20 と書く（struct リテラルは必ず .名前 = 値）。省いたフィールドが 0 になると思うこと。Zig はこっそり埋めない。設計図にデフォルトがあるか、自分で書くかのどちらか。",
+    ),
+  ),
+  note("struct-copies", L("Assignment copies a struct", "Asignar copia el struct", "代入は struct をコピーする"),
+    p(
+      "In Zig, a struct is a plain value, like a number. When you write var b = a; Zig copies every field of a into a brand new struct called b. From then on they are two separate things: changing b.fuel does not touch a.fuel.",
+      "En Zig, un struct es un valor simple, como un número. Al escribir var b = a; Zig copia cada campo de a en un struct nuevo llamado b. Desde ahí son dos cosas separadas: cambiar b.fuel no toca a.fuel.",
+      "Zig の struct は数と同じただの値。var b = a; と書くと、a の全フィールドが新しい struct b にコピーされる。それ以降は別物で、b.fuel を変えても a.fuel は変わらない。",
+    ),
+    ex('const Torch = struct { fuel: u8 };\nconst a = Torch{ .fuel = 5 };\nvar b = a;\nb.fuel = 0;\nstd.debug.print("{d} {d}\\n", .{ a.fuel, b.fuel });', "5 0",
+      L("b is a copy: emptying it leaves a full", "b es una copia: vaciarla deja a lleno", "b はコピー。空にしても a は満タン")),
+    p(
+      "The same happens in a for loop: for (torches) |t| gives you each element as a constant COPY. You can read it, but you cannot change it, and even a var copy made from it would only change the copy. To change the elements themselves, loop over &torches and capture |*t|: a pointer to the real element.",
+      "Lo mismo pasa en un for: for (torches) |t| te da cada elemento como una COPIA constante. Puedes leerla, pero no cambiarla, y aunque hagas una copia var, solo cambiarías la copia. Para cambiar los elementos de verdad, recorre &torches y captura |*t|: un puntero al elemento real.",
+      "for でも同じ。for (torches) |t| は各要素を定数のコピーでくれる。読めるが変えられず、var にコピーしてもコピーが変わるだけ。本物を変えるには &torches をまわして |*t| で受ける。本物の要素へのポインタじゃ。",
+    ),
+    ex('const Torch = struct { fuel: u8 };\nvar torches = [_]Torch{ .{ .fuel = 1 }, .{ .fuel = 4 } };\nfor (&torches) |*t| t.fuel += 2;\nstd.debug.print("{d} {d}\\n", .{ torches[0].fuel, torches[1].fuel });', "3 6",
+      L("|*t| points at each real torch in the array", "|*t| apunta a cada antorcha real del array", "|*t| は配列の本物のたいまつを指す")),
+    p(
+      "Through a pointer you can still write t.fuel: Zig follows the pointer for you when you use a dot on a struct pointer. Rule to remember: a plain name or capture holds a copy; a pointer (&x, |*x|) reaches the original.",
+      "A través de un puntero aún puedes escribir t.fuel: Zig sigue el puntero por ti cuando usas un punto sobre un puntero a struct. Regla: un nombre o captura simple guarda una copia; un puntero (&x, |*x|) llega al original.",
+      "ポインタでも t.fuel と書ける。struct へのポインタにドットを使うと Zig が自動でたどってくれる。覚えかた：ふつうの名前やキャプチャはコピー、ポインタ（&x、|*x|）は本物にとどく。",
+    ),
+    bad("const Torch = struct { fuel: u8 };\nvar torches = [_]Torch{ .{ .fuel = 1 } };\nfor (torches) |t| t.fuel += 2;\n_ = &torches;",
+      L("Does not compile: a plain capture is a constant copy", "No compila: una captura simple es una copia constante", "コンパイル不可：ふつうのキャプチャは定数のコピー")),
+  ),
+  note("methods-self", L("Methods and self", "Métodos y self", "メソッドと self"),
+    p(
+      "A method is a function written inside a struct. If its first parameter is the struct, you can call it with a dot: lamp.double() means Lamp.double(lamp). Zig passes the value before the dot as that first parameter, which is usually named self.",
+      "Un método es una función escrita dentro de un struct. Si su primer parámetro es el struct, puedes llamarla con un punto: lamp.double() significa Lamp.double(lamp). Zig pasa el valor antes del punto como ese primer parámetro, que suele llamarse self.",
+      "メソッドは struct の中に書いた関数。最初の引数がその struct なら、ドットで呼べる：lamp.double() は Lamp.double(lamp) と同じ。ドットの前の値が最初の引数（ふつう self という名前）として渡される。",
+    ),
+    p(
+      "The type of self decides what the method may do. self: Lamp receives a read-only COPY: fine for computing an answer. self: *Lamp receives a POINTER to the original, so self.watts -= 10 changes the real lamp. Only *Lamp methods can modify fields.",
+      "El tipo de self decide qué puede hacer el método. self: Lamp recibe una COPIA de solo lectura: sirve para calcular una respuesta. self: *Lamp recibe un PUNTERO al original, así que self.watts -= 10 cambia la lámpara real. Solo los métodos *Lamp pueden modificar campos.",
+      "self の型でメソッドにできることが決まる。self: Lamp は読むだけのコピーで、答えを計算するのに向く。self: *Lamp は本物へのポインタなので、self.watts -= 10 で本物が変わる。フィールドを変えられるのは *Lamp のメソッドだけ。",
+    ),
+    ex(zmain(LAMP, 'var lamp = Lamp{ .watts = 60 };\nlamp.dim();\nstd.debug.print("{d} {d}\\n", .{ lamp.watts, lamp.double() });'), "50 100",
+      L("dim takes *Lamp and changes lamp; double only reads", "dim recibe *Lamp y cambia lamp; double solo lee", "dim は *Lamp で lamp を変え、double は読むだけ")),
+    p(
+      "A pointer method needs something it is allowed to change. If the value is const, &lamp is a *const Lamp (read-only), and Zig refuses to turn it into a writable *Lamp: cast discards const qualifier. Declare it with var when you plan to call methods that change it.",
+      "Un método con puntero necesita algo que se pueda cambiar. Si el valor es const, &lamp es un *const Lamp (solo lectura) y Zig se niega a convertirlo en un *Lamp escribible: cast discards const qualifier. Decláralo con var si vas a llamar métodos que lo cambian.",
+      "ポインタのメソッドには変えてよいものが必要。値が const なら &lamp は読むだけの *const Lamp で、書ける *Lamp にはできない（cast discards const qualifier）。変えるメソッドを呼ぶなら var で宣言しよう。",
+    ),
+    bad(zmain(LAMP, "const lamp = Lamp{ .watts = 40 };\nlamp.dim();"),
+      L("Does not compile: lamp is const, dim needs *Lamp", "No compila: lamp es const y dim pide *Lamp", "コンパイル不可：lamp は const、dim は *Lamp が必要")),
+    p(
+      "Inside a struct, @This() is just another name for the struct itself. Anywhere you could write Lamp you can write @This(), which helps when the struct has no name yet. So the same rule applies: a plain type gives a copy, a * in front gives a pointer.",
+      "Dentro de un struct, @This() es solo otro nombre para el propio struct. Donde puedas escribir Lamp puedes escribir @This(), útil cuando el struct aún no tiene nombre. Así que vale la misma regla: el tipo simple da una copia, un * delante da un puntero.",
+      "struct の中の @This() はその struct 自身の別名。Lamp と書ける所にはどこでも @This() と書ける。名前がまだない時に便利。だからルールは同じ：型だけならコピー、前に * があればポインタ。",
+    ),
+  ),
+  note("tuples", L("Tuples: fields without names", "Tuplas: campos sin nombre", "タプル：名前のないフィールド"),
+    p(
+      "A literal .{ ... } without field names is a TUPLE: a small struct whose fields are numbered from 0 instead of named. Each field can have a different type, so .{ 7, \"arrows\", false } holds a number, a string and a bool together.",
+      "Un literal .{ ... } sin nombres de campo es una TUPLA: un struct pequeño cuyos campos se numeran desde 0 en vez de tener nombre. Cada campo puede tener otro tipo, así que .{ 7, \"arrows\", false } guarda juntos un número, un texto y un bool.",
+      "フィールド名のない .{ ... } はタプル。名前のかわりに 0 から番号がつく小さな struct じゃ。フィールドごとに型がちがってよいので、.{ 7, \"arrows\", false } は数・文字列・bool をいっしょに持てる。",
+    ),
+    p(
+      "You read a tuple field with an index, like an array: info[0], info[1]. The index must be a number known while compiling. And .len tells you how many fields the tuple has, which is also known while compiling.",
+      "Lees un campo de tupla con un índice, como un array: info[0], info[1]. El índice debe ser un número conocido al compilar. Y .len te dice cuántos campos tiene la tupla, también conocido al compilar.",
+      "タプルのフィールドは配列のように番号で読む：info[0]、info[1]。番号はコンパイル時にわかる数でなければならない。.len でフィールドの数がわかる。これもコンパイル時に決まる。",
+    ),
+    ex('const info = .{ 7, "arrows", false };\nstd.debug.print("{d} {s} {}\\n", .{ info[0], info[1], info[2] });\nstd.debug.print("{d}\\n", .{info.len});', "7 arrows false\n3",
+      L("Three fields, three types, numbered from 0", "Tres campos, tres tipos, numerados desde 0", "3つのフィールド、3つの型、0 から番号")),
+    p(
+      "You already use tuples all the time: the .{ ... } after the text in std.debug.print is a tuple of the values that fill each {} slot. That is why it needs the dot and the braces, even for a single value: .{x}.",
+      "Ya usas tuplas todo el tiempo: el .{ ... } después del texto en std.debug.print es una tupla con los valores que llenan cada hueco {}. Por eso necesita el punto y las llaves, incluso con un solo valor: .{x}.",
+      "タプルはいつも使っている。std.debug.print の文字のあとの .{ ... } は、各 {} をうめる値のタプルじゃ。だから値がひとつでもドットと波かっこが必要：.{x}。",
+    ),
+    p(
+      "Common mistake: confusing a tuple's .len with one of its values. .len counts the fields, whatever they contain. If you want names instead of numbers, write .{ .speed = 3 }: that is an anonymous struct, read with .speed.",
+      "Error común: confundir el .len de una tupla con uno de sus valores. .len cuenta los campos, contengan lo que contengan. Si quieres nombres en vez de números, escribe .{ .speed = 3 }: es un struct anónimo y se lee con .speed.",
+      "よくあるミス：タプルの .len を中の値とまちがえること。.len は中身に関係なくフィールドの数を数える。番号ではなく名前がほしいなら .{ .speed = 3 } と書く。これは名前なし struct で .speed で読む。",
+    ),
+  ),
+];
+
+const enumsNotes: NoteDef[] = [
+  note("enums", L("Enums: a fixed set of names", "Enums: un conjunto fijo de nombres", "enum：決まった名前の集まり"),
+    p(
+      "An enum lists every value a type can have: enum { spring, summer, autumn, winter }. A variable of that type holds exactly one of those names, never anything else. When Zig already knows the type, you can write just the name with a dot: const s: Season = .autumn;",
+      "Un enum lista todos los valores que puede tener un tipo: enum { spring, summer, autumn, winter }. Una variable de ese tipo guarda exactamente uno de esos nombres, nunca otra cosa. Si Zig ya conoce el tipo, basta el nombre con un punto: const s: Season = .autumn;",
+      "enum は型がとれる値をすべて並べる：enum { spring, summer, autumn, winter }。その型の変数はどれかひとつだけを持ち、ほかの値にはならない。型がわかっていれば名前にドットをつけるだけでよい：const s: Season = .autumn;",
+    ),
+    p(
+      "Behind each name there is a number. By default the first tag is 0, the next 1, and so on, in the order you wrote them. @intFromEnum gives that number and @tagName gives the name as text.",
+      "Detrás de cada nombre hay un número. Por defecto el primer tag es 0, el siguiente 1, y así, en el orden en que los escribiste. @intFromEnum da ese número y @tagName da el nombre como texto.",
+      "名前のうしろには番号がある。ふつうは書いた順に最初のタグが 0、次が 1…となる。@intFromEnum でその番号、@tagName で名前の文字列がとれる。",
+    ),
+    ex('const Season = enum { spring, summer, autumn, winter };\nconst s: Season = .autumn;\nstd.debug.print("{s} {d}\\n", .{ @tagName(s), @intFromEnum(s) });', "autumn 2",
+      L("Counting starts at 0: spring 0, summer 1, autumn 2", "Se cuenta desde 0: spring 0, summer 1, autumn 2", "0 から数える：spring 0、summer 1、autumn 2")),
+    p(
+      "With enum(u8) you choose the number type and may set values yourself: low = 10. A tag without a value takes the previous tag's value plus one, so after low = 10 comes mid = 11.",
+      "Con enum(u8) eliges el tipo del número y puedes fijar valores tú mismo: low = 10. Un tag sin valor toma el valor del tag anterior más uno, así que tras low = 10 viene mid = 11.",
+      "enum(u8) なら番号の型を選び、値を自分で決められる：low = 10。値のないタグは前のタグの値 + 1 になる。low = 10 の次の mid は 11。",
+    ),
+    ex('const Level = enum(u8) { low = 10, mid, high = 50 };\nstd.debug.print("{d} {d}\\n", .{ @intFromEnum(Level.mid), @intFromEnum(Level.high) });', "11 50"),
+    p(
+      "Enums can have methods, just like structs: a fn inside the enum whose first parameter is the enum, called with a dot. A typical method uses switch on self to return a different tag or value for each case.",
+      "Los enums pueden tener métodos, igual que los structs: una fn dentro del enum cuyo primer parámetro es el enum, llamada con un punto. Un método típico usa switch sobre self para devolver otro tag o valor en cada caso.",
+      "enum にも struct と同じようにメソッドが書ける。最初の引数がその enum の関数を中に書き、ドットで呼ぶ。よくあるのは self を switch して、場合ごとに別のタグや値を返すメソッド。",
+    ),
+  ),
+  note("switch-enums", L("switch must cover every tag", "switch debe cubrir cada tag", "switch はすべてのタグを書く"),
+    p(
+      "switch picks a branch (a prong) by value. On an enum, Zig checks that the switch is EXHAUSTIVE: every tag must appear in some prong, or there must be an else prong at the end. Forget one and you get a compile error: switch must handle all possibilities.",
+      "switch elige una rama según el valor. Sobre un enum, Zig revisa que el switch sea EXHAUSTIVO: cada tag debe aparecer en alguna rama, o debe haber una rama else al final. Si olvidas uno, hay error de compilación: switch must handle all possibilities.",
+      "switch は値によって分岐を選ぶ。enum の switch では、すべてのタグがどこかの分岐にあるか、最後に else があるかを Zig が調べる。ひとつでも忘れると switch must handle all possibilities というエラーになる。",
+    ),
+    bad("const Light = enum { red, amber, green };\nconst l: Light = .red;\nswitch (l) {\n    .red => {},\n    .green => {},\n}",
+      L("Does not compile: amber is not handled", "No compila: falta amber", "コンパイル不可：amber がない")),
+    p(
+      "Why so strict? If you later add a new tag to the enum, the compiler shows you every switch that must now handle it. Nothing is silently skipped. This is one of the ways Zig catches bugs before the program runs.",
+      "¿Por qué tan estricto? Si luego agregas un tag nuevo al enum, el compilador te muestra cada switch que ahora debe manejarlo. Nada se salta en silencio. Es una de las formas en que Zig atrapa errores antes de ejecutar.",
+      "なぜきびしいのか？あとで enum に新しいタグを足すと、それをあつかうべき switch をコンパイラが全部教えてくれる。だまって飛ばされることはない。実行前にバグを見つける Zig のしくみのひとつじゃ。",
+    ),
+    p(
+      "One prong can list several tags separated by commas, and else catches every tag not listed above. A switch is also an expression: it can produce a value, as long as every prong gives a value of the same type.",
+      "Una rama puede listar varios tags separados por comas, y else atrapa todos los tags no listados antes. Un switch también es una expresión: puede producir un valor, siempre que cada rama dé un valor del mismo tipo.",
+      "ひとつの分岐にカンマでいくつもタグを書ける。else は上にないタグを全部受ける。switch は式でもあり、どの分岐も同じ型の値を出すなら値を作れる。",
+    ),
+    ex('const Season = enum { spring, summer, autumn, winter };\nconst s: Season = .winter;\nconst coat = switch (s) {\n    .autumn, .winter => "yes",\n    else => "no",\n};\nstd.debug.print("{s}\\n", .{coat});', "yes",
+      L("winter is listed in the first prong, so coat is yes", "winter está en la primera rama, así que coat es yes", "winter は最初の分岐にあるので coat は yes")),
+    p(
+      "Common mistake: assuming a missing tag simply does nothing. In Zig it does not compile. If doing nothing is really what you want, say it out loud with a prong like .amber => {}, or with else => {}.",
+      "Error común: suponer que un tag que falta simplemente no hace nada. En Zig no compila. Si de verdad no quieres hacer nada, dilo con una rama como .amber => {} o con else => {}.",
+      "よくあるミス：書かなかったタグは何もしないだけだと思うこと。Zig ではコンパイルできない。本当に何もしないなら .amber => {} や else => {} とはっきり書こう。",
+    ),
+  ),
+  note("tagged-unions", L("Tagged unions: one field at a time", "Uniones etiquetadas: un campo a la vez", "タグ付き共用体：一度にひとつ"),
+    p(
+      "A union stores ONE of several fields at a time, like a box that holds either gold or a gem, never both. union(enum) adds a hidden tag that remembers which field is active right now. That tag is what makes it safe and easy to use.",
+      "Una unión guarda UNO de varios campos a la vez, como una caja que guarda oro o una gema, nunca ambos. union(enum) agrega un tag oculto que recuerda qué campo está activo ahora. Ese tag es lo que la hace segura y fácil de usar.",
+      "共用体（union）はいくつかのフィールドのうち一度にひとつだけを持つ。金か宝石のどちらかが入る箱のようなもの。union(enum) は今どのフィールドが入っているかを覚える見えないタグを足す。このタグのおかげで安全に使える。",
+    ),
+    p(
+      "To use the value, switch on the union. Each prong is a field name, and |g| captures that field's value (its payload). A field with no type, like nothing, carries no payload, so its prong has no capture.",
+      "Para usar el valor, haz switch sobre la unión. Cada rama es un nombre de campo, y |g| captura el valor de ese campo (su carga). Un campo sin tipo, como nothing, no lleva carga, así que su rama no captura nada.",
+      "値を使うには union を switch する。分岐はフィールド名で、|g| でそのフィールドの値（ペイロード）を受けとる。nothing のように型のないフィールドは値を持たないので、キャプチャもない。",
+    ),
+    ex('const Reward = union(enum) {\n    gold: u32,\n    gem: struct { size: u8 },\n    nothing,\n};\nconst r: Reward = .{ .gold = 25 };\nswitch (r) {\n    .gold => |g| std.debug.print("gold {d}\\n", .{g}),\n    .gem => |gm| std.debug.print("gem {d}\\n", .{gm.size}),\n    .nothing => std.debug.print("none\\n", .{}),\n}', "gold 25",
+      L("r holds gold right now, so only the .gold prong runs", "r tiene gold ahora, así que solo corre la rama .gold", "r は今 gold なので .gold の分岐だけが動く")),
+    p(
+      "The tag can also be read directly: @tagName(r) gives the active field's name as text, and r == .gold compares the active tag with a name. A plain union without (enum) has no tag, so none of this works on it.",
+      "El tag también se puede leer directamente: @tagName(r) da el nombre del campo activo como texto, y r == .gold compara el tag activo con un nombre. Una unión simple sin (enum) no tiene tag, así que nada de esto funciona con ella.",
+      "タグは直接読むこともできる。@tagName(r) は今のフィールド名の文字列、r == .gold は今のタグと名前を比べる。(enum) のないただの union にはタグがないので、どれも使えない。",
+    ),
+    ex('const Reward = union(enum) { gold: u32, nothing };\nconst r: Reward = .nothing;\nstd.debug.print("{s} {}\\n", .{ @tagName(r), r == .gold });', "nothing false"),
+    p(
+      "Common mistake: reading one field directly, like r.gold, without checking the tag first. If another field is active, the program panics. Let switch do the checking: it is exhaustive, so every possible shape gets handled.",
+      "Error común: leer un campo directamente, como r.gold, sin revisar antes el tag. Si hay otro campo activo, el programa hace panic. Deja que switch revise: es exhaustivo, así que cada forma posible se maneja.",
+      "よくあるミス：タグを調べずに r.gold のようにフィールドを直接読むこと。別のフィールドが入っていたら panic する。switch にまかせよう。全部の形をあつかうことが保証される。",
+    ),
+  ),
+  note("runtime-checks", L("Safety checks at run time", "Revisiones de seguridad al ejecutar", "実行時の安全チェック"),
+    p(
+      "Some mistakes can only be seen while the program runs, because they depend on values the compiler does not know. In Debug builds Zig adds safety checks for them: instead of reading garbage memory, the program stops with a panic and a clear message.",
+      "Algunos errores solo se ven al ejecutar, porque dependen de valores que el compilador no conoce. En Debug, Zig agrega revisiones de seguridad: en vez de leer memoria basura, el programa se detiene con un panic y un mensaje claro.",
+      "コンパイラが知らない値で決まるまちがいは、実行中にしか見えない。Debug ビルドの Zig はそのための安全チェックを入れる。ゴミのメモリを読むかわりに、わかりやすいメッセージで panic して止まる。",
+    ),
+    p(
+      "Reading an inactive union field is one of them. If r currently holds a gem and you read r.gold, Zig panics with access of union field 'gold' while field 'gem' is active. It compiles, because the active field is only known at run time.",
+      "Leer un campo inactivo de una unión es uno de ellos. Si r tiene ahora una gema y lees r.gold, Zig hace panic con access of union field 'gold' while field 'gem' is active. Compila, porque el campo activo solo se conoce al ejecutar.",
+      "そのひとつが、入っていない union のフィールドを読むこと。r が今 gem なのに r.gold を読むと、access of union field 'gold' while field 'gem' is active で panic する。今のフィールドは実行時にしかわからないので、コンパイルは通る。",
+    ),
+    boom('const Reward = union(enum) { gold: u32, gem: u8 };\nvar r: Reward = .{ .gem = 2 };\n_ = &r;\nstd.debug.print("{d}\\n", .{r.gold});', "access of union field 'gold' while field 'gem' is active",
+      L("Compiles, then panics: gem is the active field", "Compila y luego hace panic: gem es el campo activo", "コンパイルは通り、実行で panic：今は gem")),
+    p(
+      "Turning a number into an enum is another. @enumFromInt(n) trusts that n is one of the enum's values. If the enum only has 0, 1 and 2 and n is 7, there is no tag to give back, so the program panics with invalid enum value.",
+      "Convertir un número en enum es otro. @enumFromInt(n) confía en que n sea uno de los valores del enum. Si el enum solo tiene 0, 1 y 2 y n es 7, no hay tag que devolver, así que el programa hace panic con invalid enum value.",
+      "数を enum に変えるのもそう。@enumFromInt(n) は n が enum の値のどれかだと信じる。enum に 0、1、2 しかないのに n が 7 なら返すタグがなく、invalid enum value で panic する。",
+    ),
+    boom('const Mood = enum(u8) { calm, angry, sleepy };\nvar raw: u8 = 7;\n_ = &raw;\nconst m: Mood = @enumFromInt(raw);\nstd.debug.print("{s}\\n", .{@tagName(m)});', "invalid enum value",
+      L("Mood has no tag numbered 7", "Mood no tiene ningún tag con el número 7", "Mood に 7 番のタグはない")),
+    p(
+      "Rule to remember: a panic is not a compile error. The program builds and starts, and stops only when it reaches the bad line. Avoid both panics by checking first: switch on the union, and make sure a number is in range before @enumFromInt.",
+      "Regla: un panic no es un error de compilación. El programa se construye y arranca, y solo se detiene al llegar a la línea mala. Evita ambos panics revisando antes: haz switch sobre la unión y asegúrate de que el número esté en rango antes de @enumFromInt.",
+      "覚えかた：panic はコンパイルエラーではない。プログラムはビルドされて動き、悪い行に来た時に止まる。先に調べれば防げる。union は switch で、数は @enumFromInt の前に範囲を確かめよう。",
+    ),
+  ),
+];
+
+const pointersNotes: NoteDef[] = [
+  note("pointers", L("Pointers: &x and p.*", "Punteros: &x y p.*", "ポインタ：&x と p.*"),
+    p(
+      "A pointer is the address of a value: it says where the value lives in memory. &coins gives a pointer to coins. Its type is *u32 when coins is a var u32: the * means pointer to.",
+      "Un puntero es la dirección de un valor: dice dónde vive el valor en memoria. &coins da un puntero a coins. Su tipo es *u32 cuando coins es un var u32: el * significa puntero a.",
+      "ポインタは値の住所。値がメモリのどこにあるかを示す。&coins は coins へのポインタをくれる。coins が var の u32 なら型は *u32。* は「〜へのポインタ」という意味じゃ。",
+    ),
+    p(
+      "ptr.* follows the pointer to the value. Reading ptr.* gives the current value; writing ptr.* = 5 or ptr.* += 5 changes the original variable, because there is only one value and the pointer just leads to it. No copy is made.",
+      "ptr.* sigue el puntero hasta el valor. Leer ptr.* da el valor actual; escribir ptr.* = 5 o ptr.* += 5 cambia la variable original, porque hay un solo valor y el puntero solo lleva a él. No se hace ninguna copia.",
+      "ptr.* はポインタをたどって値にとどく。ptr.* を読めば今の値、ptr.* = 5 や ptr.* += 5 と書けば元の変数が変わる。値はひとつだけで、ポインタはそこへ案内するだけ。コピーは作られない。",
+    ),
+    ex('var coins: u32 = 10;\nconst ptr = &coins;\nptr.* += 5;\nstd.debug.print("{d} {d}\\n", .{ coins, ptr.* });', "15 15",
+      L("One value, two ways to reach it", "Un valor, dos formas de llegar a él", "値はひとつ、とどき方は2つ")),
+    p(
+      "Pointers let a function change a variable that belongs to its caller. Function parameters are copies, so fn reset(score: u32) could never change the caller's score. With score: *u32 and a call reset(&score), the function writes through the pointer.",
+      "Los punteros permiten que una función cambie una variable de quien la llama. Los parámetros son copias, así que fn reset(score: u32) nunca podría cambiar el score de quien llama. Con score: *u32 y la llamada reset(&score), la función escribe por el puntero.",
+      "ポインタを使うと、関数が呼んだ側の変数を変えられる。引数はコピーなので fn reset(score: u32) では呼んだ側の score は変わらない。score: *u32 にして reset(&score) と呼べば、関数はポインタ経由で書ける。",
+    ),
+    ex(zmain("fn reset(score: *u32) void {\n    score.* = 0;\n}", 'var score: u32 = 99;\nreset(&score);\nstd.debug.print("{d}\\n", .{score});'), "0"),
+    p(
+      "Common mistake: var local = ptr.*; local += 5; This copies the value out of the pointer into a new variable, and then changes only the copy. The original never changes. To change the original, write through the pointer itself: ptr.* += 5.",
+      "Error común: var local = ptr.*; local += 5; Esto copia el valor del puntero a una variable nueva y luego cambia solo la copia. El original nunca cambia. Para cambiar el original, escribe por el puntero mismo: ptr.* += 5.",
+      "よくあるミス：var local = ptr.*; local += 5; これはポインタの先の値を新しい変数にコピーし、コピーだけを変える。元は変わらない。元を変えるにはポインタそのものに書く：ptr.* += 5。",
+    ),
+  ),
+  note("const-pointers", L("*const: look, don't touch", "*const: mirar, no tocar", "*const：見るだけ"),
+    p(
+      "The pointer you get from & depends on what it points at. &x of a var gives *T, a pointer you can write through. &x of a const gives *const T, a read-only pointer: you can read x through it, but never change it.",
+      "El puntero que da & depende de a qué apunta. &x de un var da *T, un puntero por el que puedes escribir. &x de un const da *const T, un puntero de solo lectura: puedes leer x por él, pero nunca cambiarlo.",
+      "& でとれるポインタは、指す先しだい。var の &x は書きこめる *T。const の &x は読むだけの *const T。x を読めるが、変えることはできない。",
+    ),
+    ex('const limit: u16 = 300;\nconst view = &limit;\nstd.debug.print("{d} {}\\n", .{ view.*, @TypeOf(view) });', "300 *const u16",
+      L("A pointer to a const is a *const pointer", "Un puntero a un const es un puntero *const", "const へのポインタは *const")),
+    p(
+      "Zig never lets you turn a *const T into a plain *T, because that would let you change something that was declared constant. Assigning one to the other is a compile error that mentions both types, like expected type '*u16', found '*const u16'.",
+      "Zig nunca deja convertir un *const T en un *T simple, porque eso permitiría cambiar algo declarado constante. Asignar uno al otro es un error de compilación que menciona ambos tipos, como expected type '*u16', found '*const u16'.",
+      "Zig は *const T をただの *T に変えさせない。const と決めたものを変えられてしまうからじゃ。代入すると両方の型が出るコンパイルエラーになる：expected type '*u16', found '*const u16' など。",
+    ),
+    bad("const limit: u16 = 300;\nconst view = &limit;\nview.* = 1;",
+      L("Does not compile: view is read-only", "No compila: view es de solo lectura", "コンパイル不可：view は読むだけ")),
+    p(
+      "The other direction is fine: a writable *T can always be used where a *const T is expected. Giving out a read-only view of a var is safe. That is why functions that only read take *const T or []const T: they accept both const and var data.",
+      "La otra dirección sí vale: un *T escribible siempre se puede usar donde se espera un *const T. Dar una vista de solo lectura de un var es seguro. Por eso las funciones que solo leen piden *const T o []const T: aceptan datos const y var.",
+      "逆向きは問題ない。書ける *T は *const T の代わりにいつでも使える。var を読むだけで見せるのは安全だからじゃ。だから読むだけの関数は *const T や []const T を受けとる。const も var も渡せる。",
+    ),
+    ex('var hp: u16 = 8;\nconst peek: *const u16 = &hp;\nhp += 1;\nstd.debug.print("{d}\\n", .{peek.*});', "9",
+      L("peek can't write, but it sees hp change", "peek no puede escribir, pero ve cambiar hp", "peek は書けないが hp の変化は見える")),
+  ),
+  note("slices", L("Slices: a pointer plus a length", "Slices: un puntero más un largo", "スライス：ポインタ＋長さ"),
+    p(
+      "A slice []T is a window onto items that live somewhere else, usually an array. It stores two things: a pointer to the first item and a length. arr[a..b] makes a window from index a up to, but not including, b, so its len is b - a.",
+      "Un slice []T es una ventana a elementos que viven en otro lugar, normalmente un array. Guarda dos cosas: un puntero al primer elemento y un largo. arr[a..b] crea una ventana desde el índice a hasta b, sin incluir b, así que su len es b - a.",
+      "スライス []T は、ほかの場所（たいてい配列）にある要素をのぞく窓。最初の要素へのポインタと長さの2つを持つ。arr[a..b] は a から b の手前までの窓で、len は b - a。",
+    ),
+    p(
+      "A slice copies nothing. win[0] is the same memory as row[2] when win = row[2..4], so writing through the window changes the array. On a 64-bit machine a pointer is 8 bytes, so a slice (pointer + length) is 16 bytes, whatever its length.",
+      "Un slice no copia nada. win[0] es la misma memoria que row[2] cuando win = row[2..4], así que escribir por la ventana cambia el array. En una máquina de 64 bits un puntero ocupa 8 bytes, así que un slice (puntero + largo) ocupa 16, sea cual sea su largo.",
+      "スライスは何もコピーしない。win = row[2..4] なら win[0] は row[2] と同じメモリで、窓から書けば配列が変わる。64ビットではポインタは8バイトなので、スライス（ポインタ＋長さ）は長さに関係なく16バイト。",
+    ),
+    ex('var row = [_]u8{ 10, 20, 30, 40 };\nconst win = row[2..4];\nwin[1] = 0;\nstd.debug.print("{any} {d}\\n", .{ row, win.len });', "{ 10, 20, 30, 0 } 2",
+      L("win[1] is row[3]: the write lands in row", "win[1] es row[3]: lo escrito llega a row", "win[1] は row[3]。row に書きこまれる")),
+    p(
+      "When both bounds are known while compiling, Zig knows the exact length, so arr[1..3] is a pointer to an array, *[2]T. When a bound is only known at run time, the result is a real slice, []T. Both index and loop the same way.",
+      "Cuando ambos límites se conocen al compilar, Zig sabe el largo exacto, así que arr[1..3] es un puntero a array, *[2]T. Si un límite solo se conoce al ejecutar, el resultado es un slice de verdad, []T. Ambos se indexan y recorren igual.",
+      "両方の範囲がコンパイル時にわかれば長さも決まるので、arr[1..3] は配列へのポインタ *[2]T になる。範囲が実行時にしかわからなければ本物のスライス []T。どちらも同じように番号で読み、ループできる。",
+    ),
+    ex('var data = [_]u8{ 1, 2, 3, 4, 5, 6 };\nvar start: usize = 2;\n_ = &start;\nstd.debug.print("{} {}\\n", .{ @TypeOf(data[0..2]), @TypeOf(data[start..]) });', "*[2]u8 []u8"),
+    p(
+      "Functions usually take slices, so one function works for any length. A pointer to an array, like &small, turns into a slice automatically when passed. Use []const T when the function only reads.",
+      "Las funciones suelen recibir slices, así una sola función sirve para cualquier largo. Un puntero a array, como &small, se convierte solo en slice al pasarlo. Usa []const T cuando la función solo lee.",
+      "関数はたいていスライスを受けとるので、どんな長さでもひとつの関数ですむ。&small のような配列へのポインタは、渡すと自動でスライスになる。読むだけなら []const T を使おう。",
+    ),
+    ex(zmain("fn count(xs: []const u8) usize {\n    return xs.len;\n}", 'const small = [_]u8{ 4, 4 };\nconst large = [_]u8{ 1, 2, 3, 4, 5, 6 };\nstd.debug.print("{d} {d}\\n", .{ count(&small), count(&large) });'), "2 6"),
+  ),
+  note("pointer-captures", L("Changing items in a loop: |*x|", "Cambiar elementos en un loop: |*x|", "ループで要素を変える：|*x|"),
+    p(
+      "A for loop gives you each item through a capture between bars. A plain capture |x| is a constant COPY of the item: perfect for reading, like adding up values, but you cannot assign to it. Trying gives cannot assign to constant.",
+      "Un for te da cada elemento mediante una captura entre barras. Una captura simple |x| es una COPIA constante del elemento: perfecta para leer, como sumar valores, pero no puedes asignarle nada. Intentarlo da cannot assign to constant.",
+      "for は棒ではさんだキャプチャで各要素をくれる。ふつうの |x| は要素の定数コピー。合計を出すなど読むのにはぴったりだが、代入はできない。すると cannot assign to constant になる。",
+    ),
+    ex('const lives = [_]u8{ 2, 5 };\nvar sum: u8 = 0;\nfor (lives) |l| sum += l;\nstd.debug.print("{d}\\n", .{sum});', "7",
+      L("Reading only: a plain capture is enough", "Solo lectura: basta una captura simple", "読むだけなら、ふつうのキャプチャで十分")),
+    p(
+      "To change the items, two things are needed together: loop over a pointer to the array, &lives, and capture a pointer to each item with |*l|. Then l.* is the real item, and l.* = 3 writes into the array.",
+      "Para cambiar los elementos hacen falta dos cosas juntas: recorrer un puntero al array, &lives, y capturar un puntero a cada elemento con |*l|. Entonces l.* es el elemento real, y l.* = 3 escribe en el array.",
+      "要素を変えるには2つをセットで：配列へのポインタ &lives をまわし、|*l| で各要素へのポインタを受ける。すると l.* が本物の要素になり、l.* = 3 で配列に書ける。",
+    ),
+    ex('var lives = [_]u8{ 1, 1, 1 };\nfor (&lives) |*l| l.* = 3;\nstd.debug.print("{any}\\n", .{lives});', "{ 3, 3, 3 }"),
+    p(
+      "Why both? Looping over lives itself works on a copy of the array, so even a pointer capture would not reach the original. Looping over &lives gives access to the real array, and |*l| hands you each real item.",
+      "¿Por qué ambas? Recorrer lives directamente trabaja sobre una copia del array, así que ni una captura de puntero llegaría al original. Recorrer &lives da acceso al array real, y |*l| te entrega cada elemento real.",
+      "なぜ両方？lives そのものをまわすと配列のコピーをまわすので、ポインタで受けても本物にとどかない。&lives をまわすと本物の配列にとどき、|*l| が本物の要素を渡してくれる。",
+    ),
+    bad("var lives = [_]u8{ 1, 1 };\nfor (lives) |l| {\n    l = 3;\n}\n_ = &lives;",
+      L("Does not compile: l is a constant copy", "No compila: l es una copia constante", "コンパイル不可：l は定数のコピー")),
+    p(
+      "Common mistake: writing |*l| but then l = 3 instead of l.* = 3. l is the pointer; l.* is the item it points at. With a struct item, l.field works directly because Zig follows the pointer for field access.",
+      "Error común: escribir |*l| pero luego l = 3 en vez de l.* = 3. l es el puntero; l.* es el elemento al que apunta. Con un elemento struct, l.campo funciona directo porque Zig sigue el puntero al acceder a campos.",
+      "よくあるミス：|*l| と書いたのに l.* = 3 ではなく l = 3 と書くこと。l はポインタで、l.* が指す先の要素。要素が struct なら、フィールドを読む時に Zig がたどるので l.field と書ける。",
+    ),
+  ),
+];
+
+const sentinelsNotes: NoteDef[] = [
+  note("slice-ranges", L("Slice ranges: a..b", "Rangos de slice: a..b", "スライスの範囲：a..b"),
+    p(
+      "s[a..b] takes the items from index a up to b, but b itself is NOT included. Think of a and b as cuts between letters: [0..3] keeps the first three letters (indices 0, 1, 2). s[a..] has no end, so it runs to the last item.",
+      "s[a..b] toma los elementos desde el índice a hasta b, pero b NO se incluye. Piensa en a y b como cortes entre letras: [0..3] guarda las tres primeras letras (índices 0, 1, 2). s[a..] no tiene fin, así que llega hasta el último.",
+      "s[a..b] は a 番から b 番の手前までをとる。b 自体はふくまない。a と b を文字の間の切れ目と考えよう：[0..3] は最初の3文字（0、1、2 番）。s[a..] は終わりがないので最後まで。",
+    ),
+    ex('const word: []const u8 = "lantern";\nstd.debug.print("{s} {s} {s}\\n", .{ word[0..3], word[3..], word[2..5] });', "lan tern nte",
+      L("The length of a..b is always b - a", "El largo de a..b siempre es b - a", "a..b の長さはいつも b - a")),
+    p(
+      "Because the end is excluded, the length is simply b - a, and word[0..word.len] is the whole word. To cut a word just before a space found at index i, use word[0..i]: subtracting 1 would remove one letter too many.",
+      "Como el final se excluye, el largo es simplemente b - a, y word[0..word.len] es la palabra entera. Para cortar una palabra justo antes de un espacio hallado en el índice i, usa word[0..i]: restar 1 quitaría una letra de más.",
+      "終わりをふくまないので長さは b - a、word[0..word.len] は単語全体。i 番で見つけた空白の手前で切るなら word[0..i]。1 を引くと1文字よけいに消える。",
+    ),
+    p(
+      "Every slice is bounds-checked. If the bounds are known while compiling and too big, it is a compile error. If a bound comes from a runtime value, Zig checks it when that line runs and panics with index out of bounds instead of reading memory that isn't yours.",
+      "Cada slice revisa sus límites. Si los límites se conocen al compilar y son muy grandes, es error de compilación. Si un límite viene de un valor de ejecución, Zig lo revisa cuando corre esa línea y hace panic con index out of bounds en vez de leer memoria ajena.",
+      "スライスは必ず範囲チェックされる。コンパイル時にわかる範囲が大きすぎればコンパイルエラー。実行時の値なら、その行が動いた時に調べ、他人のメモリを読むかわりに index out of bounds で panic する。",
+    ),
+    boom('const word: []const u8 = "ox";\nvar stop: usize = 4;\n_ = &stop;\nstd.debug.print("{s}\\n", .{word[0..stop]});', "out of bounds",
+      L("stop is a runtime value: the check happens while running", "stop es de ejecución: se revisa al ejecutar", "stop は実行時の値。チェックも実行時")),
+    p(
+      "Common mistake: counting the end as included, the way you might say from 0 to 3 in everyday speech. In Zig, a..b means a up to just before b. When in doubt, compute b - a to know how many items you get.",
+      "Error común: contar el final como incluido, como cuando dices de 0 a 3 en el habla diaria. En Zig, a..b significa desde a hasta justo antes de b. Si dudas, calcula b - a para saber cuántos elementos obtienes.",
+      "よくあるミス：ふだんの「0 から 3 まで」のように終わりもふくむと数えること。Zig の a..b は a から b の直前まで。迷ったら b - a で何個とれるか計算しよう。",
+    ),
+  ),
+  note("sentinels", L("String literals and sentinels", "Literales de texto y centinelas", "文字列リテラルと番兵"),
+    p(
+      "A SENTINEL is a marker value stored right after the last item. [:0]const u8 is a slice of bytes that is guaranteed to have a 0 byte after its end, like strings in C. len does not count the sentinel, but the sentinel can be read at index len.",
+      "Un CENTINELA es un valor marcador guardado justo después del último elemento. [:0]const u8 es un slice de bytes que garantiza un byte 0 tras su final, como los textos en C. len no cuenta el centinela, pero se puede leer en el índice len.",
+      "番兵（sentinel）は最後の要素のすぐあとに置く目印の値。[:0]const u8 は終わりのあとに必ず 0 のバイトがあるスライスで、C の文字列と同じ。len に番兵はふくまれないが、len 番で読める。",
+    ),
+    p(
+      "Every string literal in Zig has one. \"raven\" is a pointer to a constant array of 5 bytes with a 0 sentinel: *const [5:0]u8. So indexing it at its length gives 0 instead of an out-of-bounds panic. One past that is still out of bounds.",
+      "Todo literal de texto en Zig tiene uno. \"raven\" es un puntero a un array constante de 5 bytes con centinela 0: *const [5:0]u8. Así que indexarlo en su largo da 0 en vez de un panic de fuera de rango. Uno más allá sí está fuera de rango.",
+      "Zig の文字列リテラルにはすべて番兵がある。\"raven\" は番兵 0 つきの5バイトの定数配列へのポインタ：*const [5:0]u8。だから長さの番号で読むと範囲外の panic ではなく 0 になる。その次はやはり範囲外。",
+    ),
+    ex('std.debug.print("{}\\n", .{@TypeOf("raven")});', "*const [5:0]u8",
+      L("5 letters, then a hidden 0 sentinel", "5 letras y luego un centinela 0 oculto", "5文字のあとに見えない番兵 0")),
+    p(
+      "Literals are also CONSTANT: they live in read-only memory. That is why their type says const, and why a literal fits []const u8 but not []u8. A []u8 would promise you can write into it, and Zig refuses to make that promise.",
+      "Los literales también son CONSTANTES: viven en memoria de solo lectura. Por eso su tipo dice const, y por eso un literal cabe en []const u8 pero no en []u8. Un []u8 prometería que puedes escribir en él, y Zig se niega a prometerlo.",
+      "リテラルは定数でもあり、読みとり専用のメモリにある。だから型に const がつき、[]const u8 には入るが []u8 には入らない。[]u8 だと書きこめると約束することになり、Zig はそれを許さない。",
+    ),
+    bad('const name: []u8 = "owl";\n_ = name;',
+      L("Does not compile: a literal can't become writable", "No compila: un literal no puede volverse escribible", "コンパイル不可：リテラルは書けるようにならない")),
+    p(
+      "If you need a writable copy, copy the bytes into your own array with .*: var name = \"owl\".*; Now name is a [3:0]u8 array on the stack that belongs to you, and you can change its letters.",
+      "Si necesitas una copia escribible, copia los bytes a tu propio array con .*: var name = \"owl\".*; Ahora name es un array [3:0]u8 en la pila que es tuyo, y puedes cambiar sus letras.",
+      "書けるコピーがほしいなら .* で自分の配列にコピーする：var name = \"owl\".*; これで name はスタック上の自分の [3:0]u8 配列になり、文字を変えられる。",
+    ),
+    ex('var name = "owl".*;\nname[0] = \'O\';\nstd.debug.print("{s}\\n", .{&name});', "Owl"),
+  ),
+  note("std-mem", L("The std.mem toolbox", "La caja de herramientas std.mem", "std.mem の道具箱"),
+    p(
+      "Slices can't be compared with ==, because Zig won't guess whether you mean the same memory or the same contents. std.mem has the tools for working with slices. They all take the item type first, usually u8 for text: std.mem.eql(u8, a, b) is true when both have the same bytes.",
+      "Los slices no se comparan con ==, porque Zig no adivina si quieres decir la misma memoria o el mismo contenido. std.mem tiene las herramientas para slices. Todas reciben primero el tipo de elemento, normalmente u8 para texto: std.mem.eql(u8, a, b) es true si ambos tienen los mismos bytes.",
+      "スライスは == で比べられない。同じメモリなのか同じ中身なのか Zig は推測しないからじゃ。スライス用の道具は std.mem にある。どれも最初に要素の型（文字列ならふつう u8）をとる。std.mem.eql(u8, a, b) は同じバイトなら true。",
+    ),
+    ex('const a: []const u8 = "moss";\nstd.debug.print("{} {}\\n", .{ std.mem.eql(u8, a, "moss"), std.mem.eql(u8, a, "mass") });', "true false"),
+    p(
+      "Searching: indexOf finds a smaller slice, indexOfScalar finds one item, and both return ?usize: the position where it starts, or null when it isn't there. Zig uses null, not -1, for nothing found. count tells how many times something appears.",
+      "Buscar: indexOf encuentra un slice más pequeño, indexOfScalar encuentra un elemento, y ambos devuelven ?usize: la posición donde empieza, o null si no está. Zig usa null, no -1, para no encontrado. count dice cuántas veces aparece algo.",
+      "検索：indexOf は小さいスライスを、indexOfScalar は要素ひとつを探し、どちらも ?usize を返す。始まる位置か、なければ null。見つからない時、Zig は -1 ではなく null を使う。count は何回出てくるかを数える。",
+    ),
+    ex('const path = "a/b/c";\nstd.debug.print("{any} {any} {d}\\n", .{ std.mem.indexOfScalar(u8, path, \'/\'), std.mem.indexOf(u8, path, "x"), std.mem.count(u8, path, "/") });', "1 null 2",
+      L("Positions start at 0; not found is null", "Las posiciones empiezan en 0; no encontrado es null", "位置は 0 から、見つからなければ null")),
+    p(
+      "trim(u8, s, chars) removes the listed bytes from both ends and returns a smaller window onto the same memory, with no copy. sort(T, slice, context, lessThan) reorders a slice in place; std.sort.asc(T) means smallest first and std.sort.desc(T) largest first.",
+      "trim(u8, s, chars) quita los bytes indicados de ambos extremos y devuelve una ventana menor sobre la misma memoria, sin copiar. sort(T, slice, context, lessThan) reordena un slice en su lugar; std.sort.asc(T) es de menor a mayor y std.sort.desc(T) de mayor a menor.",
+      "trim(u8, s, chars) は指定のバイトを両はしからとりのぞき、同じメモリの小さな窓を返す。コピーはしない。sort(T, slice, context, lessThan) はスライスをその場で並べかえる。std.sort.asc(T) は小さい順、std.sort.desc(T) は大きい順。",
+    ),
+    ex('var nums = [_]u8{ 7, 3, 8 };\nstd.mem.sort(u8, &nums, {}, std.sort.desc(u8));\nstd.debug.print("{any} [{s}]\\n", .{ nums, std.mem.trim(u8, "--ok--", "-") });', "{ 8, 7, 3 } [ok]"),
+  ),
+  note("buf-print", L("Formatting into a buffer", "Formatear en un buffer", "バッファに書きこむ"),
+    p(
+      "std.fmt.bufPrint formats text, with the same {d} and {s} placeholders as std.debug.print, but instead of printing it writes the bytes into a buffer you provide, usually an array on the stack: var space: [16]u8 = undefined;",
+      "std.fmt.bufPrint formatea texto, con los mismos marcadores {d} y {s} que std.debug.print, pero en vez de imprimir escribe los bytes en un buffer que tú das, normalmente un array en la pila: var space: [16]u8 = undefined;",
+      "std.fmt.bufPrint は std.debug.print と同じ {d} や {s} で文字を組み立てるが、表示はせず、自分で用意したバッファ（たいていスタックの配列）に書く：var space: [16]u8 = undefined;",
+    ),
+    p(
+      "It returns a slice of just the part it filled, not the whole buffer. So the result's len is the length of the text, however big the buffer is. The rest of the buffer stays untouched and is never printed.",
+      "Devuelve un slice de solo la parte que llenó, no del buffer entero. Así que el len del resultado es el largo del texto, sin importar el tamaño del buffer. El resto del buffer queda sin tocar y nunca se imprime.",
+      "返すのはうめた部分だけのスライスで、バッファ全体ではない。だから結果の len はバッファの大きさに関係なく文字の長さ。残りのバッファはさわられず、表示もされない。",
+    ),
+    ex('var space: [16]u8 = undefined;\nconst line = try std.fmt.bufPrint(&space, "{s}-{d}", .{ "lv", 7 });\nstd.debug.print("{s} {d}\\n", .{ line, line.len });', "lv-7 4",
+      L("16 bytes of room, only 4 used", "16 bytes de espacio, solo 4 usados", "16バイトの空き、使ったのは4つ")),
+    p(
+      "bufPrint can fail: if the text does not fit, it returns error.NoSpaceLeft instead of writing past the end. That is why the call needs try (or catch). No heap memory is involved, so there is nothing to free afterwards.",
+      "bufPrint puede fallar: si el texto no cabe, devuelve error.NoSpaceLeft en vez de escribir más allá del final. Por eso la llamada necesita try (o catch). No se usa memoria del heap, así que no hay nada que liberar después.",
+      "bufPrint は失敗することがある。入りきらなければ、はみ出して書くかわりに error.NoSpaceLeft を返す。だから try（か catch）が必要。ヒープは使わないので、あとで解放するものはない。",
+    ),
+    ex('var tiny: [2]u8 = undefined;\nif (std.fmt.bufPrint(&tiny, "{d}", .{12345})) |s| {\n    std.debug.print("{s}\\n", .{s});\n} else |err| {\n    std.debug.print("{s}\\n", .{@errorName(err)});\n}', "NoSpaceLeft"),
+  ),
+];
+
+const bossNotes: NoteDef[] = [
+  note("recap-copies", L("Recap: copies, pointers, const", "Repaso: copias, punteros, const", "復習：コピー・ポインタ・const"),
+    p(
+      "Assigning a struct copies it: after var b = a; the two are independent. Loop captures |x| are constant copies too. To change the original you need a pointer: &x, a *T parameter or self, or a |*x| capture over &array.",
+      "Asignar un struct lo copia: tras var b = a; los dos son independientes. Las capturas |x| también son copias constantes. Para cambiar el original necesitas un puntero: &x, un parámetro o self *T, o una captura |*x| sobre &array.",
+      "struct の代入はコピー。var b = a; のあと2つは別物。ループの |x| も定数のコピー。本物を変えるにはポインタが必要：&x、*T の引数や self、&array をまわす |*x|。",
+    ),
+    ex('const Flag = struct { up: bool };\nconst one = Flag{ .up = false };\nvar two = one;\ntwo.up = true;\nstd.debug.print("{} {}\\n", .{ one.up, two.up });', "false true"),
+    p(
+      "A pointer can only write if the thing it points at may change. &x of a const is *const T and never becomes *T, so a method taking self: *T can't be called on a const value. Declare it var instead.",
+      "Un puntero solo puede escribir si lo apuntado puede cambiar. &x de un const es *const T y nunca se vuelve *T, así que un método con self: *T no se puede llamar sobre un valor const. Decláralo var.",
+      "ポインタで書けるのは、指す先が変わってよい時だけ。const の &x は *const T で *T にはならないので、self: *T のメソッドは const の値には呼べない。var で宣言しよう。",
+    ),
+    bad("var flags = [_]bool{ false, false };\nfor (flags) |f| {\n    f = true;\n}\n_ = &flags;",
+      L("Does not compile: loop captures are constants", "No compila: las capturas del loop son constantes", "コンパイル不可：ループのキャプチャは定数")),
+  ),
+  note("recap-unions", L("Recap: enums and tagged unions", "Repaso: enums y uniones etiquetadas", "復習：enum とタグ付き共用体"),
+    p(
+      "A switch on an enum or tagged union must handle every tag, or end with else; otherwise it does not compile. In a tagged union, each prong can capture the payload with |v|. A field with no type carries no payload.",
+      "Un switch sobre un enum o una unión etiquetada debe manejar cada tag, o terminar con else; si no, no compila. En una unión etiquetada, cada rama puede capturar la carga con |v|. Un campo sin tipo no lleva carga.",
+      "enum やタグ付き共用体の switch は、すべてのタグを書くか else で終える。でないとコンパイルできない。タグ付き共用体では各分岐で |v| で値を受けとれる。型のないフィールドは値を持たない。",
+    ),
+    ex('const Drop = union(enum) { arrows: u8, map };\nconst loot = [_]Drop{ .map, .{ .arrows = 4 } };\nvar n: u32 = 0;\nfor (loot) |d| switch (d) {\n    .arrows => |a| n += a,\n    .map => n += 50,\n};\nstd.debug.print("{d}\\n", .{n});', "54"),
+    p(
+      "Only the active field of a union may be read. Reading another one directly compiles, but panics while running. Let switch decide which field is there, instead of guessing.",
+      "Solo se puede leer el campo activo de una unión. Leer otro directamente compila, pero hace panic al ejecutar. Deja que switch decida qué campo hay, en vez de adivinar.",
+      "読めるのは union の今のフィールドだけ。別のフィールドを直接読むとコンパイルは通るが、実行中に panic する。推測せず switch に判断させよう。",
+    ),
+  ),
+  note("recap-slices", L("Recap: slices and literals", "Repaso: slices y literales", "復習：スライスとリテラル"),
+    p(
+      "arr[a..b] is a window of b - a items that shares memory with arr: writes through it change arr. Bounds known while compiling give a pointer to an array (*[N]T); runtime bounds give a slice ([]T).",
+      "arr[a..b] es una ventana de b - a elementos que comparte memoria con arr: escribir por ella cambia arr. Límites conocidos al compilar dan un puntero a array (*[N]T); límites de ejecución dan un slice ([]T).",
+      "arr[a..b] は b - a 個の窓で、arr とメモリを共有する。窓から書けば arr が変わる。範囲がコンパイル時にわかれば配列へのポインタ（*[N]T）、実行時ならスライス（[]T）。",
+    ),
+    ex(zmain("fn zero(xs: []u8) void {\n    for (xs) |*x| x.* = 0;\n}", 'var bar = [_]u8{ 5, 5, 5, 5, 5 };\nzero(bar[3..]);\nstd.debug.print("{any}\\n", .{bar});'), "{ 5, 5, 5, 0, 0 }"),
+    p(
+      "String literals are constant arrays with a 0 sentinel after the last byte: index len reads that 0. Because they are constant, they fit []const u8 but never []u8. std.mem has the slice tools: eql, indexOf, trim, count, sort.",
+      "Los literales de texto son arrays constantes con un centinela 0 tras el último byte: el índice len lee ese 0. Como son constantes, caben en []const u8 pero nunca en []u8. std.mem tiene las herramientas: eql, indexOf, trim, count, sort.",
+      "文字列リテラルは、最後のバイトのあとに番兵 0 がある定数配列。len 番でその 0 が読める。定数なので []const u8 には入るが []u8 には入らない。スライスの道具は std.mem に：eql、indexOf、trim、count、sort。",
+    ),
+    ex('const cry = "caw";\nstd.debug.print("{d} {d}\\n", .{ cry.len, std.mem.count(u8, "caw caw", "aw") });', "3 2"),
+  ),
+];
+
 // ─── 3.1 Structs and methods ───────────────────────────────────────────────
 const structs: LessonDef = {
   slug: "structs-and-methods",
@@ -30,6 +497,7 @@ const structs: LessonDef = {
   xp: 70,
   enemy: "zig/undefined-imp",
   enemyName: L("BLUEPRINT IMP", "DIABLILLO PLANO", "設計図の小鬼"),
+  notes: structsNotes,
   beats: [
     say(L(
       "Welcome to Struct Mountain! A STRUCT is a blueprint: named fields with types. Point{ .x = 1, .y = 2 } builds one.",
@@ -56,6 +524,8 @@ const structs: LessonDef = {
       output: "4 0",
       check: { compiles: true, stdout: "4 0" },
       explain: L("y has a default (= 0), so you may leave it out. x has none.", "y tiene un valor por defecto (= 0), así que puedes omitirlo. x no.", "y にはデフォルト値（= 0）があるので省略できる。x にはない。"),
+      hint: L("Look at the blueprint: which field was left out of the literal, and what does the blueprint say about it?", "Mira el plano: ¿qué campo se omitió en el literal y qué dice el plano sobre él?", "設計図を見よう。リテラルで省いたフィールドは？設計図にはそれについて何と書いてある？"),
+      note: "struct-fields",
       setup: [{ t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: "o" }],
       win: [{ t: "value", actor: "ally", text: "4, 0" }, { t: "print", text: "4 0" }],
     },
@@ -67,6 +537,8 @@ const structs: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("x has no default, so it must be given: missing struct field: x.", "x no tiene valor por defecto, hay que darlo: missing struct field: x.", "x にはデフォルトがないので必須。missing struct field: x になる。"),
+      hint: L("Check each field of the blueprint: may it be left out of a literal? Only fields with = value may.", "Revisa cada campo del plano: ¿puede omitirse en un literal? Solo los que tienen = valor.", "設計図のフィールドを1つずつ見よう。リテラルで省けるのは = 値 があるものだけ。"),
+      note: "struct-fields",
     },
     {
       kind: "predict",
@@ -77,6 +549,8 @@ const structs: LessonDef = {
       output: "1 100",
       check: { compiles: true, stdout: "1 100" },
       explain: L("Assignment COPIES a struct. q is its own Point; changing it leaves p alone.", "Asignar COPIA el struct. q es su propio Point; cambiarlo no toca p.", "代入すると struct はコピーされる。q は別の Point なので p は変わらない。"),
+      hint: L("After var q = p, are p and q the same struct, or two separate ones?", "Tras var q = p, ¿p y q son el mismo struct o dos distintos?", "var q = p のあと、p と q は同じ struct？それとも別々？"),
+      note: "struct-copies",
       setup: [{ t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: "p", value: "1" }],
       win: [{ t: "clone", to: "hero" }, { t: "tag", actor: "hero", text: "q", value: "100" }, { t: "print", text: "1 100" }],
     },
@@ -94,6 +568,8 @@ const structs: LessonDef = {
       output: "3",
       check: { compiles: true, stdout: "3" },
       explain: L("p.sum() passes p as self, so it returns 1 + 2.", "p.sum() pasa p como self, así que devuelve 1 + 2.", "p.sum() は p を self としてわたすので 1 + 2 を返す。"),
+      hint: L("A method call passes the value before the dot as self. Read what sum does with self's fields.", "Una llamada a método pasa el valor antes del punto como self. Lee qué hace sum con los campos de self.", "メソッドはドットの前の値を self として受けとる。sum が self のフィールドで何をするか読もう。"),
+      note: "methods-self",
       win: [{ t: "print", text: "3" }],
     },
     {
@@ -105,6 +581,8 @@ const structs: LessonDef = {
       output: "6 8",
       check: { compiles: true, stdout: "6 8" },
       explain: L("moveRight takes *Point, so it changes p itself. Point.sum(p) is the same as p.sum().", "moveRight recibe *Point, así que cambia p mismo. Point.sum(p) es igual que p.sum().", "moveRight は *Point を受けとるので p 自体が変わる。Point.sum(p) は p.sum() と同じ。"),
+      hint: L("Look at the type of self in moveRight: copy or pointer? Then compute sum with the new x.", "Mira el tipo de self en moveRight: ¿copia o puntero? Luego calcula sum con el x nuevo.", "moveRight の self の型はコピー？ポインタ？そのあと新しい x で sum を計算しよう。"),
+      note: "methods-self",
       setup: [{ t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: "p", value: "x=1" }],
       win: [{ t: "lend", to: "hero", mut: true }, { t: "value", actor: "ally", text: "x=6" }, { t: "print", text: "6 8" }],
     },
@@ -116,6 +594,8 @@ const structs: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("p is const, so &p is *const Point. moveRight wants *Point: cast discards const qualifier.", "p es const, así que &p es *const Point. moveRight pide *Point: cast discards const qualifier.", "p は const なので &p は *const Point。moveRight は *Point がほしい。"),
+      hint: L("moveRight wants to change its self. Is p allowed to change?", "moveRight quiere cambiar su self. ¿Se permite que p cambie?", "moveRight は self を変えたい。p は変えてもいいもの？"),
+      note: "methods-self",
       setup: [{ t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: "const p" }],
       win: [{ t: "shake" }, { t: "say", actor: "ally", text: L("Carved in stone!", "¡Tallado en piedra!", "石に刻まれてる！") }],
     },
@@ -128,6 +608,8 @@ const structs: LessonDef = {
       output: ".{ .x = 6, .y = 2 }",
       check: { compiles: true, stdout: ".{ .x = 6, .y = 2 }" },
       explain: L("{any} prints a struct field by field, in the same shape as a literal.", "{any} imprime un struct campo por campo, con la misma forma de un literal.", "{any} は struct をフィールドごとに、リテラルと同じ形で表示する。"),
+      hint: L("{any} shows the whole value. Think of how you would write this struct as a literal.", "{any} muestra el valor entero. Piensa cómo escribirías este struct como literal.", "{any} は値全体を見せる。この struct をリテラルで書くとどうなるか考えよう。"),
+      note: "struct-fields",
     },
     say(L(
       "Inside a struct, @This() means 'this very type'. Handy when the struct has no name yet, or a long one.",
@@ -142,6 +624,8 @@ const structs: LessonDef = {
       answer: 0,
       check: { compiles: true, stdout: "2", wrongFail: true },
       explain: L("A plain @This() self is a read-only copy: self.n += 1 would not compile. *@This() points at c.", "Un self @This() simple es una copia de solo lectura: self.n += 1 no compila. *@This() apunta a c.", "ただの @This() は読むだけのコピーで self.n += 1 はエラー。*@This() は c を指す。"),
+      hint: L("@This() is the struct type itself. To change c.n, should self be a copy or a pointer?", "@This() es el propio tipo del struct. Para cambiar c.n, ¿self debe ser copia o puntero?", "@This() は struct の型そのもの。c.n を変えるには self はコピー？ポインタ？"),
+      note: "methods-self",
       win: [{ t: "print", text: "2" }],
     },
     {
@@ -153,6 +637,8 @@ const structs: LessonDef = {
       output: "10 20",
       check: { compiles: true, stdout: "10 20" },
       explain: L("for (&pts) |*pt| gives a pointer to each element, so the writes land in the array.", "for (&pts) |*pt| da un puntero a cada elemento, así que se escribe en el array.", "for (&pts) |*pt| は各要素へのポインタ。だから配列そのものに書きこまれる。"),
+      hint: L("The capture has a *. Does it write to a copy, or into the array itself?", "La captura tiene un *. ¿Escribe en una copia o en el propio array?", "キャプチャに * がある。コピーに書く？配列そのものに書く？"),
+      note: "struct-copies",
     },
     {
       kind: "predict",
@@ -163,6 +649,8 @@ const structs: LessonDef = {
       output: "1 two 3",
       check: { compiles: true, stdout: "1 two 3" },
       explain: L(".{ ... } without names is a tuple: fields by index, and .len counts them.", ".{ ... } sin nombres es una tupla: campos por índice, y .len los cuenta.", "名前のない .{ ... } はタプル。番号でアクセスし、.len で数がわかる。"),
+      hint: L("Fields without names are numbered from 0. What does .len count: a value, or the fields?", "Los campos sin nombre se numeran desde 0. ¿Qué cuenta .len: un valor o los campos?", "名前のないフィールドは 0 から番号つき。.len が数えるのは値？フィールド？"),
+      note: "tuples",
     },
     {
       kind: "run",
@@ -172,6 +660,8 @@ const structs: LessonDef = {
       expect: "hp: 15 25",
       fallback: [String.raw`for\s*\(\s*&party\s*\)\s*\|\s*\*h\s*\|[\s\S]*h\.heal\(\s*5\s*\)`, String.raw`party\[0\]\.heal\(\s*5\s*\)[\s\S]*party\[1\]\.heal\(\s*5\s*\)`],
       explain: L("var hero = h; heals a COPY. Capture |*h| to get a pointer and heal the real hero.", "var hero = h; cura una COPIA. Captura |*h| para tener un puntero y curar al héroe real.", "var hero = h; はコピーを回復している。|*h| でポインタを受けとり本物を回復しよう。"),
+      hint: L("heal changes whatever self points at. Is the hero being healed the one inside party, or a copy?", "heal cambia aquello a lo que apunta self. ¿El héroe curado es el de party o una copia?", "heal は self が指す先を変える。回復しているのは party の中の勇者？それともコピー？"),
+      note: "struct-copies",
     },
   ],
 };
@@ -187,6 +677,7 @@ const enums: LessonDef = {
   xp: 70,
   enemy: "zig/undefined-imp",
   enemyName: L("SHIFTER IMP", "DIABLILLO MUTANTE", "変身の小鬼"),
+  notes: enumsNotes,
   beats: [
     say(L(
       "An ENUM is a banner with a fixed set of symbols: enum { north, east, south, west }. When the type is known, write just .west.",
@@ -212,6 +703,8 @@ const enums: LessonDef = {
       output: "west north",
       check: { compiles: true, stdout: "west north" },
       explain: L("Enums can have methods too. turn maps .west to .north.", "Los enums también tienen métodos. turn convierte .west en .north.", "enum にもメソッドが書ける。turn は .west を .north にする。"),
+      hint: L("@tagName gives a tag's name. Follow the switch in turn for the tag d holds.", "@tagName da el nombre de un tag. Sigue el switch de turn para el tag que tiene d.", "@tagName はタグの名前。d のタグで turn の switch をたどろう。"),
+      note: "enums",
       win: [{ t: "print", text: "west north" }],
     },
     {
@@ -223,6 +716,8 @@ const enums: LessonDef = {
       output: "6",
       check: { compiles: true, stdout: "6" },
       explain: L("enum(u8) lets you pick values. A tag without one takes the previous value + 1: 5 + 1.", "enum(u8) permite elegir valores. Un tag sin valor toma el anterior + 1: 5 + 1.", "enum(u8) なら値を選べる。値なしのタグは前の値 + 1：5 + 1。"),
+      hint: L("c has no value of its own. What rule gives a value to a tag written without one?", "c no tiene valor propio. ¿Qué regla da valor a un tag escrito sin uno?", "c には自分の値がない。値なしのタグの値はどう決まる？"),
+      note: "enums",
     },
     say(L(
       "A switch on an enum must cover EVERY tag, or end with else. Forget one and the compiler stops you.",
@@ -237,6 +732,8 @@ const enums: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("south and west are missing: switch must handle all possibilities.", "Faltan south y west: switch must handle all possibilities.", "south と west がない。switch must handle all possibilities になる。"),
+      hint: L("Count the tags of Dir, then count the prongs. Is there an else?", "Cuenta los tags de Dir y luego las ramas. ¿Hay un else?", "Dir のタグの数と分岐の数をくらべよう。else はある？"),
+      note: "switch-enums",
       win: [{ t: "shake" }],
     },
     {
@@ -248,6 +745,8 @@ const enums: LessonDef = {
       output: "vertical",
       check: { compiles: true, stdout: "vertical" },
       explain: L("One prong can list several tags with commas; else catches the rest.", "Una rama puede listar varios tags con comas; else atrapa el resto.", "ひとつの分岐にカンマで複数のタグを書ける。残りは else。"),
+      hint: L("Find the prong that lists d's tag. A prong can name more than one tag.", "Busca la rama que nombra el tag de d. Una rama puede nombrar más de un tag.", "d のタグが書かれた分岐をさがそう。ひとつの分岐に複数のタグを書ける。"),
+      note: "switch-enums",
     },
     say(L(
       "A TAGGED UNION, union(enum), is a shape-shifter: ONE field at a time. switch tells you which, and |r| captures its value.",
@@ -263,6 +762,8 @@ const enums: LessonDef = {
       output: "12 6",
       check: { compiles: true, stdout: "12 6" },
       explain: L("The circle prong gives 3 * 2 * 2 = 12; the rect prong gives 2 * 3 = 6.", "La rama circle da 3 * 2 * 2 = 12; la rama rect da 2 * 3 = 6.", "circle の分岐は 3 * 2 * 2 = 12、rect の分岐は 2 * 3 = 6。"),
+      hint: L("Each call builds a different field. Follow the matching prong of area and do its math.", "Cada llamada crea un campo distinto. Sigue la rama de area que coincide y haz su cuenta.", "呼ぶたびに別のフィールドが作られる。area の合う分岐をたどって計算しよう。"),
+      note: "tagged-unions",
       setup: [{ t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: ".circle" }],
       win: [{ t: "tag", actor: "ally", text: ".rect" }, { t: "print", text: "12 6" }],
     },
@@ -275,6 +776,8 @@ const enums: LessonDef = {
       output: "2x5",
       check: { compiles: true, stdout: "2x5" },
       explain: L("sh is a rect right now, so the .rect prong runs and r holds its w and h.", "sh es un rect ahora, así que corre la rama .rect y r tiene su w y h.", "sh は今 rect なので .rect の分岐が動き、r に w と h が入る。"),
+      hint: L("Which field was sh built with? Only that prong runs, and |r| holds that field's value.", "¿Con qué campo se creó sh? Solo corre esa rama, y |r| guarda el valor de ese campo.", "sh はどのフィールドで作られた？その分岐だけが動き、|r| にその値が入る。"),
+      note: "tagged-unions",
     },
     {
       kind: "predict",
@@ -285,6 +788,8 @@ const enums: LessonDef = {
       output: "circle true",
       check: { compiles: true, stdout: "circle true" },
       explain: L("A tagged union knows its active tag: @tagName reads it and == .circle compares it.", "Una unión etiquetada conoce su tag activo: @tagName lo lee y == .circle lo compara.", "タグ付き共用体は今のタグを知っている。@tagName で読み、== .circle で比べる。"),
+      hint: L("A union(enum) remembers which field is active. What do @tagName and == read?", "Una union(enum) recuerda qué campo está activo. ¿Qué leen @tagName y ==?", "union(enum) は今のフィールドを覚えている。@tagName と == は何を読む？"),
+      note: "tagged-unions",
     },
     {
       kind: "predict",
@@ -294,6 +799,8 @@ const enums: LessonDef = {
       answer: 0,
       check: { compiles: true, throws: "access of union field 'rect' while field 'circle' is active" },
       explain: L("s is a circle. Reading .rect is caught at run time: access of union field 'rect' while 'circle' is active.", "s es un circle. Leer .rect se detecta al ejecutar: access of union field 'rect' while 'circle' is active.", "s は circle。.rect を読むと実行時に検出される。switch で調べよう。"),
+      hint: L("Which field is active in s? What does Zig do in Debug when another field is read?", "¿Qué campo está activo en s? ¿Qué hace Zig en Debug si se lee otro campo?", "s で今入っているフィールドは？Debug で別のフィールドを読むと Zig はどうする？"),
+      note: "runtime-checks",
       setup: [{ t: "enter", actor: "enemy" }],
       win: [{ t: "shake" }, { t: "banner", text: L("WRONG FORM!", "¡FORMA ERRÓNEA!", "ちがう姿！") }],
     },
@@ -305,6 +812,8 @@ const enums: LessonDef = {
       answer: 0,
       check: { compiles: true, throws: "invalid enum value" },
       explain: L("Color only has 0 and 1. Turning 5 into a Color panics: invalid enum value.", "Color solo tiene 0 y 1. Convertir 5 en Color hace panic: invalid enum value.", "Color は 0 と 1 だけ。5 を Color にすると panic：invalid enum value。"),
+      hint: L("List Color's tags with their numbers. Is there a tag for the number in n?", "Lista los tags de Color con sus números. ¿Hay un tag para el número en n?", "Color のタグと番号を並べよう。n の数に合うタグはある？"),
+      note: "runtime-checks",
     },
     {
       kind: "type",
@@ -313,6 +822,8 @@ const enums: LessonDef = {
       answer: "enum",
       check: { compiles: true, stdout: "square" },
       explain: L("union(enum) adds a hidden tag that remembers the active field, so switch and @tagName work.", "union(enum) agrega un tag oculto que recuerda el campo activo; así funcionan switch y @tagName.", "union(enum) は今のフィールドを覚えるタグを足す。だから switch や @tagName が使える。"),
+      hint: L("@tagName needs a tag to read. What goes in the parentheses to give the union one?", "@tagName necesita un tag que leer. ¿Qué va entre paréntesis para darle uno a la unión?", "@tagName には読むタグが必要。union にタグをもたせるにはかっこに何を書く？"),
+      note: "tagged-unions",
       win: [{ t: "print", text: "square" }],
     },
     {
@@ -323,6 +834,8 @@ const enums: LessonDef = {
       expect: "value: 50",
       fallback: [String.raw`switch\s*\(\s*it\s*\)[\s\S]*\.potion\s*=>\s*\|\s*\w+\s*\|[\s\S]*10`],
       explain: L("value read .coins from every item, even potions. switch on the tag and capture each payload.", "value leía .coins de todo, incluso pociones. Haz switch sobre el tag y captura cada valor.", "value はポーションからも .coins を読んでいた。タグで switch して値をとり出そう。"),
+      hint: L("A potion is not coins. Check which field each item holds before reading it.", "Una poción no es coins. Revisa qué campo tiene cada objeto antes de leerlo.", "ポーションは coins ではない。読む前に、どのフィールドが入っているか調べよう。"),
+      note: "tagged-unions",
     },
   ],
 };
@@ -336,6 +849,7 @@ const pointers: LessonDef = {
   xp: 75,
   enemy: "zig/undefined-imp",
   enemyName: L("POINTER IMP", "DIABLILLO PUNTERO", "ポインタの小鬼"),
+  notes: pointersNotes,
   beats: [
     say(L(
       "&x gives a POINTER to x: a *T that says where x lives. p.* reads or writes x through it, without copying.",
@@ -361,6 +875,8 @@ const pointers: LessonDef = {
       output: "42",
       check: { compiles: true, stdout: "42" },
       explain: L("addOne gets the address of n, so p.* += 1 changes n itself.", "addOne recibe la dirección de n, así que p.* += 1 cambia a n mismo.", "addOne は n の住所を受けとるので、p.* += 1 で n 自体が変わる。"),
+      hint: L("addOne receives &n, not a copy of n. What does writing p.* change?", "addOne recibe &n, no una copia de n. ¿Qué cambia al escribir p.*?", "addOne が受けとるのは n のコピーではなく &n。p.* に書くと何が変わる？"),
+      note: "pointers",
       setup: [{ t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: "n", value: "41" }],
       win: [{ t: "lend", to: "hero", mut: true }, { t: "value", actor: "ally", text: "42" }, { t: "print", text: "42" }],
     },
@@ -373,6 +889,8 @@ const pointers: LessonDef = {
       output: "7 *i32",
       check: { compiles: true, stdout: "7 *i32" },
       explain: L("&n on a var gives *i32, a writable pointer. Writing ptr.* changes n.", "&n sobre un var da *i32, un puntero escribible. Escribir ptr.* cambia n.", "var の &n は書きこめる *i32。ptr.* に書くと n が変わる。"),
+      hint: L("ptr leads to n. And what type is a pointer to a var i32?", "ptr lleva a n. ¿Y qué tipo tiene un puntero a un var i32?", "ptr は n へ案内する。var の i32 へのポインタの型は？"),
+      note: "pointers",
     },
     say(L(
       "&x on a CONST gives *const T: look, don't touch. You can't turn it into a writable *T.",
@@ -387,6 +905,8 @@ const pointers: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("x is const, so &x is *const u8: expected type '*u8', found '*const u8'.", "x es const, así que &x es *const u8: expected type '*u8', found '*const u8'.", "x は const なので &x は *const u8。*u8 には入らない。"),
+      hint: L("What kind of pointer does & give for a const? Can it go where a writable pointer is expected?", "¿Qué clase de puntero da & para un const? ¿Puede ir donde se espera uno escribible?", "const の & はどんなポインタ？書けるポインタの場所に入れられる？"),
+      note: "const-pointers",
       win: [{ t: "shake" }, { t: "say", actor: "hero", text: L("Look, don't touch!", "¡Mira, no toques!", "見るだけ！") }],
     },
     say(L(
@@ -403,6 +923,8 @@ const pointers: LessonDef = {
       output: "99 3",
       check: { compiles: true, stdout: "99 3" },
       explain: L("s looks at arr[1], arr[2], arr[3]. s[0] IS arr[1], and the window is 3 long.", "s mira arr[1], arr[2], arr[3]. s[0] ES arr[1], y la ventana mide 3.", "s は arr[1]〜arr[3] をのぞく。s[0] は arr[1] そのもので、長さは 3。"),
+      hint: L("A slice shares memory with the array. Which array item is s[0]? And the end index is excluded.", "Un slice comparte memoria con el array. ¿Qué elemento del array es s[0]? Y el índice final se excluye.", "スライスは配列とメモリを共有する。s[0] は配列の何番？終わりの番号はふくまない。"),
+      note: "slices",
       setup: [{ t: "enter", actor: "ally" }, { t: "item", kind: "gem", holder: "ally" }, { t: "tag", actor: "ally", text: "arr" }],
       win: [{ t: "lend", to: "hero", mut: true }, { t: "value", actor: "ally", text: "1 99 3 4 5" }, { t: "print", text: "99 3" }],
     },
@@ -415,6 +937,8 @@ const pointers: LessonDef = {
       output: "*[3]i32 []i32",
       check: { compiles: true, stdout: "*[3]i32 []i32" },
       explain: L("Bounds known at compile time give a pointer to an array (*[3]i32); runtime bounds give a slice.", "Límites conocidos al compilar dan un puntero a array (*[3]i32); límites en ejecución dan un slice.", "範囲がコンパイル時にわかれば配列へのポインタ *[3]i32、実行時ならスライス。"),
+      hint: L("One slice uses only fixed numbers, the other uses a var. Does the compiler know each length?", "Un slice usa solo números fijos y el otro usa un var. ¿Sabe el compilador cada largo?", "片方は決まった数だけ、もう片方は var を使う。コンパイラはそれぞれの長さを知っている？"),
+      note: "slices",
     },
     {
       kind: "predict",
@@ -425,6 +949,8 @@ const pointers: LessonDef = {
       output: "16 3 8",
       check: { compiles: true, stdout: "16 3 8" },
       explain: L("On 64-bit, a pointer is 8 bytes and a slice is pointer + length: 16. [3]u8 is just 3 bytes.", "En 64 bits, un puntero ocupa 8 bytes y un slice es puntero + largo: 16. [3]u8 son 3 bytes.", "64ビットではポインタは8バイト、スライスはポインタ＋長さで16。[3]u8 は3バイト。"),
+      hint: L("What does each type store? An array stores its items; a slice stores a pointer and a length.", "¿Qué guarda cada tipo? Un array guarda sus elementos; un slice, un puntero y un largo.", "それぞれ何を持つ？配列は要素そのもの、スライスはポインタと長さ。"),
+      note: "slices",
     },
     {
       kind: "predict",
@@ -435,6 +961,8 @@ const pointers: LessonDef = {
       output: "6",
       check: { compiles: true, stdout: "6" },
       explain: L("&xs is *const [3]i32, which coerces to a []const i32 slice. Functions take slices of any length.", "&xs es *const [3]i32, que se convierte en slice []const i32. Las funciones aceptan slices de cualquier largo.", "&xs は *const [3]i32 で、[]const i32 に変換される。どんな長さでも渡せる。"),
+      hint: L("Can a pointer to an array be passed where a slice is expected? If so, add up the items.", "¿Se puede pasar un puntero a array donde se espera un slice? Si es así, suma los elementos.", "スライスの場所に配列へのポインタを渡せる？渡せるなら要素を足そう。"),
+      note: "slices",
     },
     {
       kind: "predict",
@@ -445,6 +973,8 @@ const pointers: LessonDef = {
       output: "{ 2, 3, 4 }",
       check: { compiles: true, stdout: "{ 2, 3, 4 }" },
       explain: L("|*x| captures a pointer to each element; x.* += 1 writes into arr.", "|*x| captura un puntero a cada elemento; x.* += 1 escribe en arr.", "|*x| は各要素へのポインタ。x.* += 1 で arr に書きこむ。"),
+      hint: L("The loop runs over &arr with a * capture. Do the writes reach arr?", "El loop recorre &arr con una captura *. ¿Lo escrito llega a arr?", "ループは &arr を * のキャプチャでまわす。書いた値は arr にとどく？"),
+      note: "pointer-captures",
     },
     {
       kind: "predict",
@@ -454,6 +984,8 @@ const pointers: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("A plain |x| capture is a constant copy: cannot assign to constant. Use &arr and |*x|.", "Una captura |x| simple es una copia constante: cannot assign to constant. Usa &arr y |*x|.", "ただの |x| は定数のコピー。cannot assign to constant。&arr と |*x| を使おう。"),
+      hint: L("Look at the capture: is x a pointer, or a copy? Can a copy captured like this be assigned?", "Mira la captura: ¿x es un puntero o una copia? ¿Se puede asignar a una copia capturada así?", "キャプチャを見よう。x はポインタ？コピー？こうして受けたコピーに代入できる？"),
+      note: "pointer-captures",
     },
     {
       kind: "pick",
@@ -463,6 +995,8 @@ const pointers: LessonDef = {
       answer: 0,
       check: { compiles: true, stdout: "{ 2, 4, 6 }", wrongFail: true },
       explain: L("Only |*x| gives a pointer, and only a pointer has x.* to write through.", "Solo |*x| da un puntero, y solo un puntero tiene x.* para escribir.", "|*x| だけがポインタをくれる。x.* で書けるのはポインタだけ。"),
+      hint: L("The body writes x.*. What must x be for x.* to exist?", "El cuerpo escribe x.*. ¿Qué debe ser x para que exista x.*?", "本体は x.* に書く。x.* が使えるには x は何でなければならない？"),
+      note: "pointer-captures",
       win: [{ t: "print", text: "{ 2, 4, 6 }" }],
     },
     {
@@ -473,6 +1007,8 @@ const pointers: LessonDef = {
       expect: "xp: 50",
       fallback: [String.raw`xp\.\*\s*\+=\s*n`, String.raw`xp\.\*\s*=\s*xp\.\*\s*\+\s*n`, String.raw`xp\.\*\s*=\s*local`],
       explain: L("var local = xp.* copies the value; changing local is lost. Write through the pointer: xp.* += n.", "var local = xp.* copia el valor; cambiar local se pierde. Escribe por el puntero: xp.* += n.", "var local = xp.* は値のコピー。ポインタ経由で書こう：xp.* += n。"),
+      hint: L("Where does the new xp go? local is a copy. Write through the pointer instead.", "¿Adónde va el xp nuevo? local es una copia. Escribe por el puntero.", "新しい xp はどこへ行く？local はコピー。ポインタ経由で書こう。"),
+      note: "pointers",
     },
   ],
 };
@@ -486,6 +1022,7 @@ const sentinels: LessonDef = {
   xp: 75,
   enemy: "zig/overflow-spark",
   enemyName: L("WINDOW SPARK", "CHISPA VENTANA", "窓のスパーク"),
+  notes: sentinelsNotes,
   beats: [
     say(L(
       "s[a..b] opens a window from a up to, but NOT including, b. s[a..] runs to the end. Windows are bounds-checked.",
@@ -519,6 +1056,8 @@ const sentinels: LessonDef = {
       output: "fo rge org",
       check: { compiles: true, stdout: "fo rge org" },
       explain: L("The end index is excluded: [0..2] is f,o; [1..4] is o,r,g.", "El índice final se excluye: [0..2] es f,o; [1..4] es o,r,g.", "終わりの番号はふくまない。[0..2] は f,o、[1..4] は o,r,g。"),
+      hint: L("a..b starts at index a and stops just before b. Count letters from index 0.", "a..b empieza en el índice a y para justo antes de b. Cuenta letras desde el índice 0.", "a..b は a 番から b 番の直前まで。0 番から文字を数えよう。"),
+      note: "slice-ranges",
       win: [{ t: "print", text: "fo rge org" }],
     },
     {
@@ -529,6 +1068,8 @@ const sentinels: LessonDef = {
       answer: 0,
       check: { compiles: true, throws: "out of bounds" },
       explain: L("end is only known at run time, so the check happens then: 5 is past len 3, so it panics.", "end solo se conoce al ejecutar, así que se revisa entonces: 5 pasa de len 3 y hace panic.", "end は実行時にしかわからないのでその時チェック。5 は len 3 をこえて panic。"),
+      hint: L("Compare end with the length of s. When is a runtime bound checked, and what happens if it's too big?", "Compara end con el largo de s. ¿Cuándo se revisa un límite de ejecución y qué pasa si es muy grande?", "end と s の長さをくらべよう。実行時の範囲はいつ調べられ、大きすぎるとどうなる？"),
+      note: "slice-ranges",
       win: [{ t: "shake" }],
     },
     say(L(
@@ -545,6 +1086,8 @@ const sentinels: LessonDef = {
       output: "3 0",
       check: { compiles: true, stdout: "3 0" },
       explain: L("len counts 3 letters. The sentinel sits at index len and is readable: it is 0.", "len cuenta 3 letras. El centinela está en el índice len y se puede leer: es 0.", "len は3文字。番兵は len 番にあって読める。値は 0。"),
+      hint: L("Does len count the sentinel? And what sits at index len in a [:0] slice?", "¿len cuenta el centinela? ¿Y qué hay en el índice len de un slice [:0]?", "len は番兵を数える？[:0] スライスの len 番には何がある？"),
+      note: "sentinels",
     },
     {
       kind: "predict",
@@ -555,6 +1098,8 @@ const sentinels: LessonDef = {
       output: "0",
       check: { compiles: true, stdout: "0" },
       explain: L("A literal is *const [3:0]u8, so index 3 is the sentinel 0, not out of bounds.", "Un literal es *const [3:0]u8, así que el índice 3 es el centinela 0, no está fuera de rango.", "リテラルは *const [3:0]u8。3番は番兵の 0 で、範囲外ではない。"),
+      hint: L("lit has 3 letters. What does every string literal keep right after its last letter?", "lit tiene 3 letras. ¿Qué guarda todo literal de texto justo tras su última letra?", "lit は3文字。文字列リテラルは最後の文字のすぐあとに何を持っている？"),
+      note: "sentinels",
     },
     {
       kind: "predict",
@@ -564,6 +1109,8 @@ const sentinels: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("Literals are read-only. []u8 would allow writes, so it must be []const u8.", "Los literales son de solo lectura. []u8 permitiría escribir; debe ser []const u8.", "リテラルは読みとり専用。[]u8 だと書けてしまうので []const u8 にする。"),
+      hint: L("Is a string literal writable memory? Compare that with what []u8 promises.", "¿Un literal de texto es memoria escribible? Compáralo con lo que promete []u8.", "文字列リテラルは書けるメモリ？[]u8 が約束することとくらべよう。"),
+      note: "sentinels",
     },
     say(L(
       "std.mem is the toolbox for slices: eql compares, indexOf finds, trim cuts, count counts, sort sorts.",
@@ -578,6 +1125,8 @@ const sentinels: LessonDef = {
       answer: 0,
       check: { compiles: true, stdout: "true", wrongFail: true },
       explain: L("std.mem.eql(u8, a, b) compares the bytes. == on slices is not allowed.", "std.mem.eql(u8, a, b) compara los bytes. == no se permite con slices.", "std.mem.eql(u8, a, b) でバイトを比べる。スライスに == は使えない。"),
+      hint: L("The std.mem function that compares two slices has a short, three-letter name.", "La función de std.mem que compara dos slices tiene un nombre corto, de tres letras.", "2つのスライスを比べる std.mem の関数は、3文字の短い名前。"),
+      note: "std-mem",
       win: [{ t: "print", text: "true" }],
     },
     {
@@ -589,6 +1138,8 @@ const sentinels: LessonDef = {
       output: "2 null",
       check: { compiles: true, stdout: "2 null" },
       explain: L("indexOf returns ?usize: the position, or null when nothing is found.", "indexOf devuelve ?usize: la posición, o null si no encuentra nada.", "indexOf は ?usize を返す。位置か、見つからなければ null。"),
+      hint: L("Positions start at 0. What does Zig return when nothing is found: a number, or something else?", "Las posiciones empiezan en 0. ¿Qué devuelve Zig si no encuentra nada: un número u otra cosa?", "位置は 0 から。見つからない時 Zig が返すのは数？それとも別のもの？"),
+      note: "std-mem",
     },
     {
       kind: "predict",
@@ -599,6 +1150,8 @@ const sentinels: LessonDef = {
       output: "[hi]",
       check: { compiles: true, stdout: "[hi]" },
       explain: L("trim cuts the listed bytes from both ends. It returns a smaller window, no copy.", "trim recorta los bytes indicados en ambos extremos. Devuelve una ventana menor, sin copiar.", "trim は両はしから指定のバイトを切る。コピーせず小さな窓を返す。"),
+      hint: L("trim removes the listed bytes from which end, or ends?", "¿De qué extremo, o extremos, quita trim los bytes indicados?", "trim は指定のバイトをどちらのはしからとりのぞく？"),
+      note: "std-mem",
     },
     {
       kind: "predict",
@@ -609,6 +1162,8 @@ const sentinels: LessonDef = {
       output: "{ 1, 2, 5, 9 }",
       check: { compiles: true, stdout: "{ 1, 2, 5, 9 }" },
       explain: L("std.mem.sort sorts the array in place through the slice &xs; asc means smallest first.", "std.mem.sort ordena el array en su lugar mediante el slice &xs; asc es de menor a mayor.", "std.mem.sort は &xs を通して配列をその場で並べる。asc は小さい順。"),
+      hint: L("sort changes xs itself. Does asc put the smallest or the largest first?", "sort cambia xs mismo. ¿asc pone primero el menor o el mayor?", "sort は xs そのものを変える。asc は小さい順？大きい順？"),
+      note: "std-mem",
     },
     {
       kind: "predict",
@@ -619,6 +1174,8 @@ const sentinels: LessonDef = {
       output: "hp=42 5",
       check: { compiles: true, stdout: "hp=42 5" },
       explain: L("bufPrint writes into your stack buffer and returns the slice it filled: 5 bytes.", "bufPrint escribe en tu buffer de pila y devuelve el slice que llenó: 5 bytes.", "bufPrint はスタックのバッファに書き、うめた部分のスライス（5バイト）を返す。"),
+      hint: L("Does bufPrint return the whole buffer, or only the part it wrote? Count those bytes.", "¿bufPrint devuelve el buffer entero o solo la parte que escribió? Cuenta esos bytes.", "bufPrint が返すのはバッファ全体？書いた部分だけ？そのバイト数を数えよう。"),
+      note: "buf-print",
     },
     {
       kind: "run",
@@ -628,6 +1185,8 @@ const sentinels: LessonDef = {
       expect: "first: [iggi]",
       fallback: [String.raw`line\[\s*0\s*\.\.\s*space\s*\]`, String.raw`line\[\s*0\s*\.\.\s*4\s*\]`],
       explain: L("The end index is already excluded, so space - 1 cut one letter too many. Use line[0..space].", "El índice final ya se excluye, así que space - 1 cortaba una letra de más. Usa line[0..space].", "終わりの番号はもともとふくまない。space - 1 だと1文字多く切れる。line[0..space] に。"),
+      hint: L("space is the index of the space. Is the end of a range included? Do you need to subtract anything?", "space es el índice del espacio. ¿El final de un rango se incluye? ¿Hace falta restar algo?", "space は空白の番号。範囲の終わりはふくまれる？何か引く必要はある？"),
+      note: "slice-ranges",
     },
   ],
 };
@@ -641,23 +1200,24 @@ const boss: LessonDef = {
   xp: 180,
   enemy: "zig/undefined-imp",
   enemyName: L("MOUNTAIN IMP", "DIABLILLO MONTÉS", "山の小鬼"),
+  notes: bossNotes,
   beats: [
     enemySays(L(
       "Hee hee! I hide in copies, wrong forms and windows too wide. Can you see where memory really lives?",
       "¡Ji ji! Me escondo en copias, formas erróneas y ventanas muy anchas. ¿Ves dónde vive de verdad la memoria?",
       "ヒヒッ！コピーや、ちがう姿や、広すぎる窓にかくれるぞ。メモリが本当にどこにあるか見えるか？",
     )),
-    { kind: "predict", time: 15, prompt: PRINT, code: 'const Point = struct { x: i32, y: i32 = 0 };\nconst p = Point{ .x = 1, .y = 2 };\nvar q = p;\nq.y = 50;\nstd.debug.print("{d} {d}\\n", .{ p.y, q.y });', options: ["2 50", "50 50", "2 2"], answer: 0, output: "2 50", check: { compiles: true, stdout: "2 50" }, explain: L("var q = p copies the whole struct. p keeps y = 2.", "var q = p copia el struct entero. p conserva y = 2.", "var q = p は struct 全体のコピー。p の y は 2 のまま。") },
-    { kind: "predict", time: 15, prompt: COMPILES, code: zmain(POINT, "const p = Point{ .x = 1 };\np.moveRight(1);"), options: [YES, NO_CE], answer: 1, check: { compiles: false }, explain: L("A *Point method needs a var: &p of a const is *const Point.", "Un método *Point necesita un var: &p de un const es *const Point.", "*Point のメソッドには var が必要。const の &p は *const Point。") },
-    { kind: "predict", time: 12, prompt: COMPILES, code: "const Dir = enum { north, east, south, west };\nconst d: Dir = .east;\nswitch (d) {\n    .north => {},\n    .east => {},\n}", options: [YES, NO_CE], answer: 1, check: { compiles: false }, explain: L("Every tag must be handled, or add else.", "Hay que manejar cada tag, o agregar else.", "すべてのタグを書くか else を足す。") },
-    { kind: "predict", time: 15, prompt: HAPPENS, code: 'const Shape = union(enum) { circle: f32, rect: struct { w: f32, h: f32 } };\nvar s: Shape = .{ .circle = 1.5 };\n_ = &s;\nstd.debug.print("{d}\\n", .{s.rect.w});', options: [PANICS, "1.5", NO_CE], answer: 0, check: { compiles: true, throws: "access of union field 'rect' while field 'circle' is active" }, explain: L("Only the active field may be read. switch on the union instead.", "Solo se puede leer el campo activo. Mejor haz switch sobre la unión.", "読めるのは今のフィールドだけ。switch を使おう。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: 'var arr = [_]i32{ 1, 2, 3, 4, 5 };\nvar lo: usize = 1;\n_ = &lo;\nconst a = arr[1..4];\nconst b = arr[lo..4];\nstd.debug.print("{} {}\\n", .{ @TypeOf(a), @TypeOf(b) });', options: ["*[3]i32 []i32", "[]i32 []i32", "*[3]i32 *[3]i32"], answer: 0, output: "*[3]i32 []i32", check: { compiles: true, stdout: "*[3]i32 []i32" }, explain: L("Comptime bounds: pointer to array. Runtime bounds: slice.", "Límites al compilar: puntero a array. En ejecución: slice.", "コンパイル時の範囲は配列ポインタ、実行時はスライス。") },
-    { kind: "predict", time: 12, prompt: COMPILES, code: "var arr = [_]u8{ 1, 2 };\nfor (arr) |x| {\n    x += 1;\n}\n_ = &arr;", options: [YES, NO_CE], answer: 1, check: { compiles: false }, explain: L("Loop captures are constants. Use &arr and |*x| to write.", "Las capturas del loop son constantes. Usa &arr y |*x| para escribir.", "ループのキャプチャは定数。&arr と |*x| で書こう。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: 'const lit = "abc";\nvar i: usize = 3;\n_ = &i;\nstd.debug.print("{d}\\n", .{lit[i]});', options: ["0", PANICS, "99"], answer: 0, output: "0", check: { compiles: true, stdout: "0" }, explain: L("Literals end in a 0 sentinel at index len.", "Los literales terminan en un centinela 0 en el índice len.", "リテラルは len 番に番兵 0 がある。") },
-    { kind: "predict", time: 12, prompt: COMPILES, code: 'const s: []u8 = "hi";\n_ = s;', options: [YES, NO_CE], answer: 1, check: { compiles: false }, explain: L("Literals are constant: use []const u8.", "Los literales son constantes: usa []const u8.", "リテラルは定数。[]const u8 を使う。") },
-    { kind: "predict", time: 18, prompt: PRINT, code: zmain("fn bump(xs: []i32) void {\n    for (xs) |*x| x.* += 1;\n}", 'var arr = [_]i32{ 1, 2, 3, 4 };\nbump(arr[1..3]);\nstd.debug.print("{any}\\n", .{arr});'), options: ["{ 1, 3, 4, 4 }", "{ 2, 3, 4, 5 }", "{ 1, 2, 3, 4 }"], answer: 0, output: "{ 1, 3, 4, 4 }", check: { compiles: true, stdout: "{ 1, 3, 4, 4 }" }, explain: L("The window [1..3] covers only arr[1] and arr[2]; those two get bumped.", "La ventana [1..3] cubre solo arr[1] y arr[2]; esos dos suben.", "窓 [1..3] は arr[1] と arr[2] だけ。その2つが増える。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: 'const Item = union(enum) { coins: u32, key };\nconst items = [_]Item{ .{ .coins = 5 }, .key, .{ .coins = 7 } };\nvar total: u32 = 0;\nfor (items) |it| switch (it) {\n    .coins => |c| total += c,\n    .key => total += 100,\n};\nstd.debug.print("{d}\\n", .{total});', options: ["112", "12", "107"], answer: 0, output: "112", check: { compiles: true, stdout: "112" }, explain: L("A field with no type (key) carries no payload. 5 + 100 + 7 = 112.", "Un campo sin tipo (key) no lleva valor. 5 + 100 + 7 = 112.", "型のないフィールド key は値をもたない。5 + 100 + 7 = 112。") },
-    { kind: "type", time: 15, prompt: L("Count the a's", "Cuenta las a", "a の数を数えよう"), code: 'std.debug.print("{d}\\n", .{std.mem.___(u8, "banana", "a")});', answer: "count", check: { compiles: true, stdout: "3" }, explain: L("std.mem.count counts how many times the needle appears.", "std.mem.count cuenta cuántas veces aparece la aguja.", "std.mem.count は探す文字列が何回出るか数える。") },
+    { kind: "predict", time: 15, prompt: PRINT, code: 'const Point = struct { x: i32, y: i32 = 0 };\nconst p = Point{ .x = 1, .y = 2 };\nvar q = p;\nq.y = 50;\nstd.debug.print("{d} {d}\\n", .{ p.y, q.y });', options: ["2 50", "50 50", "2 2"], answer: 0, output: "2 50", check: { compiles: true, stdout: "2 50" }, explain: L("var q = p copies the whole struct. p keeps y = 2.", "var q = p copia el struct entero. p conserva y = 2.", "var q = p は struct 全体のコピー。p の y は 2 のまま。"), hint: L("After var q = p, does changing q reach p?", "Tras var q = p, ¿cambiar q llega a p?", "var q = p のあと、q を変えると p も変わる？"), note: "recap-copies" },
+    { kind: "predict", time: 15, prompt: COMPILES, code: zmain(POINT, "const p = Point{ .x = 1 };\np.moveRight(1);"), options: [YES, NO_CE], answer: 1, check: { compiles: false }, explain: L("A *Point method needs a var: &p of a const is *const Point.", "Un método *Point necesita un var: &p de un const es *const Point.", "*Point のメソッドには var が必要。const の &p は *const Point。"), hint: L("moveRight changes self. Is p something that may change?", "moveRight cambia self. ¿p puede cambiar?", "moveRight は self を変える。p は変わってよいもの？"), note: "recap-copies" },
+    { kind: "predict", time: 12, prompt: COMPILES, code: "const Dir = enum { north, east, south, west };\nconst d: Dir = .east;\nswitch (d) {\n    .north => {},\n    .east => {},\n}", options: [YES, NO_CE], answer: 1, check: { compiles: false }, explain: L("Every tag must be handled, or add else.", "Hay que manejar cada tag, o agregar else.", "すべてのタグを書くか else を足す。"), hint: L("Count Dir's tags and the prongs. Any else?", "Cuenta los tags de Dir y las ramas. ¿Hay else?", "Dir のタグと分岐を数えよう。else はある？"), note: "recap-unions" },
+    { kind: "predict", time: 15, prompt: HAPPENS, code: 'const Shape = union(enum) { circle: f32, rect: struct { w: f32, h: f32 } };\nvar s: Shape = .{ .circle = 1.5 };\n_ = &s;\nstd.debug.print("{d}\\n", .{s.rect.w});', options: [PANICS, "1.5", NO_CE], answer: 0, check: { compiles: true, throws: "access of union field 'rect' while field 'circle' is active" }, explain: L("Only the active field may be read. switch on the union instead.", "Solo se puede leer el campo activo. Mejor haz switch sobre la unión.", "読めるのは今のフィールドだけ。switch を使おう。"), hint: L("Which field is active in s, and which field is read?", "¿Qué campo está activo en s y qué campo se lee?", "s で今のフィールドは？読んでいるフィールドは？"), note: "recap-unions" },
+    { kind: "predict", time: 15, prompt: PRINT, code: 'var arr = [_]i32{ 1, 2, 3, 4, 5 };\nvar lo: usize = 1;\n_ = &lo;\nconst a = arr[1..4];\nconst b = arr[lo..4];\nstd.debug.print("{} {}\\n", .{ @TypeOf(a), @TypeOf(b) });', options: ["*[3]i32 []i32", "[]i32 []i32", "*[3]i32 *[3]i32"], answer: 0, output: "*[3]i32 []i32", check: { compiles: true, stdout: "*[3]i32 []i32" }, explain: L("Comptime bounds: pointer to array. Runtime bounds: slice.", "Límites al compilar: puntero a array. En ejecución: slice.", "コンパイル時の範囲は配列ポインタ、実行時はスライス。"), hint: L("Which bounds are known while compiling, and which only at run time?", "¿Qué límites se conocen al compilar y cuáles solo al ejecutar?", "どの範囲がコンパイル時にわかり、どれが実行時だけ？"), note: "recap-slices" },
+    { kind: "predict", time: 12, prompt: COMPILES, code: "var arr = [_]u8{ 1, 2 };\nfor (arr) |x| {\n    x += 1;\n}\n_ = &arr;", options: [YES, NO_CE], answer: 1, check: { compiles: false }, explain: L("Loop captures are constants. Use &arr and |*x| to write.", "Las capturas del loop son constantes. Usa &arr y |*x| para escribir.", "ループのキャプチャは定数。&arr と |*x| で書こう。"), hint: L("Is a plain |x| capture something you can assign to?", "¿Se puede asignar a una captura simple |x|?", "ふつうの |x| キャプチャに代入できる？"), note: "recap-copies" },
+    { kind: "predict", time: 12, prompt: PRINT, code: 'const lit = "abc";\nvar i: usize = 3;\n_ = &i;\nstd.debug.print("{d}\\n", .{lit[i]});', options: ["0", PANICS, "99"], answer: 0, output: "0", check: { compiles: true, stdout: "0" }, explain: L("Literals end in a 0 sentinel at index len.", "Los literales terminan en un centinela 0 en el índice len.", "リテラルは len 番に番兵 0 がある。"), hint: L("What does a string literal keep right after its last letter?", "¿Qué guarda un literal justo tras su última letra?", "文字列リテラルは最後の文字のすぐあとに何を持つ？"), note: "recap-slices" },
+    { kind: "predict", time: 12, prompt: COMPILES, code: 'const s: []u8 = "hi";\n_ = s;', options: [YES, NO_CE], answer: 1, check: { compiles: false }, explain: L("Literals are constant: use []const u8.", "Los literales son constantes: usa []const u8.", "リテラルは定数。[]const u8 を使う。"), hint: L("Can a literal's memory be written? What does []u8 promise?", "¿Se puede escribir la memoria de un literal? ¿Qué promete []u8?", "リテラルのメモリは書ける？[]u8 は何を約束する？"), note: "recap-slices" },
+    { kind: "predict", time: 18, prompt: PRINT, code: zmain("fn bump(xs: []i32) void {\n    for (xs) |*x| x.* += 1;\n}", 'var arr = [_]i32{ 1, 2, 3, 4 };\nbump(arr[1..3]);\nstd.debug.print("{any}\\n", .{arr});'), options: ["{ 1, 3, 4, 4 }", "{ 2, 3, 4, 5 }", "{ 1, 2, 3, 4 }"], answer: 0, output: "{ 1, 3, 4, 4 }", check: { compiles: true, stdout: "{ 1, 3, 4, 4 }" }, explain: L("The window [1..3] covers only arr[1] and arr[2]; those two get bumped.", "La ventana [1..3] cubre solo arr[1] y arr[2]; esos dos suben.", "窓 [1..3] は arr[1] と arr[2] だけ。その2つが増える。"), hint: L("Which items does [1..3] cover? The end is excluded, and the window shares arr's memory.", "¿Qué elementos cubre [1..3]? El final se excluye y la ventana comparte memoria con arr.", "[1..3] はどの要素？終わりはふくまず、窓は arr とメモリを共有する。"), note: "recap-slices" },
+    { kind: "predict", time: 15, prompt: PRINT, code: 'const Item = union(enum) { coins: u32, key };\nconst items = [_]Item{ .{ .coins = 5 }, .key, .{ .coins = 7 } };\nvar total: u32 = 0;\nfor (items) |it| switch (it) {\n    .coins => |c| total += c,\n    .key => total += 100,\n};\nstd.debug.print("{d}\\n", .{total});', options: ["112", "12", "107"], answer: 0, output: "112", check: { compiles: true, stdout: "112" }, explain: L("A field with no type (key) carries no payload. 5 + 100 + 7 = 112.", "Un campo sin tipo (key) no lleva valor. 5 + 100 + 7 = 112.", "型のないフィールド key は値をもたない。5 + 100 + 7 = 112。"), hint: L("Walk the array item by item and follow the prong each one takes.", "Recorre el array uno a uno y sigue la rama de cada elemento.", "配列を1つずつ見て、それぞれの分岐をたどろう。"), note: "recap-unions" },
+    { kind: "type", time: 15, prompt: L("Count the a's", "Cuenta las a", "a の数を数えよう"), code: 'std.debug.print("{d}\\n", .{std.mem.___(u8, "banana", "a")});', answer: "count", check: { compiles: true, stdout: "3" }, explain: L("std.mem.count counts how many times the needle appears.", "std.mem.count cuenta cuántas veces aparece la aguja.", "std.mem.count は探す文字列が何回出るか数える。"), hint: L("The std.mem tool that tells how many times something appears.", "La herramienta de std.mem que dice cuántas veces aparece algo.", "何回出てくるかを教える std.mem の道具。"), note: "recap-slices" },
     enemySays(L(
       "Eek! You saw through every copy and window. Up in Comptime Tower, the Leak Jelly drips from the pipes...",
       "¡Iiih! Viste a través de cada copia y ventana. Arriba en Comptime Tower, la Leak Jelly gotea de las tuberías...",

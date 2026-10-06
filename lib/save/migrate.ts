@@ -4,7 +4,7 @@
 //   1. bump SAVE_VERSION in schema.ts and update the types,
 //   2. add MIGRATIONS[<old version>] that returns the next version's shape,
 //   3. add a fixture test in tests/save.test.ts that decodes an old save.
-import { SAVE_VERSION, cleanName, emptyLang, type LangRecord, type SaveData } from "./schema.ts";
+import { SAVE_VERSION, START_TICKETS, TIMER_PREFS, cleanName, emptyLang, type LangRecord, type SaveData, type TimerPref } from "./schema.ts";
 
 export type SaveErrorCode = "format" | "checksum" | "newer" | "corrupt";
 
@@ -20,7 +20,8 @@ type AnySave = Record<string, unknown> & { version: number };
 
 /** MIGRATIONS[n] upgrades a version-n save to version n+1. */
 const MIGRATIONS: Record<number, (s: AnySave) => AnySave> = {
-  // 1: (s) => ({ ...s, version: 2, /* new fields */ }),
+  // v2: hint tickets (everyone starts with the same allowance) and the lesson timer preference.
+  1: (s) => ({ ...s, version: 2, stats: { ...obj(s.stats), tickets: START_TICKETS }, prefs: { timer: "normal" } }),
 };
 
 const num = (v: unknown, d = 0) => (typeof v === "number" && Number.isFinite(v) ? v : d);
@@ -30,6 +31,7 @@ const obj = (v: unknown): Record<string, unknown> => (v && typeof v === "object"
 function normalize(s: AnySave): SaveData {
   const player = obj(s.player);
   const stats = obj(s.stats);
+  const prefs = obj(s.prefs);
   const langs: Record<string, LangRecord> = {};
   for (const [k, v] of Object.entries(obj(s.langs))) {
     const l = obj(v);
@@ -53,7 +55,9 @@ function normalize(s: AnySave): SaveData {
       streak: num(stats.streak),
       bestStreak: num(stats.bestStreak),
       lastDay: typeof stats.lastDay === "string" ? stats.lastDay : null,
+      tickets: num(stats.tickets, START_TICKETS),
     },
+    prefs: { ...prefs, timer: TIMER_PREFS.includes(prefs.timer as TimerPref) ? (prefs.timer as TimerPref) : "normal" },
     langs,
   } as SaveData;
 }

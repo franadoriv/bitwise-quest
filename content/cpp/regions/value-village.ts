@@ -1,4 +1,4 @@
-import type { Beat, LessonDef, RegionDef, Text } from "../../../lib/content/types.ts";
+import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
 
 // REGION 1 · VALUE VILLAGE  (types and const, references, pointers with stack vs heap, vector and string)
@@ -11,6 +11,131 @@ const COMPILES = L("Does it compile?", "¿Compila?", "コンパイルできる�
 const SAFE = L("Is this code safe?", "¿Este código es seguro?", "このコードは安全？");
 const YES = L("Yes", "Sí", "はい");
 const NO_GCC = L("No: g++ stops it", "No: g++ lo detiene", "いいえ：g++ が止める");
+
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example; the validator checks `output` against the real compiler. */
+const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code, output, caption });
+/** An example that must NOT compile (verified too). */
+const bad = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: false } });
+/** Code shown but never run: undefined behavior has no output worth promising. */
+const show = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption });
+
+const boxesNotes: NoteDef[] = [
+  note("typed-boxes", L("Typed boxes and const", "Cajas con tipo y const", "型つきの箱と const"),
+    p(
+      "A variable in C++ is a box with a TYPE written on it. The type comes first, then the name, then the starting value: int score = 4; The type decides what fits inside: int holds whole numbers, double holds decimals, bool holds true or false, char holds one character.",
+      "Una variable en C++ es una caja con un TIPO escrito encima. Primero va el tipo, luego el nombre y luego el valor inicial: int score = 4; El tipo decide qué cabe dentro: int guarda enteros, double decimales, bool true o false, y char un solo carácter.",
+      "C++ の変数は「型」が書かれた箱。型、名前、最初の値の順に書く：int score = 4; 型が中身を決める。int は整数、double は小数、bool は true か false、char は1文字じゃ。",
+    ),
+    p(
+      "The = sign does not mean \"equals\" as in math. It means \"compute the right side, then put the result in the box on the left\". So score = score * 3 reads the old value, multiplies it and stores the new one back in the same box.",
+      "El signo = no significa \"es igual\" como en matemáticas. Significa \"calcula el lado derecho y guarda el resultado en la caja de la izquierda\". Así, score = score * 3 lee el valor viejo, lo multiplica y guarda el nuevo en la misma caja.",
+      "= は数学の「等しい」ではない。「右側を計算して、結果を左の箱に入れる」という意味じゃ。score = score * 3 は古い値を読み、かけ算して、同じ箱に入れ直す。",
+    ),
+    ex("int score = 4;\nscore = score * 3;\nstd::cout << score;", "12",
+      L("The right side uses the old value, then the box is refilled", "El lado derecho usa el valor viejo y la caja se rellena", "右側は古い値を使い、箱に入れ直す")),
+    p(
+      "const seals a box: you must fill it when you create it, and after that nobody can change it. If a line tries to assign to it, g++ refuses to build the program with \"assignment of read-only variable\". Use const for values that should never change, like a maximum or a fixed name.",
+      "const sella una caja: debes llenarla al crearla y después nadie puede cambiarla. Si una línea intenta asignarle algo, g++ se niega a compilar con \"assignment of read-only variable\". Usa const para valores que nunca deben cambiar, como un máximo o un nombre fijo.",
+      "const は箱を封印する。作るときに値を入れ、その後は誰も変えられない。代入しようとすると g++ は \"assignment of read-only variable\" と言ってビルドを拒否する。最大値など変わらない値に使おう。",
+    ),
+    bad("const int maxHp = 50;\nmaxHp = 60;",
+      L("Does not compile: a const box is sealed after it's filled", "No compila: una caja const queda sellada al llenarse", "コンパイル不可：const の箱は封印ずみ")),
+    p(
+      "Common mistake: thinking const only gives a warning. It is a hard error, so the program never runs at all. Another one: forgetting the semicolon at the end of each statement; C++ needs it on every line that does something.",
+      "Error común: creer que const solo da una advertencia. Es un error real, así que el programa nunca llega a ejecutarse. Otro: olvidar el punto y coma al final de cada sentencia; C++ lo necesita en cada línea que hace algo.",
+      "よくあるミス：const は警告だけだと思うこと。本物のエラーなので、プログラムは一度も動かない。もう一つ、文の終わりのセミコロンを忘れること。C++ は処理をする行ごとに必要じゃ。",
+    ),
+  ),
+  note("int-division", L("Dividing ints: / and %", "Dividir enteros: / y %", "整数の割り算：/ と %"),
+    p(
+      "When both sides of / are ints, C++ does INTEGER division: the result is an int, and the fraction is simply thrown away. 9 / 4 is 2, not 2.25. Nothing is rounded: the part after the point just falls off.",
+      "Cuando ambos lados de / son int, C++ hace división ENTERA: el resultado es un int y la fracción simplemente se tira. 9 / 4 es 2, no 2.25. No se redondea nada: la parte tras el punto se cae.",
+      "/ の両側が int なら、C++ は整数の割り算をする。結果は int で、小数部分は捨てられる。9 / 4 は 2.25 ではなく 2。四捨五入はせず、小数点以下が落ちるだけじゃ。",
+    ),
+    ex('std::cout << 9 / 4 << " " << 9 % 4 << " " << 9.0 / 4;', "2 1 2.25",
+      L("Int division, its remainder, and a double division", "División entera, su resto y una división double", "整数の割り算、その余り、double の割り算")),
+    p(
+      "% gives the REMAINDER of an int division: 9 = 2 * 4 + 1, so 9 % 4 is 1. With negative numbers, int division cuts toward zero: -9 / 4 is -2 (not -3), and the remainder keeps the sign of the left side: -9 % 4 is -1.",
+      "% da el RESTO de una división entera: 9 = 2 * 4 + 1, así que 9 % 4 es 1. Con negativos, la división entera corta hacia cero: -9 / 4 es -2 (no -3), y el resto conserva el signo del lado izquierdo: -9 % 4 es -1.",
+      "% は整数の割り算の余り。9 = 2 * 4 + 1 なので 9 % 4 は 1。負の数では 0 の方向に切る：-9 / 4 は -3 ではなく -2。余りは左側の符号になる：-9 % 4 は -1。",
+    ),
+    ex('std::cout << -9 / 4 << " " << -9 % 4;', "-2 -1"),
+    p(
+      "To get decimals, at least one side must be a double BEFORE the division happens: write 9.0, divide by 4.0, or convert with static_cast<double>(n). Storing the result in a double afterwards is too late: the int division already dropped the fraction.",
+      "Para tener decimales, al menos un lado debe ser double ANTES de dividir: escribe 9.0, divide entre 4.0 o convierte con static_cast<double>(n). Guardar el resultado en un double después es tarde: la división entera ya tiró la fracción.",
+      "小数がほしいなら、割り算の前に片方を double にする。9.0 と書く、4.0 で割る、static_cast<double>(n) で変換する。結果を後から double に入れても遅い。小数はもう落ちている。",
+    ),
+    ex("int coins = 5;\nint kids = 2;\ndouble late = coins / kids;\ndouble early = static_cast<double>(coins) / kids;\nstd::cout << late << \" \" << early;", "2 2.5",
+      L("Converting after the division is too late", "Convertir después de dividir es tarde", "割った後の変換では遅い")),
+  ),
+  note("conversions", L("auto, braces and conversions", "auto, llaves y conversiones", "auto・波かっこ・型変換"),
+    p(
+      "Putting a double into an int box with = compiles, but the decimals are CUT OFF, never rounded: 9.9 becomes 9. Braces are stricter: int n{9.9}; is rejected, because braces forbid \"narrowing\", any conversion that could lose information. Prefer braces when you want g++ to catch mistakes.",
+      "Meter un double en una caja int con = compila, pero los decimales se CORTAN, nunca se redondean: 9.9 queda en 9. Las llaves son más estrictas: int n{9.9}; se rechaza, porque prohíben el \"narrowing\", cualquier conversión que pierda información. Usa llaves si quieres que g++ atrape errores.",
+      "= で double を int の箱に入れるとコンパイルは通るが、小数は切り捨て（四捨五入しない）：9.9 は 9。波かっこはきびしく、int n{9.9}; は拒否される。情報が欠ける変換（narrowing）を禁止するからじゃ。",
+    ),
+    ex("int n = 9.9;\nstd::cout << n;", "9", L("= cuts off the decimals", "= corta los decimales", "= は小数を切り捨てる")),
+    bad("int n{2.5};", L("Does not compile: braces forbid narrowing", "No compila: las llaves prohíben el narrowing", "コンパイル不可：{} は narrowing 禁止")),
+    p(
+      "auto asks g++ to pick the type from the starting value: auto n = 4 is an int, auto r = 1.5 is a double. When you mix an int and a double in math, the int is promoted to double first, so the result is a double and keeps its decimals.",
+      "auto le pide a g++ que elija el tipo según el valor inicial: auto n = 4 es int, auto r = 1.5 es double. Al mezclar int y double en una cuenta, el int se convierte primero a double, así que el resultado es double y conserva sus decimales.",
+      "auto は最初の値から g++ に型を決めさせる。auto n = 4 は int、auto r = 1.5 は double。int と double をまぜて計算すると、int が先に double になるので、結果は double で小数が残る。",
+    ),
+    ex("auto n = 4;\nauto r = 1.5;\nstd::cout << n + r;", "5.5"),
+    p(
+      "A char is really a small number: each character has a code, and 'a' is 97. Doing math with a char gives an int (the code), and char(...) turns a code back into a character. A bool prints as 1 or 0 with std::cout, until you send std::boolalpha, which switches it to true and false.",
+      "Un char es en realidad un número pequeño: cada carácter tiene un código, y 'a' es 97. Hacer cuentas con un char da un int (el código), y char(...) convierte un código de nuevo en carácter. Un bool se imprime como 1 o 0 con std::cout, hasta que envías std::boolalpha, que lo cambia a true y false.",
+      "char の正体は小さな数。文字にはそれぞれ番号があり、'a' は 97。char で計算すると int（番号）になり、char(...) で番号を文字に戻せる。bool は std::cout で 1 か 0 と表示され、std::boolalpha を送ると true/false になる。",
+    ),
+    ex("char k = 'a';\nstd::cout << k + 2 << \" \" << char(k + 2) << \"\\n\";\nstd::cout << (3 > 5) << \" \" << std::boolalpha << (3 > 5);", "99 c\n0 false",
+      L("A char is a number; a bool prints as a digit until boolalpha", "Un char es un número; un bool sale como dígito hasta boolalpha", "char は数。bool は boolalpha まで数字で出る")),
+  ),
+  note("namespaces", L("Namespaces and ::", "Namespaces y ::", "名前空間と ::"),
+    p(
+      "Big programs have thousands of names, and two libraries could both have a count or a print. C++ avoids clashes with NAMESPACES: named folders for names. Everything from the standard library lives in the namespace std.",
+      "Los programas grandes tienen miles de nombres, y dos bibliotecas podrían tener ambas un count o un print. C++ evita choques con los NAMESPACES: carpetas con nombre para los nombres. Todo lo de la biblioteca estándar vive en el namespace std.",
+      "大きなプログラムには名前が何千もあり、2つのライブラリが同じ count や print を持つこともある。C++ は名前空間（namespace）という名前つきフォルダで衝突を防ぐ。標準ライブラリはすべて std の中じゃ。",
+    ),
+    p(
+      "To reach a name inside a namespace, write the namespace, two colons and the name: shop::price means \"price from shop\". That's why the course always writes std::cout and std::string: cout and string live inside std.",
+      "Para llegar a un nombre dentro de un namespace, escribe el namespace, dos puntos dobles y el nombre: shop::price significa \"price de shop\". Por eso el curso siempre escribe std::cout y std::string: cout y string viven dentro de std.",
+      "名前空間の中の名前を使うには、名前空間、コロン2つ、名前の順に書く。shop::price は「shop の price」。だからこの講座ではいつも std::cout、std::string と書く。cout も string も std の中にあるからじゃ。",
+    ),
+    ex("namespace shop { int price = 12; }\n\nint main() {\n  std::cout << shop::price;\n}", "12",
+      L("Reading a name from its namespace", "Leer un nombre desde su namespace", "名前空間から名前を読む")),
+    p(
+      "Common mistakes: using a single colon or a dot (shop.price) instead of ::. The dot is for members of an object, :: is for names inside a namespace or a class. Writing only cout without std:: fails too, unless the program has using namespace std; which this course avoids.",
+      "Errores comunes: usar un solo dos puntos o un punto (shop.price) en vez de ::. El punto es para miembros de un objeto; :: es para nombres dentro de un namespace o una clase. Escribir solo cout sin std:: también falla, salvo que haya using namespace std; que este curso evita.",
+      "よくあるミス：:: の代わりにコロン1つやドット（shop.price）を使うこと。ドットはオブジェクトのメンバ用、:: は名前空間やクラスの中の名前用じゃ。std:: なしの cout も、using namespace std; がなければ失敗する。",
+    ),
+  ),
+  note("ub-basics", L("Undefined behavior (UB)", "Comportamiento indefinido (UB)", "未定義動作（UB）"),
+    p(
+      "Some C++ code compiles fine but breaks a rule of the language. The result is UNDEFINED BEHAVIOR: the standard promises nothing. The program might print a strange number, crash, or seem to work today and fail tomorrow with another compiler or flag. You can't \"test\" UB away.",
+      "Hay código C++ que compila bien pero rompe una regla del lenguaje. El resultado es COMPORTAMIENTO INDEFINIDO: el estándar no promete nada. El programa puede imprimir un número raro, caerse o parecer funcionar hoy y fallar mañana con otro compilador u opción. El UB no se arregla probando.",
+      "コンパイルは通るのに言語のルールを破るコードがある。その結果が未定義動作（UB）で、何も保証されない。変な数が出る、落ちる、今日は動いて明日は別のコンパイラで壊れる…。試して確かめることはできない。",
+    ),
+    p(
+      "Reading a local variable before giving it a value is UB. A local int is not zero by default: its box holds whatever bits were there before. The fix is simple: always initialize, for example int total = 0; or int total{};",
+      "Leer una variable local antes de darle valor es UB. Un int local no vale cero por defecto: su caja guarda los bits que hubiera antes. La solución es simple: inicializa siempre, por ejemplo int total = 0; o int total{};",
+      "値を入れる前のローカル変数を読むのは UB。ローカルの int は自動で 0 にはならず、前に残っていたビットが入っている。直し方はかんたん。int total = 0; や int total{}; のように必ず初期化しよう。",
+    ),
+    show("int total;          // garbage inside\nstd::cout << total; // UB: never do this",
+      L("Compiles, but reading total is UB", "Compila, pero leer total es UB", "コンパイルは通るが total を読むのは UB")),
+    ex("int total{};\ntotal += 7;\nstd::cout << total;", "7", L("Initialized: always defined", "Inicializada: siempre definida", "初期化ずみ：必ず決まる")),
+    p(
+      "Signed overflow is UB too: going past the biggest int (2147483647) breaks the rules, and the optimizer assumes it never happens, so no result is promised, not even a \"wrap around\". Unsigned types are different: they are defined to wrap around. If a number can grow big, use a wider type like long long.",
+      "El desbordamiento con signo también es UB: pasar del int más grande (2147483647) rompe las reglas, y el optimizador asume que nunca ocurre, así que no hay resultado prometido, ni siquiera \"dar la vuelta\". Los tipos unsigned son distintos: está definido que dan la vuelta. Si un número puede crecer mucho, usa un tipo más ancho como long long.",
+      "符号つきのオーバーフローも UB。int の最大値 2147483647 を超えるとルール違反で、最適化は「起きない」と仮定するので、「一周する」ことさえ保証されない。unsigned は別で、一周すると決まっている。大きくなる数には long long を使おう。",
+    ),
+    ex("long long big = 2147483647;\nbig = big + 1;\nstd::cout << big;", "2147483648",
+      L("A wider type has room for the next number", "Un tipo más ancho tiene lugar para el siguiente número", "広い型なら次の数が入る")),
+  ),
+];
 
 // ─── 1.1 Boxes and types ──────────────────────────────────────────────────
 const boxes: LessonDef = {
@@ -55,6 +180,8 @@ const boxes: LessonDef = {
       answer: 0,
       output: "15",
       check: { compiles: true, stdout: "15" },
+      hint: L("Work out the right side of = first with the old value, then store the result in the box.", "Calcula primero el lado derecho del = con el valor viejo y luego guarda el resultado en la caja.", "まず = の右側を古い値で計算し、その結果を箱に入れよう。"),
+      note: "typed-boxes",
       explain: L("hp + 5 is 15, and = puts 15 back into the box hp.", "hp + 5 es 15, y = guarda 15 de vuelta en la caja hp.", "hp + 5 は 15。= で箱 hp に 15 を入れ直すよ。"),
       setup: [{ t: "tag", actor: "hero", text: "int hp", value: "10" }],
       win: [{ t: "value", actor: "hero", text: "15" }, { t: "print", text: "15" }],
@@ -72,6 +199,8 @@ const boxes: LessonDef = {
       answer: 0,
       output: "3 3.5",
       check: { compiles: true, stdout: "3 3.5" },
+      hint: L("Check each division: are both sides ints, or is one of them a double?", "Revisa cada división: ¿ambos lados son int, o uno es double?", "割り算ごとに確認：両方 int？それとも片方が double？"),
+      note: "int-division",
       explain: L("7 / 2 is int division: 3. 7.0 is a double, so 7.0 / 2 is 3.5.", "7 / 2 es división entera: 3. 7.0 es un double, así que 7.0 / 2 es 3.5.", "7 / 2 は整数の割り算で 3。7.0 は double だから 7.0 / 2 は 3.5。"),
       win: [{ t: "print", text: "3 3.5" }],
     },
@@ -83,6 +212,8 @@ const boxes: LessonDef = {
       answer: 0,
       output: "1 -3",
       check: { compiles: true, stdout: "1 -3" },
+      hint: L("% is the remainder. For the negative division, remember which way int division cuts.", "% es el resto. Para la división negativa, recuerda hacia dónde corta la división entera.", "% は余り。負の割り算では、整数の割り算がどちらへ切るかを思い出そう。"),
+      note: "int-division",
       explain: L("% is the remainder: 7 = 2*3 + 1. Int division cuts toward zero, so -3.5 becomes -3.", "% es el resto: 7 = 2*3 + 1. La división entera corta hacia cero: -3.5 queda en -3.", "% は余り（7 = 2*3 + 1）。整数の割り算は 0 の方向に切るので -3.5 は -3。"),
     },
     {
@@ -92,6 +223,8 @@ const boxes: LessonDef = {
       options: [YES, NO_GCC],
       answer: 1,
       check: { compiles: false },
+      hint: L("What does const promise about a box after its first value?", "¿Qué promete const sobre una caja después de su primer valor?", "const は、最初の値を入れた後の箱について何を約束する？"),
+      note: "typed-boxes",
       explain: L("A const box can't change after it's filled: 'assignment of read-only variable'.", "Una caja const no cambia tras llenarse: 'assignment of read-only variable'.", "const の箱は一度入れたら変えられない。read-only のエラーだよ。"),
       setup: [{ t: "tag", actor: "hero", text: "const lives", value: "3" }],
       win: [{ t: "shake" }, { t: "say", actor: "hero", text: L("Sealed!", "¡Sellado!", "封印！") }],
@@ -108,6 +241,8 @@ const boxes: LessonDef = {
       options: [YES, NO_GCC],
       answer: 1,
       check: { compiles: false },
+      hint: L("Braces are the strict way to initialize. Would this conversion lose information?", "Las llaves son la forma estricta de inicializar. ¿Esta conversión perdería información?", "{} はきびしい初期化。この変換で情報は欠ける？"),
+      note: "conversions",
       explain: L("Brace init forbids narrowing: 'narrowing conversion from double to int'.", "La inicialización con llaves prohíbe el estrechamiento (narrowing) de double a int.", "{} の初期化は情報が欠ける変換（narrowing）を禁止するよ。"),
       win: [{ t: "shake" }],
     },
@@ -119,6 +254,8 @@ const boxes: LessonDef = {
       answer: 0,
       output: "3",
       check: { compiles: true, stdout: "3" },
+      hint: L("An int box can't hold decimals. Does = round the value or just cut it?", "Una caja int no guarda decimales. ¿El = redondea el valor o solo lo corta?", "int の箱に小数は入らない。= は四捨五入する？切り捨てる？"),
+      note: "conversions",
       explain: L("With = the double is converted to int by cutting off the decimals. No rounding.", "Con = el double se convierte a int cortando los decimales. No redondea.", "= だと double は小数を切り捨てて int になる。四捨五入はしないよ。"),
       setup: [{ t: "tag", actor: "hero", text: "int y" }],
       win: [{ t: "value", actor: "hero", text: "3" }, { t: "print", text: "3" }],
@@ -136,6 +273,8 @@ const boxes: LessonDef = {
       answer: 0,
       output: "12.5",
       check: { compiles: true, stdout: "12.5" },
+      hint: L("Figure out the type auto picks for each variable, then the type of mixed math.", "Averigua el tipo que auto elige para cada variable y luego el tipo de una cuenta mixta.", "auto が各変数に選ぶ型を考え、次にまぜた計算の型を考えよう。"),
+      note: "conversions",
       explain: L("a is an int, b a double. int * double gives a double: 12.5.", "a es int y b double. int * double da un double: 12.5.", "a は int、b は double。int * double は double なので 12.5。"),
     },
     {
@@ -146,6 +285,8 @@ const boxes: LessonDef = {
       answer: 0,
       output: "66 B",
       check: { compiles: true, stdout: "66 B" },
+      hint: L("A char is secretly a number. What type does char + int give, and what does char(...) do?", "Un char es en secreto un número. ¿Qué tipo da char + int, y qué hace char(...)?", "char の正体は数。char + int の型は？char(...) は何をする？"),
+      note: "conversions",
       explain: L("A char is a small number ('A' is 65). char + int is an int: 66. char(66) is 'B' again.", "Un char es un número pequeño ('A' es 65). char + int es un int: 66. char(66) vuelve a ser 'B'.", "char は小さな数（'A' は 65）。char + int は int で 66。char(66) で 'B' に戻る。"),
     },
     {
@@ -156,6 +297,8 @@ const boxes: LessonDef = {
       answer: 0,
       output: "1 true",
       check: { compiles: true, stdout: "1 true" },
+      hint: L("How does std::cout show a bool by default? Then think about what std::boolalpha switches.", "¿Cómo muestra std::cout un bool por defecto? Luego piensa qué cambia std::boolalpha.", "std::cout は bool を標準でどう表示する？std::boolalpha で何が変わる？"),
+      note: "conversions",
       explain: L("std::cout prints a bool as 1 or 0, until std::boolalpha switches it to words.", "std::cout imprime un bool como 1 o 0, hasta que std::boolalpha lo cambia a palabras.", "std::cout は bool を 1 か 0 で表示。std::boolalpha で文字表示に切りかわるよ。"),
     },
     say(L(
@@ -169,6 +312,8 @@ const boxes: LessonDef = {
       code: "namespace game { int level = 7; }\n\nint main() {\n  std::cout << game___level;\n}",
       answer: "::",
       check: { compiles: true, stdout: "7" },
+      hint: L("It's the same 'from' operator you see in std::cout.", "Es el mismo operador 'de' que ves en std::cout.", "std::cout にあるのと同じ「〜の」演算子じゃ。"),
+      note: "namespaces",
       explain: L("game::level means 'level inside game'. The same :: is in std::cout.", "game::level significa 'level dentro de game'. Es el mismo :: de std::cout.", "game::level は「game の中の level」。std::cout と同じ :: だよ。"),
       win: [{ t: "print", text: "7" }],
     },
@@ -184,6 +329,8 @@ const boxes: LessonDef = {
       options: [L("No: reading x is UB", "No: leer x es UB", "いいえ：x を読むのは UB"), L("Yes: it shows 0", "Sí: muestra 0", "はい：0 が出る")],
       answer: 0,
       check: { compiles: true },
+      hint: L("x never got a value. Is a local int set to zero for you?", "x nunca recibió un valor. ¿Un int local se pone en cero solo?", "x には値が入っていない。ローカルの int は自動で 0 になる？"),
+      note: "ub-basics",
       explain: L("A local int starts with garbage. Reading it before giving it a value is UB. Always initialize.", "Un int local empieza con basura. Leerlo antes de darle valor es UB. Inicializa siempre.", "ローカルの int の中身はゴミ。値を入れる前に読むと UB。必ず初期化しよう。"),
       win: [{ t: "say", actor: "enemy", text: L("Curses!", "¡Rayos!", "くそっ！") }],
     },
@@ -194,6 +341,8 @@ const boxes: LessonDef = {
       options: [L("UB: signed overflow", "UB: desbordamiento con signo", "UB：符号つきオーバーフロー"), L("Always -2147483648", "Siempre -2147483648", "必ず -2147483648"), "0"],
       answer: 0,
       check: { compiles: true },
+      hint: L("int is a signed type. What does C++ promise when a signed number goes past its max?", "int es un tipo con signo. ¿Qué promete C++ cuando un número con signo pasa su máximo?", "int は符号つき。符号つきの数が最大を超えたら C++ は何を約束する？"),
+      note: "ub-basics",
       explain: L("Overflowing a signed int is UB: the compiler assumes it never happens, so no result is promised.", "Desbordar un int con signo es UB: el compilador asume que nunca pasa, así que no hay resultado prometido.", "符号つき int のオーバーフローは UB。結果は何も保証されないよ。"),
     },
     say(L(
@@ -214,10 +363,87 @@ const boxes: LessonDef = {
         String.raw`gold\s*/\s*2\.0`,
         String.raw`double\s+(gold|friends)\s*=`,
       ],
+      hint: L("The division happens before the value lands in the double. Make one side a double first.", "La división ocurre antes de que el valor llegue al double. Convierte un lado a double antes.", "割り算は double に入る前に起きる。先に片方を double にしよう。"),
+      note: "int-division",
       explain: L("gold / friends was int division (3) before landing in the double. Make one side a double first.", "gold / friends era división entera (3) antes de llegar al double. Convierte un lado a double primero.", "gold / friends は double に入る前に整数の割り算（3）になっていた。先に片方を double に。"),
     },
   ],
+  notes: boxesNotes,
 };
+
+const lendNotes: NoteDef[] = [
+  note("copies", L("Values are copied", "Los valores se copian", "値はコピーされる"),
+    p(
+      "In C++, most things are VALUES. When you pass a variable to a function the normal way, void boost(int power), the function gets its own COPY. Whatever it does to that copy stays inside the function, and the copy disappears at the function's closing }.",
+      "En C++ casi todo son VALORES. Cuando pasas una variable a una función de la forma normal, void boost(int power), la función recibe su propia COPIA. Lo que haga con esa copia se queda dentro de la función, y la copia desaparece en la } final de la función.",
+      "C++ ではほとんどのものが「値」。ふつうの書き方 void boost(int power) で変数を関数に渡すと、関数は自分用のコピーを受け取る。コピーへの変更は関数の中だけで、関数の } でコピーは消えるのじゃ。",
+    ),
+    ex("void boost(int power) { power *= 2; }\n\nint main() {\n  int power = 3;\n  boost(power);\n  std::cout << power;\n}", "3",
+      L("Same name, different boxes: boost doubled its own copy", "Mismo nombre, cajas distintas: boost duplicó su copia", "名前は同じでも箱は別。boost は自分のコピーを2倍にした")),
+    p(
+      "The same name does not mean the same box. A parameter named like the caller's variable is still a separate box that only starts with the same value. What matters is the type of the parameter: a plain type means copy.",
+      "El mismo nombre no significa la misma caja. Un parámetro con el mismo nombre que la variable de quien llama sigue siendo otra caja que solo empieza con el mismo valor. Lo que importa es el tipo del parámetro: un tipo simple significa copia.",
+      "同じ名前でも同じ箱とは限らない。呼び出し元と同じ名前の引数も、同じ値で始まるだけの別の箱じゃ。大事なのは引数の型。ふつうの型ならコピーになる。",
+    ),
+    p(
+      "Containers are values too. std::string, std::vector and friends copy ALL their contents when you write auto b = a; or pass them by value. After the copy, the two containers are independent: changing one never changes the other. This is safe, but copying a huge container costs time.",
+      "Los contenedores también son valores. std::string, std::vector y compañía copian TODO su contenido cuando escribes auto b = a; o los pasas por valor. Tras la copia, los dos contenedores son independientes: cambiar uno nunca cambia el otro. Es seguro, pero copiar un contenedor enorme cuesta tiempo.",
+      "コンテナも値。std::string や std::vector は auto b = a; や値渡しで中身を全部コピーする。コピー後の2つは独立していて、片方を変えてももう片方は変わらない。安全だが、巨大なコンテナのコピーは時間がかかる。",
+    ),
+    ex("std::string a = \"map\";\nstd::string b = a;\nb += \"!\";\nstd::cout << a << \" \" << b;", "map map!",
+      L("b is a full, independent copy of a", "b es una copia completa e independiente de a", "b は a の独立した完全コピー")),
+    p(
+      "Common mistake: coming from Python or JavaScript, where lists are shared when assigned. In C++ assignment copies the whole container. If you want to share or edit the original, you need a reference (&), which the next note explains.",
+      "Error común: venir de Python o JavaScript, donde las listas se comparten al asignarlas. En C++ asignar copia el contenedor entero. Si quieres compartir o editar el original, necesitas una referencia (&), que explica la siguiente nota.",
+      "よくあるミス：代入でリストが共有される Python や JavaScript のつもりでいること。C++ の代入はコンテナ全体をコピーする。元を共有・編集したいなら参照（&）が必要じゃ。次のノートで説明する。",
+    ),
+  ),
+  note("references", L("References: another name", "Referencias: otro nombre", "参照：もう一つの名前"),
+    p(
+      "A REFERENCE is a second name for a box that already exists. int& purse = coins; creates no new box: purse and coins are the same box. Reading or writing purse reads or writes coins.",
+      "Una REFERENCIA es un segundo nombre para una caja que ya existe. int& purse = coins; no crea ninguna caja nueva: purse y coins son la misma caja. Leer o escribir purse es leer o escribir coins.",
+      "参照（reference）は、すでにある箱のもう一つの名前。int& purse = coins; は新しい箱を作らない。purse と coins は同じ箱で、purse を読み書きすれば coins を読み書きすることになる。",
+    ),
+    ex("int coins = 4;\nint& purse = coins;\npurse += 6;\nstd::cout << coins;", "10"),
+    p(
+      "Put & on a function parameter and the function receives your real box instead of a copy: void doubleIt(int& n). Now changes inside the function stick after it returns. This is how a function can change several of the caller's variables at once.",
+      "Pon & en un parámetro y la función recibe tu caja real en vez de una copia: void doubleIt(int& n). Ahora los cambios dentro de la función se quedan después del return. Así una función puede cambiar varias variables de quien la llama a la vez.",
+      "引数に & をつけると、関数はコピーではなく本物の箱を受け取る：void doubleIt(int& n)。関数の中の変更が、戻った後も残る。こうして関数は呼び出し元の変数をいくつも変えられる。",
+    ),
+    ex("void doubleIt(int& n) { n *= 2; }\n\nint main() {\n  int gems = 6;\n  doubleIt(gems);\n  std::cout << gems;\n}", "12",
+      L("n IS gems, so the change survives the call", "n ES gems, así que el cambio sobrevive a la llamada", "n は gems そのもの。変更が残る")),
+    p(
+      "A reference is glued to its box for life. It must be bound when it is created (int& r; alone does not compile), and it can never be re-glued. Writing ref = other; does NOT move the reference: it copies other's value into the box ref was already glued to.",
+      "Una referencia queda pegada a su caja de por vida. Debe enlazarse al crearla (int& r; solo no compila) y nunca se puede volver a pegar. Escribir ref = other; NO mueve la referencia: copia el valor de other en la caja a la que ref ya estaba pegada.",
+      "参照は一生その箱にくっつく。作るときに結びつける必要があり（int& r; だけではコンパイル不可）、付けかえはできない。ref = other; は参照を動かすのではなく、other の値を ref の箱にコピーするのじゃ。",
+    ),
+    ex("int x = 4, y = 8;\nint& ref = x;\nref = y;\nstd::cout << x << \" \" << y;", "8 8",
+      L("ref = y copies 8 into x; ref still means x", "ref = y copia 8 en x; ref sigue siendo x", "ref = y は x に 8 をコピー。ref は x のまま")),
+  ),
+  note("const-ref", L("const& : borrow, read only", "const&: prestar solo para leer", "const&：読むだけの借用"),
+    p(
+      "Passing a big std::string by value copies every letter. Passing it as std::string& avoids the copy, but lets the function change your text. const std::string& gives the best of both: no copy, and the function promises to only read.",
+      "Pasar un std::string grande por valor copia cada letra. Pasarlo como std::string& evita la copia, pero deja que la función cambie tu texto. const std::string& da lo mejor de ambos: sin copia, y la función promete solo leer.",
+      "大きな std::string を値渡しすると全文字がコピーされる。std::string& ならコピーはないが、関数に書きかえられてしまう。const std::string& なら両方のいいとこ取り。コピーなしで、読むだけを約束する。",
+    ),
+    ex("void greet(const std::string& name) {\n  std::cout << \"hi \" << name;\n}\n\nint main() {\n  greet(\"Mia\");\n}", "hi Mia",
+      L("Read-only access with no copy", "Acceso de solo lectura sin copia", "コピーなしの読み取り専用")),
+    p(
+      "The promise is checked by g++. Inside the function, anything that would modify a const reference (=, +=, push_back...) is a compile error. That makes const& a safe default for parameters you only read.",
+      "g++ verifica la promesa. Dentro de la función, cualquier cosa que modifique una referencia const (=, +=, push_back...) es un error de compilación. Por eso const& es una opción segura por defecto para parámetros que solo lees.",
+      "この約束は g++ がチェックする。関数の中で const 参照を変える操作（=、+=、push_back など）はコンパイルエラー。だから読むだけの引数には const& が安全な定番じゃ。",
+    ),
+    bad("void rename(const std::string& s) {\n  s = \"Zed\";\n}\n\nint main() {}",
+      L("Does not compile: s is read-only", "No compila: s es de solo lectura", "コンパイル不可：s は読み取り専用")),
+    p(
+      "A plain reference (int&) must be glued to a real, named box, because the function might write to it. A temporary value like 3 + 4 or a literal is not a box you could see changes in, so int& refuses it. A const int& accepts it: since nobody will write, C++ can keep the temporary alive for the call.",
+      "Una referencia simple (int&) debe pegarse a una caja real con nombre, porque la función podría escribir en ella. Un valor temporal como 3 + 4 o un literal no es una caja donde veas cambios, así que int& lo rechaza. Un const int& sí lo acepta: como nadie escribirá, C++ mantiene vivo el temporal durante la llamada.",
+      "ふつうの参照（int&）は名前のある本物の箱に結びつく必要がある。関数が書きこむかもしれないからじゃ。3 + 4 やリテラルのような一時的な値は箱ではないので int& は拒否する。const int& なら書かないので受け入れられる。",
+    ),
+    ex("void print2(const int& n) { std::cout << n * 2; }\n\nint main() {\n  print2(3 + 4);\n}", "14",
+      L("const int& can bind to a temporary", "const int& puede enlazarse a un temporal", "const int& は一時的な値に結びつける")),
+  ),
+];
 
 // ─── 1.2 Lend or clone? ────────────────────────────────────────────────────
 const lend: LessonDef = {
@@ -262,6 +488,8 @@ const lend: LessonDef = {
       answer: 0,
       output: "5",
       check: { compiles: true, stdout: "5" },
+      hint: L("Look at heal's parameter type. Does heal get main's box or its own copy?", "Mira el tipo del parámetro de heal. ¿heal recibe la caja de main o su propia copia?", "heal の引数の型を見よう。main の箱？それとも自分のコピー？"),
+      note: "copies",
       explain: L("heal got a COPY of hp. It added 10 to the copy, which vanished at its }.", "heal recibió una COPIA de hp. Sumó 10 a la copia, que desapareció en su }.", "heal が受け取ったのは hp のコピー。コピーに 10 足して、} で消えたよ。"),
       setup: [{ t: "tag", actor: "hero", text: "hp", value: "5" }],
       win: [{ t: "enter", actor: "ally" }, { t: "clone", to: "ally" }, { t: "print", text: "5" }],
@@ -277,6 +505,8 @@ const lend: LessonDef = {
       code: "void heal(int___ hp) { hp += 10; }\n\nint main() {\n  int hp = 5;\n  heal(hp);\n  std::cout << hp;\n}",
       answer: "&",
       check: { compiles: true, stdout: "15" },
+      hint: L("One symbol after int turns the parameter into another name for the caller's box.", "Un símbolo tras int convierte el parámetro en otro nombre para la caja de quien llama.", "int の後の記号1つで、引数が呼び出し元の箱の別名になる。"),
+      note: "references",
       explain: L("int& hp is a reference: hp inside heal IS main's hp, so += 10 sticks.", "int& hp es una referencia: hp dentro de heal ES el hp de main, así que el += 10 se queda.", "int& hp は参照。heal の hp は main の hp そのものだから += 10 が残るよ。"),
       setup: [{ t: "tag", actor: "hero", text: "hp", value: "5" }],
       win: [{ t: "enter", actor: "ally" }, { t: "lend", to: "ally" }, { t: "value", actor: "hero", text: "15" }, { t: "print", text: "15" }],
@@ -289,6 +519,8 @@ const lend: LessonDef = {
       answer: 0,
       output: "9",
       check: { compiles: true, stdout: "9" },
+      hint: L("Is r a new box, or another name for one that already exists?", "¿r es una caja nueva, u otro nombre para una que ya existe?", "r は新しい箱？それともすでにある箱の別名？"),
+      note: "references",
       explain: L("r is just another name for a. Writing to r writes to a.", "r es solo otro nombre para a. Escribir en r es escribir en a.", "r は a の別名にすぎない。r に書けば a に書いたことになるよ。"),
       setup: [{ t: "tag", actor: "hero", text: "a / r", value: "1" }],
       win: [{ t: "value", actor: "hero", text: "9" }, { t: "print", text: "9" }],
@@ -306,6 +538,8 @@ const lend: LessonDef = {
       answer: 0,
       output: "22",
       check: { compiles: true, stdout: "22" },
+      hint: L("A reference can never be re-glued. So what does r = b actually change?", "Una referencia nunca se vuelve a pegar. Entonces, ¿qué cambia realmente r = b?", "参照は付けかえられない。では r = b は実際に何を変える？"),
+      note: "references",
       explain: L("r = b does not re-glue r. It copies b's value (2) into a. Later b = 7 doesn't touch a.", "r = b no vuelve a pegar r. Copia el valor de b (2) en a. Luego b = 7 no toca a.", "r = b は付けかえじゃない。b の値 2 を a にコピーするだけ。b = 7 は a に影響しない。"),
     },
     {
@@ -315,6 +549,8 @@ const lend: LessonDef = {
       options: [YES, NO_GCC],
       answer: 1,
       check: { compiles: false },
+      hint: L("A reference is another name for a box. Which box does this one name?", "Una referencia es otro nombre para una caja. ¿De qué caja es nombre esta?", "参照は箱の別名。この参照はどの箱の名前？"),
+      note: "references",
       explain: L("A reference must be bound at birth: 'r declared as reference but not initialized'.", "Una referencia debe enlazarse al nacer: 'r declared as reference but not initialized'.", "参照は生まれたときに結びつける必要がある。初期化なしはエラー。"),
       win: [{ t: "shake" }],
     },
@@ -330,6 +566,8 @@ const lend: LessonDef = {
       options: ["std::string", "const std::string&", "std::string&"],
       answer: 1,
       check: { compiles: true },
+      hint: L("You want two things: no copy of the text, and a promise that show won't change it.", "Quieres dos cosas: no copiar el texto y que show prometa no cambiarlo.", "ほしいのは2つ：文字列をコピーしないこと、show が変えない約束。"),
+      note: "const-ref",
       explain: L("std::string copies the text; std::string& lets show change it. const& borrows read-only.", "std::string copia el texto; std::string& deja que show lo cambie. const& lo presta solo para leer.", "std::string はコピー、std::string& は変更できてしまう。const& は読むだけの借用。"),
     },
     {
@@ -339,6 +577,8 @@ const lend: LessonDef = {
       options: [YES, NO_GCC],
       answer: 1,
       check: { compiles: false },
+      hint: L("What did const in the parameter promise? Does += keep that promise?", "¿Qué prometió el const del parámetro? ¿El += cumple esa promesa?", "引数の const は何を約束した？+= はその約束を守る？"),
+      note: "const-ref",
       explain: L("s is a const reference: += would change it, so g++ refuses.", "s es una referencia const: += la cambiaría, así que g++ se niega.", "s は const 参照。+= は変更になるので g++ が拒否するよ。"),
     },
     {
@@ -348,6 +588,8 @@ const lend: LessonDef = {
       options: [YES, NO_GCC],
       answer: 1,
       check: { compiles: false },
+      hint: L("A plain int& must be glued to a real, named box. Is 5 one?", "Un int& simple debe pegarse a una caja real con nombre. ¿5 lo es?", "ふつうの int& は名前のある本物の箱に結びつく。5 はそう？"),
+      note: "const-ref",
       explain: L("5 is a temporary, not a box. A plain int& can't bind to it; a const int& could.", "5 es un temporal, no una caja. Un int& simple no puede enlazarse; un const int& sí.", "5 は一時的な値で箱じゃない。int& は結びつけないけど const int& ならOK。"),
     },
     {
@@ -358,6 +600,8 @@ const lend: LessonDef = {
       answer: 0,
       output: "1 99",
       check: { compiles: true, stdout: "1 99" },
+      hint: L("Does auto w = v make a new vector or another name for v? There's no & in sight.", "¿auto w = v crea un vector nuevo u otro nombre para v? No hay ningún &.", "auto w = v は新しい vector？v の別名？& はどこにもない。"),
+      note: "copies",
       explain: L("Containers are values: auto w = v copies the whole vector. Editing w leaves v alone.", "Los contenedores son valores: auto w = v copia todo el vector. Editar w no toca v.", "コンテナは値。auto w = v で vector 全体がコピーされ、w をいじっても v はそのまま。"),
       setup: [{ t: "item", kind: "scroll", holder: "hero" }, { t: "tag", actor: "hero", text: "v" }],
       win: [{ t: "enter", actor: "ally" }, { t: "clone", to: "ally" }, { t: "tag", actor: "ally", text: "w" }, { t: "print", text: "1 99" }],
@@ -370,6 +614,8 @@ const lend: LessonDef = {
       answer: 0,
       output: "21",
       check: { compiles: true, stdout: "21" },
+      hint: L("Check the parameter types of swap2: do a and b reach main's boxes?", "Revisa los tipos de los parámetros de swap2: ¿a y b llegan a las cajas de main?", "swap2 の引数の型を見よう。a と b は main の箱に届く？"),
+      note: "references",
       explain: L("a and b are references to x and y, so the swap happens in main's boxes.", "a y b son referencias a x e y, así que el intercambio ocurre en las cajas de main.", "a と b は x と y の参照。だから入れかえは main の箱で起きるよ。"),
     },
     {
@@ -379,10 +625,108 @@ const lend: LessonDef = {
       solution: '#include <iostream>\n\nvoid levelUp(int& lvl) {\n    lvl++;\n}\n\nint main() {\n    int lvl = 1;\n    levelUp(lvl);\n    std::cout << "level: " << lvl << "\\n";\n}\n',
       expect: "level: 2",
       fallback: [String.raw`levelUp\s*\(\s*int\s*&`, String.raw`lvl\s*=\s*levelUp\s*\(`],
+      hint: L("levelUp changes its own copy. Make its parameter reach main's lvl instead.", "levelUp cambia su propia copia. Haz que su parámetro llegue al lvl de main.", "levelUp は自分のコピーを変えている。引数が main の lvl に届くように。"),
+      note: "references",
       explain: L("levelUp bumped a copy. Take the parameter by reference (int&) so it bumps main's lvl.", "levelUp subía una copia. Recibe el parámetro por referencia (int&) para subir el lvl de main.", "levelUp はコピーを増やしていた。int& で受け取れば main の lvl が増えるよ。"),
     },
   ],
+  notes: lendNotes,
 };
+
+const pointersNotes: NoteDef[] = [
+  note("pointer-basics", L("Pointers: & and *", "Punteros: & y *", "ポインタ：& と *"),
+    p(
+      "Every box lives at an ADDRESS in memory, like a house number. A POINTER is a variable that stores an address. &mana means \"the address of mana\", and int* key = &mana; makes key a pointer to an int that remembers where mana lives.",
+      "Cada caja vive en una DIRECCIÓN de memoria, como el número de una casa. Un PUNTERO es una variable que guarda una dirección. &mana significa \"la dirección de mana\", e int* key = &mana; hace de key un puntero a int que recuerda dónde vive mana.",
+      "箱はすべてメモリ上の「住所」に住んでいる。ポインタは住所をしまう変数じゃ。&mana は「mana の住所」、int* key = &mana; で key は mana の場所を覚えた int へのポインタになる。",
+    ),
+    p(
+      "To use the key, put * in front: *key means \"the box at that address\". Reading *key reads mana, and *key = 6 writes into mana. Without the *, you are working with the address itself, not with the value in the box.",
+      "Para usar la llave, pon * delante: *key significa \"la caja en esa dirección\". Leer *key lee mana, y *key = 6 escribe en mana. Sin el *, trabajas con la dirección misma, no con el valor de la caja.",
+      "鍵を使うには前に * をつける。*key は「その住所の箱」。*key を読めば mana を読み、*key = 6 で mana に書く。* がなければ、箱の中身ではなく住所そのものを扱うことになる。",
+    ),
+    ex("int mana = 2;\nint* key = &mana;\n*key = 6;\nstd::cout << mana;", "6",
+      L("& takes the address, * opens the box", "& toma la dirección, * abre la caja", "& で住所を取り、* で箱を開ける")),
+    p(
+      "Common mistake: forgetting the * when changing the value through a pointer parameter. key += 1 moves the KEY to the next address (pointer arithmetic) and leaves the value untouched; *key += 1 adds to the value. Order also matters: the box must exist before you take its address.",
+      "Error común: olvidar el * al cambiar el valor mediante un parámetro puntero. key += 1 mueve la LLAVE a la siguiente dirección (aritmética de punteros) y no toca el valor; *key += 1 suma al valor. El orden también importa: la caja debe existir antes de tomar su dirección.",
+      "よくあるミス：ポインタ引数で値を変えるときに * を忘れること。key += 1 は鍵を次の住所へずらす（ポインタ演算）だけで値はそのまま。*key += 1 なら値に足す。順番も大事で、住所を取る前に箱が必要じゃ。",
+    ),
+    ex("void reset(int* n) { *n = 0; }\n\nint main() {\n  int lives = 9;\n  reset(&lives);\n  std::cout << lives;\n}", "0",
+      L("Pass the address; the function writes through *", "Pasa la dirección; la función escribe con *", "住所を渡し、関数は * で書く")),
+    p(
+      "Arrays and pointers are close friends. An array name turns into a pointer to its first element. p + 2 is the address two elements ahead, and p[i] is just a short way to write *(p + i).",
+      "Los arrays y los punteros son muy amigos. El nombre de un array se convierte en un puntero a su primer elemento. p + 2 es la dirección dos elementos más adelante, y p[i] es solo una forma corta de escribir *(p + i).",
+      "配列とポインタは仲よし。配列の名前は先頭要素へのポインタになる。p + 2 は2つ先の要素の住所で、p[i] は *(p + i) の短い書き方にすぎない。",
+    ),
+    ex("int nums[4] = {5, 6, 7, 8};\nint* q = nums;\nstd::cout << *(q + 3) << \" \" << q[0];", "8 5"),
+  ),
+  note("reaim-null", L("Re-aiming, nullptr and crashes", "Reapuntar, nullptr y caídas", "付けかえ・nullptr・クラッシュ"),
+    p(
+      "Unlike a reference, a pointer can change where it points. k = &b; re-aims k at another box; after that, *k reaches b and the old box is left alone. This is the big difference: a reference is glued for life, a pointer is a key you can move.",
+      "A diferencia de una referencia, un puntero puede cambiar adónde apunta. k = &b; reapunta k a otra caja; después, *k llega a b y la caja vieja queda tranquila. Esta es la gran diferencia: una referencia queda pegada de por vida, un puntero es una llave que puedes mover.",
+      "参照とちがい、ポインタは指す先を変えられる。k = &b; で k は別の箱を指し、その後 *k は b に届き、前の箱はそのまま。これが大きな差じゃ。参照は一生くっつき、ポインタは動かせる鍵。",
+    ),
+    ex("int a = 3, b = 4;\nint* k = &a;\nk = &b;\n*k += 10;\nstd::cout << a << \" \" << b;", "3 14"),
+    p(
+      "A pointer can also be blank: nullptr means \"points nowhere\". Comparing a pointer (k == nullptr) is always safe; it's how you check before using it. A comparison gives a bool, which std::cout prints as 1 or 0.",
+      "Un puntero también puede estar vacío: nullptr significa \"no apunta a nada\". Comparar un puntero (k == nullptr) siempre es seguro; así se revisa antes de usarlo. Una comparación da un bool, que std::cout imprime como 1 o 0.",
+      "ポインタは空にもできる。nullptr は「どこも指さない」。ポインタの比較（k == nullptr）はいつでも安全で、使う前の確認に使う。比較の結果は bool で、std::cout では 1 か 0 と表示される。",
+    ),
+    ex("int* k = nullptr;\nif (k != nullptr) std::cout << *k;\nelse std::cout << \"empty\";", "empty",
+      L("Check before you open the box", "Revisa antes de abrir la caja", "開ける前に確かめる")),
+    p(
+      "What is never safe is USING a null pointer: *k when k is nullptr is undefined behavior. It compiles, and often the program crashes with a segfault, but nothing is promised. Rule: before writing *k, be sure k points to a living box.",
+      "Lo que nunca es seguro es USAR un puntero nulo: *k cuando k es nullptr es comportamiento indefinido. Compila, y a menudo el programa se cae con un segfault, pero no hay ninguna promesa. Regla: antes de escribir *k, asegúrate de que k apunta a una caja viva.",
+      "決して安全でないのは、null ポインタを使うこと。k が nullptr のときの *k は未定義動作。コンパイルは通り、たいてい segfault で落ちるが、何も保証されない。*k と書く前に、k が生きた箱を指しているか確かめよう。",
+    ),
+  ),
+  note("const-pointers", L("const with pointers", "const con punteros", "ポインタと const"),
+    p(
+      "With pointers there are two things you could lock: the BOX the pointer reaches, or the POINTER itself. Where you put const decides which one. Read the type from right to left: const int* is \"pointer to a const int\", int* const is \"const pointer to an int\".",
+      "Con punteros hay dos cosas que puedes sellar: la CAJA a la que llega el puntero, o el PUNTERO mismo. Dónde pones const decide cuál. Lee el tipo de derecha a izquierda: const int* es \"puntero a un int const\", int* const es \"puntero const a un int\".",
+      "ポインタで封印できるものは2つ。ポインタが届く「箱」か、「ポインタ自身」か。const の位置で決まる。型は右から左へ読もう。const int* は「const int へのポインタ」、int* const は「int への const ポインタ」。",
+    ),
+    p(
+      "const int* view is a read-only window: you can read *view and move view to another box, but you can't write through it. int* const fixed is a key welded to one box: you can change the value with *fixed = ..., but fixed can never point anywhere else.",
+      "const int* view es una ventana de solo lectura: puedes leer *view y mover view a otra caja, pero no escribir a través de él. int* const fixed es una llave soldada a una caja: puedes cambiar el valor con *fixed = ..., pero fixed nunca puede apuntar a otro lado.",
+      "const int* view は読み取り専用の窓。*view を読んだり別の箱へ移したりはできるが、書きこめない。int* const fixed は1つの箱に溶接された鍵。*fixed = ... で値は変えられるが、別の場所は指せない。",
+    ),
+    ex("int a = 1, b = 2;\nconst int* view = &a;\nview = &b;\nstd::cout << *view;", "2",
+      L("const int*: may move, may only read", "const int*: puede moverse, solo puede leer", "const int*：移動OK、読むだけ")),
+    ex("int energy = 1;\nint* const fixed = &energy;\n*fixed = 5;\nstd::cout << energy;", "5",
+      L("int* const: may write, may never move", "int* const: puede escribir, nunca moverse", "int* const：書けるが動かせない")),
+    p(
+      "Common mistake: reading const int* as \"constant pointer\". The const sits next to int, so it's the int that is read-only. A trick: if const is LEFT of the *, the value is locked; if it is RIGHT of the *, the pointer is locked.",
+      "Error común: leer const int* como \"puntero constante\". El const está junto a int, así que lo de solo lectura es el int. Un truco: si const está a la IZQUIERDA del *, se sella el valor; si está a la DERECHA del *, se sella el puntero.",
+      "よくあるミス：const int* を「定数ポインタ」と読むこと。const は int の隣なので、読み取り専用なのは int じゃ。コツ：const が * の左なら値が封印、右ならポインタが封印。",
+    ),
+  ),
+  note("stack-heap", L("Stack, heap, leaks, dangling", "Pila, heap, fugas y colgantes", "スタック・ヒープ・リーク"),
+    p(
+      "Ordinary local variables live on the STACK. They are created when their line runs and destroyed automatically at the closing } of their block. This is fast and safe, and it's where almost all your variables should live.",
+      "Las variables locales normales viven en la PILA (stack). Se crean cuando corre su línea y se destruyen solas en la } final de su bloque. Es rápido y seguro, y es donde deberían vivir casi todas tus variables.",
+      "ふつうのローカル変数はスタックに住む。その行で作られ、ブロックの } で自動的に壊される。速くて安全で、ほとんどの変数はここに置くべきじゃ。",
+    ),
+    p(
+      "new creates a box on the HEAP and gives you its address. A heap box does NOT die at the }: it stays until someone calls delete on that address. If every pointer to it is lost first, the memory can never be freed: that is a LEAK.",
+      "new crea una caja en el HEAP y te da su dirección. Una caja del heap NO muere en la }: se queda hasta que alguien llama a delete con esa dirección. Si antes se pierde todo puntero a ella, esa memoria ya no se puede liberar: eso es una FUGA.",
+      "new はヒープに箱を作り、その住所をくれる。ヒープの箱は } では死なず、誰かがその住所を delete するまで残る。先にポインタを全部なくすと二度と解放できない。これがリークじゃ。",
+    ),
+    ex("int* makeGem() {\n  int* g = new int(9);\n  return g;\n}\n\nint main() {\n  int* p = makeGem();\n  std::cout << *p;\n  delete p;\n}", "9",
+      L("A heap box outlives the function; delete frees it", "Una caja del heap sobrevive a la función; delete la libera", "ヒープの箱は関数より長生き。delete で解放")),
+    p(
+      "The opposite danger is a DANGLING pointer: one that still holds the address of a box that already died. Returning &local from a function is the classic case: the local dies at the function's }, so the caller gets a key to a dead box. Using it is UB; g++ even warns about it.",
+      "El peligro contrario es un puntero COLGANTE: uno que aún guarda la dirección de una caja que ya murió. Devolver &local desde una función es el caso clásico: la local muere en la } de la función, así que quien llama recibe una llave a una caja muerta. Usarla es UB; g++ incluso avisa.",
+      "逆の危険がダングリングポインタ。もう死んだ箱の住所を持ち続けるポインタじゃ。関数から &ローカル を返すのが典型で、ローカルは関数の } で死ぬので、呼び出し元は死んだ箱の鍵を受け取る。使えば UB。g++ も警告する。",
+    ),
+    p(
+      "Modern C++ rarely writes new and delete by hand. Use plain locals, containers like std::vector, or smart pointers like std::make_unique, which delete for you. You'll meet them in the Lifetime Forest.",
+      "El C++ moderno casi nunca escribe new y delete a mano. Usa locales simples, contenedores como std::vector o punteros inteligentes como std::make_unique, que borran por ti. Los conocerás en el Bosque de Vida.",
+      "現代の C++ では new と delete を手で書くことはまれ。ふつうのローカル、std::vector などのコンテナ、自動で delete してくれる std::make_unique などのスマートポインタを使う。ライフタイムの森で出会えるぞ。",
+    ),
+  ),
+];
 
 // ─── 1.3 Keys and pointers ─────────────────────────────────────────────────
 const pointers: LessonDef = {
@@ -427,6 +771,8 @@ const pointers: LessonDef = {
       answer: 0,
       output: "8",
       check: { compiles: true, stdout: "8" },
+      hint: L("p stores where hp lives. What does the * in *p = 8 open?", "p guarda dónde vive hp. ¿Qué abre el * de *p = 8?", "p は hp の住所を持つ。*p = 8 の * は何を開ける？"),
+      note: "pointer-basics",
       explain: L("p holds hp's address. *p = 8 opens that box and puts 8 inside: hp is 8.", "p guarda la dirección de hp. *p = 8 abre esa caja y mete 8: hp vale 8.", "p は hp の住所を持つ。*p = 8 はその箱に 8 を入れるので hp は 8。"),
       setup: [{ t: "tag", actor: "hero", text: "hp", value: "5" }, { t: "enter", actor: "ally" }, { t: "item", kind: "key", holder: "ally" }, { t: "tag", actor: "ally", text: "p" }],
       win: [{ t: "lend", to: "hero" }, { t: "value", actor: "hero", text: "8" }, { t: "print", text: "8" }],
@@ -437,6 +783,8 @@ const pointers: LessonDef = {
       code: "int hp = 3;\nint* p = ___hp;\nstd::cout << *p;",
       answer: "&",
       check: { compiles: true, stdout: "3" },
+      hint: L("An int* stores an address. Which operator gives you the address of a box?", "Un int* guarda una dirección. ¿Qué operador da la dirección de una caja?", "int* がしまうのは住所。箱の住所をくれる演算子は？"),
+      note: "pointer-basics",
       explain: L("&hp is 'the address of hp', exactly what an int* stores.", "&hp es 'la dirección de hp', justo lo que guarda un int*.", "&hp は「hp の住所」。int* がしまうのはまさにそれ。"),
       win: [{ t: "print", text: "3" }],
     },
@@ -453,6 +801,8 @@ const pointers: LessonDef = {
       answer: 0,
       output: "19",
       check: { compiles: true, stdout: "19" },
+      hint: L("Unlike a reference, a pointer can move. Where does p point when *p = 9 runs?", "A diferencia de una referencia, un puntero puede moverse. ¿Adónde apunta p al correr *p = 9?", "参照とちがってポインタは動ける。*p = 9 のとき p はどこを指す？"),
+      note: "reaim-null",
       explain: L("p = &b re-aims the key at b. *p = 9 then changes b, and a stays 1.", "p = &b apunta la llave a b. Luego *p = 9 cambia b, y a sigue en 1.", "p = &b で鍵は b を指す。*p = 9 は b を変え、a は 1 のまま。"),
     },
     {
@@ -463,6 +813,8 @@ const pointers: LessonDef = {
       answer: 0,
       output: "1",
       check: { compiles: true, stdout: "1" },
+      hint: L("Comparing a pointer is not the same as opening it. And how does std::cout print a bool?", "Comparar un puntero no es lo mismo que abrirlo. ¿Y cómo imprime std::cout un bool?", "ポインタの比較は開けることとはちがう。bool は std::cout でどう出る？"),
+      note: "reaim-null",
       explain: L("Comparing a pointer is safe; only using *p on nullptr is UB. true prints as 1.", "Comparar un puntero es seguro; solo usar *p con nullptr es UB. true se imprime como 1.", "ポインタの比較は安全。nullptr に *p するのが UB。true は 1 と表示。"),
     },
     {
@@ -470,6 +822,8 @@ const pointers: LessonDef = {
       prompt: L("Order it so it prints 8", "Ordénalo para que imprima 8", "8 と表示されるように並べよう"),
       lines: ["int hp = 5;", "int* p = &hp;", "*p = 8;", "std::cout << hp;"],
       check: { compiles: true, stdout: "8" },
+      hint: L("A key can only be made for a box that already exists, and printing comes last.", "Solo puedes hacer una llave para una caja que ya existe, y lo de imprimir va al final.", "鍵はすでにある箱にしか作れない。表示は最後じゃ。"),
+      note: "pointer-basics",
       explain: L("Make the box, make the key to it, use the key, then print.", "Crea la caja, crea su llave, usa la llave y luego imprime.", "箱を作り、その鍵を作り、鍵を使い、最後に表示。"),
     },
     say(L(
@@ -484,6 +838,8 @@ const pointers: LessonDef = {
       options: [YES, NO_GCC],
       answer: 1,
       check: { compiles: false },
+      hint: L("Read the type right to left: what does the const in const int* lock?", "Lee el tipo de derecha a izquierda: ¿qué sella el const de const int*?", "型を右から左へ読もう。const int* の const は何を封印する？"),
+      note: "const-pointers",
       explain: L("const int* is a read-only view of the box: writing through it is 'assignment of read-only location'.", "const int* es una vista de solo lectura: escribir a través de él da 'assignment of read-only location'.", "const int* は箱を読むだけの鍵。書きこむと read-only location のエラー。"),
     },
     {
@@ -493,6 +849,8 @@ const pointers: LessonDef = {
       options: [YES, NO_GCC],
       answer: 1,
       check: { compiles: false },
+      hint: L("Here const sits right of the *. Is the value locked, or the pointer?", "Aquí el const está a la derecha del *. ¿Se sella el valor o el puntero?", "const が * の右にある。封印されるのは値？ポインタ？"),
+      note: "const-pointers",
       explain: L("int* const means the key itself is sealed: it can never be re-aimed at y.", "int* const significa que la llave misma está sellada: nunca puede apuntar a y.", "int* const は鍵そのものが封印。y に付けかえられない。"),
     },
     {
@@ -503,6 +861,8 @@ const pointers: LessonDef = {
       answer: 0,
       output: "30 20",
       check: { compiles: true, stdout: "30 20" },
+      hint: L("p starts at index 0. p + n moves n boxes ahead, and p[n] means *(p + n).", "p empieza en el índice 0. p + n avanza n cajas, y p[n] significa *(p + n).", "p は 0 番から。p + n は n 個先、p[n] は *(p + n) のこと。"),
+      note: "pointer-basics",
       explain: L("An array turns into a pointer to its first box. p + 2 walks two boxes ahead; p[1] is *(p + 1).", "Un array se vuelve un puntero a su primera caja. p + 2 avanza dos cajas; p[1] es *(p + 1).", "配列は先頭の箱へのポインタになる。p + 2 は 2 つ先、p[1] は *(p + 1)。"),
     },
     say(L(
@@ -516,6 +876,8 @@ const pointers: LessonDef = {
       code: "void f() {\n  int x = 5;\n}",
       options: [L("On the stack", "En la pila (stack)", "スタック"), L("On the heap", "En el heap", "ヒープ")],
       answer: 0,
+      hint: L("Was this box created with new? If not, think about where ordinary locals live.", "¿Esta caja se creó con new? Si no, piensa dónde viven las locales normales.", "この箱は new で作った？ちがうなら、ふつうのローカルの住む場所を考えよう。"),
+      note: "stack-heap",
       explain: L("A plain local is on the stack and is gone at f's }. Only new int(5) would be on the heap.", "Una local simple está en la pila y desaparece en la } de f. Solo new int(5) estaría en el heap.", "ふつうのローカルはスタックで、f の } で消える。new int(5) ならヒープ。"),
     },
     {
@@ -526,6 +888,8 @@ const pointers: LessonDef = {
       answer: 0,
       output: "42",
       check: { compiles: true, stdout: "42" },
+      hint: L("new gives back an address. What does the * in front of p show instead?", "new devuelve una dirección. ¿Qué muestra en cambio el * delante de p?", "new は住所を返す。p の前の * では代わりに何が見える？"),
+      note: "stack-heap",
       explain: L("new int(42) builds a heap box holding 42 and returns its address. delete frees it.", "new int(42) crea una caja en el heap con 42 y devuelve su dirección. delete la libera.", "new int(42) はヒープに 42 入りの箱を作り住所を返す。delete で解放。"),
       win: [{ t: "print", text: "42" }, { t: "drop" }],
     },
@@ -536,6 +900,8 @@ const pointers: LessonDef = {
       options: [L("It leaks: never freed", "Se fuga: nunca se libera", "リーク：解放されない"), L("Compile error", "Error de compilación", "コンパイルエラー"), L("Freed at the }", "Se libera en la }", "} で解放される")],
       answer: 0,
       check: { compiles: true },
+      hint: L("Heap boxes live until delete. Who calls delete here?", "Las cajas del heap viven hasta el delete. ¿Quién llama a delete aquí?", "ヒープの箱は delete まで生きる。ここで delete を呼ぶのは誰？"),
+      note: "stack-heap",
       explain: L("Heap boxes don't die at }. Without delete the memory is lost: a LEAK. Modern C++ avoids raw new.", "Las cajas del heap no mueren en la }. Sin delete esa memoria se pierde: una FUGA. El C++ moderno evita new.", "ヒープの箱は } で消えない。delete しないとリーク。現代の C++ は生の new を避けるよ。"),
       win: [{ t: "banner", text: L("LEAK", "FUGA", "リーク") }],
     },
@@ -547,6 +913,8 @@ const pointers: LessonDef = {
       answer: 0,
       // Compile-only proof: the UB line sits behind a branch that never runs, so nothing crashes.
       check: { compiles: true, program: "#include <iostream>\n\nint main(int argc, char**) {\n  int* p = nullptr;\n  if (argc > 99) std::cout << *p;\n}\n" },
+      hint: L("p points nowhere. Is opening a blank key ever promised to work?", "p no apunta a nada. ¿Abrir una llave vacía tiene alguna garantía?", "p はどこも指さない。空の鍵を開けて大丈夫という保証はある？"),
+      note: "reaim-null",
       explain: L("It compiles, but *p on nullptr is UB: often a segfault, never a promise.", "Compila, pero *p con nullptr es UB: a menudo un segfault, nunca una promesa.", "コンパイルは通るけど nullptr への *p は UB。たいてい segfault。"),
       win: [{ t: "shake" }, { t: "say", actor: "enemy", text: L("Crack!", "¡Crac!", "バキッ！") }],
     },
@@ -557,6 +925,8 @@ const pointers: LessonDef = {
       options: [L("No: x died at the }", "No: x murió en la }", "いいえ：x は } で消えた"), L("Yes: p keeps x alive", "Sí: p mantiene viva a x", "はい：p が x を生かす")],
       answer: 0,
       check: { compiles: true },
+      hint: L("x is a local of make. When does it die, and what does p point to afterwards?", "x es local de make. ¿Cuándo muere, y a qué apunta p después?", "x は make のローカル。いつ死ぬ？その後 p は何を指す？"),
+      note: "stack-heap",
       explain: L("x was a stack local. After return the key points to a dead box: a DANGLING pointer. g++ even warns.", "x era local en la pila. Tras el return la llave apunta a una caja muerta: puntero COLGANTE. g++ avisa.", "x はスタックのローカル。return 後の鍵は死んだ箱を指す（ダングリング）。g++ も警告するよ。"),
       win: [{ t: "say", actor: "enemy", text: L("Dangling!", "¡Colgando!", "ぶらーん！") }],
     },
@@ -567,10 +937,98 @@ const pointers: LessonDef = {
       solution: '#include <iostream>\n\nvoid addGold(int* gold) {\n    *gold += 10;\n}\n\nint main() {\n    int gold = 5;\n    addGold(&gold);\n    std::cout << "gold: " << gold << "\\n";\n}\n',
       expect: "gold: 15",
       fallback: [String.raw`\*\s*gold\s*\+=\s*10`, String.raw`\(\s*\*\s*gold\s*\)\s*\+=\s*10`, String.raw`\*\s*gold\s*=\s*\*\s*gold\s*\+\s*10`],
+      hint: L("Inside addGold, gold is an address. Are you changing the key or the box it opens?", "Dentro de addGold, gold es una dirección. ¿Cambias la llave o la caja que abre?", "addGold の中の gold は住所。変えているのは鍵？開ける箱？"),
+      note: "pointer-basics",
       explain: L("gold += 10 moved the KEY ten boxes away. *gold += 10 opens the box and adds to the value.", "gold += 10 movió la LLAVE diez cajas. *gold += 10 abre la caja y suma al valor.", "gold += 10 は鍵を 10 個先にずらしただけ。*gold += 10 で箱の中身に足そう。"),
     },
   ],
+  notes: pointersNotes,
 };
+
+const bagsNotes: NoteDef[] = [
+  note("vector-basics", L("std::vector: a list that grows", "std::vector: una lista que crece", "std::vector：のびるリスト"),
+    p(
+      "std::vector<int> is a list of ints that can grow and shrink. The type in < > says what each element is. push_back(x) adds x at the END, size() counts the elements, front() reads the first one and back() reads the last one. Indexes start at 0, so the first element is v[0].",
+      "std::vector<int> es una lista de int que puede crecer y encogerse. El tipo entre < > dice qué es cada elemento. push_back(x) agrega x al FINAL, size() cuenta los elementos, front() lee el primero y back() el último. Los índices empiezan en 0, así que el primero es v[0].",
+      "std::vector<int> は伸び縮みする int のリスト。< > の型が要素の種類。push_back(x) は末尾に x を追加、size() は要素数、front() は最初、back() は最後を読む。番号は 0 から始まり、最初の要素は v[0] じゃ。",
+    ),
+    ex("std::vector<int> nums{8, 2};\nnums.push_back(5);\nstd::cout << nums.size() << \" \" << nums.front() << \" \" << nums.back();", "3 8 5",
+      L("push_back adds at the end; back() follows it", "push_back agrega al final; back() lo sigue", "push_back は末尾に追加、back() はそれを読む")),
+    p(
+      "Watch the brackets when you create one. Parentheses call a constructor with a meaning: vector<int>(4, 7) means \"4 elements, each 7\", and vector<int>(4) means \"4 elements, all zero\". Braces list the elements themselves: vector<int>{4, 7} has exactly two elements, 4 and 7.",
+      "Cuidado con los paréntesis al crearlo. Los paréntesis llaman a un constructor con un significado: vector<int>(4, 7) es \"4 elementos, cada uno 7\", y vector<int>(4) es \"4 elementos, todos cero\". Las llaves listan los elementos mismos: vector<int>{4, 7} tiene justo dos elementos, 4 y 7.",
+      "作るときのかっこに注意。丸かっこは意味のあるコンストラクタを呼ぶ。vector<int>(4, 7) は「7 が 4 個」、vector<int>(4) は「0 が 4 個」。波かっこは要素そのものを並べる。vector<int>{4, 7} は 4 と 7 の 2 個だけじゃ。",
+    ),
+    ex("std::vector<int> sevens(4, 7);\nstd::vector<int> pair{4, 7};\nstd::cout << sevens.size() << \" \" << sevens[0] << \" | \" << pair.size();", "4 7 | 2",
+      L("( ) means count and value; { } means the elements", "( ) es cantidad y valor; { } son los elementos", "( ) は個数と値、{ } は要素そのもの")),
+    p(
+      "Common mistake: expecting push_back to add at the front, or forgetting that size() changes after every push_back. Draw the vector as a row of boxes and add the new box on the right each time.",
+      "Error común: esperar que push_back agregue al principio, u olvidar que size() cambia tras cada push_back. Dibuja el vector como una fila de cajas y agrega la caja nueva a la derecha cada vez.",
+      "よくあるミス：push_back が先頭に足すと思うこと、push_back のたびに size() が変わるのを忘れること。vector を箱の列として描き、新しい箱は毎回右に足そう。",
+    ),
+  ),
+  note("range-for", L("Range-for: copy or reference", "For de rango: copia o referencia", "範囲 for：コピーか参照か"),
+    p(
+      "A range-for visits every element in order: for (int n : nums) { ... }. On each round, n is a fresh variable that starts with the current element's value. It reads nicely and you can't get the index wrong.",
+      "Un for de rango recorre cada elemento en orden: for (int n : nums) { ... }. En cada vuelta, n es una variable nueva que empieza con el valor del elemento actual. Se lee bien y no puedes equivocarte de índice.",
+      "範囲 for は要素を順番にめぐる：for (int n : nums) { ... }。毎回 n は今の要素の値で始まる新しい変数。読みやすく、番号をまちがえることもない。",
+    ),
+    p(
+      "The catch: without &, n is a COPY. Changing n changes only the copy, which is thrown away at the end of the round, so the vector stays the same. With a reference, for (int& n : nums), n IS the element, and changes go straight into the vector. auto& works the same way.",
+      "La trampa: sin &, n es una COPIA. Cambiar n solo cambia la copia, que se tira al final de la vuelta, así que el vector no cambia. Con una referencia, for (int& n : nums), n ES el elemento, y los cambios van directo al vector. auto& funciona igual.",
+      "落とし穴：& がないと n はコピー。n を変えてもコピーが変わるだけで、回の終わりに捨てられ、vector はそのまま。参照 for (int& n : nums) なら n は要素そのもので、変更が vector に入る。auto& も同じじゃ。",
+    ),
+    ex("std::vector<std::string> names{\"ann\", \"bo\"};\nfor (auto& n : names) n += \"!\";\nfor (const auto& n : names) std::cout << n << \" \";", "ann! bo!",
+      L("auto& edits the elements; const auto& only reads them", "auto& edita los elementos; const auto& solo los lee", "auto& は要素を編集、const auto& は読むだけ")),
+    p(
+      "Rule to remember: want to change the elements? Use & (or auto&). Only reading big elements like strings? Use const auto& to skip the copies. Only reading small ones like ints? A plain copy is fine.",
+      "Regla para recordar: ¿quieres cambiar los elementos? Usa & (o auto&). ¿Solo lees elementos grandes como strings? Usa const auto& para evitar copias. ¿Solo lees elementos pequeños como int? Una copia simple está bien.",
+      "覚えるルール：要素を変えたい？なら &（か auto&）。string のような大きい要素を読むだけ？ const auto& でコピーを省く。int のような小さい要素を読むだけなら、ふつうのコピーで十分じゃ。",
+    ),
+  ),
+  note("bounds", L("Out of range: [ ], at() and size_t", "Fuera de rango: [ ], at() y size_t", "範囲外：[ ]・at()・size_t"),
+    p(
+      "A vector with 2 elements has valid indexes 0 and 1 only. v[i] trusts you completely and checks nothing: an index past the end reads memory that isn't yours, which is undefined behavior. It may print junk, crash, or look fine.",
+      "Un vector con 2 elementos solo tiene los índices válidos 0 y 1. v[i] confía en ti por completo y no revisa nada: un índice más allá del final lee memoria que no es tuya, lo cual es comportamiento indefinido. Puede imprimir basura, caerse o parecer bien.",
+      "要素が 2 個の vector で有効な番号は 0 と 1 だけ。v[i] は完全に信用して何も確かめない。末尾より先の番号は自分のものでないメモリを読むので未定義動作。ゴミが出る、落ちる、平気に見えることもある。",
+    ),
+    p(
+      "v.at(i) does the same job but CHECKS the index first. If it's out of range, it throws a std::out_of_range exception. If nothing catches it, the program stops with an error message. A try / catch block can catch it and continue.",
+      "v.at(i) hace lo mismo pero REVISA el índice primero. Si está fuera de rango, lanza una excepción std::out_of_range. Si nadie la atrapa, el programa se detiene con un mensaje de error. Un bloque try / catch puede atraparla y seguir.",
+      "v.at(i) は同じ仕事をするが、先に番号を確かめる。範囲外なら std::out_of_range という例外を投げる。誰も捕まえなければエラーメッセージで止まる。try / catch で捕まえれば続けられる。",
+    ),
+    ex("std::vector<int> nums{4, 5};\ntry {\n  std::cout << nums.at(2);\n} catch (const std::out_of_range&) {\n  std::cout << \"too far\";\n}", "too far",
+      L("at() checks and throws; catch handles it", "at() revisa y lanza; catch lo maneja", "at() は確かめて投げ、catch が受け止める")),
+    p(
+      "size() returns size_t, an UNSIGNED type: it can't hold negative numbers. Subtracting below zero doesn't give -1; it wraps around to a huge number (this wrap is defined, not UB). Convert to int before subtracting, or compare first, when the result could go negative.",
+      "size() devuelve size_t, un tipo SIN SIGNO: no puede guardar negativos. Restar por debajo de cero no da -1; da la vuelta a un número enorme (esta vuelta está definida, no es UB). Convierte a int antes de restar, o compara primero, cuando el resultado pueda ser negativo.",
+      "size() が返す size_t は符号なしの型で、負の数を持てない。0 より下に引くと -1 にならず、巨大な数に一周する（これは定義済みで UB ではない）。負になりうるなら、int に変換してから引くか、先に比べよう。",
+    ),
+    ex("std::vector<int> nums{4, 5};\nstd::cout << static_cast<int>(nums.size()) - 3;", "-1",
+      L("As an int, the subtraction can go negative", "Como int, la resta puede ser negativa", "int にすれば負の結果も出せる")),
+  ),
+  note("strings", L("std::string and text", "std::string y el texto", "std::string と文字列"),
+    p(
+      "std::string is text that can grow, like a vector of chars. += glues more text at the end, size() counts the characters, and s[0] reads the first character. Like vectors, indexes start at 0.",
+      "std::string es texto que puede crecer, como un vector de char. += pega más texto al final, size() cuenta los caracteres y s[0] lee el primero. Como en los vectores, los índices empiezan en 0.",
+      "std::string は char の vector のような、のびる文字列。+= で末尾に文字をつなぎ、size() で文字数を数え、s[0] で最初の文字を読む。vector と同じく番号は 0 から。",
+    ),
+    ex("std::string word = \"map\";\nword += \"le\";\nstd::cout << word << \" \" << word.size() << \" \" << word[1];", "maple 5 a"),
+    p(
+      "+ on two strings GLUES them; it never does math, even if the text looks like a number. To get a number from text, convert it: std::stoi turns \"34\" into the int 34. To go the other way, std::to_string(34) gives the text \"34\".",
+      "+ con dos strings los PEGA; nunca hace cuentas, aunque el texto parezca un número. Para obtener un número del texto, conviértelo: std::stoi convierte \"34\" en el int 34. Al revés, std::to_string(34) da el texto \"34\".",
+      "string 同士の + は連結。数字に見える文字でも計算はしない。文字から数がほしいなら変換する。std::stoi は \"34\" を int の 34 に、逆に std::to_string(34) は文字の \"34\" にする。",
+    ),
+    ex("std::string x = \"3\", y = \"4\";\nstd::cout << x + y << \" \" << std::stoi(x) * std::stoi(y);", "34 12",
+      L("Glue the text, or convert and compute", "Pega el texto, o convierte y calcula", "連結するか、変換して計算するか")),
+    p(
+      "Trap: text in double quotes, like \"sun\", is NOT a std::string. It's an old C-style array of chars, and two arrays can't be added with +. It works as soon as one side is a real std::string, for example std::string(\"sun\") + \"set\".",
+      "Trampa: el texto entre comillas dobles, como \"sun\", NO es un std::string. Es un viejo array de char al estilo C, y dos arrays no se suman con +. Funciona en cuanto un lado es un std::string de verdad, por ejemplo std::string(\"sun\") + \"set\".",
+      "ワナ：\"sun\" のような二重引用符の文字は std::string ではない。C 由来の古い char 配列で、配列同士は + できない。片方が本物の std::string なら動く。たとえば std::string(\"sun\") + \"set\"。",
+    ),
+    ex("std::string s = std::string(\"sun\") + \"set\";\nstd::cout << s;", "sunset"),
+  ),
+];
 
 // ─── 1.4 Vectors and strings ───────────────────────────────────────────────
 const bags: LessonDef = {
@@ -614,6 +1072,8 @@ const bags: LessonDef = {
       answer: 0,
       output: "4 1",
       check: { compiles: true, stdout: "4 1" },
+      hint: L("Count the items after push_back, and remember which end push_back adds to.", "Cuenta los elementos tras push_back y recuerda en qué extremo agrega push_back.", "push_back 後の要素数を数え、push_back がどちらの端に足すか思い出そう。"),
+      note: "vector-basics",
       explain: L("push_back adds 1 at the end: 4 items, and back() is the last one, 1.", "push_back agrega 1 al final: 4 elementos, y back() es el último, 1.", "push_back で末尾に 1。要素は 4 個、back() は最後の 1。"),
       setup: [{ t: "item", kind: "scroll", holder: "hero" }, { t: "tag", actor: "hero", text: "v", value: "{3,1,4}" }],
       win: [{ t: "value", actor: "hero", text: "{3,1,4,1}" }, { t: "print", text: "4 1" }],
@@ -626,6 +1086,8 @@ const bags: LessonDef = {
       answer: 0,
       output: "12",
       check: { compiles: true, stdout: "12" },
+      hint: L("front() and back() read the two ends. The result is a sum of numbers.", "front() y back() leen los dos extremos. El resultado es una suma de números.", "front() と back() は両端を読む。結果は数の足し算じゃ。"),
+      note: "vector-basics",
       explain: L("front() is 5 and back() is 7: 5 + 7 = 12.", "front() es 5 y back() es 7: 5 + 7 = 12.", "front() は 5、back() は 7。5 + 7 = 12。"),
     },
     say(L(
@@ -641,6 +1103,8 @@ const bags: LessonDef = {
       answer: 0,
       output: "31",
       check: { compiles: true, stdout: "31" },
+      hint: L("Parentheses and braces mean different things here: a count, or a list of elements?", "Aquí paréntesis y llaves significan cosas distintas: ¿una cantidad o una lista de elementos?", "ここでは ( ) と { } の意味がちがう。個数？要素のリスト？"),
+      note: "vector-basics",
       explain: L("a(3) means 'size 3' (three zeros). b{3} is a list with one item: 3.", "a(3) significa 'tamaño 3' (tres ceros). b{3} es una lista con un elemento: 3.", "a(3) は「サイズ 3」（0 が 3 個）。b{3} は要素 3 が 1 個のリスト。"),
     },
     say(L(
@@ -656,6 +1120,8 @@ const bags: LessonDef = {
       answer: 0,
       output: "1",
       check: { compiles: true, stdout: "1" },
+      hint: L("Without &, is x the real element or a copy of it?", "Sin &, ¿x es el elemento real o una copia?", "& がないとき、x は本物の要素？コピー？"),
+      note: "range-for",
       explain: L("Each x was a copy, doubled and thrown away. The vector never changed.", "Cada x era una copia, duplicada y descartada. El vector nunca cambió.", "x は毎回コピー。2 倍にして捨てられただけで vector は変わらない。"),
       setup: [{ t: "item", kind: "scroll", holder: "hero" }, { t: "tag", actor: "hero", text: "v", value: "{1,2,3}" }],
       win: [{ t: "enter", actor: "ally" }, { t: "clone", to: "ally" }, { t: "print", text: "1" }],
@@ -666,6 +1132,8 @@ const bags: LessonDef = {
       code: "std::vector<int> v{1, 2, 3};\nfor (int___ x : v) x *= 2;\nstd::cout << v[0];",
       answer: "&",
       check: { compiles: true, stdout: "2" },
+      hint: L("Make x another name for each element instead of a copy.", "Haz que x sea otro nombre para cada elemento en vez de una copia.", "x をコピーではなく各要素の別名にしよう。"),
+      note: "range-for",
       explain: L("int& x is a reference to each item, so x *= 2 doubles the vector itself.", "int& x es una referencia a cada elemento, así que x *= 2 duplica el vector mismo.", "int& x は各要素への参照。x *= 2 で vector 自体が 2 倍になるよ。"),
       setup: [{ t: "item", kind: "scroll", holder: "hero" }, { t: "tag", actor: "hero", text: "v", value: "{1,2,3}" }],
       win: [{ t: "enter", actor: "ally" }, { t: "lend", to: "ally" }, { t: "value", actor: "hero", text: "{2,4,6}" }, { t: "print", text: "2" }],
@@ -682,6 +1150,8 @@ const bags: LessonDef = {
       options: [L("Throws std::out_of_range", "Lanza std::out_of_range", "std::out_of_range を投げる"), L("Shows 0", "Muestra 0", "0 が出る"), L("Compile error", "Error de compilación", "コンパイルエラー")],
       answer: 0,
       check: { compiles: true, throws: "std::out_of_range" },
+      hint: L("Unlike [ ], at() checks the index first. What does it do when the index is too big?", "A diferencia de [ ], at() revisa el índice primero. ¿Qué hace si el índice es muy grande?", "[ ] とちがい at() は先に番号を確かめる。大きすぎたらどうする？"),
+      note: "bounds",
       explain: L("at() finds that 5 is past the end and throws. Nobody catches it here, so the program stops.", "at() ve que 5 está fuera y lanza. Aquí nadie lo atrapa, así que el programa se detiene.", "at() は 5 が範囲外だと気づいて投げる。誰も捕まえないのでプログラムは止まる。"),
       win: [{ t: "shake" }],
     },
@@ -693,6 +1163,8 @@ const bags: LessonDef = {
       answer: 0,
       output: "caught",
       check: { compiles: true, stdout: "caught" },
+      hint: L("at() throws on a bad index. Does this catch match the type it throws?", "at() lanza con un índice malo. ¿Este catch coincide con el tipo que lanza?", "at() は悪い番号で投げる。この catch は投げられる型と合う？"),
+      note: "bounds",
       explain: L("at(5) throws std::out_of_range and the catch block handles it: caught.", "at(5) lanza std::out_of_range y el bloque catch lo maneja: caught.", "at(5) が投げた std::out_of_range を catch が受け止めて caught。"),
       win: [{ t: "print", text: "caught" }],
     },
@@ -703,6 +1175,8 @@ const bags: LessonDef = {
       options: [L("No: [] past the end is UB", "No: [] fuera del final es UB", "いいえ：範囲外の [] は UB"), L("Yes: it throws", "Sí: lanza una excepción", "はい：例外を投げる")],
       answer: 0,
       check: { compiles: true },
+      hint: L("Does [ ] check the index the way at() does? Count the valid indexes.", "¿[ ] revisa el índice como at()? Cuenta los índices válidos.", "[ ] は at() のように番号を確かめる？有効な番号を数えよう。"),
+      note: "bounds",
       explain: L("[] trusts you and checks nothing. Index 5 reads memory that isn't yours: UB.", "[] confía en ti y no revisa nada. El índice 5 lee memoria ajena: UB.", "[] は何も確認しない。5 番は自分のものじゃないメモリを読む：UB。"),
       win: [{ t: "banner", text: L("UB!", "¡UB!", "UB！") }],
     },
@@ -719,6 +1193,8 @@ const bags: LessonDef = {
       answer: 0,
       output: "5 h",
       check: { compiles: true, stdout: "5 h" },
+      hint: L("Count the letters after += glues the text, and remember indexes start at 0.", "Cuenta las letras después de que += pega el texto, y recuerda que los índices empiezan en 0.", "+= でつないだ後の文字数を数えよう。番号は 0 から。"),
+      note: "strings",
       explain: L("\"hero!\" has 5 letters, and s[0] is the first one: h.", "\"hero!\" tiene 5 letras, y s[0] es la primera: h.", "\"hero!\" は 5 文字。s[0] は先頭の h。"),
     },
     {
@@ -729,6 +1205,8 @@ const bags: LessonDef = {
       answer: 0,
       output: "105 15",
       check: { compiles: true, stdout: "105 15" },
+      hint: L("+ on two strings never does math. What does std::stoi turn text into?", "+ con dos strings nunca hace cuentas. ¿En qué convierte std::stoi el texto?", "string 同士の + は計算しない。std::stoi は文字を何に変える？"),
+      note: "strings",
       explain: L("+ on strings glues text: \"105\". std::stoi turns text into an int, so 10 + 5 = 15.", "+ con strings pega texto: \"105\". std::stoi convierte texto en int, así que 10 + 5 = 15.", "文字列の + は連結で \"105\"。std::stoi で int にすれば 10 + 5 = 15。"),
     },
     {
@@ -738,6 +1216,8 @@ const bags: LessonDef = {
       options: [YES, NO_GCC],
       answer: 1,
       check: { compiles: false },
+      hint: L("Is text in double quotes a std::string, or something older?", "¿El texto entre comillas dobles es un std::string, o algo más antiguo?", "二重引用符の文字は std::string？それとももっと古いもの？"),
+      note: "strings",
       explain: L("\"a\" and \"b\" are plain char arrays, not std::string, and arrays can't be added.", "\"a\" y \"b\" son arrays de char, no std::string, y los arrays no se suman.", "\"a\" と \"b\" は std::string じゃなく char 配列。配列同士は足せない。"),
     },
     {
@@ -748,6 +1228,8 @@ const bags: LessonDef = {
       answer: 0,
       output: "18446744073709551615",
       check: { compiles: true, stdout: "18446744073709551615" },
+      hint: L("size() returns an unsigned type. What happens when unsigned math goes below zero?", "size() devuelve un tipo sin signo. ¿Qué pasa cuando una cuenta sin signo baja de cero?", "size() は符号なしの型。符号なしの計算が 0 より下になると？"),
+      note: "bounds",
       explain: L("size() is unsigned (size_t). 0 - 1 can't go negative, so it wraps to the biggest value. That's defined.", "size() es sin signo (size_t). 0 - 1 no puede ser negativo: da la vuelta al valor máximo. Está definido.", "size() は符号なし（size_t）。0 - 1 は負になれず最大値に一周する。これは定義済み。"),
     },
     {
@@ -757,10 +1239,66 @@ const bags: LessonDef = {
       solution: '#include <iostream>\n#include <vector>\n\nint main() {\n    std::vector<int> v{1, 2, 3};\n    for (auto& x : v) x *= 10;\n    for (auto x : v) std::cout << x << " ";\n    std::cout << "\\n";\n}\n',
       expect: "10 20 30",
       fallback: [String.raw`for\s*\(\s*(auto|int)\s*&\s*\w+\s*:\s*v\s*\)`, String.raw`v\s*\[\s*\w+\s*\]\s*\*=\s*10`],
+      hint: L("The first loop's x is a copy of each element. Make it reach the real elements.", "La x del primer bucle es una copia de cada elemento. Haz que llegue a los reales.", "最初のループの x は各要素のコピー。本物に届くようにしよう。"),
+      note: "range-for",
       explain: L("The first loop multiplied copies. auto& x edits each real item in the vector.", "El primer bucle multiplicaba copias. auto& x edita cada elemento real del vector.", "最初のループはコピーをかけていた。auto& x なら vector の本物を書きかえる。"),
     },
   ],
+  notes: bagsNotes,
 };
+
+const bossNotes: NoteDef[] = [
+  note("boss-aliases", L("Recap: copies, references, keys", "Repaso: copias, referencias, llaves", "復習：コピー・参照・鍵"),
+    p(
+      "Ask one question for every name: is it its OWN box, or another way to reach an existing box? auto y = x and std::string s = v[0] make copies: new boxes. auto& z = x and int& r = a are references: the same box under a new name.",
+      "Hazte una pregunta por cada nombre: ¿es su PROPIA caja, u otra forma de llegar a una caja que ya existe? auto y = x y std::string s = v[0] hacen copias: cajas nuevas. auto& z = x e int& r = a son referencias: la misma caja con otro nombre.",
+      "名前ごとに考えよう。自分の箱か、すでにある箱への別の道か？ auto y = x や std::string s = v[0] はコピーで新しい箱。auto& z = x や int& r = a は参照で、同じ箱の別名じゃ。",
+    ),
+    p(
+      "Pointers are the third path: int* k = &n stores the address, and *k reaches n. A pointer to a pointer (int** kk = &k) needs two stars to reach the value: *kk is k, and **kk is n. When several names reach one box, apply every change to that one box, in order.",
+      "Los punteros son el tercer camino: int* k = &n guarda la dirección y *k llega a n. Un puntero a puntero (int** kk = &k) necesita dos estrellas para llegar al valor: *kk es k y **kk es n. Si varios nombres llegan a una caja, aplica cada cambio a esa caja, en orden.",
+      "ポインタは3つ目の道。int* k = &n は住所をしまい、*k で n に届く。ポインタのポインタ（int** kk = &k）は星2つで値に届く：*kk は k、**kk は n。いくつもの名前が1つの箱に届くなら、変更を順番にその箱へ。",
+    ),
+    ex("int base = 2;\nint& alias = base;\nint* key = &alias;\n*key *= 5;\nalias -= 1;\nstd::cout << base;", "9",
+      L("alias and *key both reach base", "alias y *key llegan ambos a base", "alias も *key も base に届く")),
+    ex("int n = 4;\nint* k = &n;\nint** kk = &k;\nstd::cout << **kk;", "4"),
+  ),
+  note("boss-numbers", L("Recap: numbers and sizes", "Repaso: números y tamaños", "復習：数とサイズ"),
+    p(
+      "int / int drops the fraction, and operators of the same level run left to right: 9 / 2 * 2 is (9 / 2) * 2, which is 4 * 2. As soon as one side is a double, like 2.0, the division keeps its decimals.",
+      "int / int tira la fracción, y los operadores del mismo nivel corren de izquierda a derecha: 9 / 2 * 2 es (9 / 2) * 2, es decir 4 * 2. En cuanto un lado es double, como 2.0, la división conserva sus decimales.",
+      "int / int は小数を捨て、同じ強さの演算子は左から順に計算する。9 / 2 * 2 は (9 / 2) * 2 で 4 * 2。片方が 2.0 のような double なら、割り算は小数を残す。",
+    ),
+    ex("std::cout << 9 / 2 * 2 << \" \" << 9 / 2.0;", "8 4.5"),
+    p(
+      "Signed overflow is UB, but UNSIGNED numbers are defined to wrap around: going below 0 lands on the biggest value. sizeof tells you how many bytes a type or object uses; sizeof(char) is always 1 by definition.",
+      "El desbordamiento con signo es UB, pero está definido que los números UNSIGNED dan la vuelta: bajar de 0 cae en el valor más grande. sizeof te dice cuántos bytes usa un tipo u objeto; sizeof(char) siempre es 1 por definición.",
+      "符号つきのオーバーフローは UB だが、unsigned は一周すると決まっている。0 より下は最大値になる。sizeof は型やオブジェクトのバイト数を教え、sizeof(char) は定義により必ず 1。",
+    ),
+    p(
+      "A text literal in quotes carries a hidden extra character at the end: '\\0', the marker that says \"the text stops here\". So a char array made from a literal has one more element than the letters you can see.",
+      "Un texto literal entre comillas lleva un carácter extra oculto al final: '\\0', la marca que dice \"el texto termina aquí\". Por eso un array de char hecho con un literal tiene un elemento más que las letras que ves.",
+      "引用符の文字列リテラルの最後には、見えない文字 '\\0' がある。「文字はここで終わり」という印じゃ。だからリテラルから作った char 配列は、見える文字より 1 つ多い。",
+    ),
+    ex("char word[] = \"cat\";\nstd::cout << sizeof(word);", "4",
+      L("c, a, t and the hidden '\\0'", "c, a, t y el '\\0' oculto", "c・a・t と隠れた '\\0'")),
+  ),
+  note("boss-safety", L("Recap: addresses and bounds", "Repaso: direcciones y límites", "復習：住所と範囲"),
+    p(
+      "A pointer stores an ADDRESS, never a plain number. The only ways to fill an int* are &someInt, another int*, new int(...), or nullptr. Assigning a number like 42 to a pointer is a compile error: g++ won't turn an int into an address.",
+      "Un puntero guarda una DIRECCIÓN, nunca un número suelto. Las únicas formas de llenar un int* son &unInt, otro int*, new int(...) o nullptr. Asignar un número como 42 a un puntero es un error de compilación: g++ no convierte un int en una dirección.",
+      "ポインタがしまうのは住所で、ただの数ではない。int* に入れられるのは &ある int、別の int*、new int(...)、nullptr だけ。42 のような数を入れるとコンパイルエラー。g++ は int を住所に変えない。",
+    ),
+    ex("int n = 42;\nint* k = &n;\nstd::cout << *k;", "42", L("Fill a pointer with an address", "Llena un puntero con una dirección", "ポインタには住所を入れる")),
+    p(
+      "Valid indexes go from 0 to size() - 1. Reading past the end is UB whether you use v[i] or a raw pointer p[i] into the vector's memory. The safe habits: loop while i < size(), use a range-for, or use at() when you want a checked access.",
+      "Los índices válidos van de 0 a size() - 1. Leer más allá del final es UB, uses v[i] o un puntero crudo p[i] a la memoria del vector. Los hábitos seguros: recorre mientras i < size(), usa un for de rango, o usa at() si quieres un acceso revisado.",
+      "有効な番号は 0 から size() - 1 まで。末尾の先を読むのは、v[i] でも vector のメモリを指す生ポインタ p[i] でも UB。安全な習慣：i < size() の間だけ回す、範囲 for を使う、確認つきなら at() を使う。",
+    ),
+    ex("std::vector<int> v{7, 8};\nfor (std::size_t i = 0; i < v.size(); ++i) std::cout << v[i];", "78",
+      L("Stop before size(): every index is valid", "Para antes de size(): cada índice es válido", "size() の手前で止めればすべて有効")),
+  ),
+];
 
 // ─── 1.5 Boss: Pointer Golem ───────────────────────────────────────────────
 const boss: LessonDef = {
@@ -777,23 +1315,24 @@ const boss: LessonDef = {
       "SOY EL GÓLEM PUNTERO. Copias, alias, llaves... ¡sigue cada camino por mi piedra o serás aplastado!",
       "我はポインタゴーレム。コピー、別名、鍵…この石の道をすべてたどれ。さもなくば砕く！",
     )),
-    { kind: "predict", time: 15, prompt: PRINT, code: "int a = 5;\nint& r = a;\nint* p = &r;\n*p += 1;\nr *= 2;\nstd::cout << a;", options: ["12", "11", "6"], answer: 0, output: "12", check: { compiles: true, stdout: "12" }, explain: L("r and *p both reach a: 5 + 1 = 6, then 6 * 2 = 12.", "r y *p llegan ambos a a: 5 + 1 = 6, luego 6 * 2 = 12.", "r も *p も a のこと。5 + 1 = 6、6 * 2 = 12。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: "std::cout << 10 / 4 * 4;", options: ["8", "10", "16"], answer: 0, output: "8", check: { compiles: true, stdout: "8" }, explain: L("Left to right: 10 / 4 is 2 (int division), then 2 * 4 = 8.", "De izquierda a derecha: 10 / 4 es 2 (división entera), luego 2 * 4 = 8.", "左から順に 10 / 4 = 2（整数の割り算）、2 * 4 = 8。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: "unsigned int u = 0;\nu = u - 1;\nstd::cout << (u > 0);", options: ["1", "0", L("UB", "UB", "UB")], answer: 0, output: "1", check: { compiles: true, stdout: "1" }, explain: L("Unsigned numbers wrap around (defined!): 0 - 1 is the maximum, which is > 0.", "Los unsigned dan la vuelta (¡definido!): 0 - 1 es el máximo, que es > 0.", "unsigned は一周する（定義済み）。0 - 1 は最大値で > 0。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: 'std::vector<std::string> v{"a", "b"};\nstd::string s = v[0];\ns += "x";\nstd::cout << v[0] << s;', options: ["aax", "axax", "ax"], answer: 0, output: "aax", check: { compiles: true, stdout: "aax" }, explain: L("s is a copy of v[0]. Adding x to s leaves v[0] as \"a\".", "s es una copia de v[0]. Agregar x a s deja v[0] como \"a\".", "s は v[0] のコピー。s に x を足しても v[0] は \"a\" のまま。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: "int x = 3;\nauto y = x;\nauto& z = x;\ny++;\nz += 10;\nstd::cout << x << y;", options: ["134", "44", "1314"], answer: 0, output: "134", check: { compiles: true, stdout: "134" }, explain: L("y is a copy (becomes 4); z is a reference to x (x becomes 13). Printed: 13 then 4.", "y es una copia (pasa a 4); z es referencia a x (x pasa a 13). Se imprime 13 y luego 4.", "y はコピー（4 に）、z は x の参照（x は 13 に）。表示は 13 と 4。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: 'std::cout << sizeof(char) << " " << 5 / 2.0;', options: ["1 2.5", "1 2", "8 2.5"], answer: 0, output: "1 2.5", check: { compiles: true, stdout: "1 2.5" }, explain: L("sizeof(char) is always 1. 2.0 is a double, so 5 / 2.0 is 2.5.", "sizeof(char) siempre es 1. 2.0 es double, así que 5 / 2.0 es 2.5.", "sizeof(char) はいつも 1。2.0 は double なので 5 / 2.0 は 2.5。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: "void bump(int* p) { (*p)++; }\nvoid bumpRef(int& r) { r++; }\n\nint main() {\n  int hp = 1;\n  bump(&hp);\n  bumpRef(hp);\n  std::cout << hp;\n}", options: ["3", "2", "1"], answer: 0, output: "3", check: { compiles: true, stdout: "3" }, explain: L("Both reach the real hp: one through a key, one through a reference. 1 + 1 + 1 = 3.", "Ambos llegan al hp real: uno con una llave, otro con una referencia. 1 + 1 + 1 = 3.", "どちらも本物の hp に届く（鍵と参照）。1 + 1 + 1 = 3。") },
-    { kind: "predict", time: 12, prompt: COMPILES, code: "int* p = 5;", options: [YES, NO_GCC], answer: 1, check: { compiles: false }, explain: L("A pointer holds an address, not a number: 'invalid conversion from int to int*'.", "Un puntero guarda una dirección, no un número: 'invalid conversion from int to int*'.", "ポインタがしまうのは住所で、数じゃない。int から int* には変換できない。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: "int x = 10;\nint* p = &x;\nint** pp = &p;\n**pp = 20;\nstd::cout << x;", options: ["20", "10", L("An address", "Una dirección", "住所")], answer: 0, output: "20", check: { compiles: true, stdout: "20" }, explain: L("pp is a key to the key p. **pp opens p, then opens x: x becomes 20.", "pp es una llave hacia la llave p. **pp abre p y luego abre x: x pasa a 20.", "pp は鍵 p への鍵。**pp で p を開け、さらに x を開けて 20 に。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: 'char s[] = "hi";\nstd::cout << sizeof(s);', options: ["3", "2", "8"], answer: 0, output: "3", check: { compiles: true, stdout: "3" }, explain: L("A text literal ends with a hidden '\\0' marker: h, i, '\\0' is 3 chars.", "Un texto literal termina con una marca oculta '\\0': h, i, '\\0' son 3 chars.", "文字列リテラルの最後には隠れた '\\0' がある。h, i, '\\0' で 3。") },
-    { kind: "predict", time: 12, prompt: SAFE, code: "std::vector<int> v{1, 2, 3};\nint* p = &v[0];\nstd::cout << p[3];", options: [L("No: index 3 is past the end", "No: el índice 3 está fuera", "いいえ：3 番は範囲外"), L("Yes: it shows 0", "Sí: muestra 0", "はい：0 が出る")], answer: 0, check: { compiles: true }, explain: L("Valid indexes are 0, 1, 2. p[3] reads past the end: UB, just like v[3].", "Los índices válidos son 0, 1, 2. p[3] lee fuera del final: UB, igual que v[3].", "有効なのは 0, 1, 2。p[3] は範囲外を読むので v[3] と同じく UB。") },
+    { kind: "predict", time: 15, prompt: PRINT, code: "int a = 5;\nint& r = a;\nint* p = &r;\n*p += 1;\nr *= 2;\nstd::cout << a;", options: ["12", "11", "6"], answer: 0, output: "12", check: { compiles: true, stdout: "12" }, hint: L("r and p both lead to the same box. Apply each change to it, in order.", "r y p llevan a la misma caja. Aplícale cada cambio, en orden.", "r も p も同じ箱へ。変更を順番にその箱へ。"), note: "boss-aliases", explain: L("r and *p both reach a: 5 + 1 = 6, then 6 * 2 = 12.", "r y *p llegan ambos a a: 5 + 1 = 6, luego 6 * 2 = 12.", "r も *p も a のこと。5 + 1 = 6、6 * 2 = 12。") },
+    { kind: "predict", time: 12, prompt: PRINT, code: "std::cout << 10 / 4 * 4;", options: ["8", "10", "16"], answer: 0, output: "8", check: { compiles: true, stdout: "8" }, hint: L("Same-level operators go left to right, and int / int drops the fraction.", "Los operadores del mismo nivel van de izquierda a derecha, e int / int tira la fracción.", "同じ強さの演算子は左から。int / int は小数を捨てる。"), note: "boss-numbers", explain: L("Left to right: 10 / 4 is 2 (int division), then 2 * 4 = 8.", "De izquierda a derecha: 10 / 4 es 2 (división entera), luego 2 * 4 = 8.", "左から順に 10 / 4 = 2（整数の割り算）、2 * 4 = 8。") },
+    { kind: "predict", time: 12, prompt: PRINT, code: "unsigned int u = 0;\nu = u - 1;\nstd::cout << (u > 0);", options: ["1", "0", L("UB", "UB", "UB")], answer: 0, output: "1", check: { compiles: true, stdout: "1" }, hint: L("Unsigned math has defined behavior below zero. Where does it land?", "Las cuentas unsigned tienen un comportamiento definido bajo cero. ¿Dónde caen?", "unsigned の 0 より下は動作が決まっている。どこに着く？"), note: "boss-numbers", explain: L("Unsigned numbers wrap around (defined!): 0 - 1 is the maximum, which is > 0.", "Los unsigned dan la vuelta (¡definido!): 0 - 1 es el máximo, que es > 0.", "unsigned は一周する（定義済み）。0 - 1 は最大値で > 0。") },
+    { kind: "predict", time: 12, prompt: PRINT, code: 'std::vector<std::string> v{"a", "b"};\nstd::string s = v[0];\ns += "x";\nstd::cout << v[0] << s;', options: ["aax", "axax", "ax"], answer: 0, output: "aax", check: { compiles: true, stdout: "aax" }, hint: L("Is s its own box or another name for v[0]? Look for an &.", "¿s es su propia caja u otro nombre para v[0]? Busca un &.", "s は自分の箱？v[0] の別名？& を探そう。"), note: "boss-aliases", explain: L("s is a copy of v[0]. Adding x to s leaves v[0] as \"a\".", "s es una copia de v[0]. Agregar x a s deja v[0] como \"a\".", "s は v[0] のコピー。s に x を足しても v[0] は \"a\" のまま。") },
+    { kind: "predict", time: 12, prompt: PRINT, code: "int x = 3;\nauto y = x;\nauto& z = x;\ny++;\nz += 10;\nstd::cout << x << y;", options: ["134", "44", "1314"], answer: 0, output: "134", check: { compiles: true, stdout: "134" }, hint: L("One of y and z is a copy, the other an alias. Then watch the order things are printed in.", "Entre y y z, uno es copia y el otro alias. Luego fíjate en el orden en que se imprimen.", "y と z の片方はコピー、片方は別名。表示の順番にも注意。"), note: "boss-aliases", explain: L("y is a copy (becomes 4); z is a reference to x (x becomes 13). Printed: 13 then 4.", "y es una copia (pasa a 4); z es referencia a x (x pasa a 13). Se imprime 13 y luego 4.", "y はコピー（4 に）、z は x の参照（x は 13 に）。表示は 13 と 4。") },
+    { kind: "predict", time: 12, prompt: PRINT, code: 'std::cout << sizeof(char) << " " << 5 / 2.0;', options: ["1 2.5", "1 2", "8 2.5"], answer: 0, output: "1 2.5", check: { compiles: true, stdout: "1 2.5" }, hint: L("sizeof(char) is fixed by the language. Is 2.0 an int or a double?", "sizeof(char) lo fija el lenguaje. ¿2.0 es un int o un double?", "sizeof(char) は言語で決まっている。2.0 は int？double？"), note: "boss-numbers", explain: L("sizeof(char) is always 1. 2.0 is a double, so 5 / 2.0 is 2.5.", "sizeof(char) siempre es 1. 2.0 es double, así que 5 / 2.0 es 2.5.", "sizeof(char) はいつも 1。2.0 は double なので 5 / 2.0 は 2.5。") },
+    { kind: "predict", time: 15, prompt: PRINT, code: "void bump(int* p) { (*p)++; }\nvoid bumpRef(int& r) { r++; }\n\nint main() {\n  int hp = 1;\n  bump(&hp);\n  bumpRef(hp);\n  std::cout << hp;\n}", options: ["3", "2", "1"], answer: 0, output: "3", check: { compiles: true, stdout: "3" }, hint: L("Does each function get a copy, or a way to reach main's hp?", "¿Cada función recibe una copia, o una forma de llegar al hp de main?", "各関数が受け取るのはコピー？main の hp に届く道？"), note: "boss-aliases", explain: L("Both reach the real hp: one through a key, one through a reference. 1 + 1 + 1 = 3.", "Ambos llegan al hp real: uno con una llave, otro con una referencia. 1 + 1 + 1 = 3.", "どちらも本物の hp に届く（鍵と参照）。1 + 1 + 1 = 3。") },
+    { kind: "predict", time: 12, prompt: COMPILES, code: "int* p = 5;", options: [YES, NO_GCC], answer: 1, check: { compiles: false }, hint: L("What kind of value does a pointer store? Is 5 that kind of value?", "¿Qué clase de valor guarda un puntero? ¿5 es esa clase de valor?", "ポインタがしまう値の種類は？5 はその種類？"), note: "boss-safety", explain: L("A pointer holds an address, not a number: 'invalid conversion from int to int*'.", "Un puntero guarda una dirección, no un número: 'invalid conversion from int to int*'.", "ポインタがしまうのは住所で、数じゃない。int から int* には変換できない。") },
+    { kind: "predict", time: 15, prompt: PRINT, code: "int x = 10;\nint* p = &x;\nint** pp = &p;\n**pp = 20;\nstd::cout << x;", options: ["20", "10", L("An address", "Una dirección", "住所")], answer: 0, output: "20", check: { compiles: true, stdout: "20" }, hint: L("Follow the stars one at a time: *pp is p, so where does **pp lead?", "Sigue las estrellas de una en una: *pp es p, entonces ¿adónde lleva **pp?", "星を1つずつたどろう。*pp は p。では **pp はどこへ？"), note: "boss-aliases", explain: L("pp is a key to the key p. **pp opens p, then opens x: x becomes 20.", "pp es una llave hacia la llave p. **pp abre p y luego abre x: x pasa a 20.", "pp は鍵 p への鍵。**pp で p を開け、さらに x を開けて 20 に。") },
+    { kind: "predict", time: 12, prompt: PRINT, code: 'char s[] = "hi";\nstd::cout << sizeof(s);', options: ["3", "2", "8"], answer: 0, output: "3", check: { compiles: true, stdout: "3" }, hint: L("Count the letters, plus the hidden marker every text literal ends with.", "Cuenta las letras, más la marca oculta con la que termina todo texto literal.", "文字数に、リテラルの最後の隠れた印を足そう。"), note: "boss-numbers", explain: L("A text literal ends with a hidden '\\0' marker: h, i, '\\0' is 3 chars.", "Un texto literal termina con una marca oculta '\\0': h, i, '\\0' son 3 chars.", "文字列リテラルの最後には隠れた '\\0' がある。h, i, '\\0' で 3。") },
+    { kind: "predict", time: 12, prompt: SAFE, code: "std::vector<int> v{1, 2, 3};\nint* p = &v[0];\nstd::cout << p[3];", options: [L("No: index 3 is past the end", "No: el índice 3 está fuera", "いいえ：3 番は範囲外"), L("Yes: it shows 0", "Sí: muestra 0", "はい：0 が出る")], answer: 0, check: { compiles: true }, hint: L("List the valid indexes of a 3-element vector. Is 3 among them?", "Haz la lista de índices válidos de un vector de 3 elementos. ¿Está el 3?", "要素 3 個の vector の有効な番号は？3 は入っている？"), note: "boss-safety", explain: L("Valid indexes are 0, 1, 2. p[3] reads past the end: UB, just like v[3].", "Los índices válidos son 0, 1, 2. p[3] lee fuera del final: UB, igual que v[3].", "有効なのは 0, 1, 2。p[3] は範囲外を読むので v[3] と同じく UB。") },
     enemySays(L(
       "Crumble... you followed every key. But in the Lifetime Forest, objects are born and die. Beware!",
       "Me desmorono... seguiste cada llave. Pero en el Bosque de Vida los objetos nacen y mueren. ¡Cuidado!",
       "くずれる…すべての鍵をたどったか。だがライフタイムの森では、オブジェクトが生まれて死ぬ。気をつけろ！",
     )),
   ],
+  notes: bossNotes,
 };
 
 export const valueVillage: RegionDef = {

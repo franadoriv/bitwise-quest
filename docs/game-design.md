@@ -13,6 +13,7 @@ Frequent stimulation and quick rewards, without visual chaos.
 - **Code controls the world:** variables are labels above characters, moves send items flying and borrows go and come back.
 - **No dead time:** if the player is idle for 9 seconds, the hero cheers them on.
 - **Mistakes teach:** the planet's guide explains why and the question comes back at the end ("the bug is back!").
+- **Help is always one tap away:** the guidebook (📖) holds the full explanation of every idea in the lesson, and a hint ticket buys a nudge (see [Learning help](#learning-help-guidebook-and-hints)).
 
 ## Planets
 
@@ -47,21 +48,61 @@ Progress is saved like on a retro console: a **memory card with 15 slots** (`/sa
 - **Export/import:** a slot can be downloaded as a `.bwq` file (`BitwiseQuest_<player>_<date>_<time>.bwq`) and imported into any slot on another browser or device. Importing onto a used slot asks first; deleting a slot shows a warning. Edited or damaged files are rejected.
 - Saves live in the browser (localStorage). Clearing site data deletes them, so export to keep a backup.
 
-## Scoring (`components/game/LessonGame.tsx`)
+## Lesson timer
+
+Before every lesson, boss and review (not exams) a timer modal (`components/game/TimerModal.tsx`) asks how to play. The last choice comes preselected (`prefs.timer` in the save, stored with `setTimerPref`), so one tap starts. The modes live in `TIMER_MODES` (`lib/game-rules.ts`):
+
+| Mode | Time per question | Max speed bonus | Notes |
+| --- | --- | --- | --- |
+| `off` | No timer | 0 | No time pressure and no speed bonus. Not allowed in bosses |
+| `relaxed` | base × 1.6 | 40 | |
+| `normal` | base | 60 | Default for new saves |
+| `fast` | base × 0.65 | 90 | |
+
+- **Base seconds** come from `questionSeconds(beat)`: the beat's `time` if set; 120 for `run`; otherwise 12 (`pick`), 14 (`predict`, `order`) or 16 (`type`) plus 2 s per non-empty code line (3 s per line for `order`), clamped to 10–60 s. Longer code gets more time. The modal shows the lesson's average.
+- **`questionLimitMs(beat, mode, boss)`** turns that into milliseconds; bosses are always timed (`off` counts as `normal`).
+- In lessons and reviews, running out only loses the speed bonus. In bosses a timeout counts as a mistake. Exams skip the modal and keep their own fixed timer (`time`, or 25 s per question), where a timeout is a wrong answer.
+- The timer pauses while the guidebook is open: reading time does not count.
+
+## Scoring (`components/game/LessonGame.tsx`, `questionPoints` in `lib/game-rules.ts`)
 
 | Concept | Rule |
 | --- | --- |
-| Points per correct answer | `(100 + 60 × speed) × (1 + 0.1 × min(combo − 1, 10))` |
-| Speed | Fraction of time remaining. Above 0.66 is PERFECT and above 0.33 is GREAT |
+| Points per correct answer | `(100 + bonus × speed) × (1 + 0.1 × min(combo − 1, 10))`, where `bonus` is the timer mode's max speed bonus (0, 40, 60 or 90) |
+| Guidebook cost | Opening the guidebook during a question removes that question's speed bonus and costs 25% of its points (`× 0.75`), once per question |
+| Speed | Fraction of time remaining (0 without a timer). Above 0.66 is PERFECT and above 0.33 is GREAT |
 | Combo | Consecutive first-try correct answers. Banner at 3, 6, 9 and then every 5 |
 | Hearts | 5 in lessons and 3 in bosses. Only the first mistake on each beat costs a heart |
 | Stars | 3 with no mistakes, 2 with up to 2 mistakes, 1 otherwise (`lib/game-rules.ts`) |
 | XP | `lesson xp × (0.6 + 0.15 × stars)` (× 0.4 on replays) `+ points / 25`, computed by `completeLesson` in `lib/save/progress.ts` |
 | Level | `floor(sqrt(xp / 40)) + 1` |
 
+## Learning help: guidebook and hints
+
+Some questions are hard, and dialogs and `explain` are short by design. Two kinds of help keep a stuck player moving (authoring rules in [authoring-lessons.md](authoring-lessons.md#notes-and-hints)):
+
+**The guidebook (lesson notes).** The book (📖) button opens `components/game/NotePanel.tsx`, the lesson's notes: long explanations of each idea with runnable examples (`LessonDef.notes`). It opens on the note the current question points at (`note`), with the others as tabs. It is available at any time in lessons, bosses and reviews, and from the "read more" button in the wrong-answer box; it is hidden in exams.
+
+- The timer is paused while it is open.
+- On a question, the **first** open costs 25% of that question's points and its speed bonus (the button shows `−25%`); later opens for the same question are free, and so is opening it on dialogs, demos or after a wrong answer.
+
+**Hints.** The bulb button on a question (it shows the ticket count) (`takeHint` in `components/game/LessonGame.tsx`) spends one hint ticket (`spendTicket`) and shows the question's `hint` in a box from the guide. On `pick` and `predict` it also strikes out one wrong option (`ChoiceBeatView`'s `struck` prop). One hint per question; a question without a `hint` costs nothing. With no tickets left the button refuses.
+
+**Ticket economy** (`lib/save/progress.ts`, saved as `stats.tickets`):
+
+| Source | Tickets |
+| --- | --- |
+| New save (and every save migrated from v1) | 5 (`START_TICKETS`) |
+| A 3-star lesson clear | +1 |
+| First lesson, review or exam of a calendar day (`bumpStreak`) | +1 |
+| Buy on the result screen (`components/game/ResultScreen.tsx`, `buyTicket`) | +1 for 40 coins (`TICKET_PRICE`) |
+| Using a hint | −1 |
+
+Hints never affect points or stars, so the trade-off is purely the ticket.
+
 ## Retention
 
-- **Daily streak** when completing any lesson, review or exam.
+- **Daily streak** when completing any lesson, review or exam. The first of the day also gives a hint ticket.
 - **Play time** is tracked per save and shown on the memory card.
 - **Spaced repetition:** every missed beat enters a Leitner box. Intervals are 10 minutes, 1, 3, 7 and 14 days. It shows on the map as "WANDERING BUGS".
 - **Per-lesson mastery:** average of the last 20 answers, visible on the map.

@@ -8,7 +8,7 @@ Player progress lives **on the client**, in a retro "memory card" with 15 save s
 | Migrations | `lib/save/migrate.ts` | `SaveError`, `MIGRATIONS`, `normalize`, `migrate` |
 | Binary codec | `lib/save/codec.ts` | `.bwq` encode/decode, CRC32, base64, export file name |
 | Storage | `lib/save/store.ts` | localStorage slots, active slot, export/import |
-| Progress rules | `lib/save/progress.ts` | Pure functions: unlocks, rewards, reviews, exams, landing, play time |
+| Progress rules | `lib/save/progress.ts` | Pure functions: unlocks, rewards, reviews, exams, hint tickets, timer preference, landing, play time |
 | React state | `components/save/SaveProvider.tsx` | `SaveProvider`, `useSave`, `RequireSave` |
 | Slot screen | `components/save/MemoryCard.tsx` | `/saves`: new game, continue, export, import, delete |
 | HUD chip | `components/save/PlayerChip.tsx` | Player name, level and the autosave light |
@@ -17,15 +17,18 @@ Player progress lives **on the client**, in a retro "memory card" with 15 save s
 ## Data model (`lib/save/schema.ts`)
 
 ```ts
-SAVE_VERSION = 1      // bump on any shape change (see "Changing the save format")
-SLOT_COUNT   = 15     // slots on the memory card
-NAME_MAX     = 12     // player name length
+SAVE_VERSION  = 2     // bump on any shape change (see "Changing the save format")
+SLOT_COUNT    = 15    // slots on the memory card
+NAME_MAX      = 12    // player name length
+START_TICKETS = 5     // hint tickets in a new save
+TIMER_PREFS   = ["off", "relaxed", "normal", "fast"]  // TimerPref (= TimerMode in lib/game-rules.ts)
 
 interface SaveData {
   version: typeof SAVE_VERSION;
   id: string;                 // random UUID: the same save across exports/imports
   player: { name; createdAt; updatedAt; playMs };
-  stats: { xp; coins; streak; bestStreak; lastDay: string | null };
+  stats: { xp; coins; streak; bestStreak; lastDay: string | null; tickets };  // tickets: hint tickets (v2)
+  prefs: { timer: TimerPref };  // last choice in the pre-lesson timer modal (v2)
   lastLang?: string;          // last planet visited (the galaxy starts there)
   langs: Record<langSlug, LangRecord>;
 }
@@ -41,7 +44,8 @@ interface LangRecord {
 
 - `LessonRecord.recent` holds the last 20 first-try answers as a string of `"1"`/`"0"`; mastery is computed from it.
 - `LessonRecord.skipped` marks lessons cleared by an entry exam instead of played.
-- `newSave(name)` creates an empty save; the name is cleaned by `cleanName` (control characters and `<>` removed, trimmed, cut to `NAME_MAX`, `"HERO"` if empty).
+- `stats.tickets` is the number of hint tickets the player holds; `prefs.timer` is preselected in the timer modal before each lesson (see [game-design.md](game-design.md#lesson-timer)).
+- `newSave(name)` creates an empty save with `START_TICKETS` tickets and the `"normal"` timer; the name is cleaned by `cleanName` (control characters and `<>` removed, trimmed, cut to `NAME_MAX`, `"HERO"` if empty).
 - `langOf(save, lang)` returns the language record, creating an empty one if needed (it mutates the save, so call it on a clone).
 
 Design rules:
@@ -57,7 +61,11 @@ Design rules:
 1. It rejects anything without a numeric `version` (`SaveError("corrupt")`).
 2. A `version` above `SAVE_VERSION` is refused (`SaveError("newer")`): the player must update the game.
 3. While `version < SAVE_VERSION`, it applies `MIGRATIONS[version]`, which upgrades version *n* to *n + 1*. A missing step is `SaveError("corrupt")`.
-4. `normalize` fills defaults for any missing field (numbers default to 0, `lastDay` to `null`, a missing `id` becomes `legacy-<createdAt>`, missing `lessons`/`reviews`/`exams` become `{}`) without dropping unknown fields.
+4. `normalize` fills defaults for any missing field (numbers default to 0, `lastDay` to `null`, `stats.tickets` to `START_TICKETS`, an unknown `prefs.timer` to `"normal"`, a missing `id` becomes `legacy-<createdAt>`, missing `lessons`/`reviews`/`exams` become `{}`) without dropping unknown fields (including unknown keys in `prefs`).
+
+| Step | Change |
+| --- | --- |
+| `MIGRATIONS[1]` (v1 → v2) | Adds hint tickets and the timer preference: `stats.tickets = START_TICKETS` (5, the same allowance for everyone) and `prefs = { timer: "normal" }` |
 
 `SaveError.code` is one of:
 
@@ -120,13 +128,18 @@ All game-progress logic is **pure**: functions take a save (and the content they
 | `worldState(content, rec)` | Derived map view: per region `unlocked`/`completed`, per lesson `stars`/`completed`/`skipped`/`unlocked`/`mastery`, plus `reviewDue` and `isNew` |
 | `isUnlocked(content, rec, slug)` | Used by `LessonClient` to redirect locked lessons to the map |
 | `nextLesson(content, rec)` | First unlocked, uncompleted lesson |
-| `completeLesson(save, lang, content, lesson, result)` | Stars, best score, plays, first-clear XP (40% on replays), coins, attempts, streak; returns `{ save, reward }` |
+| `completeLesson(save, lang, content, lesson, result)` | Stars, best score, plays, first-clear XP (40% on replays), coins, attempts, streak, hint tickets (+1 for 3 stars, +1 for the first play of the day); returns `{ save, reward }` (`reward.ticketsGained`) |
 | `recordFailedRun(save, lang, slug, attempts)` | Game over: misses still enter review, the lesson is not completed |
 | `dueReviews(rec, now, limit = 8)` | Due review keys, lowest box first |
 | `completeReview(save, lang, results, score)` | Moves Leitner boxes (correct: next box; wrong: back to box 1 in 10 minutes; past the last box the key is removed) |
 | `completeExam(save, lang, meta, answers)` | Grades on the client, stores the attempt and skips mastered regions in order (≥ 80% over ≥ 2 questions); returns `{ save, report }` |
+| `spendTicket(save)` | Spends one hint ticket; `null` when there are none left |
+| `buyTicket(save, price = TICKET_PRICE)` | Buys one ticket for `TICKET_PRICE` (40) coins; `null` when the player can't afford it |
+| `setTimerPref(save, timer)` | Stores the timer chosen in the pre-lesson modal |
 | `markLanded(save, lang)` | Sets `landedAt` the first time (the guide's landing intro is not shown again) |
 | `addPlayTime(save, ms)` | Adds to `player.playMs` |
+
+The streak is bumped by `completeLesson`, `completeReview` and `completeExam` alike, and the first of those on a new calendar day also adds one hint ticket.
 
 Unlock rules: a region unlocks when the previous region is fully completed (lessons skipped by an exam count) and its `status` is `active`; a lesson unlocks when the previous lesson of its region is completed.
 
@@ -170,5 +183,5 @@ Only needed when the **shape** of `SaveData` changes (new required field, rename
 
 ## Tests
 
-- `npm test` runs `tests/save.test.ts` with `node:test`: codec round-trip (binary and base64), files differ per export and hide the name, any modified byte is rejected, non-save files are rejected, newer versions are refused, normalization of old shapes (defaults plus preserved unknown keys), export file name, lesson unlock order and rewards (including a missed beat becoming a due review and moving up a Leitner box), and exam region skipping.
+- `npm test` runs `tests/save.test.ts` with `node:test`: codec round-trip (binary and base64), files differ per export and hide the name, any modified byte is rejected, non-save files are rejected, newer versions are refused, normalization of old shapes (defaults plus preserved unknown keys), export file name, lesson unlock order and rewards (including a missed beat becoming a due review and moving up a Leitner box), exam region skipping, the v1 → v2 migration (5 tickets, `"normal"` timer, an invalid timer repaired, unknown prefs kept), hint tickets (spend, buy, earned by perfect clears and daily play) and the timer math in `lib/game-rules.ts` (`questionSeconds`, `questionLimitMs`, `questionPoints`).
 - `scripts/e2e-memory-card.mjs` drives the real UI; `scripts/playtest.mjs` injects a save and checks the result was persisted. See [testing.md](testing.md).

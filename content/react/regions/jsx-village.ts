@@ -1,4 +1,4 @@
-import type { LessonDef, RegionDef } from "../../../lib/content/types.ts";
+import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
 import { enemySays, say } from "../../rust/helpers.ts";
 
@@ -19,6 +19,322 @@ const RENDER = L("RENDER!", "¡RENDER!", "レンダー！");
 
 const HELLO = 'function Hello({ name }: { name: string }) {\n  return <p>Hi {name}</p>;\n}';
 
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A rendered example: shows `body` and `el`; the validator renders `el` and checks the HTML. */
+const ex = (body: string, el: string, output: string, caption?: Text): NoteBlock =>
+  ({ t: "code", code: body ? `${body}\n${el}` : el, output, caption, check: { program: show(body, el), compiles: true, stdout: output } });
+/** A runnable example shown as written (React is imported behind the scenes). */
+const run = (code: string, output: string, caption?: Text): NoteBlock =>
+  ({ t: "code", code, output, caption, check: { program: `${HEAD}${code}`, compiles: true, stdout: output } });
+/** An example that must NOT type-check (verified too). */
+const bad = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { program: `${HEAD}${code}`, compiles: false } });
+
+const jsxBasicsNotes: NoteDef[] = [
+  note("jsx-slots", L("Curly braces: JS inside markup", "Llaves: JS dentro del marcado", "波かっこ：マークアップの中の JS"),
+    p(
+      "JSX looks like HTML, but it lives inside JavaScript. Most of it reaches the page as written: tags and plain text. The exception is curly braces. Whatever sits between { and } is a JavaScript expression: it runs first, and only its resulting VALUE lands in the markup.",
+      "JSX parece HTML, pero vive dentro de JavaScript. Casi todo llega a la página tal cual: etiquetas y texto plano. La excepción son las llaves. Lo que va entre { y } es una expresión de JavaScript: se ejecuta primero, y solo su VALOR resultante cae en el marcado.",
+      "JSX は HTML に見えるけれど、JavaScript の中に住んでいる。タグや普通の文字はそのままページに出る。例外は波かっこ。{ と } の間は JavaScript の式で、先に計算され、その結果の「値」だけがマークアップに入るんだ。",
+    ),
+    ex("const level = 4;", "<p>Level {level * 10}</p>", "<p>Level 40</p>",
+      L("The expression runs first; only 40 reaches the HTML", "La expresión corre primero; solo 40 llega al HTML", "式が先に計算され、HTML には 40 だけが届く")),
+    p(
+      "Without braces, a word is just text. Writing pet between tags prints the three letters p-e-t, not the value of the variable. Quotes inside braces, like {\"pet\"}, are also just text. To show a variable, write its name inside braces with no quotes.",
+      "Sin llaves, una palabra es solo texto. Escribir pet entre etiquetas imprime las tres letras p-e-t, no el valor de la variable. Las comillas dentro de llaves, como {\"pet\"}, también son solo texto. Para mostrar una variable, escribe su nombre entre llaves y sin comillas.",
+      "波かっこがなければ、単語はただの文字。タグの間に pet と書くと、変数の値ではなく p-e-t の3文字が出る。{\"pet\"} のように引用符を付けても文字のまま。変数を表示するには、引用符なしで名前を波かっこに入れよう。",
+    ),
+    ex('const pet = "Mochi";', "<p>pet / {pet}</p>", "<p>pet / Mochi</p>",
+      L("The same word, as plain text and inside a slot", "La misma palabra, como texto y dentro de un hueco", "同じ単語を、ただの文字と穴の中で")),
+    p(
+      "Strings in braces are escaped: characters like < and > become &lt; and &gt;, so a string can never turn into real tags. This protects your page when the text comes from a user. It is also why you don't build markup by gluing strings together: write real JSX tags instead.",
+      "Los strings dentro de llaves se escapan: caracteres como < y > se vuelven &lt; y &gt;, así un string nunca se convierte en etiquetas reales. Esto protege tu página cuando el texto viene de un usuario. Por eso tampoco se arma marcado pegando strings: escribe etiquetas JSX de verdad.",
+      "波かっこの文字列はエスケープされる。< や > は &lt; や &gt; に変わり、文字列が本物のタグになることはない。ユーザーが入力した文字からページを守るしくみだよ。だから文字列をつないでマークアップを作らず、本物の JSX タグを書こう。",
+    ),
+    ex('const motto = "<u>win</u>";', "<p>{motto}</p>", "<p>&lt;u&gt;win&lt;/u&gt;</p>",
+      L("The string's < and > are escaped, not parsed", "Los < y > del string se escapan, no se interpretan", "文字列の < と > はタグではなくエスケープされる")),
+    p(
+      "Common mistake: thinking braces print the code itself. {7 * 6} never shows 7 * 6; it shows 42. When you see an expression in braces, compute it in your head, then put the result where the braces were.",
+      "Error común: creer que las llaves muestran el código. {7 * 6} nunca muestra 7 * 6; muestra 42. Cuando veas una expresión entre llaves, calcúlala mentalmente y pon el resultado donde estaban las llaves.",
+      "よくあるミス：波かっこがコードそのものを表示すると思うこと。{7 * 6} は 7 * 6 ではなく 42 を表示する。波かっこの式を見たら、頭の中で計算して、その結果を波かっこの場所に置こう。",
+    ),
+  ),
+  note("jsx-attributes", L("Attributes: className and style", "Atributos: className y style", "属性：className と style"),
+    p(
+      "Attributes in JSX look like HTML attributes, with two twists. First, a few HTML names clash with JavaScript keywords, so JSX renames them: class becomes className and for becomes htmlFor. React turns them back into the normal HTML names when it renders.",
+      "Los atributos en JSX parecen atributos HTML, con dos diferencias. Primero, algunos nombres de HTML chocan con palabras reservadas de JavaScript, así que JSX los renombra: class pasa a className y for a htmlFor. Al renderizar, React los convierte de nuevo en los nombres HTML normales.",
+      "JSX の属性は HTML の属性に似ているけど、ちがいが2つある。1つ目、一部の HTML の名前は JavaScript の予約語とぶつかるので名前が変わる。class は className、for は htmlFor。レンダー時に React が普通の HTML の名前に戻すよ。",
+    ),
+    ex("", '<span className="tag">new</span>', '<span class="tag">new</span>',
+      L("Written className, rendered as class", "Se escribe className, se genera class", "className と書き、class として出る")),
+    p(
+      "Second, a value can be a quoted string or a JavaScript expression in braces. style is the special one: it takes an object, not a CSS string. Its keys use camelCase, like marginTop, and React writes them as CSS (margin-top). Numbers used as sizes get px added.",
+      "Segundo, un valor puede ser un string entre comillas o una expresión JavaScript entre llaves. style es el especial: recibe un objeto, no un string de CSS. Sus claves van en camelCase, como marginTop, y React las escribe como CSS (margin-top). A los números usados como tamaños les agrega px.",
+      "2つ目、値は引用符の文字列か、波かっこの JavaScript 式。特別なのが style で、CSS の文字列ではなくオブジェクトを受け取る。キーは marginTop のようなキャメルケースで、React が CSS の margin-top に直す。サイズの数値には px が付くよ。",
+    ),
+    ex("", '<div style={{ marginTop: 8, color: "blue" }}>hi</div>', '<div style="margin-top:8px;color:blue">hi</div>',
+      L("camelCase keys become CSS names; 8 becomes 8px", "Las claves camelCase pasan a CSS; 8 se vuelve 8px", "キャメルケースは CSS の名前に、8 は 8px に")),
+    p(
+      "Why double braces in style={{ ... }}? The outer pair means \"JavaScript starts here\"; the inner pair is the object itself. Common mistakes: writing class out of HTML habit, which TypeScript rejects on a div, or a CSS string like style=\"color: red\", which fails because style must be an object.",
+      "¿Por qué llaves dobles en style={{ ... }}? El par externo significa \"aquí empieza JavaScript\"; el interno es el objeto en sí. Errores comunes: escribir class por costumbre de HTML, que TypeScript rechaza en un div, o un string CSS como style=\"color: red\", que falla porque style debe ser un objeto.",
+      "style={{ ... }} の二重の波かっこは？外側は「ここから JavaScript」、内側はオブジェクトそのもの。よくあるミス：HTML のくせで class と書く（div では TypeScript が拒否）、style=\"color: red\" のような CSS 文字列を書く（style はオブジェクトでないとだめ）。",
+    ),
+    bad('const box = <div class="box">x</div>;',
+      L("Does not compile: JSX has no class attribute on a div", "No compila: en JSX un div no tiene atributo class", "コンパイル不可：JSX の div に class 属性はない")),
+  ),
+  note("one-parent", L("One parent per JSX value", "Un solo padre por valor JSX", "JSX の値には親がひとつ"),
+    p(
+      "Every piece of JSX becomes one JavaScript value, a React element. A function can return only one value, so a component can't return two loose tags side by side. TypeScript stops with TS2657: JSX expressions must have one parent element.",
+      "Cada trozo de JSX se convierte en un valor de JavaScript, un elemento de React. Una función solo puede devolver un valor, así que un componente no puede devolver dos etiquetas sueltas una al lado de otra. TypeScript se detiene con TS2657: JSX expressions must have one parent element.",
+      "JSX はひとかたまりごとに、ひとつの JavaScript の値（React 要素）になる。関数が返せる値はひとつだけなので、コンポーネントはバラバラのタグを2つ並べて返せない。TypeScript は TS2657: JSX expressions must have one parent element で止まる。",
+    ),
+    bad("function Menu() {\n  return <li>Tea</li><li>Cake</li>;\n}",
+      L("Does not compile: two roots and no parent", "No compila: dos raíces y ningún padre", "コンパイル不可：根が2つで親がない")),
+    p(
+      "The fix is to wrap the siblings in one parent. Any tag works, like a div, but it adds an extra box to the HTML. A fragment, written <> and </>, groups them without adding anything: the HTML shows only the children.",
+      "La solución es envolver a los hermanos en un solo padre. Sirve cualquier etiqueta, como un div, pero agrega una caja extra al HTML. Un fragmento, escrito <> y </>, los agrupa sin agregar nada: el HTML muestra solo a los hijos.",
+      "直し方は、兄弟をひとつの親で包むこと。div などどんなタグでもいいけど、HTML に余分な箱が増える。フラグメント <> と </> なら何も足さずにまとめられて、HTML には子どもだけが出るよ。",
+    ),
+    ex("function Menu() {\n  return <><li>Tea</li><li>Cake</li></>;\n}", "<ul><Menu /></ul>", "<ul><li>Tea</li><li>Cake</li></ul>",
+      L("The fragment groups the items and leaves no trace", "El fragmento agrupa los items y no deja rastro", "フラグメントは項目をまとめ、跡を残さない")),
+    p(
+      "Rule to remember: one return, one root. When you see two tags at the top level of a return, look for the missing wrapper. Wrapping with a div also compiles; choose a fragment when an extra element would break the structure, as inside a ul or a table.",
+      "Regla para recordar: un return, una raíz. Si ves dos etiquetas en el nivel superior de un return, busca el envoltorio que falta. Envolver con un div también compila; elige un fragmento cuando un elemento extra rompería la estructura, como dentro de un ul o una tabla.",
+      "覚えておくルール：return ひとつに根はひとつ。return の一番上にタグが2つあったら、足りない包みを探そう。div で包んでもコンパイルできる。ul や table の中のように余分な要素が邪魔なときはフラグメントを選ぼう。",
+    ),
+  ),
+  note("what-renders", L("What shows up: null, booleans and 0", "Qué se ve: null, booleanos y 0", "表示されるもの：null・真偽値・0"),
+    p(
+      "Braces accept many kinds of values. Strings and numbers render as text. true, false, null and undefined render nothing at all: they leave an empty spot. That is useful: an expression that turns into false or null simply hides its part of the screen.",
+      "Las llaves aceptan muchos tipos de valores. Los strings y números se muestran como texto. true, false, null y undefined no muestran nada: dejan un hueco vacío. Eso es útil: una expresión que se vuelve false o null simplemente oculta su parte de la pantalla.",
+      "波かっこにはいろいろな値を入れられる。文字列と数値は文字として表示される。true・false・null・undefined は何も表示せず、空っぽになる。これは便利で、false や null になる式はその部分を隠してくれるよ。",
+    ),
+    ex("", "<p>[{false}{null}]</p>", "<p>[]</p>",
+      L("false and null leave nothing between the brackets", "false y null no dejan nada entre los corchetes", "false と null は角かっこの間に何も残さない")),
+    p(
+      "&& is the usual way to show something only sometimes: cond && <Tag />. If cond is true, the result is the tag; if it is false, the result is false, which renders nothing. But && returns its left side whenever that side is falsy, and 0 is falsy while still being a number.",
+      "&& es la forma habitual de mostrar algo solo a veces: cond && <Tag />. Si cond es true, el resultado es la etiqueta; si es false, el resultado es false, que no muestra nada. Pero && devuelve su lado izquierdo cuando ese lado es falsy, y 0 es falsy sin dejar de ser un número.",
+      "ときどきだけ表示するなら && がふつう：cond && <Tag />。cond が true ならタグ、false なら結果は false で何も出ない。ただし && は左側が falsy ならその左側を返す。0 は falsy だけど、数値のままなんだ。",
+    ),
+    p(
+      "So with a number on the left, React prints that 0 on the screen. Fix it by making the left side a real boolean, like unread > 0 && ..., or use a ternary: cond ? <A /> : null. Rule: only booleans on the left of &&.",
+      "Así que con un número a la izquierda, React imprime ese 0 en pantalla. Arréglalo haciendo que el lado izquierdo sea un booleano de verdad, como unread > 0 && ..., o usa un ternario: cond ? <A /> : null. Regla: solo booleanos a la izquierda de &&.",
+      "だから左側が数値だと、React はその 0 を画面に出してしまう。unread > 0 && ... のように左側を本物の真偽値にするか、三項演算子 cond ? <A /> : null を使おう。ルール：&& の左には真偽値だけ。",
+    ),
+    ex("const unread: number = 0;", "<p>{unread > 0 && <b>new</b>}</p>", "<p></p>",
+      L("A comparison gives a real boolean: false shows nothing", "Una comparación da un booleano real: false no muestra nada", "比較なら本物の真偽値。false は何も出さない")),
+  ),
+];
+
+const componentsNotes: NoteDef[] = [
+  note("components", L("Components are capitalized functions", "Componentes: funciones con mayúscula", "コンポーネントは大文字の関数"),
+    p(
+      "A component is a plain function that returns JSX. You use it like a tag: <Banner />. React calls the function, takes the JSX it returns and puts that in place of the tag. The component leaves no tag of its own in the HTML; only what it returns appears.",
+      "Un componente es una función normal que devuelve JSX. Lo usas como una etiqueta: <Banner />. React llama a la función, toma el JSX que devuelve y lo pone en lugar de la etiqueta. El componente no deja una etiqueta propia en el HTML; solo aparece lo que devuelve.",
+      "コンポーネントは JSX を返す普通の関数。<Banner /> のようにタグとして使う。React が関数を呼び、返ってきた JSX をタグの場所に置く。コンポーネント自身のタグは HTML に残らず、返したものだけが出るよ。",
+    ),
+    ex("function Banner() {\n  return <header>Shop</header>;\n}", "<Banner />", "<header>Shop</header>",
+      L("<Banner /> is replaced by what Banner returns", "<Banner /> se reemplaza por lo que devuelve Banner", "<Banner /> は Banner の戻り値に置きかわる")),
+    p(
+      "The name must start with a capital letter. That is how JSX tells the two kinds of tags apart: lower case, like <div>, means a built-in HTML element; capitalized, like <Banner>, means a component from your code. A lowercase component is looked up as an HTML tag, and TypeScript says it does not exist (TS2339).",
+      "El nombre debe empezar con mayúscula. Así distingue JSX los dos tipos de etiquetas: en minúscula, como <div>, es un elemento HTML; con mayúscula, como <Banner>, es un componente de tu código. Un componente en minúscula se busca como etiqueta HTML y TypeScript dice que no existe (TS2339).",
+      "名前は大文字で始める。JSX はこれで2種類のタグを見分ける。<div> のような小文字は HTML の要素、<Banner> のような大文字は自分のコードのコンポーネント。小文字だと HTML タグとして探され、TypeScript は存在しないと言う（TS2339）。",
+    ),
+    bad("function banner() {\n  return <header>Shop</header>;\n}\nconst top = <banner />;",
+      L("Does not compile: lower case means an HTML tag", "No compila: minúscula significa etiqueta HTML", "コンパイル不可：小文字は HTML タグ扱い")),
+    p(
+      "Rule: define it as a function with a Capitalized name and use it as <Name />. Common mistake: expecting <Banner /> to appear in the output. When you predict the HTML of a component, replace the tag with what the function returns.",
+      "Regla: defínelo como función con nombre en Mayúscula y úsalo como <Nombre />. Error común: esperar ver <Banner /> en la salida. Al predecir el HTML de un componente, reemplaza la etiqueta por lo que devuelve la función.",
+      "ルール：大文字の名前の関数として定義し、<Name /> として使う。よくあるミス：出力に <Banner /> が残ると思うこと。コンポーネントの HTML を予想するときは、タグを関数の戻り値に置きかえよう。",
+    ),
+  ),
+  note("props", L("Props: a component's inputs", "Props: las entradas del componente", "プロップス：部品への入力"),
+    p(
+      "Props are how a parent passes data to a component. You write them like attributes, <Tag price={9} />, and React gathers them into ONE object, { price: 9 }, which becomes the function's first parameter. Most components destructure it right away: function Tag({ price }) ...",
+      "Las props son la forma en que un padre le pasa datos a un componente. Se escriben como atributos, <Tag price={9} />, y React las junta en UN objeto, { price: 9 }, que llega como primer parámetro de la función. Casi todos los componentes lo desestructuran enseguida: function Tag({ price }) ...",
+      "プロップスは、親がコンポーネントにデータを渡す方法。<Tag price={9} /> のように属性として書くと、React がひとつのオブジェクト { price: 9 } にまとめ、関数の最初の引数として渡す。たいていすぐに分割代入する：function Tag({ price }) ...",
+    ),
+    ex("function Tag({ price }: { price: number }) {\n  return <i>${price}</i>;\n}", "<Tag price={9} />", "<i>$9</i>"),
+    p(
+      "With destructuring, the names are ready to use: price, not props.price. There is no variable called props unless you name the parameter that way. In TypeScript, the type after the colon lists each prop; a prop without ? is required, and leaving it out fails with TS2741.",
+      "Con la desestructuración, los nombres quedan listos para usar: price, no props.price. No existe una variable llamada props salvo que nombres así el parámetro. En TypeScript, el tipo tras los dos puntos lista cada prop; una prop sin ? es obligatoria, y omitirla falla con TS2741.",
+      "分割代入すれば名前をそのまま使える。props.price ではなく price。引数を props と名付けない限り、props という変数はない。TypeScript ではコロンのあとの型が各プロップスを表す。? のないプロップスは必須で、省くと TS2741 になる。",
+    ),
+    bad("function Tag({ price }: { price: number }) {\n  return <i>{price}</i>;\n}\nconst sale = <Tag />;",
+      L("Does not compile: the required price is missing", "No compila: falta price, que es obligatoria", "コンパイル不可：必須の price がない")),
+    p(
+      "Mark a prop optional with ? and give it a default in the destructuring: { size = \"M\" }: { size?: string }. When the parent leaves it out, the default fills the gap, just like a default parameter in any JavaScript function.",
+      "Marca una prop como opcional con ? y dale un valor por defecto en la desestructuración: { size = \"M\" }: { size?: string }. Si el padre no la pasa, el valor por defecto llena el hueco, igual que un parámetro por defecto en cualquier función de JavaScript.",
+      "? でプロップスを省略可能にし、分割代入でデフォルト値を付ける：{ size = \"M\" }: { size?: string }。親が渡さなければデフォルト値が入る。普通の JavaScript 関数のデフォルト引数と同じだよ。",
+    ),
+    ex('function Shirt({ size = "M" }: { size?: string }) {\n  return <b>{size}</b>;\n}', '<div><Shirt /><Shirt size="XL" /></div>', "<div><b>M</b><b>XL</b></div>",
+      L("The first Shirt gets the default, the second its own size", "La primera Shirt usa el valor por defecto; la segunda, su talla", "1つ目はデフォルト、2つ目は自分のサイズ")),
+    p(
+      "Props are read-only: a component uses them but never reassigns them. If something must change, the parent changes it and passes a new value on the next render.",
+      "Las props son de solo lectura: el componente las usa pero nunca las reasigna. Si algo debe cambiar, el padre lo cambia y pasa un valor nuevo en el siguiente render.",
+      "プロップスは読み取り専用。コンポーネントは使うだけで書きかえない。変える必要があれば、親が変えて次のレンダーで新しい値を渡すよ。",
+    ),
+  ),
+  note("children", L("children: what goes between the tags", "children: lo que va entre etiquetas", "children：タグの間に書くもの"),
+    p(
+      "Anything you write between a component's opening and closing tags arrives as a special prop named children. <Frame><i>art</i></Frame> calls Frame with { children: <i>art</i> }. The component decides where to place it, usually with {children} inside its own markup.",
+      "Todo lo que escribes entre la etiqueta de apertura y la de cierre de un componente llega como una prop especial llamada children. <Frame><i>art</i></Frame> llama a Frame con { children: <i>art</i> }. El componente decide dónde ponerlo, normalmente con {children} dentro de su propio marcado.",
+      "コンポーネントの開きタグと閉じタグの間に書いたものは、children という特別なプロップスとして届く。<Frame><i>art</i></Frame> は Frame を { children: <i>art</i> } で呼ぶ。置き場所はコンポーネントが決め、ふつうは自分のマークアップに {children} と書くよ。",
+    ),
+    ex("function Frame({ children }: { children: React.ReactNode }) {\n  return <figure>{children}</figure>;\n}", "<Frame><i>art</i></Frame>", "<figure><i>art</i></figure>"),
+    p(
+      "What type should children have? React.ReactNode is the type for \"anything React can render\": elements, strings, numbers, null, booleans and arrays of them. A narrower type like string rejects a tag, because a JSX element is an object, not text.",
+      "¿Qué tipo debe tener children? React.ReactNode es el tipo de \"todo lo que React puede renderizar\": elementos, strings, números, null, booleanos y arreglos de ellos. Un tipo más estrecho como string rechaza una etiqueta, porque un elemento JSX es un objeto, no texto.",
+      "children の型は？React.ReactNode は「React が表示できるもの全部」の型。要素・文字列・数値・null・真偽値、そしてそれらの配列。string のような狭い型だとタグは入らない。JSX の要素は文字ではなくオブジェクトだからね。",
+    ),
+    bad("function Frame({ children }: { children: string }) {\n  return <figure>{children}</figure>;\n}\nconst pic = <Frame><i>art</i></Frame>;",
+      L("Does not compile: an <i> element is not a string", "No compila: un elemento <i> no es un string", "コンパイル不可：<i> 要素は string ではない")),
+    p(
+      "Common mistake: forgetting {children} in the component's return. The content you passed then silently disappears from the HTML. children is just a prop, so nothing appears unless the component places it.",
+      "Error común: olvidar {children} en el return del componente. El contenido que pasaste desaparece en silencio del HTML. children es solo una prop, así que nada aparece a menos que el componente lo coloque.",
+      "よくあるミス：コンポーネントの return に {children} を書き忘れること。渡した中身が HTML から静かに消えてしまう。children もただのプロップスなので、コンポーネントが置かない限り何も出ないよ。",
+    ),
+  ),
+  note("callback-props", L("Callbacks: children ask, parents act", "Callbacks: el hijo pide, el padre actúa", "コールバック：子が頼み、親が動く"),
+    p(
+      "Data flows down: a parent passes props to its children. But what if a child needs a change in the parent's data, like a button that adds coins? The child can't reach the parent's variables. Instead, the parent passes a function as a prop, and the child calls it.",
+      "Los datos bajan: un padre pasa props a sus hijos. ¿Pero y si un hijo necesita cambiar los datos del padre, como un botón que suma monedas? El hijo no puede tocar las variables del padre. En cambio, el padre pasa una función como prop, y el hijo la llama.",
+      "データは上から下へ流れる。親が子にプロップスを渡す。でも、コインを増やすボタンのように、子が親のデータを変えたいときは？子は親の変数に手が届かない。代わりに親が関数をプロップスで渡し、子がそれを呼ぶんだ。",
+    ),
+    run("let coins = 0;\nfunction Coin({ onGrab }: { onGrab: (n: number) => void }) {\n  return <button onClick={() => onGrab(5)}>+5</button>;\n}\nconst btn = Coin({ onGrab: (n) => { coins += n; } });\nbtn.props.onClick(); // simulate a click\nconsole.log(coins);", "5",
+      L("The child calls onGrab; the parent's function changes coins", "El hijo llama a onGrab; la función del padre cambia coins", "子が onGrab を呼び、親の関数が coins を変える")),
+    p(
+      "The child decides WHEN (on a click) and with what value; the parent decides WHAT happens. That keeps each piece of data owned by one component. By convention these props start with on: onGrab, onSelect, onClose.",
+      "El hijo decide CUÁNDO (al hacer clic) y con qué valor; el padre decide QUÉ pasa. Así cada dato tiene un solo dueño. Por convención estas props empiezan con on: onGrab, onSelect, onClose.",
+      "子は「いつ」（クリックしたとき）と「どの値で」を決め、親は「何が起きるか」を決める。こうしてデータの持ち主はひとつに保たれる。こういうプロップスは on で始めるのが慣例：onGrab、onSelect、onClose。",
+    ),
+    p(
+      "Common mistake: assigning to the parent's data from inside the child. The child doesn't have that variable in scope and, even if it did, React wouldn't know it must re-render. Call the callback and let the parent change its own data.",
+      "Error común: asignar los datos del padre desde dentro del hijo. El hijo no tiene esa variable a su alcance y, aunque la tuviera, React no sabría que debe volver a renderizar. Llama al callback y deja que el padre cambie sus propios datos.",
+      "よくあるミス：子の中から親のデータに代入しようとすること。子からその変数は見えないし、見えても React は再レンダーが必要だと気づけない。コールバックを呼んで、親に自分のデータを変えてもらおう。",
+    ),
+  ),
+];
+
+const listsNotes: NoteDef[] = [
+  note("lists-keys", L("Lists: map to elements with keys", "Listas: map a elementos con key", "リスト：map でキー付き要素に"),
+    p(
+      "To show a list, turn an array of data into an array of elements with map: each item becomes one tag. Put that array inside braces in a parent, like a ul, and React renders the elements in order. The data comes first, then the map, then the render.",
+      "Para mostrar una lista, convierte un arreglo de datos en un arreglo de elementos con map: cada item se vuelve una etiqueta. Pon ese arreglo entre llaves dentro de un padre, como un ul, y React muestra los elementos en orden. Primero los datos, luego el map, luego el render.",
+      "リストを表示するには、map でデータの配列を要素の配列に変える。項目ひとつがタグひとつになる。その配列を ul などの親の中の波かっこに入れると、React が順番に表示する。データが先、次に map、最後にレンダーだよ。",
+    ),
+    ex('const fruits = ["fig", "kiwi"];', "<ol>{fruits.map(f => <li key={f}>{f}</li>)}</ol>", "<ol><li>fig</li><li>kiwi</li></ol>"),
+    p(
+      "Each element in a list needs a key prop, a label unique among its siblings. React uses keys to match items between renders. The key is for React only: it never appears in the HTML. Without a key, React prints a warning in the console.",
+      "Cada elemento de una lista necesita una prop key, una etiqueta única entre sus hermanos. React usa las keys para emparejar items entre renders. La key es solo para React: nunca aparece en el HTML. Sin key, React muestra una advertencia en la consola.",
+      "リストの要素にはそれぞれ key プロップスが必要。兄弟の中で一意な名札だよ。React はキーを使ってレンダー間で項目を対応づける。キーは React 専用で、HTML には出ない。キーがないと React はコンソールに警告を出す。",
+    ),
+    p(
+      "Watch the arrow function inside map. x => <li>...</li> returns the tag. With curly braces, x => { <li>...</li> }, the braces start a function body, and nothing is returned unless you write return. The list then renders empty, with no error.",
+      "Ojo con la flecha dentro de map. x => <li>...</li> devuelve la etiqueta. Con llaves, x => { <li>...</li> }, las llaves inician un cuerpo de función, y no se devuelve nada salvo que escribas return. La lista entonces sale vacía, sin ningún error.",
+      "map の中のアロー関数に注意。x => <li>...</li> はタグを返す。波かっこ付きの x => { <li>...</li> } だと、波かっこは関数の本体になり、return を書かない限り何も返さない。するとエラーなしでリストが空になる。",
+    ),
+    run("const nums = [1, 2];\nconsole.log(nums.map(n => n * 10));\nconsole.log(nums.map(n => { n * 10; }));", "[ 10, 20 ]\n[ undefined, undefined ]",
+      L("Braces without return give undefined for every item", "Llaves sin return dan undefined en cada item", "return のない波かっこは、全項目が undefined")),
+  ),
+  note("good-keys", L("Choosing a good key", "Elegir una buena key", "よいキーの選び方"),
+    p(
+      "A good key is stable and unique: it stays the same for the same item across renders and differs between siblings. A database id is ideal. Random values like Math.random() change on every render, so React thinks every item is new and throws away its state.",
+      "Una buena key es estable y única: sigue igual para el mismo item entre renders y es distinta entre hermanos. Un id de base de datos es ideal. Valores aleatorios como Math.random() cambian en cada render, así que React cree que cada item es nuevo y descarta su estado.",
+      "よいキーは安定していて一意。同じ項目ならレンダーをまたいで同じで、兄弟同士ではちがう。データベースの id が理想。Math.random() のようなランダムな値は毎回変わるので、React は全部を新しい項目と思い、状態を捨ててしまう。",
+    ),
+    ex('const cats = [{ id: 31, name: "Tofu" }, { id: 48, name: "Miso" }];', "<ul>{cats.map(c => <li key={c.id}>{c.name}</li>)}</ul>", "<ul><li>Tofu</li><li>Miso</li></ul>"),
+    p(
+      "A fixed string like \"row\" repeats for every item, so it isn't unique. The array index looks harmless, but it ties each item's state to its POSITION. When you insert or remove items, positions shift, and state stays behind at the old position.",
+      "Un string fijo como \"row\" se repite en cada item, así que no es único. El índice del arreglo parece inofensivo, pero ata el estado de cada item a su POSICIÓN. Al insertar o quitar items, las posiciones se mueven y el estado se queda en la posición vieja.",
+      "\"row\" のような固定の文字列は全部の項目で同じなので一意じゃない。配列のインデックスは無害に見えるけど、各項目の状態を「位置」に結びつける。項目を追加や削除すると位置がずれ、状態は古い位置に残ってしまう。",
+    ),
+    p(
+      "Picture state saved by key. With index keys, an item inserted at the top gets key 0 and inherits whatever the old first item had. React shows no error; the data is simply on the wrong row. Stable ids move with their items.",
+      "Imagina el estado guardado por key. Con keys de índice, un item insertado arriba recibe la key 0 y hereda lo que tenía el antiguo primer item. React no muestra error; los datos simplemente quedan en la fila equivocada. Los ids estables se mueven con sus items.",
+      "キーごとに保存された状態を想像しよう。番号キーだと、先頭に追加した項目がキー 0 になり、元の先頭の項目のものを受け継ぐ。React はエラーを出さず、データが違う行にあるだけ。安定した id なら項目と一緒に動くよ。",
+    ),
+    run('const notes = new Map([["b7", "ripe"]]); // state saved by id key\nconst rows = [{ id: "a3", fruit: "plum" }, { id: "b7", fruit: "pear" }];\nconsole.log(rows.map(r => r.fruit + ":" + (notes.get(r.id) ?? "")).join(" "));', "plum: pear:ripe",
+      L("With id keys, the note stays with pear after plum is added", "Con keys de id, la nota sigue con pear tras agregar plum", "id のキーなら、plum を足しても pear のメモは pear に残る")),
+  ),
+  note("conditional-rendering", L("Showing things only sometimes", "Mostrar algo solo a veces", "ときどきだけ表示する"),
+    p(
+      "Three tools decide whether something appears. A component can return null to render nothing. Inside JSX, cond && <X /> shows X only when cond is true. And cond ? <A /> : <B /> picks one of two things. Choose the one that reads best.",
+      "Tres herramientas deciden si algo aparece. Un componente puede devolver null para no mostrar nada. Dentro de JSX, cond && <X /> muestra X solo si cond es true. Y cond ? <A /> : <B /> elige una de dos cosas. Elige la que se lea mejor.",
+      "表示するかどうかを決める道具は3つ。コンポーネントは null を返せば何も表示しない。JSX の中では cond && <X /> で cond が true のときだけ X を出す。cond ? <A /> : <B /> はふたつからひとつを選ぶ。読みやすいものを選ぼう。",
+    ),
+    ex("function Badge({ vip }: { vip: boolean }) {\n  if (!vip) return null;\n  return <em>VIP</em>;\n}", "<p><Badge vip={false} /><Badge vip /></p>", "<p><em>VIP</em></p>",
+      L("null renders nothing; vip alone means vip={true}", "null no genera nada; vip solo equivale a vip={true}", "null は何も出さない。vip だけなら vip={true}")),
+    p(
+      "A prop written with no value, like <Badge vip />, is shorthand for vip={true}. The ternary always needs both parts: a question mark after the condition and a colon between the two results. Use it for an either/or, like signed in or signed out.",
+      "Una prop escrita sin valor, como <Badge vip />, es un atajo de vip={true}. El ternario siempre necesita ambas partes: un signo de interrogación tras la condición y dos puntos entre los dos resultados. Úsalo para un esto o aquello, como sesión iniciada o no.",
+      "<Badge vip /> のように値なしで書いたプロップスは vip={true} の省略形。三項演算子には必ず両方の部分が必要で、条件のあとに ?、ふたつの結果の間に : を書く。ログイン中かどうかのような「どちらか」に使おう。",
+    ),
+    ex("const online: boolean = true;", '<i>{online ? "green" : "grey"}</i>', "<i>green</i>"),
+    p(
+      "The trap with &&: when the left side is a number, a 0 returns itself and shows on screen. Lengths are the classic case: list.length && <Table /> prints 0 for an empty list. Compare instead, list.length > 0 && ..., so the left side is a real boolean.",
+      "La trampa de &&: cuando el lado izquierdo es un número, un 0 se devuelve a sí mismo y aparece en pantalla. Las longitudes son el caso clásico: list.length && <Table /> imprime 0 con una lista vacía. Mejor compara, list.length > 0 && ..., para que el lado izquierdo sea un booleano de verdad.",
+      "&& のわな：左側が数値だと、0 はそのまま返って画面に出る。典型例は長さで、list.length && <Table /> は空のリストで 0 を表示する。list.length > 0 && ... と比べれば、左側が本物の真偽値になるよ。",
+    ),
+  ),
+];
+
+// The boss recaps the whole region: one short note per idea it tests.
+const gremlinNotes: NoteDef[] = [
+  note("recap-slots", L("Recap: braces and attributes", "Repaso: llaves y atributos", "復習：波かっこと属性"),
+    p(
+      "Braces run JavaScript and drop the value into the markup. Strings and numbers show as text, and strings are escaped, so \"<b>\" prints as &lt;b&gt;. A plain object is not something React can render: show one of its fields instead, like {pet.name}.",
+      "Las llaves ejecutan JavaScript y ponen el valor en el marcado. Los strings y números se ven como texto, y los strings se escapan, así que \"<b>\" se imprime como &lt;b&gt;. Un objeto plano no es algo que React pueda mostrar: muestra uno de sus campos, como {pet.name}.",
+      "波かっこは JavaScript を実行し、その値をマークアップに入れる。文字列と数値は文字として出て、文字列はエスケープされるので \"<b>\" は &lt;b&gt; になる。ただのオブジェクトは React が表示できない。{pet.name} のようにフィールドを表示しよう。",
+    ),
+    ex('const pet = { name: "Rex", age: 3 };', "<p>{pet.name} is {pet.age}</p>", "<p>Rex is 3</p>"),
+    p(
+      "Attributes that clash with JavaScript keywords are renamed: className for class, htmlFor for for. style takes an object with camelCase keys, and React writes them as CSS, adding px to numeric sizes.",
+      "Los atributos que chocan con palabras reservadas de JavaScript se renombran: className por class, htmlFor por for. style recibe un objeto con claves camelCase, y React las escribe como CSS, agregando px a los tamaños numéricos.",
+      "JavaScript の予約語とぶつかる属性は名前が変わる。class は className、for は htmlFor。style はキャメルケースのキーを持つオブジェクトを受け取り、React が CSS に直して、数値のサイズに px を付ける。",
+    ),
+    ex("", '<h3 className="title" style={{ paddingLeft: 4 }}>Map</h3>', '<h3 class="title" style="padding-left:4px">Map</h3>'),
+  ),
+  note("recap-components", L("Recap: components and props", "Repaso: componentes y props", "復習：コンポーネントとプロップス"),
+    p(
+      "A component is a Capitalized function that returns JSX; lowercase names are treated as HTML tags. Props arrive as one object, and content between the tags arrives as children, which the component places with {children}.",
+      "Un componente es una función con Mayúscula que devuelve JSX; los nombres en minúscula se tratan como etiquetas HTML. Las props llegan como un objeto, y el contenido entre etiquetas llega como children, que el componente coloca con {children}.",
+      "コンポーネントは JSX を返す大文字の関数。小文字の名前は HTML タグとして扱われる。プロップスはひとつのオブジェクトで届き、タグの間の中身は children として届く。コンポーネントは {children} でそれを置く。",
+    ),
+    ex("function Panel({ label, children }: { label: string; children: React.ReactNode }) {\n  return <aside><h4>{label}</h4>{children}</aside>;\n}", '<Panel label="Tips"><i>rest</i></Panel>', "<aside><h4>Tips</h4><i>rest</i></aside>"),
+    p(
+      "Prop types can be a union of shapes: { kind: \"a\"; x: number } | { kind: \"b\"; y: string }. TypeScript then accepts only props that match one whole shape; mixing fields from two shapes is a type error.",
+      "Los tipos de props pueden ser una unión de formas: { kind: \"a\"; x: number } | { kind: \"b\"; y: string }. Entonces TypeScript solo acepta props que coincidan con una forma completa; mezclar campos de dos formas es un error de tipos.",
+      "プロップスの型は形のユニオンにできる：{ kind: \"a\"; x: number } | { kind: \"b\"; y: string }。すると TypeScript は、どれかひとつの形にまるごと合うプロップスだけを受け入れる。ふたつの形のフィールドを混ぜると型エラーだよ。",
+    ),
+    bad('type Shape = { kind: "dot"; r: number } | { kind: "box"; w: number };\nfunction Draw(s: Shape) {\n  return <i>{s.kind}</i>;\n}\nconst x = <Draw kind="dot" w={2} />;',
+      L("Does not compile: dot needs r, and w belongs to box", "No compila: dot necesita r, y w es de box", "コンパイル不可：dot には r が必要で、w は box のもの")),
+  ),
+  note("recap-keys", L("Recap: lists and keys", "Repaso: listas y keys", "復習：リストとキー"),
+    p(
+      "map turns an array of data into elements. Each element needs a key, unique among its siblings and stable across renders, ideally an id from the data. The key tells React who is who, and it never reaches the HTML. Ordinary HTML attributes don't do this job.",
+      "map convierte un arreglo de datos en elementos. Cada elemento necesita una key, única entre sus hermanos y estable entre renders, idealmente un id de los datos. La key le dice a React quién es quién, y nunca llega al HTML. Los atributos HTML comunes no cumplen esa función.",
+      "map はデータの配列を要素に変える。各要素には、兄弟の中で一意でレンダーをまたいで安定したキーが必要で、データの id が理想。キーは React に誰が誰かを教え、HTML には出ない。普通の HTML 属性ではこの役目は果たせないよ。",
+    ),
+    ex('const birds = [{ id: 5, kind: "owl" }, { id: 6, kind: "jay" }];', "<ul>{birds.map(b => <li key={b.id}>{b.kind}</li>)}</ul>", "<ul><li>owl</li><li>jay</li></ul>"),
+  ),
+  note("recap-conditional", L("Recap: hiding and showing", "Repaso: ocultar y mostrar", "復習：表示と非表示"),
+    p(
+      "true, false, null and undefined render nothing, and a component that returns null leaves no trace. cond && <X /> shows X when cond is true. But && returns its left side when that side is falsy, so a number 0 on the left gets printed.",
+      "true, false, null y undefined no muestran nada, y un componente que devuelve null no deja rastro. cond && <X /> muestra X cuando cond es true. Pero && devuelve su lado izquierdo cuando ese lado es falsy, así que un 0 numérico a la izquierda se imprime.",
+      "true・false・null・undefined は何も表示せず、null を返すコンポーネントは跡を残さない。cond && <X /> は cond が true なら X を出す。でも && は左側が falsy ならそれを返すので、左側の数値 0 は表示される。",
+    ),
+    ex("const lives: number = 0;", '<p>{lives > 0 && "alive"}{lives === 0 && "game over"}</p>', "<p>game over</p>"),
+    p(
+      "Make the left side of && a real boolean with a comparison, like n > 0, or use a ternary when you need one thing or the other.",
+      "Haz que el lado izquierdo de && sea un booleano de verdad con una comparación, como n > 0, o usa un ternario cuando necesites una cosa u otra.",
+      "n > 0 のような比較で && の左側を本物の真偽値にしよう。どちらか一方を出したいときは三項演算子を使おう。",
+    ),
+  ),
+];
+
 // ─── 1.1 JSX basics ──────────────────────────────────────────────────────────
 const jsxBasics: LessonDef = {
   slug: "jsx-basics",
@@ -28,6 +344,7 @@ const jsxBasics: LessonDef = {
   xp: 70,
   enemy: "typescript/undefined-ghost",
   enemyName: L("BLANK GHOST", "FANTASMA VACÍO", "からっぽゴースト"),
+  notes: jsxBasicsNotes,
   beats: [
     say(L(
       "Welcome to JSX Village! Here markup lives INSIDE JavaScript: JSX describes what the screen should look like.",
@@ -66,6 +383,8 @@ const jsxBasics: LessonDef = {
       output: "<p>5</p>",
       check: { program: show("", "<p>{2 + 3}</p>"), compiles: true, stdout: "<p>5</p>" },
       explain: L("Inside {} JavaScript runs first: 2 + 3 becomes 5.", "Dentro de {} primero corre JavaScript: 2 + 3 se vuelve 5.", "{} の中は先に JavaScript として計算される。2 + 3 は 5 だよ。"),
+      hint: L("Braces don't print code: they run it. Work out the expression, then put the result inside the tag.", "Las llaves no imprimen el código: lo ejecutan. Resuelve la expresión y pon el resultado dentro de la etiqueta.", "波かっこはコードを表示せず実行する。式を計算して、結果をタグの中に置こう。"),
+      note: "jsx-slots",
       setup: [{ t: "tag", actor: "hero", text: "{2 + 3}" }],
       win: [{ t: "value", actor: "hero", text: "5" }, { t: "print", text: "<p>5</p>" }],
     },
@@ -77,6 +396,8 @@ const jsxBasics: LessonDef = {
       answer: 0,
       check: { program: show('const name = "Ada";', "<h1>Hi {name}</h1>"), compiles: true, stdout: "<h1>Hi Ada</h1>" },
       explain: L("Without {} it is plain text: you'd see the word name, not Ada.", "Sin {} es texto plano: verías la palabra name, no Ada.", "{} がないとただの文字。Ada ではなく name と表示されちゃう。"),
+      hint: L("You want the variable's value, not the word. Which form makes JSX run JavaScript?", "Quieres el valor de la variable, no la palabra. ¿Qué forma hace que JSX ejecute JavaScript?", "欲しいのは単語ではなく変数の値。JSX で JavaScript を動かす書き方はどれ？"),
+      note: "jsx-slots",
       setup: [{ t: "tag", actor: "hero", text: "name", value: '"Ada"' }],
       win: [{ t: "print", text: "<h1>Hi Ada</h1>" }],
     },
@@ -87,6 +408,8 @@ const jsxBasics: LessonDef = {
       answer: "className",
       check: { program: show("", '<div className="card">Gem</div>'), compiles: true, stdout: '<div class="card">Gem</div>' },
       explain: L("class is a JS keyword, so JSX uses className. It still renders as class=\"card\".", "class es palabra reservada de JS, así que JSX usa className. Igual se genera class=\"card\".", "class は JS の予約語なので JSX では className。HTML では class=\"card\" になるよ。"),
+      hint: L("class is a reserved word in JavaScript, so JSX uses a longer camelCase name for it.", "class es palabra reservada en JavaScript, así que JSX usa un nombre camelCase más largo.", "class は JavaScript の予約語。JSX ではキャメルケースの少し長い名前を使う。"),
+      note: "jsx-attributes",
       win: [{ t: "print", text: '<div class="card">Gem</div>' }],
     },
     say(L(
@@ -124,6 +447,8 @@ const jsxBasics: LessonDef = {
       answer: 1,
       check: { program: `${HEAD}function Card() {\n  return <h1>Title</h1><p>Body</p>;\n}`, compiles: false },
       explain: L("TS2657: JSX expressions must have one parent element. Wrap them in <>...</>.", "TS2657: las expresiones JSX deben tener un solo padre. Envuélvelas en <>...</>.", "TS2657：JSX には親がひとつ必要。<>...</> で包もう。"),
+      hint: L("Count the tags at the top level of the return. How many values can one function return?", "Cuenta las etiquetas en el nivel superior del return. ¿Cuántos valores puede devolver una función?", "return の一番上にあるタグを数えよう。関数が返せる値はいくつ？"),
+      note: "one-parent",
       setup: [{ t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: "Card" }],
       win: [{ t: "shake" }, { t: "say", actor: "ally", text: L("Need a parent!", "¡Falta un padre!", "親が必要！") }],
     },
@@ -136,6 +461,8 @@ const jsxBasics: LessonDef = {
       output: "<p></p>",
       check: { program: show("", "<p>{true}{null}{undefined}{false}</p>"), compiles: true, stdout: "<p></p>" },
       explain: L("true, false, null and undefined render NOTHING. Handy for hiding things.", "true, false, null y undefined no generan NADA. Útil para ocultar cosas.", "true・false・null・undefined は何も表示しない。隠すのに便利だよ。"),
+      hint: L("Some values in braces print as text and some print nothing at all. Which group are these in?", "Algunos valores entre llaves se imprimen como texto y otros no muestran nada. ¿En qué grupo están estos?", "波かっこの値には、文字として出るものと何も出ないものがある。これらはどっち？"),
+      note: "what-renders",
       win: [{ t: "say", actor: "enemy", text: L("Nothing to see!", "¡Nada que ver!", "なにもないよ！") }],
     },
     say(L(
@@ -152,6 +479,8 @@ const jsxBasics: LessonDef = {
       output: "<p>0</p>",
       check: { program: show("const count: number = 0;", '<p>{count && "items"}</p>'), compiles: true, stdout: "<p>0</p>" },
       explain: L("0 && x evaluates to 0, and React renders numbers. Use count > 0 && ... instead.", "0 && x da 0, y React muestra los números. Usa count > 0 && ... en su lugar.", "0 && x は 0 になり、React は数値を表示する。count > 0 && ... と書こう。"),
+      hint: L("What does && return when its left side is falsy? Then ask: does React show that kind of value?", "¿Qué devuelve && cuando su lado izquierdo es falsy? Luego pregúntate: ¿React muestra ese tipo de valor?", "左側が falsy のとき && は何を返す？その種類の値を React は表示する？"),
+      note: "what-renders",
       setup: [{ t: "tag", actor: "hero", text: "count", value: "0" }],
       win: [{ t: "print", text: "<p>0</p>" }, { t: "say", actor: "enemy", text: L("A wild 0!", "¡Un 0 salvaje!", "野生の 0 だ！") }],
     },
@@ -164,6 +493,8 @@ const jsxBasics: LessonDef = {
       output: "<p>&lt;b&gt;boom&lt;/b&gt;</p>",
       check: { program: show('const evil = "<b>boom</b>";', "<p>{evil}</p>"), compiles: true, stdout: "<p>&lt;b&gt;boom&lt;/b&gt;</p>" },
       explain: L("Text in {} is ESCAPED: a string never becomes real tags. That blocks HTML injection.", "El texto en {} se ESCAPA: un string nunca se vuelve etiquetas reales. Eso bloquea la inyección de HTML.", "{} の文字列はエスケープされ、本物のタグにはならない。HTML の注入を防げるよ。"),
+      hint: L("Is the string's content treated as tags or as plain text? Think about what keeps pages safe.", "¿El contenido del string se trata como etiquetas o como texto plano? Piensa en qué protege las páginas.", "文字列の中身はタグ扱い？ただの文字扱い？ページを守るしくみを考えよう。"),
+      note: "jsx-slots",
       win: [{ t: "item", kind: "shield", holder: "hero" }, { t: "say", actor: "hero", text: L("Escaped!", "¡Escapado!", "エスケープ！") }],
     },
     {
@@ -175,6 +506,8 @@ const jsxBasics: LessonDef = {
       output: '<div style="color:red;font-size:12px">x</div>',
       check: { program: show("", '<div style={{ color: "red", fontSize: 12 }}>x</div>'), compiles: true, stdout: '<div style="color:red;font-size:12px">x</div>' },
       explain: L("style takes an OBJECT with camelCase keys. React writes font-size and adds px to numbers.", "style recibe un OBJETO con claves camelCase. React escribe font-size y agrega px a los números.", "style にはキャメルケースのオブジェクトを渡す。React が font-size に直し、数値に px を付けるよ。"),
+      hint: L("React turns camelCase keys into CSS names and gives plain numeric sizes a unit.", "React convierte las claves camelCase en nombres CSS y da una unidad a los tamaños numéricos.", "React はキャメルケースのキーを CSS の名前に直し、数値だけのサイズに単位を付ける。"),
+      note: "jsx-attributes",
     },
     {
       kind: "run",
@@ -187,6 +520,8 @@ const jsxBasics: LessonDef = {
         String.raw`<(div|section|article|main|React\.Fragment|Fragment)>\s*<h1>Title<\/h1>\s*<p>Body<\/p>\s*<\/(div|section|article|main|React\.Fragment|Fragment)>`,
       ],
       explain: L("Wrap both tags in one parent: a fragment <>...</> adds no extra HTML.", "Envuelve ambas etiquetas en un padre: un fragmento <>...</> no agrega HTML extra.", "ふたつのタグを親ひとつで包もう。フラグメント <>...</> なら余分な HTML は出ないよ。"),
+      hint: L("Two loose tags are two values. Give them one parent that wraps both.", "Dos etiquetas sueltas son dos valores. Dales un padre que envuelva a ambas.", "バラバラのタグ2つは値2つ。両方を包む親をひとつ用意しよう。"),
+      note: "one-parent",
     },
   ],
 };
@@ -200,6 +535,7 @@ const componentsAndProps: LessonDef = {
   xp: 75,
   enemy: "typescript/any-shifter",
   enemyName: L("PROP SNATCHER", "LADRÓN DE PROPS", "プロップスどろぼう"),
+  notes: componentsNotes,
   beats: [
     say(L(
       "A component is a function that returns JSX. Its name starts with a CAPITAL letter so React knows it's yours.",
@@ -235,6 +571,8 @@ const componentsAndProps: LessonDef = {
       output: "<p>Hi Cy</p>",
       check: { program: show(HELLO, '<Hello name="Cy" />'), compiles: true, stdout: "<p>Hi Cy</p>" },
       explain: L("React calls Hello with { name: \"Cy\" } and prints what it returns. Components leave no tag of their own.", "React llama a Hello con { name: \"Cy\" } e imprime lo que devuelve. Los componentes no dejan etiqueta propia.", "React は Hello を { name: \"Cy\" } で呼び、その戻り値を出力する。部品自体のタグは残らないよ。"),
+      hint: L("React calls the function with the props and puts its return value in place of the tag.", "React llama a la función con las props y pone lo que devuelve en lugar de la etiqueta.", "React はプロップスで関数を呼び、戻り値をタグの場所に置く。"),
+      note: "components",
       setup: [{ t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: "Hello" }, { t: "item", kind: "gem", holder: "hero" }],
       win: [{ t: "give", to: "ally" }, { t: "print", text: "<p>Hi Cy</p>" }],
     },
@@ -246,6 +584,8 @@ const componentsAndProps: LessonDef = {
       answer: 1,
       check: { program: `${HEAD}function hello() {\n  return <p>Hi</p>;\n}\nconst el = <hello />;`, compiles: false },
       explain: L("Lower case means an HTML tag. TS2339: 'hello' does not exist on JSX.IntrinsicElements. Call it Hello.", "Minúscula significa etiqueta HTML. TS2339: 'hello' no existe en JSX.IntrinsicElements. Llámalo Hello.", "小文字は HTML タグ扱い。TS2339：'hello' は JSX.IntrinsicElements にない。Hello と名付けよう。"),
+      hint: L("Look at the first letter of the tag. How does JSX tell HTML tags from your components?", "Mira la primera letra de la etiqueta. ¿Cómo distingue JSX las etiquetas HTML de tus componentes?", "タグの最初の文字を見よう。JSX は HTML タグと自作の部品をどう見分ける？"),
+      note: "components",
       win: [{ t: "shake" }],
     },
     say(L(
@@ -262,6 +602,8 @@ const componentsAndProps: LessonDef = {
       output: "<div><b>gem</b></div>",
       check: { program: show("function Box({ children }: { children: React.ReactNode }) {\n  return <div>{children}</div>;\n}", "<Box><b>gem</b></Box>"), compiles: true, stdout: "<div><b>gem</b></div>" },
       explain: L("Whatever sits between <Box> and </Box> arrives as the children prop.", "Lo que va entre <Box> y </Box> llega como la prop children.", "<Box> と </Box> の間に書いたものは children として届くよ。"),
+      hint: L("Content between a component's tags is passed in as a prop. Where does Box place it?", "El contenido entre las etiquetas de un componente llega como prop. ¿Dónde lo coloca Box?", "部品のタグの間の中身はプロップスとして届く。Box はそれをどこに置く？"),
+      note: "children",
       setup: [{ t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: "Box" }, { t: "item", kind: "gem", holder: "hero" }],
       win: [{ t: "give", to: "ally" }, { t: "print", text: "<div><b>gem</b></div>" }],
     },
@@ -273,6 +615,8 @@ const componentsAndProps: LessonDef = {
       answer: 0,
       check: { compiles: true, wrongFail: true },
       explain: L("React.ReactNode covers elements, strings, numbers, null and arrays. A <b> is not a string.", "React.ReactNode cubre elementos, strings, números, null y arreglos. Un <b> no es un string.", "React.ReactNode は要素・文字列・数値・null・配列を含む。<b> は string じゃないよ。"),
+      hint: L("A <b> element is not text or a number. You need the type that covers anything React can render.", "Un elemento <b> no es texto ni número. Necesitas el tipo que cubre todo lo que React puede renderizar.", "<b> 要素は文字でも数値でもない。React が表示できるもの全部を含む型が必要。"),
+      note: "children",
     },
     {
       kind: "predict",
@@ -283,6 +627,8 @@ const componentsAndProps: LessonDef = {
       output: "<button>OK</button>",
       check: { program: show('function Btn({ label = "OK" }: { label?: string }) {\n  return <button>{label}</button>;\n}', "<Btn />"), compiles: true, stdout: "<button>OK</button>" },
       explain: L("A default in the destructuring fills a missing prop, like any JS function parameter.", "Un valor por defecto en la desestructuración llena la prop que falta, como en cualquier función JS.", "分割代入のデフォルト値が、渡されなかったプロップスを埋めるよ。"),
+      hint: L("No label is passed. Look at the = in the destructuring: what fills a missing prop?", "No se pasa label. Mira el = en la desestructuración: ¿qué llena una prop que falta?", "label は渡されていない。分割代入の = を見よう。足りないプロップスを埋めるのは？"),
+      note: "props",
     },
     {
       kind: "predict",
@@ -292,6 +638,8 @@ const componentsAndProps: LessonDef = {
       answer: 1,
       check: { program: `${HEAD}type Props = { name: string };\nfunction Hello({ name }: Props) {\n  return <p>Hi {name}</p>;\n}\nconst el = <Hello />;`, compiles: false },
       explain: L("TS2741: Property 'name' is missing. Required props must be passed.", "TS2741: falta la propiedad 'name'. Las props obligatorias se deben pasar.", "TS2741：'name' がない。必須のプロップスは渡さないとだめ。"),
+      hint: L("Compare the Props type with what the tag passes. Is a prop without ? left out?", "Compara el tipo Props con lo que pasa la etiqueta. ¿Falta alguna prop sin ?", "Props の型とタグが渡すものを比べよう。? のないプロップスが抜けていない？"),
+      note: "props",
       setup: [{ t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: "Hello" }],
       win: [{ t: "shake" }, { t: "say", actor: "ally", text: L("No name?", "¿Sin nombre?", "名前は？") }],
     },
@@ -312,6 +660,8 @@ const componentsAndProps: LessonDef = {
         stdout: "10",
       },
       explain: L("The child can't touch the parent's data. It calls the callback; the parent does the change.", "El hijo no puede tocar los datos del padre. Llama al callback y el padre hace el cambio.", "子は親のデータに触れない。コールバックを呼べば、親が変更してくれるよ。"),
+      hint: L("The child can't reach the parent's variables. What did the parent hand it to ask for a change?", "El hijo no alcanza las variables del padre. ¿Qué le entregó el padre para pedir un cambio?", "子は親の変数に届かない。変更を頼むために親は何を渡した？"),
+      note: "callback-props",
       setup: [{ t: "tag", actor: "hero", text: "hp", value: "3" }, { t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: "Potion" }],
       win: [{ t: "item", kind: "potion", holder: "ally" }, { t: "give", to: "hero" }, { t: "value", actor: "hero", text: "10" }],
     },
@@ -322,6 +672,8 @@ const componentsAndProps: LessonDef = {
       answer: "label",
       check: { program: show("function Badge({ label }: { label: string }) {\n  return <span>{label}</span>;\n}", '<Badge label="MVP" />'), compiles: true, stdout: "<span>MVP</span>" },
       explain: L("Props arrive as ONE object; { label } pulls the label field out of it.", "Las props llegan como UN objeto; { label } saca de él el campo label.", "プロップスはひとつのオブジェクトで届く。{ label } で label を取り出すよ。"),
+      hint: L("The braces pull one field out of the props object. Which field does the type declare?", "Las llaves sacan un campo del objeto props. ¿Qué campo declara el tipo?", "波かっこは props オブジェクトからフィールドを取り出す。型が宣言しているのは？"),
+      note: "props",
     },
     {
       kind: "run",
@@ -334,6 +686,8 @@ const componentsAndProps: LessonDef = {
         String.raw`function\s+Badge\s*\(\s*props\b[\s\S]*\{\s*props\.label\s*\}`,
       ],
       explain: L("There is no props variable here: the destructured label is already in scope.", "Aquí no existe la variable props: label ya está disponible tras desestructurar.", "ここに props という変数はない。分割代入した label をそのまま使おう。"),
+      hint: L("Read the parameter list: is there a variable named props, or was the field already pulled out?", "Lee la lista de parámetros: ¿hay una variable llamada props, o el campo ya se extrajo?", "引数を読もう。props という変数はある？それともフィールドはもう取り出されている？"),
+      note: "props",
     },
   ],
 };
@@ -347,6 +701,7 @@ const listsAndKeys: LessonDef = {
   xp: 80,
   enemy: "react/key-twins",
   enemyName: L("KEY TWINS", "GEMELOS SIN KEY", "キーなし双子"),
+  notes: listsNotes,
   beats: [
     say(L(
       "Got an array? map it to JSX. React renders the resulting array of elements in order.",
@@ -386,6 +741,8 @@ const listsAndKeys: LessonDef = {
       output: "<ul><li>a</li><li>b</li></ul>",
       check: { program: show("", '<ul>{["a", "b"].map(x => <li key={x}>{x}</li>)}</ul>'), compiles: true, stdout: "<ul><li>a</li><li>b</li></ul>" },
       explain: L("key is for React only: it never reaches the HTML.", "key es solo para React: nunca llega al HTML.", "キーは React 専用。HTML には出てこないよ。"),
+      hint: L("Ask who the key is for: the browser, or React itself?", "Pregúntate para quién es la key: ¿para el navegador o para React?", "キーは誰のためのもの？ブラウザ？それとも React？"),
+      note: "lists-keys",
       win: [{ t: "print", text: "<ul><li>a</li><li>b</li></ul>" }],
     },
     {
@@ -400,6 +757,8 @@ const listsAndKeys: LessonDef = {
         stdout: "<ul><li>Feed cat</li><li>Fix bug</li></ul>",
       },
       explain: L("An id is stable and unique. Random keys change every render; a fixed string repeats.", "Un id es estable y único. Las keys aleatorias cambian en cada render; un string fijo se repite.", "id は安定していて一意。ランダムは毎回変わり、固定の文字列は重複するよ。"),
+      hint: L("A key must be unique among siblings AND stay the same on every render.", "Una key debe ser única entre hermanos Y seguir igual en cada render.", "キーは兄弟の中で一意で、しかも毎回のレンダーで同じであること。"),
+      note: "good-keys",
       setup: [{ t: "enter", actor: "ally" }, { t: "enter", actor: "enemy" }],
       win: [{ t: "tag", actor: "ally", text: "key=7" }, { t: "tag", actor: "enemy", text: "key=9" }],
     },
@@ -441,6 +800,8 @@ const listsAndKeys: LessonDef = {
         stdout: "eggs:2 L milk:",
       },
       explain: L("React matches by key. With index keys, key 0 is now eggs, so eggs inherits milk's state. No error, just a silent bug.", "React empareja por key. Con índices, la key 0 ahora es eggs y hereda el estado de milk. Sin error: un bug silencioso.", "React はキーで対応づける。番号だとキー 0 は eggs になり、milk の状態を受け継ぐ。エラーなしの静かなバグ。"),
+      hint: L("React matches state by key. After the insert, which row now has key 0?", "React empareja el estado por key. Tras insertar, ¿qué fila tiene ahora la key 0?", "React はキーで状態を対応づける。追加後、キー 0 を持つのはどの行？"),
+      note: "good-keys",
       win: [{ t: "say", actor: "enemy", text: L("Not my text!", "¡No es mi texto!", "ぼくのじゃない！") }],
     },
     {
@@ -452,6 +813,8 @@ const listsAndKeys: LessonDef = {
       output: "<ul><li>todo</li></ul>",
       check: { program: show("function Item({ done }: { done: boolean }) {\n  if (done) return null;\n  return <li>todo</li>;\n}", "<ul><Item done /><Item done={false} /></ul>"), compiles: true, stdout: "<ul><li>todo</li></ul>" },
       explain: L("Returning null renders nothing. done alone means done={true}.", "Devolver null no genera nada. done solo equivale a done={true}.", "null を返すと何も表示されない。done だけなら done={true} と同じだよ。"),
+      hint: L("Check each Item: which one returns null? And what does a prop with no value mean?", "Revisa cada Item: ¿cuál devuelve null? ¿Y qué significa una prop sin valor?", "Item をひとつずつ見よう。null を返すのはどれ？値のないプロップスの意味は？"),
+      note: "conditional-rendering",
     },
     say(L(
       "Show or hide with cond && <X /> or a ternary a ? b : c. And beware: a length of 0 renders a 0!",
@@ -467,6 +830,8 @@ const listsAndKeys: LessonDef = {
       output: "<div>0</div>",
       check: { program: show("const items: string[] = [];", "<div>{items.length && <ul />}</div>"), compiles: true, stdout: "<div>0</div>" },
       explain: L("items.length is 0, and 0 renders. Write items.length > 0 && <ul /> instead.", "items.length es 0, y el 0 se muestra. Escribe items.length > 0 && <ul /> en su lugar.", "items.length は 0 で、0 は表示される。items.length > 0 && <ul /> と書こう。"),
+      hint: L("What is the length of an empty array? Is that value a boolean, and does React show it?", "¿Cuál es la longitud de un arreglo vacío? ¿Ese valor es booleano, y React lo muestra?", "空の配列の長さは？その値は真偽値？React は表示する？"),
+      note: "conditional-rendering",
       win: [{ t: "say", actor: "enemy", text: L("Zero again!", "¡Otra vez cero!", "また 0 だ！") }],
     },
     {
@@ -476,6 +841,8 @@ const listsAndKeys: LessonDef = {
       answer: "?",
       check: { program: show("const loggedIn: boolean = false;", '<p>{loggedIn ? "Welcome back" : "Please sign in"}</p>'), compiles: true, stdout: "<p>Please sign in</p>" },
       explain: L("cond ? a : b picks one of two values: perfect for either/or UI.", "cond ? a : b elige uno de dos valores: ideal para mostrar una cosa u otra.", "cond ? a : b はふたつの値からひとつを選ぶ。どちらかを出す UI にぴったり。"),
+      hint: L("The ternary has two symbols: one after the condition, one between the two results.", "El ternario tiene dos símbolos: uno tras la condición y otro entre los dos resultados.", "三項演算子の記号は2つ。条件のあとにひとつ、ふたつの結果の間にひとつ。"),
+      note: "conditional-rendering",
     },
     {
       kind: "order",
@@ -491,6 +858,8 @@ const listsAndKeys: LessonDef = {
         stdout: "<ul><li>a</li><li>b</li></ul>",
       },
       explain: L("Data first, then map it to keyed elements, then render the list.", "Primero los datos, luego map a elementos con key, luego se renderiza la lista.", "まずデータ、次にキー付き要素へ map、最後にリストをレンダー。"),
+      hint: L("You can't map data that doesn't exist yet, and you print only after the list is built.", "No puedes hacer map de datos que aún no existen, y solo imprimes cuando la lista está armada.", "まだないデータは map できない。出力はリストができてから。"),
+      note: "lists-keys",
     },
     {
       kind: "run",
@@ -503,6 +872,8 @@ const listsAndKeys: LessonDef = {
         String.raw`=>\s*\{\s*return\s*\(?\s*<li`,
       ],
       explain: L("An arrow with { } needs return. Drop the braces so the <li> is the returned value.", "Una flecha con { } necesita return. Quita las llaves para que el <li> sea el valor devuelto.", "{ } 付きのアロー関数には return が必要。波かっこを外せば <li> が返るよ。"),
+      hint: L("Look at the arrow inside map. With curly braces, what does the function return?", "Mira la flecha dentro de map. Con llaves, ¿qué devuelve la función?", "map の中のアロー関数を見よう。波かっこがあると、関数は何を返す？"),
+      note: "lists-keys",
     },
   ],
 };
@@ -519,6 +890,7 @@ const jsxGremlin: LessonDef = {
   xp: 190,
   enemy: "typescript/nan-gremlin",
   enemyName: L("JSX GREMLIN", "GREMLIN JSX", "JSX グレムリン"),
+  notes: gremlinNotes,
   beats: [
     enemySays(L(
       "Hee hee! I sneak zeros into lists and steal keys from twins. Can you read my markup?",
@@ -531,6 +903,8 @@ const jsxGremlin: LessonDef = {
       options: ["<p>has items</p>", "<p>true</p>", "<p>3</p>"], answer: 0,
       check: { program: show("", '<p>{[1, 2, 3].length > 0 && "has items"}</p>'), compiles: true, stdout: "<p>has items</p>" },
       explain: L("3 > 0 is true, so && returns the string.", "3 > 0 es true, así que && devuelve el string.", "3 > 0 は true なので && は文字列を返す。"),
+      hint: L("Evaluate the comparison first. Then: what does && return when its left side is true?", "Evalúa primero la comparación. Luego: ¿qué devuelve && cuando su lado izquierdo es true?", "まず比較を計算。左側が true のとき && は何を返す？"),
+      note: "recap-conditional",
     },
     {
       kind: "predict", time: 12, prompt: HTML,
@@ -538,6 +912,8 @@ const jsxGremlin: LessonDef = {
       options: ["<p></p>", "<p>0</p>", "<p>items</p>"], answer: 1,
       check: { program: show("const count: number = 0;", '<p>{count && "items"}</p>'), compiles: true, stdout: "<p>0</p>" },
       explain: L("0 is a number, and numbers render.", "0 es un número, y los números se muestran.", "0 は数値。数値は表示されるよ。"),
+      hint: L("Is the left side a boolean or a number? What does React do with each?", "¿El lado izquierdo es booleano o número? ¿Qué hace React con cada uno?", "左側は真偽値？数値？React はそれぞれをどう扱う？"),
+      note: "recap-conditional",
     },
     {
       kind: "predict", time: 15, prompt: COMPILES,
@@ -545,6 +921,8 @@ const jsxGremlin: LessonDef = {
       options: [YES, NO], answer: 1,
       check: { program: `${HEAD}const user = { name: "Ada" };\nconst el = <p>{user}</p>;`, compiles: false },
       explain: L("A plain object is not a ReactNode. Render a field: {user.name}.", "Un objeto plano no es un ReactNode. Muestra un campo: {user.name}.", "ただのオブジェクトは ReactNode じゃない。{user.name} と書こう。"),
+      hint: L("Can React render any value, or only text, numbers, elements and a few others? What is user?", "¿React puede mostrar cualquier valor o solo texto, números, elementos y algunos más? ¿Qué es user?", "React は何でも表示できる？文字・数値・要素などだけ？user は何？"),
+      note: "recap-slots",
     },
     {
       kind: "predict", time: 15, prompt: HTML,
@@ -552,6 +930,8 @@ const jsxGremlin: LessonDef = {
       options: ["<section><h2>Bag</h2><p>gem</p></section>", "<section><h2>Bag</h2></section>", "<Card><p>gem</p></Card>"], answer: 0,
       check: { program: show(CARD, '<Card title="Bag"><p>gem</p></Card>'), compiles: true, stdout: "<section><h2>Bag</h2><p>gem</p></section>" },
       explain: L("title is a prop; the <p> arrives as children.", "title es una prop; el <p> llega como children.", "title はプロップス、<p> は children として届く。"),
+      hint: L("title is a regular prop. What arrives as children, and where does Card place each one?", "title es una prop normal. ¿Qué llega como children, y dónde coloca Card cada cosa?", "title は普通のプロップス。children として届くのは何？Card はそれぞれどこに置く？"),
+      note: "recap-components",
     },
     {
       kind: "type", time: 12,
@@ -560,6 +940,8 @@ const jsxGremlin: LessonDef = {
       answer: "htmlFor",
       check: { program: show("", '<label htmlFor="email">Email</label>'), compiles: true, stdout: '<label for="email">Email</label>' },
       explain: L("for is a JS keyword, so JSX uses htmlFor.", "for es palabra reservada de JS; JSX usa htmlFor.", "for は JS の予約語なので htmlFor を使う。"),
+      hint: L("for is a JavaScript keyword too. JSX renames it the same way it renames class.", "for también es palabra reservada de JavaScript. JSX la renombra igual que a class.", "for も JavaScript の予約語。class と同じように JSX では名前が変わる。"),
+      note: "recap-slots",
     },
     {
       kind: "pick", time: 12,
@@ -568,6 +950,8 @@ const jsxGremlin: LessonDef = {
       options: ["Greeting", "greeting"], answer: 0,
       check: { compiles: true, wrongFail: true },
       explain: L("Components start with a capital letter.", "Los componentes empiezan con mayúscula.", "コンポーネントは大文字で始める。"),
+      hint: L("The tag below is spelled one exact way. And how must a component's name start?", "La etiqueta de abajo se escribe de una forma exacta. ¿Y cómo debe empezar el nombre de un componente?", "下のタグのつづりはひとつに決まっている。部品の名前はどう始まる？"),
+      note: "recap-components",
     },
     {
       kind: "pick", time: 12,
@@ -580,6 +964,8 @@ const jsxGremlin: LessonDef = {
         stdout: "<ul><li>Nap</li></ul>",
       },
       explain: L("key identifies siblings; id is just an HTML attribute.", "key identifica a los hermanos; id es solo un atributo HTML.", "兄弟を見分けるのは key。id はただの HTML 属性。"),
+      hint: L("React needs a special prop on list items, unique among siblings. HTML attributes don't do this job.", "React necesita una prop especial en los items de una lista, única entre hermanos. Los atributos HTML no sirven.", "React はリストの項目に、兄弟の中で一意な特別なプロップスを求める。HTML 属性ではだめ。"),
+      note: "recap-keys",
     },
     {
       kind: "predict", time: 12, prompt: HTML,
@@ -587,6 +973,8 @@ const jsxGremlin: LessonDef = {
       options: ["<p><i>hi</i></p>", "<p>&lt;i&gt;hi&lt;/i&gt;</p>"], answer: 1,
       check: { program: show("", '<p>{"<i>hi</i>"}</p>'), compiles: true, stdout: "<p>&lt;i&gt;hi&lt;/i&gt;</p>" },
       explain: L("Strings are escaped, never parsed as tags.", "Los strings se escapan, nunca se leen como etiquetas.", "文字列はエスケープされ、タグにはならない。"),
+      hint: L("Think about HTML injection: could a string in braces ever turn into real tags?", "Piensa en la inyección de HTML: ¿un string entre llaves podría volverse etiquetas reales?", "HTML の注入を考えよう。波かっこの文字列が本物のタグになることはある？"),
+      note: "recap-slots",
     },
     {
       kind: "predict", time: 12, prompt: HTML,
@@ -594,6 +982,8 @@ const jsxGremlin: LessonDef = {
       options: ["<div>x</div>", "<div>nullx</div>", "<div><Hidden></Hidden>x</div>"], answer: 0,
       check: { program: show("function Hidden() {\n  return null;\n}", "<div><Hidden />x</div>"), compiles: true, stdout: "<div>x</div>" },
       explain: L("A component returning null renders nothing.", "Un componente que devuelve null no genera nada.", "null を返す部品は何も表示しない。"),
+      hint: L("What does a component that returns null leave behind in the HTML?", "¿Qué deja en el HTML un componente que devuelve null?", "null を返す部品は HTML に何を残す？"),
+      note: "recap-conditional",
     },
     {
       kind: "predict", time: 15, prompt: COMPILES,
@@ -601,6 +991,8 @@ const jsxGremlin: LessonDef = {
       options: [YES, NO], answer: 1,
       check: { program: `${HEAD}${ACTION}\nconst el = <Action variant="link" onClick={() => {}} />;`, compiles: false },
       explain: L("variant=\"link\" needs href and has no onClick: the union rejects the mix.", "variant=\"link\" requiere href y no tiene onClick: la unión rechaza la mezcla.", "variant=\"link\" には href が必要で onClick はない。ユニオンが混在を拒否する。"),
+      hint: L("Find the shape that matches variant=\"link\". Which fields does it require, and is onClick one of them?", "Busca la forma que coincide con variant=\"link\". ¿Qué campos exige, y onClick está entre ellos?", "variant=\"link\" に合う形を探そう。必要なフィールドは？onClick はある？"),
+      note: "recap-components",
     },
     {
       kind: "predict", time: 12, prompt: HTML,
@@ -608,6 +1000,8 @@ const jsxGremlin: LessonDef = {
       options: ['<b style="font-size:20px">x</b>', '<b style="fontSize:20">x</b>'], answer: 0,
       check: { program: show("", "<b style={{ fontSize: 20 }}>x</b>"), compiles: true, stdout: '<b style="font-size:20px">x</b>' },
       explain: L("camelCase becomes kebab-case and numbers get px.", "camelCase pasa a kebab-case y los números reciben px.", "キャメルケースはケバブケースに、数値には px が付く。"),
+      hint: L("React writes style keys as CSS names and adds a unit to plain numeric sizes.", "React escribe las claves de style como nombres CSS y agrega una unidad a los tamaños numéricos.", "React は style のキーを CSS の名前で書き、数値だけのサイズに単位を付ける。"),
+      note: "recap-slots",
     },
     enemySays(L(
       "Grr... no stray zeros, no missing keys... The village is yours, component crafter!",

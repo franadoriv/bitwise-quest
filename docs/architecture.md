@@ -25,7 +25,7 @@ lib/save/              Client save system: schema, migrations, binary codec, loc
 components/save/       SaveProvider/useSave/RequireSave, MemoryCard (/saves), PlayerChip (autosave light)
 components/galaxy/     Galaxy3D (low-poly planets, rings, framework and decorative moons, starfield) and GalaxyClient (planet card, moon buttons, LAND)
 components/world/      Three.js planet map (low poly islands) and its HUD, landing intro by the guide
-components/game/       Lesson engine: Stage (SVG+GSAP), beats, LessonGame (orchestrator), ResultScreen
+components/game/       Lesson engine: Stage (SVG+GSAP), beats, LessonGame (orchestrator), TimerModal, NotePanel (guidebook), ResultScreen
 components/exam/       Exam hub and per-topic report
 components/title/      Title screen (the planets' guides walk across it)
 components/ui/         GameFrame (16:9 scaling), Settings (language, palette, sound), I18n, Providers
@@ -87,11 +87,13 @@ The galaxy starts on the save's `lastLang`. Planets whose language is `soon` are
 
 ## Lesson flow
 
-1. `app/play/[lang]/lesson/[slug]/page.tsx` loads `LessonPlay` (beats, enemy sprite, theme, the planet's `guide`) and the world content from `lib/repo.ts`.
+1. `app/play/[lang]/lesson/[slug]/page.tsx` loads `LessonPlay` (beats, enemy sprite, theme, the planet's `guide`, and `notes` keyed by lesson slug) and the world content from `lib/repo.ts`. `notesOf` returns the lesson's `notes`, or, for a lesson that has none yet, a single note built from its teaching dialogs. Review plays carry the notes of every lesson they draw beats from; exam plays carry none.
 2. `LessonClient` waits for a save (`RequireSave`), checks `isUnlocked` against it and hands the play to the `Preloader` (`components/game/Preloader.tsx`). The Preloader loads `LessonGame` on the client only (it uses audio, GSAP and random shuffling) together with what the challenges need before they can run: the Python runtime (`preparePython`, with real download progress reported by the worker) when the play has Python `run` beats, and the JS worker plus three.js (`prepareJs`) when a `run` starter imports `three`. Reviews also wait for their beats from `/api/review-play`. If everything is ready within 200 ms nothing is shown; otherwise an arcade loading screen appears (the guide walks toward the lesson's bug as data arrives, a segmented bar, one line per download with megabytes for Python, rotating tips) and ends with a short READY! hit. Exams have no `run` beats, so they only wait for the game code. A runtime that fails to load is marked on the screen and the run beats fall back to their offline checks.
-3. `LessonGame` walks the beat queue. For each beat it runs `setup` on the stage, shows the beat component and waits for `solved` or `wrong`.
-4. A correct answer adds points, combo and speed bonus, plays the `win` effects and hits the bug. A wrong answer costs a heart, shows `explain` in a box with the planet's guide and pushes the beat to the end of the queue.
-5. At the end, `completeLesson` (or `completeExam` / `completeReview`) computes the reward on the client and the new save is committed to the active slot. On game over, `recordFailedRun` still stores the misses for review.
+3. `LessonGame` first shows the timer modal (`TimerModal`) for lessons, bosses and reviews, with the save's `prefs.timer` preselected; the choice is stored with `setTimerPref`. Exams skip it. Only then does the intro (music and title banner) start.
+4. `LessonGame` walks the beat queue. For each beat it runs `setup` on the stage, shows the beat component and waits for `solved` or `wrong`. The question's time limit comes from `questionLimitMs` in `lib/game-rules.ts` (see [game-design.md](game-design.md#lesson-timer)).
+5. Outside exams, a book button opens the guidebook (`NotePanel`, the play's `notes` for the current beat's lesson, starting at the beat's `note`) and pauses the timer; on a question the first open marks it as helped, which `questionPoints` charges 25% and its speed bonus. A bulb button spends a hint ticket (`spendTicket`, committed to the save right away) to show the beat's `hint`, and on `pick`/`predict` strikes out one wrong option. See [game-design.md](game-design.md#learning-help-guidebook-and-hints).
+6. A correct answer adds points, combo and speed bonus, plays the `win` effects and hits the bug. A wrong answer costs a heart, shows `explain` in a box with the planet's guide (with a "read more" button that opens the guidebook) and pushes the beat to the end of the queue.
+7. At the end, `completeLesson` (or `completeExam` / `completeReview`) computes the reward on the client (including hint tickets earned) and the new save is committed to the active slot. On game over, `recordFailedRun` still stores the misses for review. The result screen can buy hint tickets with coins (`buyTicket`).
 
 All content arrives at the client with every locale (`Text` values). Components resolve it at render time with `useI18n().tx(text)`, so switching language never needs a reload. See [i18n.md](i18n.md).
 

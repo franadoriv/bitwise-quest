@@ -60,13 +60,16 @@ export function nextLesson(content: WorldContent, rec: LangRecord | undefined): 
 // ─── mutations (return a new save) ──────────────────────────────────────────
 const clone = (s: SaveData): SaveData => structuredClone(s);
 
-function bumpStreak(save: SaveData, now: number) {
+/** Counts today as played. The first play of a new day gives a hint ticket. */
+function bumpStreak(save: SaveData, now: number): number {
   const t = today(new Date(now));
-  if (save.stats.lastDay === t) return;
+  if (save.stats.lastDay === t) return 0;
   const yesterday = today(new Date(now - DAY));
   save.stats.streak = save.stats.lastDay === yesterday ? save.stats.streak + 1 : 1;
   save.stats.bestStreak = Math.max(save.stats.bestStreak, save.stats.streak);
   save.stats.lastDay = t;
+  save.stats.tickets += 1;
+  return 1;
 }
 
 function touch(save: SaveData, lang: string, now: number) {
@@ -87,7 +90,7 @@ function recordAttempts(rec: LangRecord, lessonSlug: string, attempts: Attempt[]
   }
 }
 
-export interface Reward { xpGained: number; coinsGained: number; stars: number; levelBefore: number; levelAfter: number; xpAfter: number; nextLesson: string | null }
+export interface Reward { xpGained: number; coinsGained: number; stars: number; levelBefore: number; levelAfter: number; xpAfter: number; nextLesson: string | null; ticketsGained?: number }
 
 export function completeLesson(
   save: SaveData,
@@ -115,9 +118,11 @@ export function completeLesson(
   recordAttempts(rec, lesson.slug, result.attempts, now);
   s.stats.xp += xpGained;
   s.stats.coins += coinsGained;
-  bumpStreak(s, now);
+  // A perfect (3-star) clear earns a hint ticket, and so does the first play of a day.
+  const ticketsGained = (stars === 3 ? 1 : 0) + bumpStreak(s, now);
+  if (stars === 3) s.stats.tickets += 1;
   touch(s, lang, now);
-  return { save: s, reward: { xpGained, coinsGained, stars, levelBefore: before, levelAfter: levelFromXp(s.stats.xp), xpAfter: s.stats.xp, nextLesson: nextLesson(content, rec) } };
+  return { save: s, reward: { xpGained, coinsGained, stars, levelBefore: before, levelAfter: levelFromXp(s.stats.xp), xpAfter: s.stats.xp, nextLesson: nextLesson(content, rec), ticketsGained } };
 }
 
 /** Game over: keep what was learned (misses enter review) without completing the lesson. */
@@ -246,5 +251,31 @@ export function markLanded(save: SaveData, lang: string, now = Date.now()): Save
 export function addPlayTime(save: SaveData, ms: number): SaveData {
   const s = clone(save);
   s.player.playMs += Math.max(0, Math.round(ms));
+  return s;
+}
+
+// ─── hint tickets and preferences ───────────────────────────────────────────
+export const TICKET_PRICE = 40;
+
+/** Spends one hint ticket; null when there are none left. */
+export function spendTicket(save: SaveData): SaveData | null {
+  if (save.stats.tickets <= 0) return null;
+  const s = clone(save);
+  s.stats.tickets -= 1;
+  return s;
+}
+
+/** Buys one hint ticket with coins; null when the player can't afford it. */
+export function buyTicket(save: SaveData, price = TICKET_PRICE): SaveData | null {
+  if (save.stats.coins < price) return null;
+  const s = clone(save);
+  s.stats.coins -= price;
+  s.stats.tickets += 1;
+  return s;
+}
+
+export function setTimerPref(save: SaveData, timer: SaveData["prefs"]["timer"]): SaveData {
+  const s = clone(save);
+  s.prefs = { ...s.prefs, timer };
   return s;
 }

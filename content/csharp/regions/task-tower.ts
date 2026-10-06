@@ -1,4 +1,4 @@
-import type { LessonDef, RegionDef } from "../../../lib/content/types.ts";
+import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L, say, enemySays } from "../../rust/helpers.ts";
 
 // REGION 4 · TASK TOWER  (exceptions, using and disposal, async/await)
@@ -21,6 +21,326 @@ const TORCH = `class Torch : IDisposable
     public void Dispose() => Console.Write("out" + n + " ");
 }`;
 const withTorch = (code: string) => `using System;\n\n${code}\n\n${TORCH}\n`;
+
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example; the validator checks `output` against the real compiler. */
+const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code, output, caption });
+/** An example that must NOT compile (verified too). */
+const bad = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: false } });
+
+const exceptionsNotes: NoteDef[] = [
+  note("try-catch-finally", L("try, catch and finally", "try, catch y finally", "try・catch・finally"),
+    p(
+      "When something goes wrong at runtime, C# throws an exception: an object that describes the problem. You can throw one yourself with throw new SomeException(\"message\"). The current code stops at once: the lines after the throw in the same block never run. The runtime then looks for a catch that can handle it.",
+      "Cuando algo sale mal al ejecutar, C# lanza una excepción: un objeto que describe el problema. Puedes lanzar una tú mismo con throw new AlgunaException(\"mensaje\"). El código actual se detiene al instante: las líneas después del throw en el mismo bloque nunca corren. Luego se busca un catch que pueda manejarla.",
+      "実行中に問題が起きると、C# は例外（問題を説明するオブジェクト）を投げる。throw new SomeException(\"message\") で自分でも投げられる。今のコードはすぐ止まり、同じブロックの throw より後の行は動かない。そして受け止められる catch を探す。",
+    ),
+    p(
+      "try { ... } marks the risky code. catch (SomeException e) { ... } runs only if an exception of that type escaped from the try, and e.Message holds its text. If nothing was thrown, the catch blocks are skipped. If no catch matches anywhere, the program crashes and prints the exception.",
+      "try { ... } marca el código riesgoso. catch (AlgunaException e) { ... } corre solo si una excepción de ese tipo escapó del try, y e.Message tiene su texto. Si no se lanzó nada, los catch se saltan. Si ningún catch coincide en ninguna parte, el programa revienta e imprime la excepción.",
+      "try { ... } は危ないコードの印。catch (SomeException e) { ... } はその型の例外が try から出た時だけ動き、e.Message にその文字が入る。何も投げられなければ catch は飛ばされる。どこにも合う catch が無ければ、プログラムは例外を表示して落ちる。",
+    ),
+    ex('try\n{\n    Console.Write("open ");\n    throw new TimeoutException("slow");\n    Console.Write("never ");\n}\ncatch (TimeoutException e) { Console.Write("handled " + e.Message); }\nConsole.WriteLine(" next");', "open handled slow next",
+      L("The line after throw is skipped; code after the catch goes on", "La línea tras el throw se salta; lo que sigue al catch continúa", "throw の後の行は飛ばされ、catch の後は続く")),
+    p(
+      "finally { ... } runs no matter how the try ends: normally, by an exception (caught or not), or by a return. A return inside try waits: finally runs first, and only then is the value handed back to the caller. Use finally for cleanup that must always happen.",
+      "finally { ... } corre sin importar cómo termine el try: normalmente, por una excepción (atrapada o no) o por un return. Un return dentro del try espera: finally corre primero, y solo entonces el valor llega a quien llamó. Usa finally para la limpieza que siempre debe ocurrir.",
+      "finally { ... } は try の終わり方に関係なく動く：ふつうに終わっても、例外でも（受けても受けなくても）、return でも。try の中の return は待たされ、先に finally が動いてから値が呼び出し元に届く。必ず必要な後片づけに使おう。",
+    ),
+    ex('Check(5);\nCheck(-1);\n\nstatic void Check(int n)\n{\n    try { if (n < 0) return; Console.Write("ok" + n + " "); }\n    finally { Console.Write("done" + n + " "); }\n}', "ok5 done5 done-1",
+      L("finally runs on the normal path and on the early return", "finally corre en el camino normal y en el return temprano", "ふつうの終わりでも、早めの return でも finally は動く")),
+    p(
+      "Nested blocks: if an inner try has no matching catch, its finally still runs, and then the exception keeps flying outward to the next enclosing try. Common mistake: thinking finally waits until the end of the program, or that it runs only when there was no error.",
+      "Bloques anidados: si un try interno no tiene un catch que coincida, su finally corre igual, y luego la excepción sigue volando hacia el siguiente try que lo envuelve. Error común: pensar que finally espera al final del programa, o que solo corre si no hubo error.",
+      "入れ子のブロック：内側の try に合う catch が無くても、その finally は動き、それから例外は外側の try へ飛んでいく。よくあるミス：finally はプログラムの最後まで待つ、またはエラーが無い時だけ動く、と思うこと。",
+    ),
+  ),
+  note("matching-catches", L("Which catch runs?", "¿Qué catch corre?", "どの catch が動く？"),
+    p(
+      "Exception types form a family tree. Exception is the root; ArgumentException is a child of it, and ArgumentNullException is a child of ArgumentException. catch (X) matches X and every type below X. The object keeps its real type, though: e.GetType().Name still reports the exact class that was thrown.",
+      "Los tipos de excepción forman un árbol familiar. Exception es la raíz; ArgumentException es hija suya, y ArgumentNullException es hija de ArgumentException. catch (X) atrapa X y todo tipo debajo de X. Pero el objeto conserva su tipo real: e.GetType().Name sigue mostrando la clase exacta que se lanzó.",
+      "例外の型は家系図のようになっている。根は Exception、その子が ArgumentException、さらにその子が ArgumentNullException。catch (X) は X とその下の型すべてに合う。でも中身は本当の型のままで、e.GetType().Name は投げられた正確なクラス名を返す。",
+    ),
+    ex('try { throw new ArgumentOutOfRangeException("level"); }\ncatch (ArgumentException e) { Console.WriteLine("caught " + e.GetType().Name); }', "caught ArgumentOutOfRangeException",
+      L("A parent catch, but the object keeps its real type", "Un catch del padre, pero el objeto conserva su tipo real", "親の catch でも、中身は本当の型のまま")),
+    p(
+      "Catch blocks are checked from top to bottom, and only the FIRST one that matches runs; the rest are skipped. So specific types go first and general ones, like Exception, go last. Two types can sit in different branches of the tree: then neither catches the other.",
+      "Los catch se revisan de arriba abajo, y solo corre el PRIMERO que coincide; el resto se salta. Por eso los tipos específicos van primero y los generales, como Exception, al final. Dos tipos pueden estar en ramas distintas del árbol: entonces ninguno atrapa al otro.",
+      "catch は上から順に調べられ、最初に合った1つだけが動き、残りは飛ばされる。だから具体的な型を先に、Exception のような一般的な型を最後に書く。木の別々の枝にある2つの型は、互いを受け止めない。",
+    ),
+    ex('try { throw new KeyNotFoundException(); }\ncatch (InvalidOperationException) { Console.Write("A"); }\ncatch (KeyNotFoundException) { Console.Write("B"); }\ncatch (Exception) { Console.Write("C"); }', "B",
+      L("Not in the first branch; the second catch is the first match", "No está en la primera rama; el segundo catch es la primera coincidencia", "1つ目の枝ではない。最初に合うのは2つ目")),
+    p(
+      "If a general catch comes before a more specific one, the specific one could never run, so the compiler stops you with error CS0160. The fix is to swap them: specific first, general last.",
+      "Si un catch general va antes de uno más específico, el específico nunca podría correr, así que el compilador te detiene con el error CS0160. El arreglo es intercambiarlos: el específico primero, el general al final.",
+      "一般的な catch がより具体的な catch より前にあると、具体的なほうは絶対に動けないので、コンパイラはエラー CS0160 で止める。直すには入れかえて、具体的なものを先、一般的なものを後にする。",
+    ),
+    p(
+      "You can make your own exceptions: class NotEnoughGold : Exception { }, with properties for details. A filter, catch (X e) when (condition), only catches when the condition is true. If it's false, that catch is skipped as if it didn't match, and the next catches get their chance.",
+      "Puedes crear tus propias excepciones: class NotEnoughGold : Exception { }, con propiedades para los detalles. Un filtro, catch (X e) when (condición), solo atrapa si la condición es verdadera. Si es falsa, ese catch se salta como si no coincidiera, y los siguientes tienen su oportunidad.",
+      "自分の例外も作れる：class NotEnoughGold : Exception { }。詳しい情報はプロパティに入れる。フィルタ catch (X e) when (条件) は条件が true の時だけ受ける。false なら合わなかったのと同じように飛ばされ、次の catch の番になる。",
+    ),
+    ex('try { throw new Locked(2); }\ncatch (Locked e) when (e.Keys > 1) { Console.Write("need " + e.Keys + " keys"); }\n\nclass Locked : Exception\n{\n    public int Keys { get; }\n    public Locked(int keys) => Keys = keys;\n}', "need 2 keys"),
+  ),
+  note("wrap-and-rethrow", L("Wrapping and rethrowing", "Envolver y relanzar", "包む・投げ直す"),
+    p(
+      "Sometimes a low-level error (\"disk full\") should reach the caller as a clearer one (\"could not save\"). Pass the original as the second constructor argument: new InvalidOperationException(\"could not save\", e). The new exception carries the old one in its InnerException property, so no detail is lost.",
+      "A veces un error de bajo nivel (\"disco lleno\") debe llegar a quien llama como uno más claro (\"no se pudo guardar\"). Pasa el original como segundo argumento del constructor: new InvalidOperationException(\"could not save\", e). La excepción nueva lleva la vieja en su propiedad InnerException, así que no se pierde ningún detalle.",
+      "低レベルのエラー（「ディスクがいっぱい」）は、わかりやすいエラー（「保存できない」）として呼び出し元に届けたい時がある。元の例外をコンストラクタの2つ目の引数に渡す：new InvalidOperationException(\"could not save\", e)。新しい例外は古い例外を InnerException に持つので、何も失われない。",
+    ),
+    ex('try\n{\n    try { throw new TimeoutException("net"); }\n    catch (Exception e) { throw new Exception("sync failed", e); }\n}\ncatch (Exception e) { Console.WriteLine(e.InnerException!.Message + " -> " + e.Message); }', "net -> sync failed"),
+    p(
+      "To let an exception continue unchanged after doing something in a catch, like logging, write throw; on its own. It rethrows the very same exception with its original stack trace: the record of which methods were running when it was first thrown.",
+      "Para dejar que una excepción siga igual después de hacer algo en un catch, como registrarla, escribe throw; solo. Relanza la misma excepción con su traza de pila original: el registro de qué métodos estaban corriendo cuando se lanzó por primera vez.",
+      "catch の中でログを取るなどした後、例外をそのまま先へ流すには throw; とだけ書く。同じ例外を元のスタックトレース（最初に投げられた時に動いていたメソッドの記録）ごと投げ直す。",
+    ),
+    ex('try\n{\n    try { throw new FormatException("bad id"); }\n    catch (FormatException) { Console.Write("log "); throw; }\n}\ncatch (Exception e) { Console.WriteLine(e.GetType().Name); }', "log FormatException",
+      L("Logged, then passed along unchanged", "Se registra y luego sigue sin cambios", "ログを取ってから、そのまま先へ")),
+    p(
+      "throw e; looks similar but resets the stack trace to the current line, so the trace no longer shows where the problem started. That makes bugs much harder to find. Rule: inside a catch, rethrow with throw; or wrap the exception in a new one; avoid throw e;.",
+      "throw e; se parece, pero reinicia la traza de pila en la línea actual, así que la traza ya no muestra dónde empezó el problema. Eso hace mucho más difícil encontrar errores. Regla: dentro de un catch, relanza con throw; o envuelve la excepción en una nueva; evita throw e;.",
+      "throw e; は似ているが、スタックトレースを今の行からやり直すので、問題が始まった場所が見えなくなる。バグ探しがずっと難しくなる。ルール：catch の中では throw; で投げ直すか、新しい例外で包む。throw e; は避けよう。",
+    ),
+    p(
+      "throw; only works inside a catch block, where there is a current exception to rethrow. Anywhere else there is nothing to rethrow, and the compiler reports CS0156.",
+      "throw; solo funciona dentro de un bloque catch, donde hay una excepción actual que relanzar. En cualquier otro lugar no hay nada que relanzar, y el compilador da CS0156.",
+      "throw; が使えるのは catch ブロックの中だけ。そこには投げ直す今の例外がある。ほかの場所では投げ直す物が無いので、コンパイラは CS0156 を出す。",
+    ),
+  ),
+];
+
+const disposalNotes: NoteDef[] = [
+  note("idisposable-and-using", L("IDisposable and using", "IDisposable y using", "IDisposable と using"),
+    p(
+      "Some objects hold things the system lends out: files, network connections, locks. They must be given back as soon as you're done, not \"eventually\". Such types implement the IDisposable interface, which has one method, Dispose(), that releases the resource.",
+      "Algunos objetos guardan cosas que el sistema presta: archivos, conexiones de red, candados. Hay que devolverlas apenas terminas, no \"algún día\". Esos tipos implementan la interfaz IDisposable, que tiene un método, Dispose(), que libera el recurso.",
+      "システムから借りた物（ファイル、ネットワーク接続、ロック）を持つオブジェクトがある。それは「いつか」ではなく、使い終わったらすぐ返す必要がある。そういう型は IDisposable インターフェイスを実装し、その Dispose() メソッドで資源を手放す。",
+    ),
+    p(
+      "A using statement calls Dispose for you: using (var x = new Thing()) { ... }. The object is created, the block runs, and exactly when the block ends Dispose is called, once. Code after the block runs after the cleanup.",
+      "Una instrucción using llama a Dispose por ti: using (var x = new Cosa()) { ... }. Se crea el objeto, corre el bloque y, justo cuando el bloque termina, se llama a Dispose una vez. El código después del bloque corre después de la limpieza.",
+      "using 文は Dispose を代わりに呼んでくれる：using (var x = new Thing()) { ... }。オブジェクトを作り、ブロックを実行し、ブロックが終わったちょうどその時に Dispose を1回呼ぶ。ブロックの後のコードは後片づけの後に動く。",
+    ),
+    ex('using (var l = new Lamp())\n    Console.Write("read ");\nConsole.WriteLine("sleep");\n\nclass Lamp : IDisposable\n{\n    public Lamp() => Console.Write("on ");\n    public void Dispose() => Console.Write("off ");\n}', "on read off sleep",
+      L("Created, used, disposed, then the next line", "Se crea, se usa, se libera y luego la línea siguiente", "作る、使う、Dispose、そして次の行")),
+    p(
+      "using only accepts types that implement IDisposable; any other type fails with CS1674, because there would be no Dispose to call. To make your own class disposable, write : IDisposable after its name and add a public void Dispose() method.",
+      "using solo acepta tipos que implementan IDisposable; cualquier otro falla con CS1674, porque no habría un Dispose que llamar. Para que tu clase sea liberable, escribe : IDisposable tras su nombre y agrega un método public void Dispose().",
+      "using は IDisposable を実装した型だけを受け付ける。ほかの型は呼ぶ Dispose が無いので CS1674 になる。自分のクラスを Dispose できるようにするには、名前の後に : IDisposable と書き、public void Dispose() を足す。",
+    ),
+    p(
+      "Common mistake: thinking that the closing brace of an ordinary block cleans up. It doesn't: a plain { var t = new Thing(); } just lets the variable go out of scope, and Dispose is never called. Only using, or calling Dispose yourself, does it.",
+      "Error común: pensar que la llave de cierre de un bloque común limpia. No lo hace: un simple { var t = new Cosa(); } solo deja que la variable salga de alcance, y Dispose nunca se llama. Solo using, o llamar a Dispose tú mismo, lo hace.",
+      "よくあるミス：ふつうのブロックの閉じかっこで後片づけされると思うこと。されない。ただの { var t = new Thing(); } は変数がスコープを出るだけで、Dispose は呼ばれない。呼ぶのは using か、自分で Dispose を呼んだ時だけじゃ。",
+    ),
+  ),
+  note("using-declarations", L("using var declarations", "Declaraciones using var", "using var 宣言"),
+    p(
+      "using var x = new Thing(); is the shorter form, with no extra block. The variable lives until the end of the enclosing scope (the method body, or the { } it's in), and Dispose is called there, automatically.",
+      "using var x = new Cosa(); es la forma corta, sin bloque extra. La variable vive hasta el final del bloque que la contiene (el cuerpo del método, o las { } donde está), y Dispose se llama ahí, automáticamente.",
+      "using var x = new Thing(); は余分なブロックの無い短い書き方。変数は囲んでいるスコープ（メソッドの本体か、その { }）の終わりまで生き、そこで自動的に Dispose が呼ばれる。",
+    ),
+    p(
+      "When several using variables share a scope, they are disposed in REVERSE order of creation: the last one created goes first. That's on purpose, because later objects often depend on earlier ones (a reader on top of a file), so the dependent ones close first.",
+      "Cuando varias variables using comparten un bloque, se liberan en orden INVERSO al de creación: la última creada va primero. Es a propósito, porque los objetos posteriores suelen depender de los anteriores (un lector sobre un archivo), así que los dependientes se cierran primero.",
+      "同じスコープに using の変数がいくつかあると、作った順と逆に Dispose される。最後に作った物が最初。後の物は前の物に頼っていることが多い（ファイルの上の読み取り役など）ので、頼っている側から閉じるためじゃ。",
+    ),
+    ex('Camp();\n\nstatic void Camp()\n{\n    using var tent = new Gear("tent");\n    using var fire = new Gear("fire");\n    Console.Write("night ");\n}\n\nclass Gear(string n) : IDisposable { public void Dispose() => Console.Write("pack-" + n + " "); }', "night pack-fire pack-tent",
+      L("Last created, first disposed", "La última creada, la primera liberada", "最後に作った物が最初に Dispose")),
+    p(
+      "Common mistake: expecting Dispose right after the variable's last use. It waits for the end of the scope. If you need it earlier, put the code in its own { } block, or use the using (...) { } form, which ends where its block ends.",
+      "Error común: esperar Dispose justo después del último uso de la variable. Espera al final del bloque. Si lo necesitas antes, pon el código en su propio bloque { }, o usa la forma using (...) { }, que termina donde termina su bloque.",
+      "よくあるミス：変数を最後に使った直後に Dispose されると思うこと。スコープの終わりまで待つ。早くしたいなら、そのコードを専用の { } に入れるか、ブロックの終わりで終わる using (...) { } の形を使おう。",
+    ),
+  ),
+  note("using-and-exceptions", L("using is a hidden try/finally", "using es un try/finally oculto", "using は隠れた try/finally"),
+    p(
+      "The compiler turns using into try/finally: the rest of the scope goes in the try, and Dispose goes in the finally. So Dispose runs however the scope is left: normally, by a return, or by an exception.",
+      "El compilador convierte using en try/finally: el resto del bloque va en el try y Dispose va en el finally. Así que Dispose corre sin importar cómo se salga del bloque: normalmente, por un return o por una excepción.",
+      "コンパイラは using を try/finally に変える。スコープの残りが try に、Dispose が finally に入る。だから、ふつうに終わっても、return でも、例外でも、スコープを出る時に Dispose が動く。",
+    ),
+    ex('Visit(true);\n\nstatic void Visit(bool early)\n{\n    using var l = new Lamp();\n    if (early) { Console.Write("leave "); return; }\n    Console.Write("stay ");\n}\n\nclass Lamp : IDisposable { public void Dispose() => Console.Write("off"); }', "leave off",
+      L("An early return still disposes", "Un return temprano igual libera", "早めの return でも Dispose される")),
+    p(
+      "When an exception leaves the scope of a using variable, Dispose runs first, while the exception is on its way out, and only then does an outer catch handle it. The same with an outer finally: the inner scope ends, and disposes, before the outer finally runs.",
+      "Cuando una excepción sale del alcance de una variable using, Dispose corre primero, mientras la excepción va saliendo, y solo después la maneja un catch externo. Lo mismo con un finally externo: el bloque interno termina, y libera, antes de que corra el finally externo.",
+      "例外が using の変数のスコープを出る時、外へ向かう途中でまず Dispose が動き、その後で外の catch が受ける。外の finally も同じで、内側のスコープが終わって Dispose してから、外の finally が動く。",
+    ),
+    p(
+      "Read it as nested boxes: the innermost scope closes first. To trace the order, list the lines of the body, then the Dispose of each scope being left (innermost first), then the catch if there was an exception, and finally the outer finally.",
+      "Léelo como cajas anidadas: el bloque más interno se cierra primero. Para seguir el orden, enumera las líneas del cuerpo, luego el Dispose de cada bloque que se deja (el más interno primero), luego el catch si hubo excepción, y al final el finally externo.",
+      "入れ子の箱と考えよう。一番内側のスコープが先に閉じる。順番を追うには、本体の行、次に抜けるスコープの Dispose（内側から）、例外があれば catch、最後に外の finally と並べるのじゃ。",
+    ),
+  ),
+  note("gc-and-finalizers", L("Garbage collector and finalizers", "Recolector de basura y finalizadores", "GC とファイナライザ"),
+    p(
+      "Plain memory is managed by the garbage collector (GC). When no variable refers to an object anymore, the GC may reclaim it later, at a time it chooses based on how much memory is needed. In C# you never free memory yourself.",
+      "La memoria común la administra el recolector de basura (GC). Cuando ninguna variable apunta ya a un objeto, el GC puede recuperarlo después, en un momento que elige según cuánta memoria se necesite. En C# nunca liberas memoria tú mismo.",
+      "ふつうのメモリはガベージコレクタ（GC）が管理する。どの変数も指さなくなったオブジェクトは、GC が必要なメモリ量に応じて選んだ時に、後から回収する。C# では自分でメモリを解放することはない。",
+    ),
+    p(
+      "A finalizer, written ~ClassName() { }, is a last-resort cleanup the GC may call before reclaiming an object. You can't predict when: seconds later, at shutdown, or never. Going out of scope or ending a using block does not trigger it.",
+      "Un finalizador, escrito ~NombreClase() { }, es una limpieza de último recurso que el GC puede llamar antes de recuperar un objeto. No puedes predecir cuándo: segundos después, al cerrar el programa o nunca. Salir de alcance o terminar un bloque using no lo dispara.",
+      "ファイナライザ ~ClassName() { } は、GC がオブジェクトを回収する前に呼ぶかもしれない最後の手段の後片づけ。いつかは予測できない：数秒後か、終了時か、呼ばれないか。スコープを出ても using が終わっても呼ばれない。",
+    ),
+    p(
+      "That's why resources use IDisposable: Dispose is deterministic, so you know exactly when it runs. Rule: never rely on the GC or a finalizer to close files or connections; use using, or call Dispose yourself.",
+      "Por eso los recursos usan IDisposable: Dispose es determinista, sabes exactamente cuándo corre. Regla: nunca dependas del GC ni de un finalizador para cerrar archivos o conexiones; usa using, o llama a Dispose tú mismo.",
+      "だから資源には IDisposable を使う。Dispose はいつ動くか正確にわかる。ルール：ファイルや接続を閉じるのに GC やファイナライザを当てにしない。using を使うか、自分で Dispose を呼ぼう。",
+    ),
+    ex('var log = new Journal();\nlog.Dispose();\nConsole.WriteLine("after");\n\nclass Journal : IDisposable\n{\n    public void Dispose() => Console.Write("closed ");\n}', "closed after",
+      L("Dispose runs exactly where you call it", "Dispose corre justo donde lo llamas", "Dispose は呼んだその場所で動く")),
+  ),
+];
+
+const asyncNotes: NoteDef[] = [
+  note("tasks-and-await", L("Task, async and await", "Task, async y await", "Task・async・await"),
+    p(
+      "Slow work (downloads, files, timers) is represented by a Task: a promise that the work will finish later. Task<T> promises a value of type T; a plain Task promises only completion. A Task<int> is not an int: assigning it to an int fails with CS0029, and printing it shows the type name instead of a number.",
+      "El trabajo lento (descargas, archivos, temporizadores) se representa con un Task: la promesa de que el trabajo terminará después. Task<T> promete un valor de tipo T; un Task a secas solo promete terminar. Un Task<int> no es un int: asignarlo a un int falla con CS0029, e imprimirlo muestra el nombre del tipo en vez de un número.",
+      "時間のかかる仕事（ダウンロード、ファイル、タイマー）は Task で表す。後で終わるという約束じゃ。Task<T> は T 型の値を、ただの Task は終わることだけを約束する。Task<int> は int ではない。int に代入すると CS0029、表示すると数ではなく型の名前が出る。",
+    ),
+    p(
+      "await task waits for the task to finish and gives you its result: int n = await CountAsync(); While waiting, the thread is free for other work instead of freezing. The code after an await runs only when that task is done, so several awaits in a row run strictly in order.",
+      "await tarea espera a que la tarea termine y te da su resultado: int n = await CountAsync(); Mientras espera, el hilo queda libre para otro trabajo en vez de congelarse. El código después de un await corre solo cuando esa tarea terminó, así que varios await seguidos corren estrictamente en orden.",
+      "await task は Task が終わるのを待って結果をくれる：int n = await CountAsync(); 待っている間、スレッドは止まらずほかの仕事ができる。await の後のコードはその Task が終わってから動くので、await を続けて書けば必ず順番どおりに進む。",
+    ),
+    ex('Console.WriteLine(await Triple(7));\n\nstatic async Task<int> Triple(int x)\n{\n    await Task.Delay(20);\n    return x * 3;\n}', "21",
+      L("return gives a plain int; the caller awaits a Task<int>", "return da un int simple; quien llama espera un Task<int>", "return は int、呼び出し側は Task<int> を await")),
+    p(
+      "To use await inside a method, mark the method async; otherwise you get CS4033. An async method returns Task or Task<T>, and inside it you write return value; with the plain T, because the compiler wraps it in the Task. Top-level statements, code outside any method, may use await directly.",
+      "Para usar await dentro de un método, márcalo async; si no, obtienes CS4033. Un método async devuelve Task o Task<T>, y adentro escribes return valor; con el T simple, porque el compilador lo envuelve en el Task. Las instrucciones de nivel superior, el código fuera de todo método, pueden usar await directamente.",
+      "メソッドの中で await を使うには async をつける。無いと CS4033。async メソッドは Task か Task<T> を返し、中ではそのまま T の値を return する。コンパイラが Task に包むからじゃ。メソッドの外に書くトップレベルのコードでは、そのまま await が使える。",
+    ),
+    p(
+      "Common mistake: forgetting await. var total = SumAsync(); compiles, but total is the Task itself, not the number. If you ever see System.Threading.Tasks.Task`1[...] printed, an await is missing somewhere.",
+      "Error común: olvidar el await. var total = SumAsync(); compila, pero total es el Task mismo, no el número. Si alguna vez ves impreso System.Threading.Tasks.Task`1[...], falta un await en algún lado.",
+      "よくあるミス：await を忘れること。var total = SumAsync(); はコンパイルできるが、total は数ではなく Task そのもの。System.Threading.Tasks.Task`1[...] と表示されたら、どこかで await が抜けている。",
+    ),
+  ),
+  note("until-first-await", L("Runs until the first await", "Corre hasta el primer await", "最初の await まで動く"),
+    p(
+      "Calling an async method does not start a background thread. Its code runs right away, on the caller's thread, up to the first await of something that isn't finished yet. There the method pauses and hands an unfinished Task back to the caller, which carries on with its next line.",
+      "Llamar a un método async no arranca un hilo de fondo. Su código corre de inmediato, en el hilo de quien llama, hasta el primer await de algo que aún no terminó. Ahí el método se pausa y le devuelve un Task sin terminar a quien llamó, que sigue con su siguiente línea.",
+      "async メソッドを呼んでも、裏でスレッドが始まるわけではない。コードは呼び出し側のスレッドですぐ動き、まだ終わっていない物を最初に await した所まで進む。そこでメソッドは一時停止し、未完了の Task を呼び出し側に返す。呼び出し側は次の行へ進む。",
+    ),
+    p(
+      "When the awaited work completes, the rest of the method resumes. If the caller later awaits the returned task, it waits for that rest to finish. So the order is: the method's part before its first await, then the caller's next lines, then the method's part after it.",
+      "Cuando el trabajo esperado termina, el resto del método continúa. Si quien llamó hace await del task devuelto, espera a que ese resto termine. Así que el orden es: la parte del método antes de su primer await, luego las siguientes líneas de quien llama, luego la parte del método después del await.",
+      "待っていた仕事が終わると、メソッドの残りが再開する。呼び出し側が後で返された Task を await すれば、その残りが終わるまで待つ。順番は、メソッドの最初の await より前、呼び出し側の次の行、メソッドの await より後、となる。",
+    ),
+    ex('var job = Brew();\nConsole.Write("[waiting] ");\nawait job;\nConsole.WriteLine("drink");\n\nstatic async Task Brew()\n{\n    Console.Write("boil ");\n    await Task.Delay(300);\n    Console.Write("pour ");\n}', "boil [waiting] pour drink",
+      L("boil happens at the call; pour after the delay", "boil ocurre en la llamada; pour después de la espera", "boil は呼んだ時、pour は待った後")),
+    p(
+      "Common mistake: thinking the whole async method runs before the caller continues, or that none of it runs until it is awaited. Find the first await inside the method: everything above it happens immediately, at the call.",
+      "Error común: pensar que todo el método async corre antes de que siga quien llama, o que nada corre hasta que se le hace await. Busca el primer await dentro del método: todo lo que está arriba ocurre de inmediato, en la llamada.",
+      "よくあるミス：async メソッドが全部終わってから呼び出し側が進む、または await するまで何も動かない、と思うこと。メソッドの中の最初の await を探そう。それより上は呼んだ瞬間に動く。",
+    ),
+  ),
+  note("task-whenall", L("Waiting for many with WhenAll", "Esperar a varios con WhenAll", "WhenAll でまとめて待つ"),
+    p(
+      "Starting several tasks before awaiting any lets them run at the same time. Task.WhenAll(t1, t2, t3) returns one task that finishes when all of them have finished, so the total wait is about as long as the slowest one, not the sum of all.",
+      "Arrancar varios tasks antes de esperar a ninguno permite que corran al mismo tiempo. Task.WhenAll(t1, t2, t3) devuelve un task que termina cuando todos terminaron, así que la espera total dura más o menos lo que el más lento, no la suma de todos.",
+      "どれかを await する前に複数の Task を始めると、同時に進められる。Task.WhenAll(t1, t2, t3) は全部が終わった時に終わる Task を1つ返す。だから待ち時間は合計ではなく、だいたい一番遅いものの長さじゃ。",
+    ),
+    p(
+      "For tasks that return values, await Task.WhenAll(...) gives you an array of results in the same order as the tasks you passed in, no matter which one finished first. That's what makes it easy to use: position 0 is always the first task's result.",
+      "Para tasks que devuelven valores, await Task.WhenAll(...) te da un array de resultados en el mismo orden que los tasks que pasaste, sin importar cuál terminó primero. Eso lo hace fácil de usar: la posición 0 siempre es el resultado del primer task.",
+      "値を返す Task なら、await Task.WhenAll(...) は渡した Task と同じ順の結果の配列をくれる。どれが先に終わったかは関係ない。だから使いやすい。0番は必ず最初の Task の結果じゃ。",
+    ),
+    ex('var sizes = await Task.WhenAll(Measure("x", 250), Measure("yyy", 5));\nConsole.WriteLine(sizes[0] + " " + sizes[1]);\n\nstatic async Task<int> Measure(string s, int ms)\n{\n    await Task.Delay(ms);\n    return s.Length;\n}', "1 3",
+      L("The fast one finishes first, but keeps its place", "El rápido termina primero, pero conserva su lugar", "速いほうが先に終わっても、位置はそのまま")),
+    p(
+      "Common mistake: expecting the results sorted by finishing time. If what you need is \"whichever finishes first\", that's a different method, Task.WhenAny.",
+      "Error común: esperar los resultados ordenados según quién terminó primero. Si lo que necesitas es \"el que termine primero\", ese es otro método, Task.WhenAny.",
+      "よくあるミス：結果が終わった順に並ぶと思うこと。「最初に終わったもの」が欲しいなら、別のメソッド Task.WhenAny を使う。",
+    ),
+  ),
+  note("async-errors", L("Exceptions in async code", "Excepciones en código async", "async の例外"),
+    p(
+      "If an async method throws, the exception is stored inside its Task. await then rethrows it as the original exception, so a normal try/catch around the await catches it by its real type, just as if the code were synchronous.",
+      "Si un método async lanza, la excepción se guarda dentro de su Task. Luego await la relanza como la excepción original, así que un try/catch normal alrededor del await la atrapa por su tipo real, igual que si el código fuera síncrono.",
+      "async メソッドが例外を投げると、例外はその Task の中にしまわれる。await はそれを元の例外のまま投げ直すので、await を囲むふつうの try/catch で本当の型のまま受けられる。同期のコードと同じじゃ。",
+    ),
+    ex('try { await Load(); }\ncatch (TimeoutException e) { Console.WriteLine("retry: " + e.Message); }\n\nstatic async Task Load()\n{\n    await Task.Delay(10);\n    throw new TimeoutException("slow server");\n}', "retry: slow server"),
+    p(
+      ".Wait() and .Result block the thread until the task ends, and they report failures differently: they throw an AggregateException, a wrapper that can hold several errors, with the original inside InnerException. A catch for the specific type misses it.",
+      ".Wait() y .Result bloquean el hilo hasta que el task termina, e informan los fallos de otra forma: lanzan un AggregateException, un envoltorio que puede guardar varios errores, con el original dentro de InnerException. Un catch del tipo específico no lo atrapa.",
+      ".Wait() と .Result は Task が終わるまでスレッドを止め、失敗の伝え方も違う。複数のエラーを入れられる包み AggregateException を投げ、元の例外は InnerException の中。具体的な型の catch では受けられない。",
+    ),
+    ex('try { Check().Wait(); }\ncatch (AggregateException e) { Console.WriteLine(e.InnerExceptions.Count + " " + e.InnerException!.Message); }\n\nstatic async Task Check() { await Task.Delay(10); throw new FormatException("bad file"); }', "1 bad file",
+      L("One wrapped error inside the AggregateException", "Un error envuelto dentro del AggregateException", "AggregateException の中に包まれたエラー1つ")),
+    p(
+      "Without await (and without Wait or Result), nobody observes the failure: the try around the call has already finished by the time the task fails, so the exception quietly stays inside the Task. Rule: await every task you start.",
+      "Sin await (y sin Wait ni Result), nadie observa el fallo: el try alrededor de la llamada ya terminó cuando el task falla, así que la excepción se queda callada dentro del Task. Regla: haz await de todo task que inicies.",
+      "await も Wait も Result も無いと、だれも失敗に気づかない。Task が失敗する頃には呼び出しを囲む try はもう終わっていて、例外は Task の中で静かに残るだけ。ルール：始めた Task は必ず await しよう。",
+    ),
+  ),
+  note("async-void-and-blocking", L("async void and blocking calls", "async void y llamadas bloqueantes", "async void とブロッキング"),
+    p(
+      "An async void method returns no Task, so there is nothing to await and nowhere to store an exception. If one throws after its first await, the exception is raised on its own, the try around the call has long ended, and the process crashes. Use async void only for event handlers, which must return void.",
+      "Un método async void no devuelve Task, así que no hay nada que esperar ni dónde guardar una excepción. Si lanza después de su primer await, la excepción sale sola, el try alrededor de la llamada terminó hace rato, y el proceso revienta. Usa async void solo para manejadores de eventos, que deben devolver void.",
+      "async void メソッドは Task を返さないので、await する物も例外をしまう場所も無い。最初の await の後で投げると、例外はむき出しで飛び、呼び出しを囲む try はとっくに終わっていて、プロセスが落ちる。async void は void が必要なイベント処理だけに使おう。",
+    ),
+    bad("await Ping();\n\nstatic async void Ping() { await Task.Delay(1); }",
+      L("Does not compile: async void gives nothing to await", "No compila: async void no da nada que esperar", "コンパイル不可：async void には await する物が無い")),
+    p(
+      "Blocking on a task with .Result or .Wait() can deadlock in apps with a UI thread. After its await, the async code wants to resume on the UI thread, but that thread is stuck waiting in .Result. Each waits for the other forever. Console apps usually don't deadlock, which is why the bug hides in tests.",
+      "Bloquear un task con .Result o .Wait() puede trabar apps con hilo de UI. Tras su await, el código async quiere seguir en el hilo de UI, pero ese hilo está trabado esperando en .Result. Cada uno espera al otro para siempre. Las apps de consola no suelen trabarse, por eso el error se esconde en las pruebas.",
+      ".Result や .Wait() で Task を待つと、UI スレッドのあるアプリでは固まる（デッドロック）ことがある。async のコードは await の後 UI スレッドで再開したいが、そのスレッドは .Result で待ち続けている。互いを永遠に待つのじゃ。コンソールではふつう起きないので、テストでは見つかりにくい。",
+    ),
+    p(
+      "Rule: async all the way. Return Task from async methods, await them up the whole call chain, and avoid .Result and .Wait() on tasks that haven't finished.",
+      "Regla: async de punta a punta. Devuelve Task desde los métodos async, hazles await en toda la cadena de llamadas, y evita .Result y .Wait() en tasks que no terminaron.",
+      "ルール：最後まで async。async メソッドは Task を返し、呼び出しの流れ全体で await する。終わっていない Task に .Result や .Wait() は使わない。",
+    ),
+  ),
+];
+
+// The boss recaps the whole region: one short note per idea it tests.
+const bossNotes: NoteDef[] = [
+  note("recap-exceptions", L("Recap: exceptions", "Repaso: excepciones", "復習：例外"),
+    p(
+      "Catches are checked top to bottom and only the first match runs. finally always runs, even when the try returns a value: it runs before the value reaches the caller. A bare throw; rethrows the current exception, so it only makes sense inside a catch (CS0156 elsewhere).",
+      "Los catch se revisan de arriba abajo y solo corre la primera coincidencia. finally siempre corre, incluso si el try devuelve un valor: corre antes de que el valor llegue a quien llama. Un throw; solo relanza la excepción actual, así que solo tiene sentido dentro de un catch (CS0156 en otro lugar).",
+      "catch は上から調べ、最初に合うものだけが動く。finally は try が値を return しても必ず動き、その値が呼び出し元に届く前に動く。throw; は今の例外を投げ直すので、catch の中でしか意味がない（ほかでは CS0156）。",
+    ),
+    ex('try { throw new KeyNotFoundException("k"); }\ncatch (KeyNotFoundException) { Console.Write("missing "); }\ncatch (Exception) { Console.Write("other "); }\nfinally { Console.Write("end"); }', "missing end"),
+  ),
+  note("recap-using", L("Recap: using and Dispose", "Repaso: using y Dispose", "復習：using と Dispose"),
+    p(
+      "using calls Dispose when its scope ends, however it ends: normally, by return or by an exception. Several using variables are disposed in reverse order: last created, first disposed. If an exception flies, the scope is left (and disposed) before any outer catch runs.",
+      "using llama a Dispose cuando termina su bloque, como sea que termine: normalmente, por return o por una excepción. Varias variables using se liberan en orden inverso: la última creada, la primera liberada. Si vuela una excepción, se deja el bloque (y se libera) antes de que corra cualquier catch externo.",
+      "using はスコープが終わる時、どう終わっても Dispose を呼ぶ：ふつうでも、return でも、例外でも。複数あれば逆順で、最後に作った物が最初。例外が飛べば、外の catch が動く前にスコープを出て Dispose される。",
+    ),
+    ex('using (var a = new Lamp("A"))\nusing (var b = new Lamp("B"))\n    Console.Write("work ");\n\nclass Lamp(string n) : IDisposable { public void Dispose() => Console.Write("off" + n + " "); }', "work offB offA"),
+  ),
+  note("recap-async", L("Recap: async and await", "Repaso: async y await", "復習：async と await"),
+    p(
+      "An async method runs right away until its first await of unfinished work; then the caller continues, and the rest resumes later. Only async Task (or Task<T>) can be awaited: async void gives the caller nothing to wait on.",
+      "Un método async corre de inmediato hasta su primer await de trabajo sin terminar; luego sigue quien llamó, y el resto continúa después. Solo async Task (o Task<T>) se puede esperar: async void no le da a quien llama nada que esperar.",
+      "async メソッドは、まだ終わっていない仕事を最初に await するまですぐ動く。その後は呼び出し側が進み、残りは後で再開する。await できるのは async Task（か Task<T>）だけ。async void は待つ物を渡さない。",
+    ),
+    ex('var r = await Task.WhenAll(Echo(1, 200), Echo(2, 0));\nConsole.WriteLine(r[0] * 10 + r[1]);\n\nstatic async Task<int> Echo(int v, int ms) { await Task.Delay(ms); return v; }', "12",
+      L("WhenAll keeps argument order: r[0] is 1", "WhenAll mantiene el orden de los argumentos: r[0] es 1", "WhenAll は引数の順：r[0] は 1")),
+    p(
+      "Task.WhenAll waits for all its tasks and returns their results in argument order, not in the order they finished.",
+      "Task.WhenAll espera a todos sus tasks y devuelve los resultados en el orden de los argumentos, no en el orden en que terminaron.",
+      "Task.WhenAll はすべての Task を待ち、終わった順ではなく引数の順に結果を返す。",
+    ),
+  ),
+  note("recap-async-errors", L("Recap: async errors", "Repaso: errores async", "復習：async のエラー"),
+    p(
+      "await rethrows a failed task's exception as itself, so a normal catch works. .Result and .Wait() wrap it in an AggregateException. A task that is never awaited loses its error: the surrounding try finishes before the task fails.",
+      "await relanza la excepción de un task fallido tal cual, así que un catch normal funciona. .Result y .Wait() la envuelven en un AggregateException. Un task al que nunca se le hace await pierde su error: el try que lo rodea termina antes de que el task falle.",
+      "await は失敗した Task の例外をそのまま投げ直すので、ふつうの catch で受けられる。.Result と .Wait() は AggregateException で包む。await されない Task のエラーは消える。周りの try が先に終わってしまうからじゃ。",
+    ),
+    ex('try { await Fault(); }\ncatch (InvalidCastException e) { Console.WriteLine("caught " + e.GetType().Name); }\n\nstatic async Task Fault() { await Task.Delay(5); throw new InvalidCastException(); }', "caught InvalidCastException"),
+  ),
+];
 
 // ─── 4.1 When spells backfire: exceptions ──────────────────────────────────
 const exceptions: LessonDef = {
@@ -64,6 +384,8 @@ const exceptions: LessonDef = {
       output: "A C:boom F",
       check: { compiles: true, stdout: "A C:boom F" },
       explain: L("B never runs: throw leaves the try at once. catch prints the Message, then finally runs.", "B nunca corre: throw sale del try al instante. catch imprime el Message y luego corre finally.", "B は動かない。throw ですぐ try を抜け、catch が Message を出し、finally が動く。"),
+      hint: L("throw leaves the try block at once. Which lines after it are skipped, and what always runs?", "throw sale del try al instante. ¿Qué líneas se saltan y qué corre siempre?", "throw ですぐ try を抜ける。飛ばされる行は？必ず動くのは？"),
+      note: "try-catch-finally",
       win: [{ t: "banner", text: L("ALWAYS", "SIEMPRE", "かならず") }, { t: "print", text: "A C:boom F" }],
     },
     say(L(
@@ -80,6 +402,8 @@ const exceptions: LessonDef = {
       output: "fmt",
       check: { compiles: true, stdout: "fmt" },
       explain: L("FormatException is not an ArgumentException, so the first catch is skipped. The second matches.", "FormatException no es un ArgumentException, así que se salta el primer catch. Coincide el segundo.", "FormatException は ArgumentException ではないので1つ目は飛ばされ、2つ目が合う。"),
+      hint: L("int.Parse(\"x\") throws FormatException. Check each catch top to bottom: does that type match it?", "int.Parse(\"x\") lanza FormatException. Revisa los catch de arriba abajo: ¿ese tipo coincide?", "int.Parse(\"x\") は FormatException。catch を上から順に、型が合うか確かめよう。"),
+      note: "matching-catches",
     },
     {
       kind: "predict",
@@ -89,6 +413,8 @@ const exceptions: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("Error CS0160: catch (Exception) already catches everything, so the FormatException catch could never run.", "Error CS0160: catch (Exception) ya atrapa todo, así que el catch de FormatException nunca podría correr.", "エラー CS0160：catch (Exception) が全部受けるので、FormatException の catch は動けない。"),
+      hint: L("If the first catch accepts every exception, could the second one ever run?", "Si el primer catch acepta toda excepción, ¿podría correr alguna vez el segundo?", "1つ目の catch が全部受けるなら、2つ目が動くことはある？"),
+      note: "matching-catches",
       win: [{ t: "shake" }, { t: "banner", text: L("CS0160", "CS0160", "CS0160") }],
     },
     {
@@ -100,6 +426,8 @@ const exceptions: LessonDef = {
       output: "finally 1",
       check: { compiles: true, stdout: "finally 1" },
       explain: L("finally runs even on return: before F hands back 1, the finally block prints first.", "finally corre incluso con return: antes de que F devuelva 1, el finally imprime.", "return でも finally は動く。F が 1 を返す前に finally が表示する。"),
+      hint: L("A return inside try doesn't skip finally. Which prints first: the finally or the returned value?", "Un return dentro del try no salta el finally. ¿Qué se imprime primero: el finally o el valor devuelto?", "try の中の return でも finally は飛ばされない。先に表示されるのは？"),
+      note: "try-catch-finally",
       win: [{ t: "banner", text: L("ALWAYS", "SIEMPRE", "かならず") }],
     },
     {
@@ -111,6 +439,8 @@ const exceptions: LessonDef = {
       output: "fin caught inner",
       check: { compiles: true, stdout: "fin caught inner" },
       explain: L("The inner try has no catch, so its finally runs first. Then the exception flies out to the outer catch.", "El try interno no tiene catch, así que su finally corre primero. Luego la excepción vuela al catch externo.", "内側の try に catch は無いので先に finally。その後、例外が外の catch へ。"),
+      hint: L("The inner try has no catch. What runs before the exception reaches the outer catch?", "El try interno no tiene catch. ¿Qué corre antes de que la excepción llegue al catch externo?", "内側の try に catch は無い。例外が外の catch に届く前に何が動く？"),
+      note: "try-catch-finally",
     },
     say(L(
       "Make your own exception by inheriting from Exception. A filter, catch (X e) when (...), only catches if the condition is true.",
@@ -126,6 +456,8 @@ const exceptions: LessonDef = {
       output: "lives 3",
       check: { compiles: true, stdout: "lives 3" },
       explain: L("The filter is false (Lives is 3), so the first catch is skipped and the second one takes it.", "El filtro es falso (Lives vale 3), así que se salta el primer catch y lo toma el segundo.", "フィルタは false（Lives は 3）なので1つ目は飛ばされ、2つ目が受ける。"),
+      hint: L("A when filter must be true for its catch to run. What is Lives here?", "Un filtro when debe ser verdadero para que su catch corra. ¿Cuánto vale Lives aquí?", "when の条件が true の時だけその catch が動く。ここでの Lives は？"),
+      note: "matching-catches",
       win: [{ t: "print", text: "lives 3" }],
     },
     {
@@ -137,6 +469,8 @@ const exceptions: LessonDef = {
       output: "ArgumentNullException",
       check: { compiles: true, stdout: "ArgumentNullException" },
       explain: L("ArgumentNullException inherits from ArgumentException, so that catch matches. The object is still the real type.", "ArgumentNullException hereda de ArgumentException, así que ese catch coincide. El objeto sigue siendo del tipo real.", "ArgumentNullException は ArgumentException を継承するので合う。中身は本当の型のまま。"),
+      hint: L("catch (ArgumentException) also matches its child types. Does that change the object's real type?", "catch (ArgumentException) también atrapa sus tipos hijos. ¿Eso cambia el tipo real del objeto?", "catch (ArgumentException) は子の型も受ける。それで本当の型は変わる？"),
+      note: "matching-catches",
     },
     say(L(
       "Wrap a low-level error in a clearer one: new X(\"msg\", e) keeps it as InnerException. To pass one along unchanged, write throw;",
@@ -152,6 +486,8 @@ const exceptions: LessonDef = {
       output: "save failed <- disk",
       check: { compiles: true, stdout: "save failed <- disk" },
       explain: L("The outer exception carries the original one inside, as InnerException. Nothing is lost.", "La excepción externa lleva la original adentro, como InnerException. No se pierde nada.", "外側の例外が元の例外を InnerException として持つ。何も失われない。"),
+      hint: L("The second constructor argument becomes InnerException. Which message is outer, which is inner?", "El segundo argumento del constructor pasa a ser InnerException. ¿Qué mensaje es el externo y cuál el interno?", "コンストラクタの2つ目の引数が InnerException。外側と内側のメッセージは？"),
+      note: "wrap-and-rethrow",
     },
     {
       kind: "type",
@@ -160,6 +496,8 @@ const exceptions: LessonDef = {
       answer: "throw",
       check: { compiles: true, stdout: "True" },
       explain: L("A bare throw; rethrows the same exception with its stack trace intact, so Thrower still shows up.", "Un throw; solo relanza la misma excepción con su traza intacta, así que Thrower sigue apareciendo.", "throw; だけなら同じ例外をトレースごと投げ直す。Thrower が残る。"),
+      hint: L("Which statement rethrows the current exception without restarting its stack trace?", "¿Qué instrucción relanza la excepción actual sin reiniciar su traza?", "トレースをやり直さずに今の例外を投げ直す文は？"),
+      note: "wrap-and-rethrow",
       win: [{ t: "print", text: "True" }],
     },
     {
@@ -171,6 +509,8 @@ const exceptions: LessonDef = {
       output: "False",
       check: { compiles: true, stdout: "False" },
       explain: L("throw ex; restarts the stack trace at Rethrow, hiding where it really failed. Prefer throw;", "throw ex; reinicia la traza en Rethrow y oculta dónde falló de verdad. Prefiere throw;", "throw ex; はトレースを Rethrow からやり直し、本当の場所を隠す。throw; を使おう。"),
+      hint: L("throw; and throw ex; treat the stack trace differently. Which one is used here?", "throw; y throw ex; tratan distinto la traza. ¿Cuál se usa aquí?", "throw; と throw ex; はトレースの扱いが違う。ここで使っているのは？"),
+      note: "wrap-and-rethrow",
       win: [{ t: "shake" }],
     },
     {
@@ -181,8 +521,11 @@ const exceptions: LessonDef = {
       expect: "bad input",
       fallback: [String.raw`catch\s*(\(\s*\w*Exception[^)]*\))?\s*\{[^}]*"bad input"`, String.raw`int\.TryParse\([\s\S]*"bad input"`],
       explain: L("int.Parse(\"ten\") throws FormatException. Wrap it in try, print bad input in the catch and done in finally.", "int.Parse(\"ten\") lanza FormatException. Envuélvelo en try, imprime bad input en el catch y done en finally.", "int.Parse(\"ten\") は FormatException。try で包み、catch で bad input、finally で done。"),
+      hint: L("int.Parse(\"ten\") throws. Put the risky line in a try and print the message in a matching catch.", "int.Parse(\"ten\") lanza. Pon la línea riesgosa en un try e imprime el mensaje en un catch adecuado.", "int.Parse(\"ten\") は例外。危ない行を try に入れ、合う catch で表示しよう。"),
+      note: "try-catch-finally",
     },
   ],
+  notes: exceptionsNotes,
 };
 
 // ─── 4.2 Torches go out: using and IDisposable ─────────────────────────────
@@ -234,6 +577,8 @@ const disposal: LessonDef = {
       output: "lightA one two outA end",
       check: { compiles: true, stdout: "lightA one two outA end", program: withTorch('using (var t = new Torch("A"))\n{\n    Console.Write("one ");\n    Console.Write("two ");\n}\nConsole.WriteLine("end");') },
       explain: L("Dispose runs exactly once, right where the using block closes, before end.", "Dispose corre una sola vez, justo donde cierra el bloque using, antes de end.", "Dispose は using ブロックが閉じる所で1回だけ、end の前に動く。"),
+      hint: L("Dispose runs when the using block ends. Is that before or after end is printed?", "Dispose corre cuando termina el bloque using. ¿Antes o después de imprimir end?", "Dispose は using ブロックの終わりで動く。end の前？後？"),
+      note: "idisposable-and-using",
       win: [{ t: "drop" }, { t: "print", text: "lightA one two outA end" }],
     },
     say(L(
@@ -250,6 +595,8 @@ const disposal: LessonDef = {
       output: "lightA lightB body outB outA",
       check: { compiles: true, stdout: "lightA lightB body outB outA", program: withTorch('Explore();\n\nstatic void Explore()\n{\n    using var a = new Torch("A");\n    using var b = new Torch("B");\n    Console.Write("body ");\n}') },
       explain: L("Both live until Explore ends. The last one lit goes out first, like stacking plates.", "Las dos viven hasta que termina Explore. La última encendida se apaga primero, como una pila de platos.", "どちらも Explore の終わりまで生きる。最後につけた方が先に消える（お皿の山と同じ）。"),
+      hint: L("Both torches live until Explore ends. In what order are using variables disposed?", "Las dos antorchas viven hasta que termina Explore. ¿En qué orden se liberan las variables using?", "どちらも Explore の終わりまで。using の変数はどの順で Dispose される？"),
+      note: "using-declarations",
     },
     {
       kind: "pick",
@@ -259,6 +606,8 @@ const disposal: LessonDef = {
       answer: 0,
       check: { compiles: true, stdout: "lightB go outB", program: withTorch('Run();\n\nstatic void Run()\n{\n    using var b = new Torch("B");\n    Console.Write("go ");\n}') },
       explain: L("using var declares a variable that is disposed automatically when its scope ends.", "using var declara una variable que se libera sola cuando termina su bloque.", "using var で宣言すると、スコープの終わりに自動で Dispose される。"),
+      hint: L("Which keyword, written before var, disposes the variable when its scope ends?", "¿Qué palabra clave, escrita antes de var, libera la variable al terminar su bloque?", "var の前に書いて、スコープの終わりに Dispose させるキーワードは？"),
+      note: "using-declarations",
       win: [{ t: "drop" }, { t: "print", text: "lightB go outB" }],
     },
     say(L(
@@ -275,6 +624,8 @@ const disposal: LessonDef = {
       output: "lightA outA caught",
       check: { compiles: true, stdout: "lightA outA caught", program: withTorch('try\n{\n    using var t = new Torch("A");\n    throw new Exception("x");\n}\ncatch { Console.Write("caught"); }') },
       explain: L("Leaving the try block ends t's scope, so Dispose runs first; then the catch handles the exception.", "Salir del bloque try termina el alcance de t, así que Dispose corre primero; luego el catch maneja la excepción.", "try を抜けると t のスコープが終わり、先に Dispose。その後 catch が受ける。"),
+      hint: L("using is a hidden try/finally. When the exception leaves the try block, what happens to t first?", "using es un try/finally oculto. Cuando la excepción sale del try, ¿qué le pasa primero a t?", "using は隠れた try/finally。例外が try を出る時、まず t はどうなる？"),
+      note: "using-and-exceptions",
       win: [{ t: "drop" }, { t: "shake" }],
     },
     {
@@ -286,6 +637,8 @@ const disposal: LessonDef = {
       output: "lightA body outA fin",
       check: { compiles: true, stdout: "lightA body outA fin", program: withTorch('try\n{\n    using var t = new Torch("A");\n    Console.Write("body ");\n}\nfinally { Console.Write("fin"); }') },
       explain: L("t belongs to the try block, so it goes out when that block ends, before the outer finally.", "t pertenece al bloque try, así que se apaga al terminar ese bloque, antes del finally externo.", "t は try ブロックのもの。ブロックの終わりで消え、その後に外の finally。"),
+      hint: L("t belongs to the try block. Which ends first: that block or the outer finally?", "t pertenece al bloque try. ¿Qué termina primero: ese bloque o el finally externo?", "t は try ブロックのもの。先に終わるのはそのブロック？外の finally？"),
+      note: "using-and-exceptions",
     },
     {
       kind: "predict",
@@ -295,6 +648,8 @@ const disposal: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("Error CS1674: using only works with types that implement IDisposable. Hero has no Dispose.", "Error CS1674: using solo funciona con tipos que implementan IDisposable. Hero no tiene Dispose.", "エラー CS1674：using は IDisposable を実装した型だけ。Hero には Dispose が無い。"),
+      hint: L("using needs a Dispose method to call. Does Hero implement IDisposable?", "using necesita un Dispose que llamar. ¿Hero implementa IDisposable?", "using には呼ぶ Dispose が必要。Hero は IDisposable を実装している？"),
+      note: "idisposable-and-using",
       win: [{ t: "shake" }, { t: "banner", text: L("CS1674", "CS1674", "CS1674") }],
     },
     say(L(
@@ -313,6 +668,8 @@ const disposal: LessonDef = {
       ],
       answer: 0,
       explain: L("Finalizers run on the GC's schedule, which you can't predict. That's why Dispose and using exist.", "Los finalizadores corren cuando el GC quiere, y eso no se puede predecir. Por eso existen Dispose y using.", "ファイナライザは GC の都合で動き、予測できない。だから Dispose と using があるんだ。"),
+      hint: L("Finalizers are run by the garbage collector. Can you predict when the GC decides to run?", "Los finalizadores los corre el recolector de basura. ¿Puedes predecir cuándo decide correr?", "ファイナライザは GC が動かす。GC がいつ動くか予測できる？"),
+      note: "gc-and-finalizers",
     },
     {
       kind: "order",
@@ -326,6 +683,8 @@ const disposal: LessonDef = {
       ],
       check: { compiles: true, stdout: "lightA use outA after", program: withTorch('using (var t = new Torch("A"))\n{\n    Console.Write("use ");\n}\nConsole.WriteLine("after");') },
       explain: L("The using line lights the torch, the block uses it, and the closing brace puts it out.", "La línea using enciende la antorcha, el bloque la usa y la llave de cierre la apaga.", "using の行でつけて、ブロックで使い、閉じかっこで消える。"),
+      hint: L("Start with the line that creates the torch, then the block that uses it. What runs after the block?", "Empieza con la línea que crea la antorcha y luego el bloque que la usa. ¿Qué corre después del bloque?", "たいまつを作る行から始め、使うブロックを続けよう。ブロックの後に動くのは？"),
+      note: "idisposable-and-using",
       win: [{ t: "drop" }, { t: "print", text: "lightA use outA after" }],
     },
     {
@@ -336,8 +695,11 @@ const disposal: LessonDef = {
       expect: "torch out",
       fallback: [String.raw`using\s+var\s+t\s*=`, String.raw`using\s*\(\s*(var|Torch)\s+t\s*=`, String.raw`t\.Dispose\(\)`],
       explain: L("Leaving the block doesn't call Dispose. Write using var t = new Torch(); and it goes out at the closing brace.", "Salir del bloque no llama a Dispose. Escribe using var t = new Torch(); y se apaga en la llave de cierre.", "ブロックを出ても Dispose は呼ばれない。using var t = new Torch(); なら閉じかっこで消える。"),
+      hint: L("Leaving a plain block never calls Dispose. Make the torch dispose itself at the closing brace.", "Salir de un bloque normal nunca llama a Dispose. Haz que la antorcha se libere sola en la llave de cierre.", "ふつうのブロックを出ても Dispose は呼ばれない。閉じかっこで自動で Dispose させよう。"),
+      note: "using-declarations",
     },
   ],
+  notes: disposalNotes,
 };
 
 // ─── 4.3 Messengers and waiting: async/await ───────────────────────────────
@@ -374,6 +736,8 @@ const asyncAwait: LessonDef = {
       output: "5",
       check: { compiles: true, stdout: "5" },
       explain: L("An async Task<int> method returns an int when awaited. await unwraps the Task into 5.", "Un método async Task<int> da un int al hacer await. await desenvuelve el Task en 5.", "async Task<int> のメソッドは await すると int になる。await が Task を 5 に開く。"),
+      hint: L("await unwraps a Task<int>. What value is inside once Add finishes?", "await desenvuelve un Task<int>. ¿Qué valor hay dentro cuando Add termina?", "await は Task<int> を開く。Add が終わった時の中身は？"),
+      note: "tasks-and-await",
       win: [{ t: "print", text: "5" }],
     },
     {
@@ -383,6 +747,8 @@ const asyncAwait: LessonDef = {
       answer: "async",
       check: { compiles: true, stdout: "42" },
       explain: L("A method that uses await must be marked async. It then returns a Task<int> holding the 42.", "Un método que usa await debe marcarse async. Así devuelve un Task<int> que guarda el 42.", "await を使うメソッドには async が必要。42 を包んだ Task<int> を返す。"),
+      hint: L("A method that uses await needs a modifier before its return type. Which one?", "Un método que usa await necesita un modificador antes de su tipo de retorno. ¿Cuál?", "await を使うメソッドには戻り値の型の前に修飾子が必要。どれ？"),
+      note: "tasks-and-await",
       win: [{ t: "print", text: "42" }],
     },
     {
@@ -394,6 +760,8 @@ const asyncAwait: LessonDef = {
       output: "A B C",
       check: { compiles: true, stdout: "A B C" },
       explain: L("Each await pauses this code until the delay is done, then it continues in order. await never skips ahead.", "Cada await pausa este código hasta que termina la espera, y luego sigue en orden. await nunca se adelanta.", "await ごとに待ち終わるまで止まり、順番どおり続く。先に進むことはない。"),
+      hint: L("Each await waits until its delay is over before moving on to the next line.", "Cada await espera a que termine su demora antes de pasar a la siguiente línea.", "await ごとに待ち終わってから次の行へ進む。"),
+      note: "tasks-and-await",
     },
     {
       kind: "predict",
@@ -403,6 +771,8 @@ const asyncAwait: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("Error CS0029: Get() returns a Task<int>, a promise, not an int. You must await it.", "Error CS0029: Get() devuelve un Task<int>, una promesa, no un int. Hay que hacerle await.", "エラー CS0029：Get() が返すのは Task<int>（約束）で int ではない。await しよう。"),
+      hint: L("What type does Get() return without await? Can that be stored in an int?", "¿Qué tipo devuelve Get() sin await? ¿Se puede guardar en un int?", "await なしで Get() が返す型は？それを int に入れられる？"),
+      note: "tasks-and-await",
       win: [{ t: "shake" }, { t: "banner", text: L("CS0029", "CS0029", "CS0029") }],
     },
     {
@@ -413,6 +783,8 @@ const asyncAwait: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("Error CS4033: await only works inside an async method. Mark F as async Task.", "Error CS4033: await solo funciona dentro de un método async. Marca F como async Task.", "エラー CS4033：await は async メソッドの中だけ。F を async Task にしよう。"),
+      hint: L("F uses await. Look at its signature: is it marked as an async method?", "F usa await. Mira su firma: ¿está marcado como método async?", "F は await を使う。シグネチャを見よう：async になっている？"),
+      note: "tasks-and-await",
       win: [{ t: "shake" }, { t: "banner", text: L("CS4033", "CS4033", "CS4033") }],
     },
     say(L(
@@ -429,6 +801,8 @@ const asyncAwait: LessonDef = {
       output: "w1 main w2",
       check: { compiles: true, stdout: "w1 main w2" },
       explain: L("w1 prints before Work's first await. Then Work steps aside, main prints, and await t1 waits for w2.", "w1 sale antes del primer await de Work. Luego Work se aparta, sale main, y await t1 espera a w2.", "w1 は Work の最初の await の前。Work が下がって main、await t1 が w2 を待つ。"),
+      hint: L("An async method runs right away until its first await. What prints before Work steps aside?", "Un método async corre de inmediato hasta su primer await. ¿Qué se imprime antes de que Work se aparte?", "async メソッドは最初の await まですぐ動く。Work が下がる前に何が出る？"),
+      note: "until-first-await",
     },
     say(L(
       "Task.WhenAll sends many messengers at once and waits for all. Results come back in the order you SENT them.",
@@ -444,6 +818,8 @@ const asyncAwait: LessonDef = {
       output: "3,1,2",
       check: { compiles: true, stdout: "3,1,2" },
       explain: L("1 finishes first, but WhenAll lays the results out in argument order, not finishing order.", "El 1 termina primero, pero WhenAll ordena los resultados según los argumentos, no según quién terminó.", "先に終わるのは 1 だけど、WhenAll は引数の順に結果を並べる。"),
+      hint: L("Ignore which task finishes first. How does WhenAll order the results it returns?", "Ignora qué task termina primero. ¿Cómo ordena WhenAll los resultados que devuelve?", "どれが先に終わるかは気にしない。WhenAll は結果をどの順に並べる？"),
+      note: "task-whenall",
       setup: [{ t: "enter", actor: "ally" }, { t: "exit", actor: "ally" }],
       win: [{ t: "enter", actor: "ally" }, { t: "print", text: "3,1,2" }],
     },
@@ -461,6 +837,8 @@ const asyncAwait: LessonDef = {
       output: "caught bad",
       check: { compiles: true, stdout: "caught bad" },
       explain: L("await rethrows the task's exception as itself, so a normal catch works.", "await relanza la excepción del task tal cual, así que un catch normal funciona.", "await は Task の例外をそのまま投げ直すので、ふつうの catch で受けられる。"),
+      hint: L("await rethrows the task's exception. Does it arrive as itself or wrapped?", "await relanza la excepción del task. ¿Llega tal cual o envuelta?", "await は Task の例外を投げ直す。そのまま？包まれて？"),
+      note: "async-errors",
       win: [{ t: "print", text: "caught bad" }],
     },
     {
@@ -472,6 +850,8 @@ const asyncAwait: LessonDef = {
       output: "AggregateException -> InvalidOperationException",
       check: { compiles: true, stdout: "AggregateException -> InvalidOperationException" },
       explain: L(".Wait() blocks the thread and wraps the error in an AggregateException. Prefer await.", ".Wait() bloquea el hilo y envuelve el error en un AggregateException. Prefiere await.", ".Wait() はスレッドを止め、エラーを AggregateException で包む。await を使おう。"),
+      hint: L(".Wait() reports a task's failure differently from await. What does the outer exception look like?", ".Wait() informa el fallo de un task distinto que await. ¿Cómo es la excepción externa?", ".Wait() は await と違う形で失敗を伝える。外側の例外はどうなる？"),
+      note: "async-errors",
     },
     say(L(
       "async void returns no Task, so nobody can await or catch its errors: they crash the app. Use it only for event handlers.",
@@ -490,6 +870,8 @@ const asyncAwait: LessonDef = {
       answer: 0,
       check: { compiles: true, throws: "InvalidOperationException: lost" },
       explain: L("The try ended long before Boom threw. With no Task to carry it, the exception crashes the process.", "El try terminó mucho antes de que Boom lanzara. Sin un Task que la lleve, la excepción tumba el proceso.", "Boom が投げる頃には try はもう終わっている。運ぶ Task が無いので、例外でプロセスが落ちる。"),
+      hint: L("By the time Boom throws, has the try already finished? Is there a Task to carry the error?", "Cuando Boom lanza, ¿ya terminó el try? ¿Hay un Task que lleve el error?", "Boom が投げる時、try はもう終わっている？エラーを運ぶ Task はある？"),
+      note: "async-void-and-blocking",
       win: [{ t: "shake" }],
     },
     {
@@ -503,6 +885,8 @@ const asyncAwait: LessonDef = {
       ],
       answer: 0,
       explain: L("After its await, LoadAsync wants to resume on the UI thread, but that thread is stuck waiting in .Result. Use await.", "Tras su await, LoadAsync quiere seguir en el hilo UI, pero ese hilo está trabado esperando en .Result. Usa await.", "LoadAsync は await の後 UI スレッドで再開したいが、そのスレッドは .Result で待ち続けている。await を使おう。"),
+      hint: L("After its await, where does LoadAsync want to continue? And what is that thread doing?", "Tras su await, ¿dónde quiere seguir LoadAsync? ¿Y qué está haciendo ese hilo?", "await の後、LoadAsync はどこで再開したい？そのスレッドは何をしている？"),
+      note: "async-void-and-blocking",
     },
     {
       kind: "run",
@@ -512,8 +896,11 @@ const asyncAwait: LessonDef = {
       expect: "total: 5",
       fallback: [String.raw`=\s*await\s+AddAsync\(`, String.raw`\{\s*await\s+total\s*\}`],
       explain: L("Without await, total is the Task itself. var total = await AddAsync(2, 3); gives you the 5.", "Sin await, total es el Task mismo. var total = await AddAsync(2, 3); te da el 5.", "await が無いと total は Task そのもの。var total = await AddAsync(2, 3); で 5 になる。"),
+      hint: L("Without await, total holds the Task itself. Get the value out of the Task before printing.", "Sin await, total guarda el Task mismo. Saca el valor del Task antes de imprimir.", "await が無いと total は Task そのもの。表示の前に Task から値を取り出そう。"),
+      note: "tasks-and-await",
     },
   ],
+  notes: asyncNotes,
 };
 
 // ─── 4.4 Boss: the Task Lich ───────────────────────────────────────────────
@@ -539,6 +926,8 @@ const boss: LessonDef = {
       output: "fmt fin",
       check: { compiles: true, stdout: "fmt fin" },
       explain: L("Only the first matching catch runs, then finally.", "Solo corre el primer catch que coincide, y luego finally.", "合う最初の catch だけが動き、次に finally。"),
+      hint: L("Only the first matching catch runs. Then what runs no matter what?", "Solo corre el primer catch que coincide. ¿Y luego qué corre pase lo que pase?", "合う最初の catch だけが動く。その後、必ず動くのは？"),
+      note: "recap-exceptions",
       win: [{ t: "attack", from: "hero", to: "enemy" }],
     },
     {
@@ -549,6 +938,8 @@ const boss: LessonDef = {
       output: "lock gem",
       check: { compiles: true, stdout: "lock gem" },
       explain: L("finally runs before the return value reaches the caller.", "finally corre antes de que el valor de return llegue a quien llamó.", "戻り値が呼び出し元に届く前に finally が動く。"),
+      hint: L("The return value is ready, but something must run before it reaches the caller.", "El valor de return está listo, pero algo debe correr antes de que llegue a quien llama.", "戻り値は用意できた。でも呼び出し元に届く前に動くものがある。"),
+      note: "recap-exceptions",
       win: [{ t: "attack", from: "hero", to: "enemy" }],
     },
     {
@@ -558,6 +949,8 @@ const boss: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("Error CS0156: a bare throw; only makes sense inside a catch, where there is something to rethrow.", "Error CS0156: un throw; solo tiene sentido dentro de un catch, donde hay algo que relanzar.", "エラー CS0156：throw; だけは catch の中でしか使えない。投げ直す物が要る。"),
+      hint: L("A bare throw; rethrows the current exception. Is there a current exception here?", "Un throw; solo relanza la excepción actual. ¿Hay una excepción actual aquí?", "throw; だけは今の例外を投げ直す。ここに今の例外はある？"),
+      note: "recap-exceptions",
       win: [{ t: "attack", from: "hero", to: "enemy" }],
     },
     {
@@ -568,6 +961,8 @@ const boss: LessonDef = {
       output: "light1 light2 light3 out3 out2 out1",
       check: { compiles: true, stdout: "light1 light2 light3 out3 out2 out1", program: withTorch('Go();\n\nstatic void Go()\n{\n    using var a = new Torch("1");\n    using var b = new Torch("2");\n    using var c = new Torch("3");\n}') },
       explain: L("Same Torch as before. using var disposes in reverse order: last lit, first out.", "La misma Torch de antes. using var libera en orden inverso: la última encendida se apaga primero.", "前と同じたいまつ。using var は逆順に Dispose：最後につけたものが最初に消える。"),
+      hint: L("using var disposes at the end of the scope. In which order do several of them go out?", "using var libera al final del bloque. ¿En qué orden se apagan varias?", "using var はスコープの終わりで Dispose。複数だとどの順？"),
+      note: "recap-using",
       win: [{ t: "attack", from: "hero", to: "enemy" }],
     },
     {
@@ -578,6 +973,8 @@ const boss: LessonDef = {
       output: "lightX outX oops",
       check: { compiles: true, stdout: "lightX outX oops", program: withTorch('try\n{\n    using var t = new Torch("X");\n    throw new Exception("oops");\n}\ncatch (Exception e) { Console.Write(e.Message); }') },
       explain: L("The torch goes out while leaving the try, before the catch runs.", "La antorcha se apaga al salir del try, antes de que corra el catch.", "try を抜ける時にたいまつは消え、その後で catch が動く。"),
+      hint: L("Leaving the try ends the torch's scope. Does that happen before or after the catch runs?", "Salir del try termina el alcance de la antorcha. ¿Pasa antes o después del catch?", "try を出るとたいまつのスコープが終わる。catch の前？後？"),
+      note: "recap-using",
       win: [{ t: "attack", from: "hero", to: "enemy" }],
     },
     {
@@ -588,6 +985,8 @@ const boss: LessonDef = {
       output: "sA hero sB",
       check: { compiles: true, stdout: "sA hero sB" },
       explain: L("Before its first await, Step runs right away. Then the caller prints hero and waits for sB.", "Antes de su primer await, Step corre de inmediato. Luego quien llama imprime hero y espera a sB.", "最初の await まで Step はすぐ動く。次に呼び出し側が hero を出し、sB を待つ。"),
+      hint: L("Step runs right away until its first await. Then the caller continues.", "Step corre de inmediato hasta su primer await. Luego sigue quien lo llamó.", "Step は最初の await まですぐ動き、その後は呼び出し側が続く。"),
+      note: "recap-async",
       win: [{ t: "attack", from: "hero", to: "enemy" }],
     },
     {
@@ -598,6 +997,8 @@ const boss: LessonDef = {
       output: "ab",
       check: { compiles: true, stdout: "ab" },
       explain: L("b finishes first, but WhenAll keeps argument order: r[0] is a.", "b termina primero, pero WhenAll mantiene el orden de los argumentos: r[0] es a.", "b が先に終わっても、WhenAll は引数の順。r[0] は a。"),
+      hint: L("It doesn't matter which finishes first: look at the order of the arguments.", "No importa cuál termina primero: mira el orden de los argumentos.", "どれが先に終わるかは関係ない。引数の順を見よう。"),
+      note: "recap-async",
       win: [{ t: "attack", from: "hero", to: "enemy" }],
     },
     {
@@ -608,6 +1009,8 @@ const boss: LessonDef = {
       output: "AggregateException",
       check: { compiles: true, stdout: "AggregateException" },
       explain: L(".Result wraps the real error in an AggregateException. await would rethrow the ArgumentException itself.", ".Result envuelve el error real en un AggregateException. await relanzaría el ArgumentException tal cual.", ".Result は本当のエラーを AggregateException で包む。await なら ArgumentException のまま。"),
+      hint: L(".Result reports a failure differently from await. Is the real error wrapped?", ".Result informa un fallo distinto que await. ¿Viene envuelto el error real?", ".Result は await と違う形で失敗を伝える。本当のエラーは包まれる？"),
+      note: "recap-async-errors",
       win: [{ t: "attack", from: "hero", to: "enemy" }],
     },
     {
@@ -618,6 +1021,8 @@ const boss: LessonDef = {
       answer: 0,
       check: { compiles: true, stdout: "saved", wrongFail: true },
       explain: L("async Task can be awaited. async void returns nothing to await, and async int is not allowed.", "async Task se puede esperar. async void no devuelve nada que esperar, y async int no está permitido.", "async Task は await できる。async void は待つ物が無く、async int は書けない。"),
+      hint: L("Only one async return type gives the caller something to await.", "Solo un tipo de retorno async le da a quien llama algo que esperar.", "呼び出し側に await できる物を渡す async の戻り値の型は1つだけ。"),
+      note: "recap-async",
       win: [{ t: "attack", from: "hero", to: "enemy", dmg: 2 }],
     },
     {
@@ -628,8 +1033,11 @@ const boss: LessonDef = {
       expect: "caught: save corrupted",
       fallback: [String.raw`await\s+LoadAsync\(\)`, String.raw`LoadAsync\(\)\s*\.\s*GetAwaiter\(\)\s*\.\s*GetResult\(\)`],
       explain: L("Without await, the try ends before LoadAsync fails and the error is lost. await LoadAsync(); brings it back.", "Sin await, el try termina antes de que LoadAsync falle y el error se pierde. await LoadAsync(); lo trae de vuelta.", "await が無いと LoadAsync が失敗する前に try が終わり、エラーは消える。await LoadAsync(); で戻る。"),
+      hint: L("The try ends before LoadAsync fails, so the error is lost. Make the try wait for the task.", "El try termina antes de que LoadAsync falle y el error se pierde. Haz que el try espere al task.", "LoadAsync が失敗する前に try が終わり、エラーが消える。try に Task を待たせよう。"),
+      note: "recap-async-errors",
     },
   ],
+  notes: bossNotes,
 };
 
 export const taskTower: RegionDef = {

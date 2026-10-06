@@ -1,4 +1,4 @@
-import type { Beat, Effect, LessonDef, RegionDef, Text } from "../../../lib/content/types.ts";
+import type { Beat, Effect, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
 
 // REGION 3 · EFFECT PEAKS  (useEffect and cleanup, dependency arrays, StrictMode, stale closures,
@@ -24,6 +24,404 @@ const COUNT = "  const [count, setCount] = useState(0);\n";
 const WHAT_PRINTS = L("What does it print?", "¿Qué imprime?", "何が表示される？");
 const RENDER = L("RENDER", "RENDER", "レンダー");
 const HIT: Effect[] = [{ t: "attack", from: "hero", to: "enemy" }];
+
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example: the player sees `code`; the validator runs it with the imports in H. */
+const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code, output, caption, check: { program: H + code, compiles: true, stdout: output } });
+/** A type-checked example with no output (effects and handlers never run in a static render). */
+const tc = (code: string, caption?: Text): NoteBlock => ({ t: "code", code, caption, check: { program: H + code, compiles: true } });
+/** An example that must NOT type-check (verified too). */
+const bad = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { program: H + code, compiles: false } });
+
+const effectsNotes: NoteDef[] = [
+  note("effect-timing", L("Render first, effects after", "Primero el render, luego efectos", "先にレンダー、後で副作用"),
+    p(
+      "A component's body is a recipe: React calls it, and it returns JSX describing the screen. That part must stay pure: no timers, no network, no subscriptions. Anything that talks to the outside world goes inside useEffect(() => { ... }), which React runs later, after the new screen has been committed in the browser.",
+      "El cuerpo de un componente es una receta: React lo llama y devuelve JSX que describe la pantalla. Esa parte debe ser pura: sin timers, sin red, sin suscripciones. Todo lo que habla con el mundo exterior va dentro de useEffect(() => { ... }), que React ejecuta después, cuando la pantalla nueva ya está en el navegador.",
+      "コンポーネントの本体はレシピ。React が呼ぶと画面を表す JSX を返す。ここは純粋に保ち、タイマーも通信も購読もしない。外の世界と話す処理は useEffect(() => { ... }) に入れる。React は新しい画面がブラウザに反映された後でそれを実行する。",
+    ),
+    p(
+      "A server or static render, like renderToStaticMarkup, only produces HTML: there is no browser screen to commit, so effects never run there. The component body runs, the JSX becomes a string, and that's all. This is why code in an effect can't change what a static render prints.",
+      "Un render de servidor o estático, como renderToStaticMarkup, solo produce HTML: no hay pantalla de navegador que actualizar, así que los efectos nunca corren ahí. Se ejecuta el cuerpo del componente, el JSX se vuelve un string y nada más. Por eso el código de un efecto no puede cambiar lo que imprime un render estático.",
+      "サーバーや renderToStaticMarkup のような静的レンダーは HTML を作るだけ。反映するブラウザ画面がないので副作用は一度も動かない。本体が実行され、JSX が文字列になって終わり。だから副作用の中のコードは静的レンダーの出力を変えられない。",
+    ),
+    ex('function Badge() {\n  console.log("rendering");\n  useEffect(() => console.log("effect ran"));\n  return <span>new</span>;\n}\nconsole.log(renderToStaticMarkup(<Badge />));', "rendering\n<span>new</span>",
+      L("The body runs; the effect does not", "El cuerpo corre; el efecto no", "本体は動くが、副作用は動かない")),
+    p(
+      "useLayoutEffect is a sibling with different timing: it runs after React updates the DOM but before the browser paints. Use it only when you must measure the layout (a size or a position) and adjust before the user sees anything; otherwise the screen could flicker. For everything else, plain useEffect is the right choice.",
+      "useLayoutEffect es un hermano con otro momento: corre después de que React actualiza el DOM pero antes de que el navegador pinte. Úsalo solo cuando debas medir el diseño (un tamaño o una posición) y ajustar antes de que el usuario vea algo; si no, la pantalla podría parpadear. Para todo lo demás, useEffect es lo correcto.",
+      "useLayoutEffect はタイミング違いの兄弟。React が DOM を更新した後、ブラウザが描画する前に動く。サイズや位置を測って、利用者が見る前に直したい時だけ使おう。そうしないと画面がちらつくことがある。それ以外は普通の useEffect でいい。",
+    ),
+    tc("function Tooltip() {\n  const tip = useRef<HTMLSpanElement>(null);\n  const [width, setWidth] = useState(0);\n  useLayoutEffect(() => {\n    setWidth(tip.current!.offsetWidth);\n  }, []);\n  return <span ref={tip}>{width}</span>;\n}",
+      L("Measure before paint, so no flicker", "Medir antes de pintar, sin parpadeo", "描画前に測るのでちらつかない")),
+    p(
+      "Common mistake: expecting an effect to run during render, or putting a computation in an effect so that it \"happens first\". It's the opposite: the effect always comes last. Read a component top to bottom as \"compute the screen\", and read each effect as \"afterwards, sync with the outside\".",
+      "Error común: esperar que un efecto corra durante el render, o meter un cálculo en un efecto para que \"pase primero\". Es al revés: el efecto siempre va al final. Lee un componente de arriba abajo como \"calcular la pantalla\", y cada efecto como \"después, sincronizar con el exterior\".",
+      "よくあるミス：副作用がレンダー中に動くと思うこと、「先にやりたい」計算を副作用に入れること。実際は逆で、副作用はいつも最後。コンポーネントは「画面を計算する」、副作用は「その後で外と同期する」と読もう。",
+    ),
+  ),
+  note("dependency-array", L("The dependency array", "El arreglo de dependencias", "依存配列"),
+    p(
+      "The second argument of useEffect tells React WHEN to run it again. No array at all: after every render. An empty array []: only once, after the component first appears (mount). An array with values, like [city]: after mount and again whenever one of those values changed since the last render.",
+      "El segundo argumento de useEffect le dice a React CUÁNDO volver a ejecutarlo. Sin arreglo: tras cada render. Un arreglo vacío []: solo una vez, cuando el componente aparece (montaje). Un arreglo con valores, como [city]: al montar y otra vez cada vez que alguno de esos valores cambió desde el render anterior.",
+      "useEffect の第2引数は「いつ再実行するか」を伝える。配列なし→毎回のレンダー後。空の [] →最初に現れた時（マウント）の一度だけ。[city] のように値を入れる→マウント時と、前回のレンダーからその値が変わった時。",
+    ),
+    tc("function Title({ city }: { city: string }) {\n  useEffect(() => console.log(\"every render\"));\n  useEffect(() => console.log(\"only on mount\"), []);\n  useEffect(() => console.log(\"city changed\"), [city]);\n  return <h1>{city}</h1>;\n}",
+      L("Three effects, three schedules", "Tres efectos, tres horarios", "3つの副作用、3つのタイミング")),
+    p(
+      "\"Changed\" is decided with Object.is, one item at a time. Numbers and strings compare by value. Objects, arrays and functions compare by identity: two objects with the same contents are still two different objects. One surprise: unlike ===, Object.is treats NaN as equal to itself.",
+      "\"Cambió\" se decide con Object.is, elemento por elemento. Números y strings se comparan por valor. Objetos, arreglos y funciones se comparan por identidad: dos objetos con el mismo contenido siguen siendo dos objetos distintos. Una sorpresa: a diferencia de ===, Object.is considera que NaN es igual a sí mismo.",
+      "「変わった」かどうかは Object.is で1つずつ判定する。数値や文字列は値で比べる。オブジェクト・配列・関数は「同じ物か」で比べるので、中身が同じでも別物。=== と違い、Object.is では NaN は自分自身と等しい、という点にも注意。",
+    ),
+    ex("function makeDeps(level: number) {\n  return [{ level }];\n}\nconst before = makeDeps(2);\nconst after = makeDeps(2);\nconsole.log(Object.is(before[0], after[0]), Object.is(2, 2));", "false true",
+      L("Like two renders: fresh objects never match", "Como dos renders: objetos nuevos nunca coinciden", "2回のレンダーと同じ：新しいオブジェクトは一致しない")),
+    p(
+      "That's why an object or array created in the component body is a bad dependency: every render builds a new one, so the effect re-runs every time. Depend on the plain values inside it instead. And remember the loop trap: an effect with no array that sets state causes a render, which runs the effect, which sets state again, forever.",
+      "Por eso un objeto o arreglo creado en el cuerpo del componente es una mala dependencia: cada render crea uno nuevo y el efecto se repite siempre. Depende mejor de los valores simples que contiene. Y recuerda la trampa del bucle: un efecto sin arreglo que cambia el estado provoca un render, que ejecuta el efecto, que cambia el estado otra vez, para siempre.",
+      "だから本体で作ったオブジェクトや配列は依存に向かない。毎回新しくなり、副作用も毎回動く。中の単純な値に依存しよう。無限ループの罠も覚えておこう。配列なしの副作用で状態を変えると再レンダー→副作用→状態変更…と永遠に続く。",
+    ),
+    p(
+      "Rule to remember: list every value from the component that the effect reads (props, state, values computed from them), and nothing that is rebuilt on each render. The React lint rule checks this for you. If the list feels wrong, the fix is usually to change the code, not to hide a dependency.",
+      "Regla para recordar: lista cada valor del componente que el efecto lee (props, estado, valores calculados con ellos) y nada que se reconstruya en cada render. La regla de lint de React lo revisa por ti. Si la lista te parece mal, la solución suele ser cambiar el código, no esconder una dependencia.",
+      "覚えるルール：副作用が読むコンポーネントの値（props、状態、それらから計算した値）はすべて書き、毎回作り直されるものは書かない。React の lint が確認してくれる。リストがおかしいと感じたら、依存を隠すのではなくコードを直そう。",
+    ),
+  ),
+  note("cleanup", L("Cleanup and StrictMode", "Limpieza y StrictMode", "クリーンアップと StrictMode"),
+    p(
+      "An effect can return a function: the cleanup. Its job is to undo exactly what the effect did: close the connection it opened, clear the timer it started, remove the listener it added. Think of it as \"leave the room as you found it\".",
+      "Un efecto puede devolver una función: la limpieza. Su trabajo es deshacer justo lo que hizo el efecto: cerrar la conexión que abrió, detener el timer que inició, quitar el listener que agregó. Piensa en \"deja la sala como la encontraste\".",
+      "副作用は関数を返せる。それがクリーンアップ。役目は副作用がしたことをちょうど元に戻すこと。開いた接続を閉じ、始めたタイマーを止め、付けたリスナーを外す。「部屋を元どおりにして出る」と考えよう。",
+    ),
+    tc("declare function watch(topic: string): { stop(): void };\nfunction Feed({ topic }: { topic: string }) {\n  useEffect(() => {\n    const watcher = watch(topic);\n    return () => watcher.stop();\n  }, [topic]);\n  return <p>{topic}</p>;\n}",
+      L("Start something, return how to stop it", "Inicia algo y devuelve cómo detenerlo", "何かを始め、止め方を返す")),
+    p(
+      "React calls the cleanup at two moments: right before running the effect again (because a dependency changed), so the old run is undone before the new one starts; and when the component disappears (unmount). It never runs \"only when the app closes\", and never right after the effect itself.",
+      "React llama a la limpieza en dos momentos: justo antes de volver a ejecutar el efecto (porque cambió una dependencia), para deshacer la ejecución vieja antes de la nueva; y cuando el componente desaparece (desmontaje). Nunca corre \"solo al cerrar la app\", ni justo después del efecto.",
+      "React がクリーンアップを呼ぶのは2回。依存が変わって副作用を再実行する直前（古い実行を先に片付ける）と、コンポーネントが消える時（アンマウント）。「アプリを閉じた時だけ」や副作用の直後に動くことはない。",
+    ),
+    p(
+      "In development, <StrictMode> stress-tests this on purpose: every component is mounted, unmounted and mounted again, so each effect runs setup, cleanup, setup. With a correct cleanup the end result is the same as one setup. If something doubles (two timers, two connections), the cleanup is missing. Production does not do the extra cycle.",
+      "En desarrollo, <StrictMode> pone esto a prueba a propósito: cada componente se monta, se desmonta y se vuelve a montar, así que cada efecto corre efecto, limpieza, efecto. Con una limpieza correcta el resultado final es igual a un solo efecto. Si algo se duplica (dos timers, dos conexiones), falta la limpieza. En producción no hay ciclo extra.",
+      "開発中の <StrictMode> はわざとこれを試す。全部品をマウント→アンマウント→再マウントするので、副作用は 実行→片付け→実行 となる。正しく片付ければ結果は1回実行と同じ。タイマーや接続が2つに増えたら片付け漏れ。本番ではこの余分な一巡はない。",
+    ),
+    ex('let open = 0;\nconst setup = () => {\n  open++;\n  return () => { open--; };\n};\nconst cleanup = setup(); // mount\ncleanup();               // StrictMode unmount\nsetup();                 // mount again\nconsole.log("open:", open);', "open: 1",
+      L("Setup, cleanup, setup: still one open", "Efecto, limpieza, efecto: sigue una abierta", "実行→片付け→実行：開いているのは1つ")),
+    p(
+      "Common mistake: starting a timer or adding a listener with no cleanup. Each re-run or remount adds one more, and the old ones keep firing: a leak. Pair every \"start\" with its \"stop\": setInterval with clearInterval, addEventListener with removeEventListener, connect with close.",
+      "Error común: iniciar un timer o agregar un listener sin limpieza. Cada repetición o remontaje suma uno más y los viejos siguen disparando: una fuga. Empareja cada \"iniciar\" con su \"detener\": setInterval con clearInterval, addEventListener con removeEventListener, connect con close.",
+      "よくあるミス：片付けなしでタイマーやリスナーを始めること。再実行や再マウントのたびに増え、古いものも動き続ける。これがリーク。「始める」には必ず「止める」を組にしよう。setInterval と clearInterval、addEventListener と removeEventListener、connect と close。",
+    ),
+  ),
+];
+
+const refsNotes: NoteDef[] = [
+  note("render-snapshot", L("Each render is a snapshot", "Cada render es una foto", "レンダーは1枚の写真"),
+    p(
+      "Every time React renders a component, it calls the function again. The props and state values in that call are fixed for that render, like a photograph. Any function created during that render (a handler, an effect, a timer callback) remembers the values from its own photo. This memory is called a closure.",
+      "Cada vez que React renderiza un componente, vuelve a llamar a la función. Los valores de props y estado de esa llamada quedan fijos para ese render, como una fotografía. Cualquier función creada en ese render (un handler, un efecto, el callback de un timer) recuerda los valores de su propia foto. Esa memoria se llama closure.",
+      "React はレンダーのたびに関数をもう一度呼ぶ。その呼び出しの props と状態はそのレンダーの間固定で、写真のようなもの。そのレンダー中に作られた関数（ハンドラ、副作用、タイマーのコールバック）は自分の写真の値を覚えている。この記憶をクロージャという。",
+    ),
+    ex('let score = 10;\nfunction snapshot() {\n  const seen = score;\n  return () => console.log("seen", seen, "now", score);\n}\nconst look = snapshot();\nscore = 25;\nlook();', "seen 10 now 25",
+      L("seen is a copy taken when look was made", "seen es una copia tomada al crear look", "seen は look を作った時のコピー")),
+    p(
+      "A closure doesn't update when a newer render happens: the new render makes NEW functions with new values, and the old function keeps its old ones. That's usually what you want, since each click handler sees the state that was on screen. It becomes a bug when an old function lives on, like an interval started once with [].",
+      "Una closure no se actualiza cuando llega un render nuevo: el render nuevo crea funciones NUEVAS con valores nuevos, y la función vieja conserva los suyos. Casi siempre es lo que quieres, porque cada handler ve el estado que estaba en pantalla. Se vuelve un bug cuando una función vieja sigue viva, como un intervalo iniciado una vez con [].",
+      "新しいレンダーが来てもクロージャは更新されない。新しいレンダーは新しい値で新しい関数を作り、古い関数は古い値のまま。普段はこれで正しい（クリックは画面に出ていた状態を見る）。古い関数が生き続ける時、例えば [] で一度だけ始めたタイマーではバグになる。",
+    ),
+    p(
+      "Rule to remember: when you read a variable inside a callback, ask \"which render created this callback?\". That render's values are the ones it sees, no matter how much time has passed. If the callback must see the latest value, either let React give it to you (an updater function) or keep it in a ref.",
+      "Regla para recordar: cuando leas una variable dentro de un callback, pregúntate \"¿qué render creó este callback?\". Los valores de ese render son los que ve, sin importar cuánto tiempo pase. Si el callback debe ver el valor más reciente, deja que React te lo dé (una función updater) o guárdalo en un ref.",
+      "覚えるルール：コールバックの中で変数を読む時は「どのレンダーがこれを作った？」と考えよう。どれだけ時間がたっても、見えるのはそのレンダーの値。最新の値が必要なら、React に渡してもらう（更新関数）か、ref に入れておこう。",
+    ),
+  ),
+  note("updater-fn", L("Updater functions", "Funciones updater", "更新関数"),
+    p(
+      "A setter like setScore accepts either a value or a function. setScore(score + 1) uses the score from the current snapshot. setScore(s => s + 1) passes an updater: React calls it with the latest pending state and stores what it returns. The updater never depends on an old photo.",
+      "Un setter como setScore acepta un valor o una función. setScore(score + 1) usa el score de la foto actual. setScore(s => s + 1) pasa un updater: React lo llama con el estado pendiente más reciente y guarda lo que devuelve. El updater nunca depende de una foto vieja.",
+      "setScore のようなセッターは値か関数を受け取る。setScore(score + 1) は今の写真の score を使う。setScore(s => s + 1) は更新関数を渡す形で、React が最新の状態を渡して呼び、返り値を保存する。更新関数は古い写真に頼らない。",
+    ),
+    ex("let hp = 0;\nconst set = (next: number | ((prev: number) => number)) => {\n  hp = typeof next === \"function\" ? next(hp) : next;\n};\nconst photo = hp;\nset(photo + 2); set(photo + 2);\nconsole.log(hp);\nset((h) => h + 2); set((h) => h + 2);\nconsole.log(hp);", "2\n6",
+      L("A tiny setter: values reuse the photo, updaters chain", "Un setter mínimo: el valor usa la foto, el updater encadena", "小さなセッター：値は写真を使い、更新関数はつながる")),
+    p(
+      "Use an updater whenever the next state is computed from the previous one and the code might run with a stale snapshot: inside an interval or timeout created once, after an await, or when you call the setter several times in a row. Each updater receives the result of the one before it.",
+      "Usa un updater cuando el siguiente estado se calcula a partir del anterior y el código podría correr con una foto vieja: dentro de un intervalo o timeout creado una vez, después de un await, o cuando llamas al setter varias veces seguidas. Cada updater recibe el resultado del anterior.",
+      "次の状態が前の状態から計算され、古い写真で動く可能性がある時は更新関数を使おう。一度だけ作ったタイマーの中、await の後、セッターを続けて何度も呼ぶ時など。各更新関数は1つ前の結果を受け取る。",
+    ),
+    tc("function Coins() {\n  const [coins, setCoins] = useState(0);\n  function bonus() {\n    setCoins((c) => c + 5);\n    setCoins((c) => c + 5);\n  }\n  return <button onClick={bonus}>{coins}</button>;\n}",
+      L("Two updaters in a row add 10", "Dos updaters seguidos suman 10", "更新関数を2回で 10 増える")),
+    p(
+      "Common mistake: \"fixing\" a stuck counter by adding the state to the dependency array of an interval effect. It works, but the interval is torn down and recreated on every tick. The updater is simpler: the effect keeps its [] and still always adds to the latest value.",
+      "Error común: \"arreglar\" un contador atascado agregando el estado al arreglo de dependencias del efecto del intervalo. Funciona, pero el intervalo se destruye y se recrea en cada tic. El updater es más simple: el efecto conserva su [] y aun así siempre suma al valor más reciente.",
+      "よくあるミス：止まったカウンターを、タイマーの副作用の依存配列に状態を足して「直す」こと。動くが、毎回タイマーを壊して作り直す。更新関数の方が簡単で、[] のままでも常に最新の値に足せる。",
+    ),
+  ),
+  note("use-ref", L("useRef: a pocket notebook", "useRef: una libreta de bolsillo", "useRef：ポケットの手帳"),
+    p(
+      "useRef(initial) gives you a plain object { current: initial } that React keeps for the whole life of the component. Every render gets back the same object, so whatever you write into ref.current is still there on the next render.",
+      "useRef(initial) te da un objeto simple { current: initial } que React conserva durante toda la vida del componente. Cada render recibe el mismo objeto, así que lo que escribas en ref.current sigue ahí en el siguiente render.",
+      "useRef(initial) は { current: initial } という普通のオブジェクトをくれる。React はそれを部品が生きている間ずっと保つ。毎回のレンダーで同じオブジェクトが返るので、ref.current に書いた値は次のレンダーでも残っている。",
+    ),
+    ex("function Probe() {\n  const box = useRef(42);\n  console.log(typeof box, box.current);\n  return null;\n}\nrenderToStaticMarkup(<Probe />);", "object 42",
+      L("A ref is an object with a current field", "Un ref es un objeto con un campo current", "ref は current を持つオブジェクト")),
+    p(
+      "The key difference from state: changing ref.current does NOT trigger a re-render. React doesn't even notice. That makes refs perfect for values the screen never shows: a timer id, the previous value of something, a counter for analytics. If the screen must show it, use state instead.",
+      "La gran diferencia con el estado: cambiar ref.current NO provoca un re-render. React ni lo nota. Eso hace a los refs perfectos para valores que la pantalla nunca muestra: el id de un timer, el valor anterior de algo, un contador para analítica. Si la pantalla debe mostrarlo, usa estado.",
+      "状態との大きな違い：ref.current を変えても再レンダーは起きない。React は気づきもしない。だから画面に出ない値にぴったり。タイマー ID、前回の値、計測用のカウンターなど。画面に出す値なら状態を使おう。",
+    ),
+    tc("function Alarm() {\n  const timeoutId = useRef<number | null>(null);\n  function start() {\n    timeoutId.current = window.setTimeout(() => console.log(\"ring\"), 500);\n  }\n  function stop() {\n    if (timeoutId.current !== null) clearTimeout(timeoutId.current);\n  }\n  return <button onClick={start} onDoubleClick={stop}>alarm</button>;\n}",
+      L("The id is kept between renders, never shown", "El id se guarda entre renders y no se muestra", "ID はレンダー間で保存し、表示しない")),
+    p(
+      "Rule to remember: write and read refs in event handlers and effects, not while rendering. Reading ref.current to build JSX works on the first render, but later changes won't appear, because nothing re-renders. Common mistake: using a ref for a value you display and wondering why the screen is stuck.",
+      "Regla para recordar: escribe y lee refs en handlers y efectos, no al renderizar. Leer ref.current para armar el JSX funciona en el primer render, pero los cambios posteriores no aparecerán, porque nada re-renderiza. Error común: usar un ref para un valor que muestras y preguntarte por qué la pantalla no cambia.",
+      "覚えるルール：ref の読み書きはハンドラと副作用の中で。レンダー中に読んで JSX に使うと最初は出るが、後の変更は再レンダーがないので出ない。よくあるミス：表示する値を ref に入れ、画面が変わらないと悩むこと。",
+    ),
+  ),
+  note("dom-refs", L("Refs to DOM elements", "Refs a elementos del DOM", "DOM 要素への ref"),
+    p(
+      "Pass a ref to a JSX tag with ref={myRef}, and after the element is mounted React puts the real DOM node in myRef.current. Then you can call browser methods on it: focus(), select(), scrollIntoView(), or read its size. Before mount (and after unmount) current is null, which is why the type is useRef<HTMLInputElement>(null).",
+      "Pasa un ref a una etiqueta JSX con ref={myRef} y, tras montar el elemento, React pone el nodo real del DOM en myRef.current. Así puedes llamar sus métodos del navegador: focus(), select(), scrollIntoView(), o leer su tamaño. Antes de montar (y tras desmontar) current es null; por eso el tipo es useRef<HTMLInputElement>(null).",
+      "JSX のタグに ref={myRef} を渡すと、マウント後に React が本物の DOM ノードを myRef.current に入れる。すると focus()、select()、scrollIntoView() などブラウザのメソッドを呼んだり、サイズを読んだりできる。マウント前とアンマウント後は null なので、型は useRef<HTMLInputElement>(null) になる。",
+    ),
+    tc("function Notes() {\n  const area = useRef<HTMLTextAreaElement>(null);\n  function clear() {\n    if (area.current) area.current.value = \"\";\n  }\n  return <><textarea ref={area} /><button onClick={clear}>Clear</button></>;\n}",
+      L("Use the DOM node in a handler, after mount", "Usa el nodo del DOM en un handler, tras montar", "マウント後、ハンドラで DOM ノードを使う")),
+    p(
+      "Because current may be null, TypeScript makes you check first: optional chaining like ref.current?.select() calls the method only when the element exists. Call DOM methods from event handlers or effects, never during render: while rendering, the element may not exist yet.",
+      "Como current puede ser null, TypeScript te obliga a revisar antes: el encadenamiento opcional como ref.current?.select() llama al método solo si el elemento existe. Llama métodos del DOM desde handlers o efectos, nunca al renderizar: durante el render el elemento puede no existir todavía.",
+      "current が null かもしれないので、TypeScript は確認を求める。ref.current?.select() のようなオプショナルチェーンなら要素がある時だけ呼ぶ。DOM のメソッドはハンドラか副作用で呼び、レンダー中は呼ばない。その時点では要素がまだないかもしれない。",
+    ),
+    p(
+      "Since React 19, a function component can simply take ref as a prop and pass it down to a DOM element. Older code wrapped such components in forwardRef; it still works, but it's no longer needed. In TypeScript, type the prop as React.Ref<HTMLButtonElement> (or the element you forward to).",
+      "Desde React 19, un componente de función puede recibir ref como prop y pasarlo a un elemento del DOM. El código antiguo envolvía esos componentes en forwardRef; sigue funcionando, pero ya no hace falta. En TypeScript, tipa la prop como React.Ref<HTMLButtonElement> (o el elemento al que lo pases).",
+      "React 19 からは、関数コンポーネントが ref を props として受け取り、DOM 要素へそのまま渡せる。昔は forwardRef で包んでいた。今も動くが不要になった。TypeScript では props を React.Ref<HTMLButtonElement>（渡す先の要素）と型付けする。",
+    ),
+    tc("function FancyButton({ ref }: { ref: React.Ref<HTMLButtonElement> }) {\n  return <button ref={ref}>Go</button>;\n}\nfunction Toolbar() {\n  const btn = useRef<HTMLButtonElement>(null);\n  return <FancyButton ref={btn} />;\n}",
+      L("React 19: ref travels like any other prop", "React 19: ref viaja como cualquier prop", "React 19：ref は普通の props として渡る")),
+  ),
+];
+
+const fetchingNotes: NoteDef[] = [
+  note("fetch-in-effect", L("Loading data in an effect", "Cargar datos en un efecto", "副作用でデータを読み込む"),
+    p(
+      "Fetching is talking to the outside world, so in plain React it goes in an effect. The usual shape: state for the data (often starting as null), maybe state for loading and error, and an effect that starts the request and stores the reply with a setter. The dependency array lists the inputs of the request, like the id.",
+      "Pedir datos es hablar con el mundo exterior, así que en React puro va en un efecto. La forma habitual: estado para los datos (a menudo empezando en null), quizá estado para carga y error, y un efecto que inicia la petición y guarda la respuesta con un setter. El arreglo de dependencias lista las entradas de la petición, como el id.",
+      "データ取得は外の世界との会話なので、素の React では副作用に書く。よくある形：データ用の状態（最初は null が多い）、必要ならローディングとエラーの状態、そしてリクエストを始めて返事をセッターで保存する副作用。依存配列には id などリクエストの入力を書く。",
+    ),
+    tc("declare function fetchScore(team: string): Promise<number>;\nfunction Score({ team }: { team: string }) {\n  const [score, setScore] = useState<number | null>(null);\n  useEffect(() => {\n    async function load() {\n      setScore(await fetchScore(team));\n    }\n    load();\n  }, [team]);\n  return <p>{score ?? \"...\"}</p>;\n}",
+      L("An async helper inside, called right away", "Una función async adentro, llamada enseguida", "中に async 関数を作ってすぐ呼ぶ")),
+    p(
+      "The effect function itself can't be async. An async function always returns a promise, but React expects an effect to return nothing or a cleanup function, and TypeScript rejects the promise. Define an async function inside the effect and call it, or use .then().",
+      "La función del efecto no puede ser async. Una función async siempre devuelve una promesa, pero React espera que un efecto no devuelva nada o devuelva una limpieza, y TypeScript rechaza la promesa. Define una función async dentro del efecto y llámala, o usa .then().",
+      "副作用の関数そのものは async にできない。async 関数は必ず Promise を返すが、React は副作用に「何も返さない」か「片付け関数」を期待し、TypeScript も Promise を拒否する。中で async 関数を作って呼ぶか、.then() を使おう。",
+    ),
+    bad("declare function fetchScore(team: string): Promise<number>;\nfunction Score({ team }: { team: string }) {\n  useEffect(async () => {\n    await fetchScore(team);\n  }, [team]);\n  return null;\n}",
+      L("Does not type-check: an async effect returns a promise", "No compila: un efecto async devuelve una promesa", "型エラー：async の副作用は Promise を返す")),
+    p(
+      "Two more rules. First, list what the request depends on: if the effect reads team but the array is [], it fetches once and never again when team changes. Second, clear the loading flag in finally(), which runs after success AND failure, so an error never leaves a spinner on screen forever.",
+      "Dos reglas más. Primero, lista de qué depende la petición: si el efecto lee team pero el arreglo es [], pide una vez y nunca más cuando team cambia. Segundo, apaga la bandera de carga en finally(), que corre tras el éxito Y tras el fallo, para que un error nunca deje un spinner en pantalla para siempre.",
+      "あと2つのルール。1つ目：リクエストが依存する値を書く。team を読むのに配列が [] だと、一度だけ取得して team が変わっても取り直さない。2つ目：ローディングは finally() で解除する。成功でも失敗でも動くので、エラーでスピナーが残り続けない。",
+    ),
+    ex('let busy = true;\nPromise.reject(new Error("offline"))\n  .catch((e) => console.log("error:", e.message))\n  .finally(() => { busy = false; console.log("busy:", busy); });', "error: offline\nbusy: false",
+      L("finally runs even after a failure", "finally corre incluso tras un fallo", "finally は失敗の後でも動く")),
+  ),
+  note("race-conditions", L("Race conditions and the ignore flag", "Carreras y la bandera ignore", "競合状態と ignore フラグ"),
+    p(
+      "Network replies don't arrive in the order you asked. If the user picks item 1 and then quickly item 2, the reply for item 1 may be slower and land last. If every reply simply writes to state, the last one to arrive wins, and the screen shows the old item. This is a race condition.",
+      "Las respuestas de red no llegan en el orden en que pediste. Si el usuario elige el ítem 1 y enseguida el 2, la respuesta del 1 puede ser más lenta y llegar al final. Si cada respuesta simplemente escribe en el estado, gana la última en llegar y la pantalla muestra el ítem viejo. Eso es una condición de carrera.",
+      "通信の返事は頼んだ順に届くとは限らない。利用者が項目1を選んですぐ項目2を選ぶと、1の返事の方が遅くて最後に届くことがある。返事がそのまま状態に書くなら最後に届いたものが勝ち、画面には古い項目が出る。これが競合状態。",
+    ),
+    ex('const send = (id: number, ms: number) =>\n  setTimeout(() => console.log("reply", id), ms);\nsend(1, 30); // asked first, slow\nsend(2, 5);  // asked second, fast', "reply 2\nreply 1",
+      L("Asked 1 then 2, but replies land 2 then 1", "Se pidió 1 y luego 2, pero llegan 2 y luego 1", "1→2 の順に頼んでも返事は 2→1")),
+    p(
+      "The fix uses the cleanup. Each run of the effect creates its own local flag, say let cancelled = false. The reply only writes to state if the flag is still false. When the dependency changes, React runs the cleanup of the old run, which sets that run's flag to true, so its late reply is quietly dropped.",
+      "La solución usa la limpieza. Cada ejecución del efecto crea su propia bandera local, por ejemplo let cancelled = false. La respuesta solo escribe en el estado si la bandera sigue en false. Cuando cambia la dependencia, React ejecuta la limpieza de la ejecución vieja, que pone su bandera en true, y su respuesta tardía se descarta en silencio.",
+      "直し方はクリーンアップを使う。副作用の実行ごとに let cancelled = false のような自分専用のフラグを作る。返事はフラグが false の時だけ状態に書く。依存が変わると React は古い実行の片付けを呼び、そのフラグを true にするので、遅れた返事は静かに捨てられる。",
+    ),
+    tc("declare function fetchPet(id: number): Promise<string>;\nfunction Pet({ id }: { id: number }) {\n  const [pet, setPet] = useState(\"\");\n  useEffect(() => {\n    let cancelled = false;\n    fetchPet(id).then((p) => { if (!cancelled) setPet(p); });\n    return () => { cancelled = true; };\n  }, [id]);\n  return <p>{pet}</p>;\n}",
+      L("Each run has its own flag; the cleanup flips it", "Cada ejecución tiene su bandera; la limpieza la cambia", "実行ごとのフラグを片付けで切り替える")),
+    p(
+      "Common mistakes: setting the flag but never reading it before writing state, or keeping one shared flag for all runs. The flag must be created inside the effect, so each request has its own. In real apps, a framework's data loader or a caching library handles races for you.",
+      "Errores comunes: poner la bandera pero nunca leerla antes de escribir el estado, o usar una sola bandera compartida para todas las ejecuciones. La bandera debe crearse dentro del efecto, para que cada petición tenga la suya. En apps reales, el cargador de datos de un framework o una librería de caché maneja las carreras por ti.",
+      "よくあるミス：フラグを立てるのに状態へ書く前に読んでいない、全実行で1つのフラグを共有している。フラグは副作用の中で作り、リクエストごとに別にする。実際のアプリでは、フレームワークのローダーやキャッシュ用ライブラリが競合を処理してくれる。",
+    ),
+  ),
+  note("abort-controller", L("Cancelling with AbortController", "Cancelar con AbortController", "AbortController で取り消す"),
+    p(
+      "An ignore flag drops a late reply, but the request still travels over the network. To cancel the request itself, browsers provide AbortController. Create one, pass its signal to fetch in the options, and call abort() on the controller when you no longer want the answer.",
+      "Una bandera ignore descarta la respuesta tardía, pero la petición sigue viajando por la red. Para cancelar la petición en sí, los navegadores ofrecen AbortController. Crea uno, pasa su signal a fetch en las opciones y llama a abort() en el controller cuando ya no quieras la respuesta.",
+      "ignore フラグは遅い返事を捨てるが、リクエスト自体は通信を続ける。リクエストそのものを取り消すには、ブラウザの AbortController を使う。作って、その signal を fetch のオプションに渡し、返事がいらなくなったら controller の abort() を呼ぶ。",
+    ),
+    ex("const ctrl = new AbortController();\nconsole.log(ctrl.signal.aborted);\nctrl.abort();\nconsole.log(ctrl.signal.aborted);", "false\ntrue",
+      L("abort() flips the signal; fetch watches it", "abort() cambia la señal; fetch la vigila", "abort() でシグナルが変わり、fetch はそれを見る")),
+    p(
+      "Inside an effect, create the controller at the start of each run and return () => ctrl.abort() as the cleanup. When the dependency changes or the component leaves, the old request is cancelled. A cancelled fetch rejects with an AbortError, so add a catch that ignores it.",
+      "Dentro de un efecto, crea el controller al inicio de cada ejecución y devuelve () => ctrl.abort() como limpieza. Cuando cambia la dependencia o el componente se va, la petición vieja se cancela. Un fetch cancelado se rechaza con un AbortError, así que agrega un catch que lo ignore.",
+      "副作用の中では、実行のはじめに controller を作り、片付けとして () => ctrl.abort() を返す。依存が変わるか部品が消えると古いリクエストが取り消される。取り消された fetch は AbortError で失敗するので、それを無視する catch を付けよう。",
+    ),
+    tc("function Weather({ city }: { city: string }) {\n  const [temp, setTemp] = useState<number | null>(null);\n  useEffect(() => {\n    const ctrl = new AbortController();\n    fetch(`/api/weather/${city}`, { signal: ctrl.signal })\n      .then((r) => r.json()).then((d) => setTemp(d.temp)).catch(() => {});\n    return () => ctrl.abort();\n  }, [city]);\n  return <p>{temp}</p>;\n}",
+      L("One controller per run, aborted in the cleanup", "Un controller por ejecución, abortado al limpiar", "実行ごとに controller、片付けで abort")),
+    p(
+      "Names to remember: the class is AbortController (created with new), the property you hand to fetch is signal, and the method that cancels is abort(). One controller can cancel several requests at once if they all got the same signal.",
+      "Nombres para recordar: la clase es AbortController (se crea con new), la propiedad que entregas a fetch es signal y el método que cancela es abort(). Un controller puede cancelar varias peticiones a la vez si todas recibieron el mismo signal.",
+      "覚える名前：クラスは AbortController（new で作る）、fetch に渡すプロパティは signal、取り消すメソッドは abort()。同じ signal を渡していれば、1つの controller で複数のリクエストをまとめて取り消せる。",
+    ),
+  ),
+];
+
+const derivedNotes: NoteDef[] = [
+  note("derive-in-render", L("Compute it during render", "Calcúlalo al renderizar", "レンダー中に計算する"),
+    p(
+      "If a value can be calculated from props or state you already have, don't store it in another state and sync it with an effect. Just compute it in the component body. It is always up to date, it needs no extra render, and it's correct on the very first render, even on the server.",
+      "Si un valor se puede calcular con props o estado que ya tienes, no lo guardes en otro estado ni lo sincronices con un efecto. Calcúlalo en el cuerpo del componente. Siempre está al día, no necesita un render extra y es correcto desde el primer render, incluso en el servidor.",
+      "手元の props や状態から計算できる値は、別の状態に入れて副作用で同期しない。本体でそのまま計算しよう。いつも最新で、余分なレンダーもいらず、サーバーでも最初のレンダーから正しい。",
+    ),
+    ex("function Cart({ prices }: { prices: number[] }) {\n  const total = prices.reduce((a, b) => a + b, 0);\n  return <p>{total}</p>;\n}\nconsole.log(renderToStaticMarkup(<Cart prices={[4, 6]} />));", "<p>10</p>",
+      L("Derived in the body: right on the first render", "Derivado en el cuerpo: correcto desde el inicio", "本体で導出：最初のレンダーから正しい")),
+    p(
+      "The effect version is worse in every way: the first render shows the empty initial state, then the effect copies the value, which triggers a second render. On the server the effect never runs at all, so the HTML stays empty. And the two copies can drift apart if you forget a dependency.",
+      "La versión con efecto es peor en todo: el primer render muestra el estado inicial vacío, luego el efecto copia el valor y eso provoca un segundo render. En el servidor el efecto nunca corre, así que el HTML queda vacío. Y las dos copias pueden desincronizarse si olvidas una dependencia.",
+      "副作用版はすべてで劣る。最初のレンダーは空の初期状態を出し、その後副作用が値をコピーして2回目のレンダーが起きる。サーバーでは副作用が動かないので HTML は空のまま。依存を忘れると2つのコピーがずれることもある。",
+    ),
+    p(
+      "If the calculation is truly slow (filtering thousands of items, heavy math), wrap it in useMemo(() => compute(a, b), [a, b]). It still runs during render and returns the value, but React reuses the cached result until a or b changes. useEffect can't do this: it returns nothing and runs after render.",
+      "Si el cálculo es de verdad lento (filtrar miles de ítems, matemática pesada), envuélvelo en useMemo(() => compute(a, b), [a, b]). Sigue corriendo al renderizar y devuelve el valor, pero React reutiliza el resultado guardado hasta que cambien a o b. useEffect no puede hacer esto: no devuelve nada y corre tras el render.",
+      "計算が本当に重い（数千件の絞り込み、重い計算）なら useMemo(() => compute(a, b), [a, b]) で包む。レンダー中に動いて値を返すのは同じだが、a か b が変わるまで React はキャッシュを再利用する。useEffect は値を返さずレンダー後に動くので、これはできない。",
+    ),
+    tc("declare function rankPlayers(list: string[], by: string): string[];\nfunction Board({ players, by }: { players: string[]; by: string }) {\n  const ranked = useMemo(() => rankPlayers(players, by), [players, by]);\n  return <ol>{ranked.map((n) => <li key={n}>{n}</li>)}</ol>;\n}",
+      L("Cached until players or by change", "Guardado hasta que cambien players o by", "players か by が変わるまでキャッシュ")),
+  ),
+  note("handlers-not-effects", L("Events go in handlers", "Los eventos van en handlers", "イベントはハンドラへ"),
+    p(
+      "Ask why the code should run. If it's because the user did something (clicked Buy, submitted a form), put it in that event handler. The handler knows exactly what happened. An effect only knows that some value changed, not why, so it may fire at the wrong times, like on page load or after an unrelated update.",
+      "Pregúntate por qué debe correr el código. Si es porque el usuario hizo algo (pulsó Comprar, envió un formulario), ponlo en ese handler. El handler sabe exactamente qué pasó. Un efecto solo sabe que algún valor cambió, no por qué, así que puede dispararse en momentos equivocados, como al cargar la página o tras otra actualización.",
+      "コードが「なぜ」動くべきかを考えよう。利用者の操作（購入を押した、フォームを送った）が理由なら、そのイベントハンドラに書く。ハンドラは何が起きたか正確に知っている。副作用は値が変わったことしか知らないので、ページ読み込み時など違うタイミングで動くことがある。",
+    ),
+    tc("declare function sendEvent(name: string): void;\nfunction SignUp() {\n  const [done, setDone] = useState(false);\n  function handleSubmit() {\n    setDone(true);\n    sendEvent(\"signup\");\n  }\n  return <button onClick={handleSubmit}>{done ? \"Thanks!\" : \"Join\"}</button>;\n}",
+      L("Caused by the click, so it lives in the handler", "Lo causa el clic, así que vive en el handler", "クリックが原因なのでハンドラに書く")),
+    p(
+      "Effects are right when the code must run because the component is on screen: connecting to a chat while the room is visible, logging that a page was viewed, syncing a non-React widget. Rule of thumb: caused by an event, use the handler; computed from what you have, use render; kept in sync with an outside system, use an effect.",
+      "Los efectos son correctos cuando el código debe correr porque el componente está en pantalla: conectarse a un chat mientras la sala se ve, registrar que se vio una página, sincronizar un widget que no es de React. Regla: si lo causa un evento, handler; si se calcula con lo que tienes, render; si se sincroniza con un sistema externo, efecto.",
+      "副作用が正しいのは、部品が画面にあるから動くべき処理。部屋が見えている間チャットに接続する、ページ閲覧を記録する、React 外のウィジェットと同期するなど。目安：イベントが原因→ハンドラ、手元から計算→レンダー、外部と同期→副作用。",
+    ),
+    tc("declare function logVisit(page: string): void;\nfunction Page({ name }: { name: string }) {\n  useEffect(() => {\n    logVisit(name);\n  }, [name]);\n  return <h1>{name}</h1>;\n}",
+      L("Fine as an effect: it runs because the page is shown", "Bien como efecto: corre porque se muestra la página", "副作用で正解：ページが表示されたから動く")),
+  ),
+  note("reset-with-key", L("Resetting state with a key", "Reiniciar el estado con una key", "key で状態をリセット"),
+    p(
+      "React keeps a component's state as long as the same component type stays in the same place in the tree. So when a prop changes, the state stays: a form for one user would keep the text typed for the previous user. Syncing it back with an effect is clumsy and shows stale content for a moment.",
+      "React conserva el estado de un componente mientras el mismo tipo de componente siga en el mismo lugar del árbol. Así que cuando cambia una prop, el estado se queda: el formulario de un usuario conservaría el texto escrito para el anterior. Reiniciarlo con un efecto es torpe y muestra contenido viejo por un momento.",
+      "React は、同じ型の部品がツリーの同じ場所にある限り状態を保つ。だから props が変わっても状態は残り、あるユーザーのフォームに前のユーザーの入力が残ってしまう。副作用で戻すのはぎこちなく、一瞬古い内容も見える。",
+    ),
+    p(
+      "The special key attribute tells React the identity of a component. When the key changes, React treats it as a different component: it unmounts the old one with all its state and mounts a fresh one. key is not a normal prop: the component never receives it, React keeps it on the element.",
+      "El atributo especial key le dice a React la identidad de un componente. Cuando la key cambia, React lo trata como otro componente: desmonta el viejo con todo su estado y monta uno nuevo. key no es una prop normal: el componente nunca la recibe, React la guarda en el elemento.",
+      "特別な属性 key は部品の「正体」を React に伝える。key が変わると React は別の部品として扱い、古いものを状態ごとアンマウントして新しいものをマウントする。key は普通の props ではなく、部品には渡らず React が要素に持つ。",
+    ),
+    ex('const el = <p key="ana">hi</p>;\nconsole.log(el.key, el.props);', "ana { children: 'hi' }",
+      L("key sits on the element, not in props", "key está en el elemento, no en las props", "key は props ではなく要素にある")),
+    tc("function Chat({ friend }: { friend: string }) {\n  const [draft, setDraft] = useState(\"\");\n  return <input value={draft} placeholder={friend} onChange={(e) => setDraft(e.target.value)} />;\n}\nfunction Inbox({ friend }: { friend: string }) {\n  return <Chat friend={friend} key={friend} />;\n}",
+      L("A new friend means a fresh Chat with an empty draft", "Otro amigo, un Chat nuevo con borrador vacío", "相手が変われば下書きが空の新しい Chat")),
+    p(
+      "Rule to remember: when ALL the state of a component should start over for a new person, item or page, pass that identity as its key. Common mistake: reaching for useEffect(() => setDraft(\"\"), [friend]), which renders the stale draft first and then clears it.",
+      "Regla para recordar: cuando TODO el estado de un componente deba empezar de cero para otra persona, ítem o página, pasa esa identidad como su key. Error común: usar useEffect(() => setDraft(\"\"), [friend]), que primero muestra el borrador viejo y luego lo borra.",
+      "覚えるルール：別の人・項目・ページで部品の状態を「全部」やり直したい時は、その正体を key に渡す。よくあるミス：useEffect(() => setDraft(\"\"), [friend]) を使うこと。古い下書きを一度表示してから消すことになる。",
+    ),
+  ),
+  note("external-store", L("Reading an outside store", "Leer un store externo", "外部ストアを読む"),
+    p(
+      "Sometimes the data lives outside React: the browser's online status, a global store, a non-React library. The tempting pattern is useState plus an effect that subscribes and copies the value into state. React has a dedicated hook for this instead: useSyncExternalStore(subscribe, getSnapshot).",
+      "A veces los datos viven fuera de React: el estado de conexión del navegador, un store global, una librería que no es de React. El patrón tentador es useState más un efecto que se suscribe y copia el valor al estado. En su lugar, React tiene un hook dedicado: useSyncExternalStore(subscribe, getSnapshot).",
+      "データが React の外にあることもある。ブラウザのオンライン状態、グローバルストア、React 外のライブラリなど。useState と、購読して値を状態にコピーする副作用を書きたくなるが、React には専用のフックがある。useSyncExternalStore(subscribe, getSnapshot)。",
+    ),
+    p(
+      "subscribe(callback) registers the callback with the source and returns a function that unsubscribes. getSnapshot() returns the current value. React calls getSnapshot during render, subscribes for you, and re-renders whenever the callback fires and the snapshot changed. An optional third argument gives the value to use on the server.",
+      "subscribe(callback) registra el callback en la fuente y devuelve una función que cancela la suscripción. getSnapshot() devuelve el valor actual. React llama a getSnapshot al renderizar, se suscribe por ti y re-renderiza cuando el callback se dispara y el valor cambió. Un tercer argumento opcional da el valor a usar en el servidor.",
+      "subscribe(callback) はコールバックを登録し、購読解除の関数を返す。getSnapshot() は今の値を返す。React はレンダー中に getSnapshot を呼び、代わりに購読し、コールバックが呼ばれて値が変わったら再レンダーする。省略できる第3引数はサーバーで使う値。",
+    ),
+    ex("let volume = 7;\nconst subscribe = (cb: () => void) => () => {};\nfunction Volume() {\n  const v = useSyncExternalStore(subscribe, () => volume, () => volume);\n  return <b>{v}</b>;\n}\nconsole.log(renderToStaticMarkup(<Volume />));", "<b>7</b>",
+      L("The snapshot is read during render, no copy in state", "El valor se lee al renderizar, sin copia en estado", "値はレンダー中に読む。状態へのコピーなし")),
+    p(
+      "Why not an effect? The effect version shows a stale value on the first render, needs its own cleanup, and can tear (show different values in different parts of the screen) during concurrent rendering. Common mistake: making getSnapshot return a new object each time, which looks like a change on every call.",
+      "¿Por qué no un efecto? La versión con efecto muestra un valor viejo en el primer render, necesita su propia limpieza y puede desgarrarse (mostrar valores distintos en distintas partes de la pantalla) en el render concurrente. Error común: que getSnapshot devuelva un objeto nuevo cada vez, lo que parece un cambio en cada llamada.",
+      "なぜ副作用ではダメ？最初のレンダーで古い値が出る、自前の片付けが必要、並行レンダーで画面の場所ごとに違う値が出る（ティアリング）ことがある。よくあるミス：getSnapshot が毎回新しいオブジェクトを返し、呼ぶたびに「変わった」と見なされること。",
+    ),
+  ),
+];
+
+const basiliskNotes: NoteDef[] = [
+  note("recap-closures", L("Recap: closures, updaters, refs", "Repaso: closures, updaters, refs", "復習：クロージャ・更新関数・ref"),
+    p(
+      "Each render is a snapshot, and every function created in it remembers that render's values. An interval started once in an effect with [] keeps seeing the first render's state forever. When the next state depends on the previous one, pass an updater like setX(x => x + 1): React hands it the latest value.",
+      "Cada render es una foto, y cada función creada en él recuerda los valores de ese render. Un intervalo iniciado una vez en un efecto con [] sigue viendo para siempre el estado del primer render. Cuando el siguiente estado depende del anterior, pasa un updater como setX(x => x + 1): React le da el valor más reciente.",
+      "レンダーは写真で、その中で作った関数はそのレンダーの値を覚えている。[] の副作用で一度だけ始めたタイマーは、最初のレンダーの状態を見続ける。次の状態が前の状態に依存するなら setX(x => x + 1) のような更新関数を渡そう。React が最新の値をくれる。",
+    ),
+    p(
+      "A ref, from useRef, is a box whose current field survives renders. Changing ref.current never triggers a re-render, so refs hold values the screen doesn't show, like timer ids. Values the user must see belong in state.",
+      "Un ref, de useRef, es una caja cuyo campo current sobrevive a los renders. Cambiar ref.current nunca provoca un re-render, así que los refs guardan valores que la pantalla no muestra, como ids de timers. Los valores que el usuario debe ver van en el estado.",
+      "useRef の ref は、current がレンダーをまたいで残る箱。ref.current を変えても再レンダーしないので、タイマー ID のような画面に出ない値に使う。利用者に見せる値は状態に入れよう。",
+    ),
+    ex("let lap = 1;\nconst frozen = lap;\nconst stale = () => frozen + 1;\nconst fresh = (prev: number) => prev + 1;\nlap = 4;\nconsole.log(stale(), fresh(lap));", "2 5",
+      L("A copy from the past vs. the value handed in now", "Una copia del pasado frente al valor recibido ahora", "過去のコピーと、今渡された値")),
+  ),
+  note("recap-deps", L("Recap: dependency arrays", "Repaso: arreglos de dependencias", "復習：依存配列"),
+    p(
+      "No array: run after every render. []: only on mount. [a, b]: when a or b changed. React compares each item with Object.is: equal primitives match, NaN matches NaN, but objects, arrays and functions match only if they are the very same one.",
+      "Sin arreglo: corre tras cada render. []: solo al montar. [a, b]: cuando cambió a o b. React compara cada elemento con Object.is: los primitivos iguales coinciden, NaN coincide con NaN, pero objetos, arreglos y funciones solo coinciden si son exactamente el mismo.",
+      "配列なし→毎回のレンダー後。[]→マウント時だけ。[a, b]→a か b が変わった時。React は各要素を Object.is で比べる。同じプリミティブは一致し、NaN は NaN と一致するが、オブジェクト・配列・関数は全く同じ物の時だけ一致する。",
+    ),
+    p(
+      "An object built in the component body is new on every render, so as a dependency it always counts as changed and the effect re-runs each time. Depend on the primitive values inside it instead.",
+      "Un objeto creado en el cuerpo del componente es nuevo en cada render, así que como dependencia siempre cuenta como cambiado y el efecto se repite cada vez. Depende mejor de los valores primitivos que contiene.",
+      "本体で作ったオブジェクトは毎回新しいので、依存にすると常に「変わった」扱いになり、副作用が毎回動く。中のプリミティブ値に依存しよう。",
+    ),
+    ex('const a = ["x"];\nconst b = ["x"];\nconsole.log(Object.is(a, b), Object.is(a[0], b[0]));', "false true",
+      L("Same contents, different arrays; same strings match", "Mismo contenido, arreglos distintos; los strings coinciden", "中身が同じでも別の配列。文字列は一致")),
+  ),
+  note("recap-cleanup", L("Recap: cleanup and StrictMode", "Repaso: limpieza y StrictMode", "復習：片付けと StrictMode"),
+    p(
+      "Return a cleanup from an effect that undoes exactly what it did: removeEventListener for addEventListener, clearInterval for setInterval, close for connect. React runs it before the next run of the effect and on unmount. Without it, every run adds another listener or timer: a leak.",
+      "Devuelve desde el efecto una limpieza que deshaga justo lo que hizo: removeEventListener para addEventListener, clearInterval para setInterval, close para connect. React la ejecuta antes de la siguiente ejecución del efecto y al desmontar. Sin ella, cada ejecución suma otro listener o timer: una fuga.",
+      "副作用からは、したことをちょうど元に戻す片付けを返す。addEventListener には removeEventListener、setInterval には clearInterval、connect には close。React は次の実行の前とアンマウント時にそれを呼ぶ。ないと実行のたびにリスナーやタイマーが増えてリークになる。",
+    ),
+    p(
+      "In development, StrictMode mounts, unmounts and mounts again on purpose, so each effect runs setup, cleanup, setup. It isn't a bug in React: it's a test that your cleanup works. Production runs the effect once.",
+      "En desarrollo, StrictMode monta, desmonta y vuelve a montar a propósito, así que cada efecto corre efecto, limpieza, efecto. No es un bug de React: es una prueba de que tu limpieza funciona. En producción el efecto corre una vez.",
+      "開発中の StrictMode はわざとマウント→アンマウント→再マウントするので、副作用は 実行→片付け→実行 となる。React のバグではなく、片付けが正しいかのテスト。本番では1回だけ動く。",
+    ),
+    tc("declare const onScroll: () => void;\nfunction Tracker() {\n  useEffect(() => {\n    window.addEventListener(\"scroll\", onScroll);\n    return () => window.removeEventListener(\"scroll\", onScroll);\n  }, []);\n  return null;\n}",
+      L("Add in the effect, remove the same one in the cleanup", "Agrega en el efecto, quita el mismo al limpiar", "副作用で付け、片付けで同じものを外す")),
+  ),
+  note("recap-fetching", L("Recap: fetching safely", "Repaso: pedir datos con seguridad", "復習：安全なデータ取得"),
+    p(
+      "Replies can arrive out of order, so a slow old reply may overwrite a newer one. Two fixes, both in the cleanup: a local ignore flag that the cleanup sets to true (check it before setting state), or an AbortController whose abort() the cleanup calls to cancel the request itself.",
+      "Las respuestas pueden llegar desordenadas, así que una respuesta vieja y lenta puede pisar a una nueva. Dos soluciones, ambas en la limpieza: una bandera local ignore que la limpieza pone en true (revísala antes de cambiar el estado), o un AbortController cuyo abort() llama la limpieza para cancelar la petición en sí.",
+      "返事は順不同で届くので、遅い古い返事が新しいものを上書きすることがある。直し方は2つで、どちらも片付けを使う。片付けで true にするローカルの ignore フラグ（状態を変える前に確認）か、片付けで abort() を呼んでリクエスト自体を取り消す AbortController。",
+    ),
+    p(
+      "The controller pattern: create it at the start of the effect, pass controller.signal to fetch, and return () => controller.abort(). Put the request's inputs, like the url, in the dependency array so a new value cancels the old request and starts a new one.",
+      "El patrón del controller: créalo al inicio del efecto, pasa controller.signal a fetch y devuelve () => controller.abort(). Pon las entradas de la petición, como la url, en el arreglo de dependencias para que un valor nuevo cancele la petición vieja y empiece otra.",
+      "controller の型：副作用のはじめに作り、controller.signal を fetch に渡し、() => controller.abort() を返す。url などリクエストの入力は依存配列に入れる。値が変われば古いリクエストを取り消して新しく始める。",
+    ),
+    ex('let page = "";\nfunction request(name: string, ms: number) {\n  let stale = false;\n  setTimeout(() => { if (!stale) page = name; }, ms);\n  return () => { stale = true; };\n}\nconst cancelHome = request("home", 40);\ncancelHome();\nrequest("shop", 5);\nsetTimeout(() => console.log(page), 60);', "shop",
+      L("The old request was cancelled, so its reply is dropped", "La petición vieja se canceló y su respuesta se descarta", "古いリクエストは取り消され、返事は捨てられる")),
+  ),
+  note("recap-derive", L("Recap: effects don't run in render", "Repaso: efectos fuera del render", "復習：副作用はレンダー中に動かない"),
+    p(
+      "Effects run after the screen is committed in a browser, never during render and never in a server or static render. So a value copied into state by an effect shows its initial value on the first render, and on the server it never changes at all.",
+      "Los efectos corren después de actualizar la pantalla en un navegador, nunca durante el render y nunca en un render de servidor o estático. Así que un valor copiado al estado por un efecto muestra su valor inicial en el primer render, y en el servidor nunca cambia.",
+      "副作用はブラウザで画面が反映された後に動き、レンダー中やサーバー・静的レンダーでは動かない。だから副作用で状態にコピーした値は、最初のレンダーでは初期値のままで、サーバーでは一度も変わらない。",
+    ),
+    p(
+      "If a value can be computed from props or state, compute it in the component body (with useMemo if it's truly slow). It's correct on the first render, everywhere, with no extra render.",
+      "Si un valor se puede calcular con props o estado, calcúlalo en el cuerpo del componente (con useMemo si de verdad es lento). Es correcto desde el primer render, en todas partes, sin render extra.",
+      "props や状態から計算できる値は本体で計算しよう（本当に重ければ useMemo）。どこでも最初のレンダーから正しく、余分なレンダーもない。",
+    ),
+    ex("function Count({ names }: { names: string[] }) {\n  const [n, setN] = useState(-1);\n  useEffect(() => setN(names.length), [names]);\n  return <i>{n} / {names.length}</i>;\n}\nconsole.log(renderToStaticMarkup(<Count names={[\"a\", \"b\"]} />));", "<i>-1 / 2</i>",
+      L("Left: copied by an effect. Right: computed in render", "Izquierda: copiado por efecto. Derecha: calculado", "左は副作用でコピー、右はレンダーで計算")),
+  ),
+];
 
 // ─── 3.1 effects and cleanup ───────────────────────────────────────────────
 const effectsAndCleanup: LessonDef = {
@@ -57,6 +455,8 @@ const effectsAndCleanup: LessonDef = {
     {
       kind: "predict",
       prompt: L("A static render (no browser). What prints?", "Render estático (sin navegador). ¿Qué imprime?", "静的レンダー（ブラウザなし）。何が出る？"),
+      hint: L("Does a static render have a browser screen to commit? Effects wait for that moment.", "Un render estático, ¿tiene pantalla de navegador que actualizar? Los efectos esperan ese momento.", "静的レンダーに反映するブラウザ画面はある？副作用はその瞬間を待つ。"),
+      note: "effect-timing",
       code: 'function C() {\n  useEffect(() => {\n    console.log("effect");\n  });\n  return <p>x</p>;\n}\nconsole.log(renderToStaticMarkup(<C />));',
       options: ["<p>x</p>", "effect <p>x</p>", "<p>x</p> effect"],
       answer: 0,
@@ -78,6 +478,8 @@ const effectsAndCleanup: LessonDef = {
     {
       kind: "pick",
       prompt: L("Run it only after the first render", "Que corra solo tras el primer render", "最初のレンダー後だけ実行しよう"),
+      hint: L("The array lists what can change. Which option has nothing in it that could ever change?", "El arreglo lista lo que puede cambiar. ¿Qué opción no tiene nada que pueda cambiar nunca?", "配列には変わりうる値を書く。変わるものが何もないのはどっち？"),
+      note: "dependency-array",
       code: 'function Hello({ count }: { count: number }) {\n  useEffect(() => {\n    console.log("hello");\n  }, ___);\n  return <p>{count}</p>;\n}',
       options: ["[]", "[count]"],
       answer: 0,
@@ -93,6 +495,8 @@ const effectsAndCleanup: LessonDef = {
     {
       kind: "predict",
       prompt: L("When does c.close() run?", "¿Cuándo corre c.close()?", "c.close() はいつ動く？"),
+      hint: L("The cleanup undoes the previous run. When would React need the old connection undone?", "La limpieza deshace la ejecución anterior. ¿Cuándo necesitaría React deshacer la conexión vieja?", "片付けは前回の実行を元に戻す。古い接続を戻す必要があるのはいつ？"),
+      note: "cleanup",
       code: "useEffect(() => {\n  const c = connect(roomId);\n  return () => c.close();\n}, [roomId]);",
       options: [
         L("Before the next effect and on unmount", "Antes del siguiente efecto y al desmontar", "次の副作用の前とアンマウント時"),
@@ -117,6 +521,8 @@ const effectsAndCleanup: LessonDef = {
     {
       kind: "predict",
       prompt: L("Dev + StrictMode, on mount the log shows…", "Desarrollo + StrictMode, al montar se ve…", "開発中の StrictMode、マウント時のログは？"),
+      hint: L("StrictMode tests your cleanup in development. To test it, what must happen between two setups?", "StrictMode prueba tu limpieza en desarrollo. Para probarla, ¿qué debe pasar entre dos efectos?", "StrictMode は開発中に片付けを試す。2回の実行の間に何が必要？"),
+      note: "cleanup",
       code: 'useEffect(() => {\n  console.log("connect");\n  return () => console.log("disconnect");\n}, []);',
       options: [
         "connect",
@@ -136,6 +542,8 @@ const effectsAndCleanup: LessonDef = {
     {
       kind: "predict",
       prompt: L("What happens with this effect?", "¿Qué pasa con este efecto?", "この副作用はどうなる？"),
+      hint: L("No array means after every render. What does setting state cause, and what runs after that?", "Sin arreglo significa tras cada render. ¿Qué provoca cambiar el estado, y qué corre después?", "配列なし＝毎回のレンダー後。状態を変えると何が起き、その後何が動く？"),
+      note: "dependency-array",
       code: "useEffect(() => {\n  setCount(count + 1);\n});",
       options: [
         L("It runs once", "Corre una vez", "一度だけ動く"),
@@ -154,6 +562,8 @@ const effectsAndCleanup: LessonDef = {
     {
       kind: "predict",
       prompt: WHAT_PRINTS,
+      hint: L("Object.is on objects asks \"is it the very same object?\", not \"do they look alike?\".", "Object.is con objetos pregunta \"¿es exactamente el mismo objeto?\", no \"¿se parecen?\".", "オブジェクトの Object.is は「全く同じ物か」を問う。「似ているか」ではない。"),
+      note: "dependency-array",
       code: "console.log(Object.is({ a: 1 }, { a: 1 }));",
       options: ["true", "false"],
       answer: 1,
@@ -170,6 +580,8 @@ const effectsAndCleanup: LessonDef = {
     {
       kind: "predict",
       prompt: L("Why does it re-run after every render?", "¿Por qué se repite tras cada render?", "なぜ毎回再実行される？"),
+      hint: L("Where is options created, and how often does that line run?", "¿Dónde se crea options y cada cuánto corre esa línea?", "options はどこで作られ、その行はどのくらい実行される？"),
+      note: "dependency-array",
       code: "const options = { roomId };\nuseEffect(() => {\n  connect(options.roomId);\n}, [options]);",
       options: [
         L("options is a new object each render", "options es un objeto nuevo en cada render", "options が毎回新しいオブジェクト"),
@@ -188,6 +600,8 @@ const effectsAndCleanup: LessonDef = {
     {
       kind: "order",
       prompt: L("Order a ticking effect with its cleanup", "Ordena un efecto con reloj y su limpieza", "タイマーの副作用と片付けを並べよう"),
+      hint: L("Open the effect, start the timer, return how to stop it, then close with the deps array.", "Abre el efecto, inicia el timer, devuelve cómo detenerlo y cierra con el arreglo de dependencias.", "副作用を開き、タイマーを始め、止め方を返し、依存配列で閉じる。"),
+      note: "cleanup",
       lines: ["useEffect(() => {", "  const id = setInterval(tick, 1000);", "  return () => clearInterval(id);", "}, []);"],
       explain: L(
         "Start the interval inside the effect and return a function that clears it. Without it, every mount adds another timer.",
@@ -201,6 +615,8 @@ const effectsAndCleanup: LessonDef = {
     {
       kind: "pick",
       prompt: L("Measure the box before the browser paints", "Mide la caja antes de que pinte el navegador", "描画前に箱の大きさを測ろう"),
+      hint: L("One of these hooks runs after the DOM updates but before the browser paints.", "Uno de estos hooks corre tras actualizar el DOM pero antes de que el navegador pinte.", "片方のフックは DOM 更新後、ブラウザの描画前に動く。"),
+      note: "effect-timing",
       code: "___(() => {\n  setHeight(box.current!.offsetHeight);\n}, []);",
       options: ["useLayoutEffect", "useEffect"],
       answer: 0,
@@ -216,6 +632,8 @@ const effectsAndCleanup: LessonDef = {
     {
       kind: "run",
       prompt: L("Compare dependencies like React does (Object.is)", "Compara dependencias como React (Object.is)", "React と同じく Object.is で依存を比べよう"),
+      hint: L("Each render makes a new array, so !== always says changed. Compare item by item the way React does.", "Cada render crea un arreglo nuevo, así que !== siempre dice que cambió. Compara elemento a elemento como React.", "配列は毎回新しいので !== は常に「変化」。React と同じく要素ごとに比べよう。"),
+      note: "dependency-array",
       starter:
         'function depsChanged(prev: unknown[], next: unknown[]): boolean {\n  return prev !== next;\n}\nconsole.log(depsChanged([1, "a"], [1, "a"]), depsChanged([1], [2]), depsChanged([NaN], [NaN]));',
       solution:
@@ -229,6 +647,7 @@ const effectsAndCleanup: LessonDef = {
       ),
     },
   ],
+  notes: effectsNotes,
 };
 
 // ─── 3.2 stale closures and refs ───────────────────────────────────────────
@@ -264,6 +683,8 @@ const staleClosuresAndRefs: LessonDef = {
     {
       kind: "predict",
       prompt: WHAT_PRINTS,
+      hint: L("h was made with one value. Does creating another function later change what h remembers?", "h se creó con un valor. ¿Crear otra función después cambia lo que h recuerda?", "h はある値で作られた。後で別の関数を作ると h の記憶は変わる？"),
+      note: "render-snapshot",
       code: 'function makeHandler(count: number) {\n  return () => console.log("count is", count);\n}\nconst h = makeHandler(0);\nmakeHandler(5);\nh();',
       options: ["count is 0", "count is 5", "count is undefined"],
       answer: 0,
@@ -280,6 +701,8 @@ const staleClosuresAndRefs: LessonDef = {
     {
       kind: "predict",
       prompt: L("After 5 seconds the counter shows…", "Tras 5 segundos el contador muestra…", "5 秒後、カウンターの表示は？"),
+      hint: L("With [], the interval callback belongs to the first render. What is count in that snapshot?", "Con [], el callback del intervalo pertenece al primer render. ¿Cuánto vale count en esa foto?", "[] だとタイマーの関数は最初のレンダーのもの。その写真の count は？"),
+      note: "render-snapshot",
       code: STALE_INTERVAL,
       options: ["1", "5", "0"],
       answer: 0,
@@ -295,6 +718,8 @@ const staleClosuresAndRefs: LessonDef = {
     {
       kind: "pick",
       prompt: L("Fix it: always add to the latest value", "Arréglalo: suma siempre al valor actual", "直そう：常に最新の値に足す"),
+      hint: L("Which option lets React hand in the latest value, instead of reading the old snapshot?", "¿Qué opción deja que React entregue el valor más reciente, en vez de leer la foto vieja?", "古い写真を読まず、React に最新の値を渡してもらえるのはどっち？"),
+      note: "updater-fn",
       code: "const id = setInterval(() => setCount(___), 1000);",
       options: ["c => c + 1", "count + 1"],
       answer: 0,
@@ -315,6 +740,8 @@ const staleClosuresAndRefs: LessonDef = {
     {
       kind: "pick",
       prompt: L("Keep a timer id without re-rendering", "Guarda un id de timer sin re-renderizar", "再レンダーせずにタイマー ID を保存"),
+      hint: L("The id is never shown on screen. Which hook stores a value without causing a render?", "El id nunca se muestra en pantalla. ¿Qué hook guarda un valor sin provocar un render?", "ID は画面に出ない。レンダーを起こさずに値を保存するフックは？"),
+      note: "use-ref",
       code: "const timer = ___<number | null>(null);",
       options: ["useRef", "useState"],
       answer: 0,
@@ -330,6 +757,8 @@ const staleClosuresAndRefs: LessonDef = {
     {
       kind: "predict",
       prompt: WHAT_PRINTS,
+      hint: L("useRef(x) returns an object. Which of its fields holds x on the first render?", "useRef(x) devuelve un objeto. ¿Qué campo suyo guarda x en el primer render?", "useRef(x) はオブジェクトを返す。最初のレンダーで x を持つのはどの項目？"),
+      note: "use-ref",
       code: "function C() {\n  const r = useRef(3);\n  return <p>{r.current}</p>;\n}\nconsole.log(renderToStaticMarkup(<C />));",
       options: ["<p>3</p>", "<p></p>", "<p>[object Object]</p>"],
       answer: 0,
@@ -346,6 +775,8 @@ const staleClosuresAndRefs: LessonDef = {
     {
       kind: "predict",
       prompt: L("A click runs this. Does the screen re-render?", "Un clic ejecuta esto. ¿Se re-renderiza?", "クリックでこれが動く。再レンダーする？"),
+      hint: L("Only state setters tell React to render again. Is writing to ref.current one of them?", "Solo los setters de estado le piden a React otro render. ¿Escribir en ref.current es uno de ellos?", "再レンダーを頼めるのは状態のセッターだけ。ref.current への書き込みは？"),
+      note: "use-ref",
       code: "function onClick() {\n  clicks.current++;\n}",
       options: [
         L("No: refs change silently", "No: los refs cambian en silencio", "しない：ref は静かに変わる"),
@@ -364,6 +795,8 @@ const staleClosuresAndRefs: LessonDef = {
     {
       kind: "type",
       prompt: L("Focus the input from a click handler", "Enfoca el input desde un clic", "クリックで入力欄にフォーカス"),
+      hint: L("After mount, inputRef.current is the real <input>. Which browser method gives it the cursor?", "Tras montar, inputRef.current es el <input> real. ¿Qué método del navegador le da el cursor?", "マウント後の inputRef.current は本物の <input>。カーソルを移すメソッドは？"),
+      note: "dom-refs",
       code: "function onClick() {\n  inputRef.current?.___();\n}",
       answer: "focus",
       explain: L(
@@ -378,6 +811,8 @@ const staleClosuresAndRefs: LessonDef = {
     {
       kind: "predict",
       prompt: L("React 19: does MyInput need forwardRef?", "React 19: ¿MyInput necesita forwardRef?", "React 19：MyInput に forwardRef は必要？"),
+      hint: L("Think about what changed for ref in React 19's function components.", "Piensa en qué cambió para ref en los componentes de función de React 19.", "React 19 の関数コンポーネントで ref について何が変わったか考えよう。"),
+      note: "dom-refs",
       code: "function MyInput({ ref }: { ref: React.Ref<HTMLInputElement> }) {\n  return <input ref={ref} />;\n}",
       options: [
         L("No: ref is a normal prop now", "No: ref ya es una prop normal", "不要：ref は普通の props"),
@@ -396,6 +831,8 @@ const staleClosuresAndRefs: LessonDef = {
     {
       kind: "run",
       prompt: L("Make tick() read the latest state, not the photo", "Haz que tick() lea el estado actual, no la foto", "tick() が写真でなく最新の状態を読むように"),
+      hint: L("tick() writes count + 1, and count is a copy from render(). Read the live variable instead.", "tick() escribe count + 1, y count es una copia de render(). Lee la variable viva en su lugar.", "tick() は render() のコピー count に +1 している。生きている変数を読もう。"),
+      note: "updater-fn",
       starter:
         'let state = 0;\nfunction render() {\n  const count = state;\n  return { tick: () => { state = count + 1; } };\n}\nconst first = render();\nfirst.tick();\nfirst.tick();\nfirst.tick();\nconsole.log("state:", state);',
       solution:
@@ -409,6 +846,7 @@ const staleClosuresAndRefs: LessonDef = {
       ),
     },
   ],
+  notes: refsNotes,
 };
 
 // ─── 3.3 data fetching ─────────────────────────────────────────────────────
@@ -446,6 +884,8 @@ const dataFetching: LessonDef = {
     {
       kind: "predict",
       prompt: L("Why is this effect wrong?", "¿Por qué este efecto está mal?", "この副作用はなぜダメ？"),
+      hint: L("What does an async function always return? Compare it with what an effect may return.", "¿Qué devuelve siempre una función async? Compáralo con lo que puede devolver un efecto.", "async 関数がいつも返すものは？副作用が返してよいものと比べよう。"),
+      note: "fetch-in-effect",
       code: "useEffect(async () => {\n  setUser(await fetchUser(id));\n}, [id]);",
       options: [
         L("It returns a promise, not a cleanup", "Devuelve una promesa, no una limpieza", "片付け関数でなく Promise を返す"),
@@ -464,6 +904,8 @@ const dataFetching: LessonDef = {
     {
       kind: "predict",
       prompt: L("Reply 2 lands first, then reply 1. It shows…", "La respuesta 2 llega primero, luego la 1. Muestra…", "返事2が先、返事1が後。表示は？"),
+      hint: L("Follow the clock: which timeout fires last? The last write is what stays in shown.", "Sigue el reloj: ¿qué timeout se dispara al final? La última escritura es la que queda en shown.", "時間を追おう。最後に動くのはどの timeout？最後の書き込みが shown に残る。"),
+      note: "race-conditions",
       code: 'let shown = "";\nconst load = (id: number, ms: number) =>\n  setTimeout(() => { shown = "user " + id; }, ms);\nload(1, 30);\nload(2, 10);\nsetTimeout(() => console.log(shown), 50);',
       options: ["user 1", "user 2"],
       answer: 0,
@@ -485,6 +927,8 @@ const dataFetching: LessonDef = {
     {
       kind: "order",
       prompt: L("Order the race-condition fix", "Ordena la solución a la carrera", "競合状態の対策を並べよう"),
+      hint: L("Create the flag first, guard the setter with it, and let the cleanup flip it.", "Crea primero la bandera, protege el setter con ella y deja que la limpieza la cambie.", "まずフラグを作り、セッターを守り、片付けでフラグを切り替える。"),
+      note: "race-conditions",
       lines: RACE_FIX,
       explain: L(
         "Each effect run has its own ignore flag. When id changes, the cleanup marks the old run, so its late reply is dropped.",
@@ -498,6 +942,8 @@ const dataFetching: LessonDef = {
     {
       kind: "pick",
       prompt: L("Cancel the network request itself", "Cancela la petición de red en sí", "通信そのものを取り消そう"),
+      hint: L("AbortController is named after what it does. Which method matches that name?", "AbortController se llama según lo que hace. ¿Qué método coincide con ese nombre?", "AbortController は役目から名付けられた。その名前に合うメソッドは？"),
+      note: "abort-controller",
       code: 'const controller = new AbortController();\nfetch("/api/user", { signal: controller.signal });\ncontroller.___();',
       options: ["abort", "cancel", "stop"],
       answer: 0,
@@ -513,6 +959,8 @@ const dataFetching: LessonDef = {
     {
       kind: "predict",
       prompt: L("userId changes. What happens?", "userId cambia. ¿Qué pasa?", "userId が変わった。どうなる？"),
+      hint: L("The effect reads userId. Is userId listed in the array that decides when it re-runs?", "El efecto lee userId. ¿Está userId en el arreglo que decide cuándo se repite?", "副作用は userId を読む。再実行を決める配列に userId はある？"),
+      note: "fetch-in-effect",
       code: "useEffect(() => {\n  load(userId);\n}, []);",
       options: [
         L("Nothing: it never refetches", "Nada: nunca vuelve a pedir", "何も起きない：再取得しない"),
@@ -531,6 +979,8 @@ const dataFetching: LessonDef = {
     {
       kind: "pick",
       prompt: L("Hide the spinner on success AND error", "Oculta el spinner con éxito Y con error", "成功でも失敗でもスピナーを消す"),
+      hint: L("You need the promise method that runs after both success and failure.", "Necesitas el método de las promesas que corre tras el éxito y tras el fallo.", "成功でも失敗でも後で動く Promise のメソッドが必要。"),
+      note: "fetch-in-effect",
       code: 'let loading = true;\nconst fetchUser = (id: number) => Promise.resolve({ id });\nfetchUser(1)\n  .then((u) => console.log("got", u.id))\n  .___(() => { loading = false; console.log("loading:", loading); });',
       options: ["finally", "always", "done"],
       answer: 0,
@@ -546,6 +996,8 @@ const dataFetching: LessonDef = {
     {
       kind: "type",
       prompt: L("Create the object that can cancel a fetch", "Crea el objeto que puede cancelar un fetch", "fetch を取り消せるオブジェクトを作ろう"),
+      hint: L("A built-in class created with new; it hands out the signal that fetch listens to.", "Una clase incorporada que se crea con new; entrega el signal que fetch escucha.", "new で作る組み込みクラス。fetch が聞く signal をくれる。"),
+      note: "abort-controller",
       code: "const controller = new ___();\nconst signal = controller.signal;",
       answer: "AbortController",
       explain: L(
@@ -565,6 +1017,8 @@ const dataFetching: LessonDef = {
     {
       kind: "run",
       prompt: L("Ignore the late reply so user 2 stays on screen", "Ignora la respuesta tardía para que quede user 2", "遅い返事を無視して user 2 を表示しよう"),
+      hint: L("The cleanup sets ignore = true, but nothing checks it. Check it before writing shown.", "La limpieza pone ignore = true, pero nada lo revisa. Revísalo antes de escribir shown.", "片付けで ignore = true にしても誰も見ていない。shown に書く前に確認しよう。"),
+      note: "race-conditions",
       starter:
         'const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));\nlet shown = "";\nfunction load(id: number, delay: number) {\n  let ignore = false;\n  wait(delay).then(() => { shown = "user " + id; });\n  return () => { ignore = true; };\n}\nconst cleanup1 = load(1, 30);\ncleanup1(); // the id changed before user 1 arrived\nload(2, 10);\nsetTimeout(() => console.log(shown), 50);',
       solution:
@@ -578,6 +1032,7 @@ const dataFetching: LessonDef = {
       ),
     },
   ],
+  notes: fetchingNotes,
 };
 
 // ─── 3.4 effects you don't need ────────────────────────────────────────────
@@ -612,6 +1067,8 @@ const effectsYouDontNeed: LessonDef = {
     {
       kind: "pick",
       prompt: L("Derive the visible todos", "Deriva las tareas visibles", "表示する todo を導き出そう"),
+      hint: L("The list can be calculated from todos right now. Does it need state at all?", "La lista se puede calcular con todos ahora mismo. ¿Necesita estado?", "リストは todos から今すぐ計算できる。そもそも状態は必要？"),
+      note: "derive-in-render",
       code: "function List({ todos }: { todos: Todo[] }) {\n  const visible = ___;\n  return <ul>{visible.map(t => <li key={t.id}>{t.text}</li>)}</ul>;\n}",
       options: ["todos.filter(t => !t.done)", "useState<Todo[]>([])[0]"],
       answer: 0,
@@ -627,6 +1084,8 @@ const effectsYouDontNeed: LessonDef = {
     {
       kind: "predict",
       prompt: L("Where should the Buy analytics go?", "¿Dónde va la analítica de Comprar?", "購入の計測はどこに書く？"),
+      hint: L("Ask why it happens: because a value changed, or because the user clicked?", "Pregúntate por qué ocurre: ¿porque cambió un valor o porque el usuario hizo clic?", "なぜ起きる？値が変わったから？利用者がクリックしたから？"),
+      note: "handlers-not-effects",
       code: 'function handleBuy() {\n  setBought(true);\n  post("/analytics", { event: "buy" });\n}',
       options: [
         L("Here, in the click handler", "Aquí, en el handler del clic", "ここ、クリックのハンドラ"),
@@ -645,6 +1104,8 @@ const effectsYouDontNeed: LessonDef = {
     {
       kind: "pick",
       prompt: L("The filter is slow. Cache it between renders", "El filtro es lento. Guárdalo entre renders", "フィルタが重い。レンダー間でキャッシュ"),
+      hint: L("You need a hook that returns a value during render and reuses it until deps change.", "Necesitas un hook que devuelva un valor al renderizar y lo reutilice hasta que cambien las deps.", "レンダー中に値を返し、依存が変わるまで再利用するフックが必要。"),
+      note: "derive-in-render",
       code: "const visible = ___(() => filterTodos(todos, tab), [todos, tab]);",
       options: ["useMemo", "useEffect"],
       answer: 0,
@@ -665,6 +1126,8 @@ const effectsYouDontNeed: LessonDef = {
     {
       kind: "type",
       prompt: L("Reset the form when the user changes", "Reinicia el formulario al cambiar de usuario", "ユーザーが変わったらフォームをリセット"),
+      hint: L("Which special attribute gives a component its identity, so a new value means a new component?", "¿Qué atributo especial da identidad a un componente, de modo que un valor nuevo sea otro componente?", "部品に正体を与え、値が変わると別の部品になる特別な属性は？"),
+      note: "reset-with-key",
       code: "<Profile userId={userId} ___={userId} />",
       answer: "key",
       explain: L(
@@ -679,6 +1142,8 @@ const effectsYouDontNeed: LessonDef = {
     {
       kind: "predict",
       prompt: L("Static render: what prints?", "Render estático: ¿qué imprime?", "静的レンダー：何が出る？"),
+      hint: L("What is visible on the very first render? Does the effect ever run in a static render?", "¿Cuánto vale visible en el primer render? ¿El efecto llega a correr en un render estático?", "最初のレンダーで visible は何？静的レンダーで副作用は動く？"),
+      note: "derive-in-render",
       code: VISIBLE_EFFECT,
       options: ["<ul></ul>", "<ul><li>Train</li></ul>"],
       answer: 0,
@@ -695,6 +1160,8 @@ const effectsYouDontNeed: LessonDef = {
     {
       kind: "pick",
       prompt: L("Subscribe to an outside store", "Suscríbete a un store externo", "外部ストアを購読しよう"),
+      hint: L("One of these hooks exists exactly to read a source that lives outside React.", "Uno de estos hooks existe justo para leer una fuente que vive fuera de React.", "片方のフックは、React の外にある値を読むためにある。"),
+      note: "external-store",
       code: "const online = ___(subscribe, () => navigator.onLine);",
       options: ["useSyncExternalStore", "useEffect"],
       answer: 0,
@@ -715,6 +1182,8 @@ const effectsYouDontNeed: LessonDef = {
     {
       kind: "run",
       prompt: L("Delete the state and effect: compute the list", "Borra estado y efecto: calcula la lista", "状態と副作用を消してリストを計算しよう"),
+      hint: L("Remove the state and the effect, and compute the filtered list in the body.", "Quita el estado y el efecto, y calcula la lista filtrada en el cuerpo.", "状態と副作用を消し、絞り込んだリストを本体で計算しよう。"),
+      note: "derive-in-render",
       starter: H + TODO + VISIBLE_EFFECT,
       solution:
         H + TODO +
@@ -728,6 +1197,7 @@ const effectsYouDontNeed: LessonDef = {
       ),
     },
   ],
+  notes: derivedNotes,
 };
 
 // ─── boss ──────────────────────────────────────────────────────────────────
@@ -760,6 +1230,8 @@ const effectBasilisk: LessonDef = {
       kind: "predict",
       time: 14,
       prompt: L("After 5 seconds the counter shows…", "Tras 5 segundos el contador muestra…", "5 秒後、カウンターの表示は？"),
+      hint: L("The interval was made in the first render, with []. What count does its photo hold?", "El intervalo se creó en el primer render, con []. ¿Qué count guarda su foto?", "タイマーは最初のレンダーで [] と共に作られた。写真の count は？"),
+      note: "recap-closures",
       code: STALE_INTERVAL,
       options: ["1", "5"],
       answer: 0,
@@ -775,6 +1247,8 @@ const effectBasilisk: LessonDef = {
       kind: "pick",
       time: 12,
       prompt: L("Fix the frozen counter", "Arregla el contador congelado", "止まったカウンターを直そう"),
+      hint: L("Pick the form where React passes in the latest state.", "Elige la forma en la que React entrega el estado más reciente.", "React が最新の状態を渡してくれる書き方を選ぼう。"),
+      note: "recap-closures",
       code: "setInterval(() => setCount(___), 1000);",
       options: ["c => c + 1", "count + 1"],
       answer: 0,
@@ -790,6 +1264,8 @@ const effectBasilisk: LessonDef = {
       kind: "predict",
       time: 15,
       prompt: WHAT_PRINTS,
+      hint: L("Object.is has one surprise with NaN, and objects only match if they are the very same one.", "Object.is tiene una sorpresa con NaN, y los objetos solo coinciden si son exactamente el mismo.", "Object.is は NaN で意外な結果になる。オブジェクトは全く同じ物の時だけ一致。"),
+      note: "recap-deps",
       code: "const same = (a: unknown[], b: unknown[]) =>\n  a.length === b.length && a.every((x, i) => Object.is(x, b[i]));\nconsole.log(same([NaN], [NaN]), same([{}], [{}]));",
       options: ["true false", "false false", "true true"],
       answer: 0,
@@ -806,6 +1282,8 @@ const effectBasilisk: LessonDef = {
       kind: "predict",
       time: 13,
       prompt: L("An object literal in the deps causes…", "Un objeto literal en las deps causa…", "依存配列にオブジェクトを書くと？"),
+      hint: L("How often is the options object created? Compare two renders with Object.is.", "¿Cada cuánto se crea el objeto options? Compara dos renders con Object.is.", "options はどのくらい作られる？2回のレンダーを Object.is で比べよう。"),
+      note: "recap-deps",
       code: "const options = { roomId };\nuseEffect(() => {\n  connect(options.roomId);\n}, [options]);",
       options: [
         L("A re-run after every render", "Repetirse tras cada render", "毎回のレンダー後に再実行"),
@@ -824,6 +1302,8 @@ const effectBasilisk: LessonDef = {
       kind: "predict",
       time: 14,
       prompt: L("No cleanup, and onResize changes often…", "Sin limpieza y onResize cambia seguido…", "片付けなし、onResize が頻繁に変わると？"),
+      hint: L("Each run adds a listener. Is anything removing them?", "Cada ejecución agrega un listener. ¿Algo los está quitando?", "実行のたびにリスナーが増える。誰か外している？"),
+      note: "recap-cleanup",
       code: 'useEffect(() => {\n  window.addEventListener("resize", onResize);\n}, [onResize]);',
       options: [
         L("Listeners pile up: a leak", "Los listeners se acumulan: fuga", "リスナーが溜まる：リーク"),
@@ -842,6 +1322,8 @@ const effectBasilisk: LessonDef = {
       kind: "pick",
       time: 13,
       prompt: L("Write the missing cleanup", "Escribe la limpieza que falta", "足りない片付けを書こう"),
+      hint: L("The cleanup must undo exactly what the effect did.", "La limpieza debe deshacer exactamente lo que hizo el efecto.", "片付けは副作用がしたことをちょうど元に戻す。"),
+      note: "recap-cleanup",
       code: 'return () => window.___("resize", onResize);',
       options: ["removeEventListener", "addEventListener"],
       answer: 0,
@@ -857,6 +1339,8 @@ const effectBasilisk: LessonDef = {
       kind: "order",
       time: 15,
       prompt: L("Order a fetch that can be cancelled", "Ordena un fetch que se pueda cancelar", "取り消せる fetch を並べよう"),
+      hint: L("Make the controller, hand its signal to fetch, and abort in the returned cleanup.", "Crea el controller, entrega su signal a fetch y aborta en la limpieza que devuelves.", "controller を作り、signal を fetch に渡し、返す片付けで abort する。"),
+      note: "recap-fetching",
       lines: ABORT_LINES,
       explain: L(
         "Create the controller, pass its signal to fetch, and abort in the cleanup when url changes or the component leaves.",
@@ -870,6 +1354,8 @@ const effectBasilisk: LessonDef = {
       kind: "predict",
       time: 13,
       prompt: L("In dev, an effect runs twice on mount. Why?", "En desarrollo, un efecto corre dos veces. ¿Por qué?", "開発中、副作用が2回動く。なぜ？"),
+      hint: L("Development only, on purpose: mount, unmount, mount. What is it checking?", "Solo en desarrollo y a propósito: montar, desmontar, montar. ¿Qué está comprobando?", "開発中だけ、わざと マウント→アンマウント→マウント。何を確かめている？"),
+      note: "recap-cleanup",
       code: "<StrictMode>\n  <App />\n</StrictMode>",
       options: [
         L("StrictMode tests your cleanup", "StrictMode prueba tu limpieza", "StrictMode が片付けを試す"),
@@ -888,6 +1374,8 @@ const effectBasilisk: LessonDef = {
       kind: "pick",
       time: 12,
       prompt: L("Keep a value with no re-render", "Guarda un valor sin re-renderizar", "再レンダーなしで値を保持"),
+      hint: L("The id isn't shown on screen. Which hook stores it silently?", "El id no se muestra en pantalla. ¿Qué hook lo guarda en silencio?", "ID は画面に出ない。静かに保存するフックは？"),
+      note: "recap-closures",
       code: "const timerId = ___<number | null>(null);",
       options: ["useRef", "useState"],
       answer: 0,
@@ -903,6 +1391,8 @@ const effectBasilisk: LessonDef = {
       kind: "predict",
       time: 15,
       prompt: L("Static render: what prints?", "Render estático: ¿qué imprime?", "静的レンダー：何が出る？"),
+      hint: L("Does the effect run in a static render? Then what does total hold?", "¿El efecto corre en un render estático? Entonces, ¿qué guarda total?", "静的レンダーで副作用は動く？なら total の値は？"),
+      note: "recap-derive",
       code: TOTAL,
       options: ["<p>0</p>", "<p>5</p>"],
       answer: 0,
@@ -919,6 +1409,8 @@ const effectBasilisk: LessonDef = {
       kind: "type",
       time: 14,
       prompt: L("Drop the late reply", "Descarta la respuesta tardía", "遅い返事を捨てよう"),
+      hint: L("Which local flag does the cleanup set to true when id changes?", "¿Qué bandera local pone la limpieza en true cuando cambia id?", "id が変わると片付けで true になるローカルのフラグは？"),
+      note: "recap-fetching",
       code: "fetchUser(id).then(u => {\n  if (!___) setUser(u);\n});",
       answer: "ignore",
       explain: L(
@@ -935,6 +1427,7 @@ const effectBasilisk: LessonDef = {
       "琥珀が…割れた！お前の副作用はちゃんと後片付けをする…",
     )),
   ],
+  notes: basiliskNotes,
 };
 
 export const effectPeaks: RegionDef = {

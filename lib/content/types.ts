@@ -65,7 +65,10 @@ export interface BeatBase {
   setup?: Effect[];
   /** Effects played when the player gets it right. */
   win?: Effect[];
+  /** A nudge shown when the player spends a hint ticket: points the way without giving the answer. */
   hint?: Text;
+  /** Id of the lesson note that explains this question (defaults to the lesson's first note). */
+  note?: string;
   /** Seconds for the speed bonus (and the timeout in boss fights). */
   time?: number;
 }
@@ -154,6 +157,24 @@ export function isQuestion(b: Beat): b is QuestionBeat {
   return b.kind !== "dialog" && b.kind !== "act";
 }
 
+/**
+ * A block of a lesson note: a paragraph, or a code example. Examples use values different from the
+ * questions; an example with `output` is run by the validator and must print exactly that.
+ */
+export type NoteBlock =
+  | { t: "p"; text: Text }
+  | { t: "code"; code: string; output?: string; caption?: Text; check?: SnippetCheck };
+
+/**
+ * The long explanation of one idea in a lesson. Players open it at any time from a question
+ * (the "📖" button) and come back to where they were. Questions that test the same idea share it.
+ */
+export interface NoteDef {
+  id: string;
+  title: Text;
+  blocks: NoteBlock[];
+}
+
 export interface LessonDef {
   slug: string;
   title: Text;
@@ -163,6 +184,8 @@ export interface LessonDef {
   enemy: EnemyKind;
   enemyName: Text;
   beats: Beat[];
+  /** Long explanations for the lesson's ideas, referenced by questions' `note`. */
+  notes?: NoteDef[];
 }
 
 export interface RegionDef {
