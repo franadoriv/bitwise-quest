@@ -1,5 +1,10 @@
 import type { ExamDef } from "../../lib/content/types.ts";
 import { L } from "../../lib/i18n/text.ts";
+import {
+  collatzTask, initialsTask, largestTask, longestWordTask, parallelSumTask, parseAgeTask, parseKvTask,
+  rleTask, sumEvensTask, sumLinesTask, tokensTask, wordFreqTask,
+} from "./tasks.ts";
+import { juniorTraceDebug, midTraceDebug, seniorTraceDebug } from "./trace-debug.ts";
 
 // Entry exams that simulate company technical screenings for Rust roles.
 // Topic and format choices are grounded in docs/research/rust-hiring-assessments.md.
@@ -30,9 +35,15 @@ export const exams: ExamDef[] = [
       "初期の技術スクリーニング（選択式）：構文、可変性、所有権、借用、match、Option/Result、コレクション。",
     ),
     count: 12,
+    codeCount: 1,
     passPct: 70,
     secondsPerQuestion: 30,
     questions: [
+      ...juniorTraceDebug,
+      longestWordTask,
+      sumEvensTask,
+      parseAgeTask,
+      initialsTask,
       // variables
       {
         topic: "variables", difficulty: 1, kind: "predict", prompt: COMPILES, code: "let a = 1;\na = 2;", options: YN, answer: 1,
@@ -298,9 +309,15 @@ export const exams: ExamDef[] = [
       "バックエンド/インフラ向け技術試験：ライフタイム、トレイト、ジェネリクス、? によるエラー処理、イテレータ、クロージャ、スレッド。",
     ),
     count: 14,
+    codeCount: 2,
     passPct: 70,
     secondsPerQuestion: 40,
     questions: [
+      ...midTraceDebug,
+      wordFreqTask,
+      parseKvTask,
+      rleTask,
+      largestTask,
       // lifetimes
       {
         topic: "lifetimes", difficulty: 1, kind: "predict", prompt: COMPILES, code: "fn longest(a: &str, b: &str) -> &str {\n    if a.len() > b.len() { a } else { b }\n}", options: YN, answer: 1,
@@ -579,9 +596,15 @@ export const exams: ExamDef[] = [
       "シニア向けシステム面接：Send/Sync、Rc と Arc、内部可変性、トレイトオブジェクト、変性、'static、Drop、非同期、unsafe。",
     ),
     count: 15,
+    codeCount: 2,
     passPct: 75,
     secondsPerQuestion: 50,
     questions: [
+      ...seniorTraceDebug,
+      sumLinesTask,
+      tokensTask,
+      parallelSumTask,
+      collatzTask,
       // concurrency: Send / Sync
       {
         topic: "concurrency", difficulty: 1, kind: "pick", prompt: L("Share the value with another thread", "Comparte el valor con otro hilo", "値を別スレッドと共有する"),

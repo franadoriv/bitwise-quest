@@ -110,24 +110,27 @@ Both route files export only `POST`; any other method gets **405** from the fram
 
 ### `POST /api/run`
 
-Body: `{ "language": string, "code": string }`. Checks, in order:
+Body: `{ "language": string, "code": string, "task"?: { "scope": "lesson" | "exam", "slug": string, "index": number } }`. Checks, in order:
 
 | # | Check | Failure |
 | --- | --- | --- |
 | 1 | `assertSameOrigin` | 403 `origin_required` / `bad_origin` / `cross_origin` / `cross_site` |
 | 2 | Per-client token bucket (6/min, burst 8) | 429 `rate_limited` + `Retry-After` |
 | 3 | `readJson` with a 16 KB cap | 415 `unsupported_media_type`, 413 `payload_too_large`, 400 `empty_body` / `invalid_json` |
-| 4 | Plain object, only `language` and `code` | 400 `invalid_body` / `unknown_field` |
+| 4 | Plain object, only `language`, `code` and `task` | 400 `invalid_body` / `unknown_field` |
 | 5 | `language` matches `^[a-z0-9-]{1,32}$` | 400 `invalid_language` |
 | 6 | `code` is a non-blank string | 400 `invalid_code` |
 | 7 | `code` ≤ 10,000 chars, ≤ 400 lines, no NUL | 413 `code_too_large` |
 | 8 | The language exists, is `active` and has a **server** runner (packs with a browser runner such as `js-browser` or `py-browser` are refused) | 404 `unknown_language` |
+| 8b | `task` (optional): plain object with only `scope` (`lesson`/`exam`), `slug` (`^[a-z0-9-]{1,64}$`) and an integer `index` 0–500, naming an existing coding task or debugging task of that pack | 400 `invalid_task` / 404 `unknown_task` |
 | 9 | Runner disabled (`BITWISE_RUNNER=off`) | 200 `{ ok: false, available: false }`: the client validates offline |
-| 10 | Result cache (SHA-256 of language + code) | 200 with `x-cache: hit`, no upstream call, no global quota used |
+| 10 | Result cache (SHA-256 of language + task + code) | 200 with `x-cache: hit`, no upstream call, no global quota used |
 | 11 | Global token bucket (60/min) | 503 `busy` + `Retry-After` |
 | 12 | One compile in flight per client | 429 `one_at_a_time` + `Retry-After: 2` |
 | 13 | Four compiles in flight in total (fail fast) | 503 `busy` + `Retry-After: 5` |
 | 14 | Upstream call; output truncated to 8,000 chars each | 200 `{ ok, stdout, stderr, available, phase? }` |
+
+**Coding tasks.** With `task`, the server builds the program itself: the player's code plus the task's tests, visible and hidden (`lib/coding/harness.ts`), so hidden tests for server-runner languages never reach the browser. The response then carries per-test results instead of stdout: `tests: [{ pass, got? , hidden? }]` (the printed output only for visible tests) and `finished`. Error messages have any hidden test's code replaced with `<hidden test>`. Limits (body size, lines) apply to the player's code; the appended tests come from the content. For browser-runner languages (JS/TS, Python) the tests travel with the lesson or exam and the program is built in the player's browser, so a curious player could read the hidden tests with the developer tools: they are an exercise aid, not a secret.
 
 Only results with `available: true` are cached, so an upstream outage is never cached. Many players submit the same correct solutions, so the cache absorbs most repeated traffic without calling the upstream.
 

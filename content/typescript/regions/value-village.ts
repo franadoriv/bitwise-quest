@@ -1,5 +1,6 @@
 import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { parseAmountTask } from "../tasks.ts";
 
 // REGION 1 · VALUE VILLAGE  (let/const, primitive types, numbers, strings, equality, truthiness)
 
@@ -849,6 +850,7 @@ const boss: LessonDef = {
     { kind: "predict", time: 12, prompt: PRINT, code: 'const s: string = "false";\nconst n: number = 0;\nconsole.log(!!s, !!n);', options: ["true false", "false false", "true true"], answer: 0, output: "true false", check: { compiles: true, stdout: "true false" }, hint: L("A string is falsy only when it's empty. And where is 0 on the falsy list?", "Un string es falsy solo si está vacío. ¿Y está 0 en la lista falsy?", "文字列が falsy なのは空のときだけ。0 は falsy のリストにある？"), note: "truthy-recap", explain: L("A non-empty string is truthy; 0 is falsy.", "Un string no vacío es truthy; 0 es falsy.", "空でない文字列は truthy、0 は falsy。") },
     { kind: "predict", time: 15, prompt: PRINT, code: 'const s: string = "";\nconsole.log([s || "guest", s ?? "guest"]);', options: ["[ 'guest', '' ]", "[ 'guest', 'guest' ]", "[ '', '' ]"], answer: 0, output: "[ 'guest', '' ]", check: { compiles: true, stdout: "[ 'guest', '' ]" }, hint: L("\"\" is falsy, but is it null or undefined? Each operator reacts to a different group.", "\"\" es falsy, pero ¿es null o undefined? Cada operador reacciona a un grupo distinto.", "\"\" は falsy。でも null か undefined？演算子ごとに反応するグループがちがう。"), note: "truthy-recap", explain: L("\"\" is falsy, so || falls back. It's not null, so ?? keeps it.", "\"\" es falsy, así que || usa el respaldo. No es null, así que ?? lo conserva.", "\"\" は falsy なので || は代わりを使う。null じゃないので ?? はそのまま。") },
     { kind: "type", time: 15, prompt: L("The safe NaN test", "La prueba segura de NaN", "安全な NaN 判定"), code: "console.log(Number.___(NaN));", answer: "isNaN", check: { compiles: true, stdout: "true" }, hint: L("NaN === NaN never works. Number has a method named after exactly this check.", "NaN === NaN nunca funciona. Number tiene un método con el nombre de justo esta prueba.", "NaN === NaN は使えない。Number にはこの判定そのままの名前のメソッドがある。"), note: "number-recap", explain: L("Number.isNaN(NaN) is true. NaN === NaN is always false.", "Number.isNaN(NaN) es true. NaN === NaN siempre es false.", "Number.isNaN(NaN) は true。NaN === NaN はいつも false。") },
+    parseAmountTask,
     enemySays(L(
       "Crumble... you saw through every disguise. The forest of closures lies ahead, traveler.",
       "Me desmorono... viste a través de cada disfraz. El bosque de closures te espera, viajero.",

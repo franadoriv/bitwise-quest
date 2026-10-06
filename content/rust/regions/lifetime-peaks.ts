@@ -1,5 +1,6 @@
 import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { enemySays, L, say } from "../helpers.ts";
+import { findTagTask } from "../tasks.ts";
 
 // REGION 3 · LIFETIME PEAKS  (scope, dangling references, 'a, structs with references, 'static)
 
@@ -855,6 +856,7 @@ const boss3: LessonDef = {
     { kind: "predict", time: 12, hint: L("longest returns the input with more characters. Count the letters of each.", "longest devuelve la entrada con más caracteres. Cuenta las letras de cada una.", "longest は文字数の多いほうを返す。それぞれの文字を数えよう。"), note: "recap-annotations", prompt: L("What does it print?", "¿Qué imprime?", "何が表示される？"), code: `${LONGEST}\nprintln!("{}", longest("peak", "summit"));`, options: ["summit", "peak", L("Error", "Error", "エラー")], answer: 0, explain: L("summit is longer.", "summit es más largo.", "summit のほうが長い。"), check: { compiles: true, stdout: "summit" } },
     { kind: "predict", time: 15, hint: L("Under one shared 'a, how long may res live? Check where b's scope ends.", "Con un solo 'a compartido, ¿cuánto puede vivir res? Revisa dónde termina el ámbito de b.", "'a を共有すると res はいつまで生きてよい？b のスコープの終わりを確かめよう。"), note: "recap-annotations", prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: `${LONGEST}\nlet a = String::from("aaaa");\nlet res;\n{\n    let b = String::from("b");\n    res = longest(&a, &b);\n}\nprintln!("{}", res);`, options: [YES, NO], answer: 1, explain: L("b dies before res is used.", "b muere antes de usar res.", "res を使う前に b が消える。"), check: { compiles: false } },
     { kind: "type", time: 15, hint: L("The field is a reference governed by the struct's lifetime. Look at how the header declares it.", "El campo es una referencia regida por el lifetime del struct. Mira cómo lo declara la cabecera.", "このフィールドは構造体のライフタイムに従う参照。見出しの宣言を見よう。"), note: "recap-static-structs", prompt: L("Borrowed field of the struct", "Campo prestado del struct", "構造体の借用フィールド"), code: "struct Excerpt<'a> { part: ___ str }", answer: "&'a", explain: L("part: &'a str", "part: &'a str", "part: &'a str"), check: { compiles: true } },
+    findTagTask,
     enemySays(L(
       "Grrr... your borrows always make it home. Climb on, Rustacean: the summit is yours.",
       "Grrr... tus préstamos siempre vuelven a casa. Sube, rustáceo: la cumbre es tuya.",

@@ -1,5 +1,6 @@
 import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { rotateLettersTask } from "../tasks.ts";
 
 // REGION 1 · FORGE VILLAGE  (const/var, integer widths and overflow, loops and switch, arrays and strings)
 
@@ -1879,6 +1880,7 @@ const boss: LessonDef = {
       check: { compiles: true, stdout: "255" },
       explain: L("+|= saturates: 250 + 10 sticks at 255 instead of panicking.", "+|= satura: 250 + 10 se queda en 255 en vez de hacer panic.", "+|= は飽和：250 + 10 は panic せず 255 で止まる。"),
     },
+    rotateLettersTask,
     enemySays(L(
       "Fzzt... every chip held. Beyond the village lies the Optional Forest, where bottles may be empty...",
       "Fzzt... cada ficha aguantó. Pasando la aldea está el Bosque Opcional, donde las botellas pueden estar vacías...",

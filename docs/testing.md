@@ -74,7 +74,7 @@ After touching an API route, `proxy.ts`, `next.config.ts` or `lib/security/`, ru
 | --- | --- |
 | `--verify` | Also runs every snippet on the language runner (this is what `content:verify` adds) |
 | `--lang=<slug>` | Only validates that pack, planet or moon, e.g. `--lang=rust`, `--lang=typescript`, `--lang=react`, `--lang=python`, `--lang=go`, `--lang=cpp`, `--lang=csharp`, `--lang=webgl`, `--lang=threejs`, `--lang=ruby`, `--lang=rails` |
-| `--only=<substring>` | Only reports and verifies items whose location contains the substring: a region slug (`--only=ownership-forest`), a lesson slug, or `exam:` for all exams (`--only=exam:senior` for one) |
+| `--only=<substring>` | Only reports and verifies items whose location contains the substring: a region slug (`--only=ownership-forest`), a lesson slug, `exam:` for all exams (`--only=exam:senior` for one), or `task` for every coding task (solution, starter and near misses) |
 
 ```bash
 npm run content:check -- --only=let-village
@@ -82,6 +82,7 @@ npm run content:verify -- --lang=rust --only=exam:
 npm run content:verify -- --lang=typescript --only=closure-forest
 npm run content:verify -- --lang=react
 npm run content:verify -- --lang=go --only=exam:
+npm run content:verify -- --lang=zig --only=task
 ```
 
 ## How each language is verified

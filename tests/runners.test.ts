@@ -87,3 +87,40 @@ test("highlighter knows every code language", () => {
   assert.deepEqual(kinds("f x' = 'a' -- c", "haskell"), ["str:'a'", "com:-- c"]);
   assert.deepEqual(kinds('def hi = puts "a#{@n}" # c\nh = { k: :v }', "ruby"), ["kw:def", "type:puts", 'str:"a#{@n}"', "com:# c", "mac::v"]);
 });
+
+test("coding tasks: the harness wraps the player's code and reads each test back", async () => {
+  const { buildTaskProgram, parseTaskResults, MARK } = await import("../lib/coding/harness.ts");
+  const tests = [{ run: "print(f(1))", expect: "2" }, { run: "print(f(2))", expect: "4", hidden: true }];
+  const py = buildTaskProgram("python", "def f(x):\n    return x * 2", tests);
+  assert.match(py, /^def f\(x\):[\s\S]*print\("@@BWQ#0"\)\nprint\(f\(1\)\)[\s\S]*print\("@@BWQ#end"\)\n$/);
+
+  // C#: using lines stay first, then the test statements, then the player's types.
+  const cs = buildTaskProgram("csharp", "using System;\n\nstatic class K { public static int F(int x) => x; }", [{ run: "Console.WriteLine(K.F(1));", expect: "1" }]);
+  assert.ok(cs.indexOf("using System;") < cs.indexOf(MARK) && cs.indexOf(MARK) < cs.indexOf("static class K"));
+
+  const ok = parseTaskResults(`debug line\n${MARK}0\n2\n${MARK}1\n4\n${MARK}end\n`, tests);
+  assert.deepEqual(ok.results.map((r) => r.pass), [true, true]);
+  assert.equal(ok.finished, true);
+  // The program crashed during the second test: it never reached the end mark.
+  const crashed = parseTaskResults(`${MARK}0\n2\n${MARK}1\n`, tests);
+  assert.deepEqual(crashed.results.map((r) => [r.pass, r.reached]), [[true, true], [false, false]]);
+  assert.equal(crashed.finished, false);
+  const wrong = parseTaskResults(`${MARK}0\n3\n${MARK}1\n4\n${MARK}end`, tests);
+  assert.deepEqual(wrong.results.map((r) => r.pass), [false, true]);
+});
+
+test("trace tables: cells are judged one by one, loosely spaced, given cells skipped", async () => {
+  const { judgeTrace, traceStdout } = await import("../lib/coding/trace.ts");
+  const rows = [
+    { label: "i = 0", cells: ["0", "[1, 2]"], given: [0] },
+    { label: "i = 1", cells: ["1", "[1, 2, 3]"] },
+  ];
+  assert.equal(traceStdout(rows), "0 | [1, 2]\n1 | [1, 2, 3]");
+  const ok = judgeTrace(rows, [["", " [1,  2] "], ["1", "[1, 2, 3]"]]);
+  assert.equal(ok.all, true); // " [1,  2] " is trimmed and its double space collapsed
+  const r = judgeTrace(rows, [["", "[1, 2]"], ["1", "[1, 2, 4]"]]);
+  assert.deepEqual(r.cells, [[true, true], [true, false]]);
+  assert.equal(r.right, 2);
+  assert.equal(r.total, 3);
+  assert.equal(judgeTrace(rows, [["x", "[1, 2]"], [" 1 ", "[1, 2, 3]"]]).all, true);
+});

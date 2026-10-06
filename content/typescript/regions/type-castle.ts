@@ -1,5 +1,6 @@
 import type { LessonDef, NoteBlock, NoteDef, RegionDef, SnippetCheck, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { parsePlayerTask } from "../tasks.ts";
 import { enemySays, say } from "../../rust/helpers.ts";
 
 // REGION 4 · TYPE CASTLE  (shapes and inference, unions and narrowing, generics, utility/mapped/conditional types)
@@ -1317,6 +1318,7 @@ const titan: LessonDef = {
       note: "recap-function-types",
       explain: L("A Handler must accept ANY Animal; a Dog-only function can't (parameters are contravariant).", "Un Handler debe aceptar CUALQUIER Animal; una función solo para Dog no puede (parámetros contravariantes).", "Handler はどの Animal も受け取る必要がある。Dog 専用関数はダメ（引数は反変）。"),
     },
+    parsePlayerTask,
     enemySays(L(
       "Impossible... not one type slipped past you. The castle gates open. Beware the tower of the event loop!",
       "Imposible... ningún tipo se te escapó. Las puertas del castillo se abren. ¡Cuidado con la torre del event loop!",

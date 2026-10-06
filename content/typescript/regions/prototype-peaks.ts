@@ -1,5 +1,6 @@
 import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { promoteTask } from "../tasks.ts";
 import { enemySays, say } from "../../rust/helpers.ts";
 
 // REGION 3 · PROTOTYPE PEAKS  (objects, destructuring, references and copies, array methods, prototypes and classes)
@@ -1291,6 +1292,7 @@ const hydra: LessonDef = {
       note: "recap-objects-classes",
       explain: L("super.speak() gives \"...\", plus \"!\". Animal is in the chain.", "super.speak() da \"...\", más \"!\". Animal está en la cadena.", "super.speak() で \"...\"、そこに \"!\"。Animal はチェーンにいるよ。"),
     },
+    promoteTask,
     enemySays(L(
       "Hsss... you tracked every reference and every parent. The peaks are yours. The Type Castle awaits.",
       "Hsss... seguiste cada referencia y cada padre. Los picos son tuyos. El Castillo de Tipos te espera.",

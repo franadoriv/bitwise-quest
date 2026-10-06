@@ -1,5 +1,6 @@
 import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { squareAllTask } from "../tasks.ts";
 
 // REGION 4 · CHANNEL TOWER  (goroutines and WaitGroup, channels, select and context, mutexes and races)
 // Never quiz outputs that depend on scheduling: races, map order or "main exits before the goroutine"
@@ -1920,6 +1921,7 @@ const boss: LessonDef = {
       hint: L("Declarations come first. The change happens while the key is held; printing comes after it's returned.", "Las declaraciones van primero. El cambio ocurre con la llave tomada; se imprime tras devolverla.", "宣言が先。変更は鍵を持っている間に、表示は鍵を返したあと。"),
       note: "recap-sync",
     },
+    squareAllTask,
     enemySays(L(
       "Nobody... is asleep? Every tunnel closed, every key returned. Concurra flows again. Well dug, little gopher.",
       "¿Nadie... duerme? Cada túnel cerrado, cada llave devuelta. Concurra vuelve a fluir. Bien cavado, pequeño gopher.",

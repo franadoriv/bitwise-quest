@@ -9,12 +9,18 @@ import type { CodeLang } from "../lib/content/types.ts";
 import { executeJs } from "../lib/runners/js-core.ts";
 import { typecheck } from "./ts-check.ts";
 import { wrapSnippet } from "./snippet-wrap.ts";
+import { buildTaskProgram, parseTaskResults } from "../lib/coding/harness.ts";
+import { TRACE_SEP, blankCells, traceStdout } from "../lib/coding/trace.ts";
+import type { CodeTest } from "../lib/content/types.ts";
 import { runAll, VERIFIABLE_LANGS } from "./remote-run.ts";
 
 const VERIFY = process.argv.includes("--verify");
+// A snippet that rejects a promise nobody handles must fail its own job, not stop the whole run.
+process.on("unhandledRejection", () => {});
 const ONLY = process.argv.find((a) => a.startsWith("--lang="))?.slice(7);
 /** --only=<text>: report and verify only items whose location contains <text> (e.g. a region slug or "exam:"). */
 const FILTER = process.argv.find((a) => a.startsWith("--only="))?.slice(7);
+// e.g. --only=task (coding tasks), --only=exam: (exam banks)
 const inScope = (where: string) => !FILTER || where.includes(FILTER);
 
 const ACTORS = ["hero", "ally", "enemy"];
@@ -65,7 +71,27 @@ function option(where: string, o: Text) {
   else prose(where, "option", o);
 }
 
-interface Job { where: string; program: string; compiles: boolean; stdout?: string; contains?: string; throws?: string; lang: CodeLang }
+interface Job {
+  where: string; program: string; compiles: boolean; stdout?: string; contains?: string; throws?: string; lang: CodeLang;
+  /** Coding task: judge the run by these tests; `taskMustFail` for starters and near misses. */
+  task?: CodeTest[]; taskMustFail?: boolean;
+}
+
+/** Judges a coding-task run: the solution passes every test; starters and near misses must not. */
+function judgeTask(job: Job, r: { stdout: string; stderr: string }) {
+  const tests = job.task!;
+  const parsed = parseTaskResults(r.stdout, tests);
+  const all = parsed.finished && parsed.results.every((x) => x.pass);
+  if (job.taskMustFail) {
+    if (all) err(job.where, "passes every test: the tests don't tell it apart from a correct solution");
+    return;
+  }
+  if (all) return;
+  const bad = parsed.results.findIndex((x) => !x.pass);
+  const why = r.stderr.split("\n").find((l) => l.trim()) ?? "";
+  if (bad < 0) err(job.where, `did not finish${why ? `: ${why}` : ""}`);
+  else err(job.where, `test #${bad} ${JSON.stringify(tests[bad].run)} printed ${JSON.stringify(parsed.results[bad].got)}, expected ${JSON.stringify(tests[bad].expect)}${why ? ` (${why})` : ""}`);
+}
 
 const codeLangOf = (p: LanguagePack): CodeLang => p.codeLang ?? (p.slug === "rust" ? "rust" : "ts");
 let LANG: CodeLang = "rust"; // code language of the pack being checked
@@ -138,6 +164,64 @@ function checkBeat(where: string, b: Beat, pack: LanguagePack) {
       const trimmed = b.lines.map((l) => l.trim());
       if (new Set(trimmed).size !== trimmed.length) err(where, "order lines must be unique (after trim)");
       if (b.check) jobs.push({ lang: LANG, where, program: buildProgram(b.lines.join("\n"), b.check), compiles: b.check.compiles, stdout: b.check.stdout, throws: b.check.throws });
+      break;
+    }
+    case "code": {
+      prose(where, "prompt", b.prompt, 70);
+      prose(where, "brief", b.brief, 600);
+      prose(where, "explain", b.explain, 160);
+      const hidden = b.tests.filter((x) => x.hidden).length;
+      if (b.tests.length < 3) err(where, "a coding task needs at least 3 tests");
+      if (!hidden) err(where, "a coding task needs at least 1 hidden test");
+      if (hidden === b.tests.length) err(where, "show at least 1 test as an example (not hidden)");
+      if (!b.solution) { err(where, "a coding task needs a reference `solution`"); break; }
+      if (b.starter.trim() === b.solution.trim()) err(where, "starter equals the solution");
+      if (!b.nearMiss?.length) warn(where, "add a `nearMiss` (a plausible wrong solution) to prove the tests catch mistakes");
+      jobs.push({ lang: LANG, where: `${where} (task solution)`, program: buildTaskProgram(LANG, b.solution, b.tests), compiles: true, task: b.tests });
+      jobs.push({ lang: LANG, where: `${where} (task starter)`, program: buildTaskProgram(LANG, b.starter, b.tests), compiles: true, task: b.tests, taskMustFail: true });
+      (b.nearMiss ?? []).forEach((m, i) => jobs.push({ lang: LANG, where: `${where} (task nearMiss ${i})`, program: buildTaskProgram(LANG, m, b.tests), compiles: true, task: b.tests, taskMustFail: true }));
+      break;
+    }
+    case "trace": {
+      prose(where, "prompt", b.prompt, 70);
+      if (b.brief != null) prose(where, "brief", b.brief, 200);
+      prose(where, "explain", b.explain, 160);
+      if (!b.columns.length || b.columns.length > 4) err(where, `a trace table needs 1-4 columns (has ${b.columns.length})`);
+      if (b.rows.length < 2 || b.rows.length > 8) err(where, `a trace table needs 2-8 rows (has ${b.rows.length})`);
+      b.rows.forEach((r, ri) => {
+        if (typeof r.label !== "string") prose(`${where} row ${ri}`, "label", r.label, 30);
+        if (r.cells.length !== b.columns.length) err(where, `row ${ri} has ${r.cells.length} cells for ${b.columns.length} columns`);
+        if (r.cells.some((c) => c !== c.trim() || c.includes(TRACE_SEP))) err(where, `row ${ri}: cells must be trimmed and must not contain "${TRACE_SEP}"`);
+        (r.given ?? []).forEach((ci) => { if (ci < 0 || ci >= b.columns.length) err(where, `row ${ri}: given column ${ci} out of range`); });
+      });
+      if (blankCells(b.rows).length < 3) err(where, "a trace table needs at least 3 cells to fill");
+      if (!b.verify) { err(where, "a trace table needs `verify` (the code printing one line per row)"); break; }
+      jobs.push({ lang: LANG, where: `${where} (task trace)`, program: buildProgram(b.verify, { compiles: true }), compiles: true, stdout: traceStdout(b.rows) });
+      break;
+    }
+    case "debug": {
+      prose(where, "prompt", b.prompt, 70);
+      prose(where, "brief", b.brief, 400);
+      prose(where, "explain", b.explain, 160);
+      const lines = b.code.split("\n");
+      const hidden = b.tests.filter((x) => x.hidden).length;
+      if (b.tests.length < 3) err(where, "a debug task needs at least 3 tests");
+      if (!hidden) err(where, "a debug task needs at least 1 hidden test");
+      if (hidden === b.tests.length) err(where, "show at least 1 test as an example (not hidden)");
+      if (!Number.isInteger(b.bugLine) || b.bugLine < 1 || b.bugLine > lines.length) { err(where, `bugLine ${b.bugLine} is not a line of the code (1-${lines.length})`); break; }
+      if (!lines[b.bugLine - 1].trim()) err(where, `bugLine ${b.bugLine} is blank`);
+      (b.alsoLines ?? []).forEach((n) => {
+        if (!Number.isInteger(n) || n < 1 || n > lines.length || n === b.bugLine || !lines[n - 1].trim()) err(where, `alsoLines: ${n} is not another non-blank line of the code`);
+      });
+      if (!b.solution) { err(where, "a debug task needs the fixed `solution`"); break; }
+      const fixed = b.solution.split("\n");
+      // The reference fix must change the line the player is asked to tap.
+      if (fixed.length === lines.length && fixed[b.bugLine - 1] === lines[b.bugLine - 1]) err(where, `the solution doesn't change bugLine ${b.bugLine}`);
+      if (b.code.trim() === b.solution.trim()) err(where, "code equals the solution");
+      if (!b.nearMiss?.length) warn(where, "add a `nearMiss` (a plausible wrong fix) to prove the tests catch mistakes");
+      jobs.push({ lang: LANG, where: `${where} (task solution)`, program: buildTaskProgram(LANG, b.solution, b.tests), compiles: true, task: b.tests });
+      jobs.push({ lang: LANG, where: `${where} (task buggy code)`, program: buildTaskProgram(LANG, b.code, b.tests), compiles: true, task: b.tests, taskMustFail: true });
+      (b.nearMiss ?? []).forEach((m, i) => jobs.push({ lang: LANG, where: `${where} (task nearMiss ${i})`, program: buildTaskProgram(LANG, m, b.tests), compiles: true, task: b.tests, taskMustFail: true }));
       break;
     }
     case "run":
@@ -280,6 +364,13 @@ async function verifyTs(tsJobs: Job[]) {
   for (const [i, job] of tsJobs.entries()) {
     const d = diags.get(`s${i}`) ?? [];
     const typeOk = d.length === 0;
+    if (job.task) {
+      // The solution must type-check; starters and near misses are judged only by the tests.
+      if (!job.taskMustFail && !typeOk) { err(job.where, `expected to type-check but failed: ${d[0]}`); continue; }
+      const r = await executeJs(job.program, { jsx: job.lang === "tsx", modules, timeoutMs: 4000 });
+      judgeTask(job, r);
+      continue;
+    }
     const notMode = job.contains?.startsWith("\u0000NOT:");
     if (notMode) {
       // The game runs code without type-checking, so a starter is judged by what it prints at runtime.
@@ -313,6 +404,7 @@ async function verifyRunner(lang: CodeLang, list: Job[]) {
   for (const [i, job] of list.entries()) {
     const r = results[i];
     if (!r.available) { warn(job.where, "runner unavailable"); continue; }
+    if (job.task) { judgeTask(job, r); continue; }
     const compiled = r.ok || r.phase === "runtime";
     const firstErr = r.stderr.split("\n").find((l) => /error|Error/.test(l)) ?? r.stderr.split("\n")[0];
     if (job.contains?.startsWith("\u0000NOT:")) {
@@ -346,6 +438,7 @@ async function verify() {
       const job = jobs[i++];
       try {
         const r = await runRust(job.program);
+        if (job.task) { judgeTask(job, r); continue; }
         const firstErr = r.stderr.split("\n").find((l) => l.startsWith("error")) ?? "";
         if (job.contains?.startsWith("\u0000NOT:")) {
           const exp = job.contains.slice(5);

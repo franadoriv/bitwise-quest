@@ -1,5 +1,7 @@
 import type { ExamDef } from "../../lib/content/types.ts";
 import { L } from "../../lib/i18n/text.ts";
+import { juniorTasks, midTasks, seniorTasks } from "./tasks.ts";
+import { juniorTraceDebug, midTraceDebug, seniorTraceDebug } from "./trace-debug.ts";
 
 // Entry exams that simulate company screenings for WebGL roles. Topics, levels and bank sizes follow
 // docs/research/webgl-threejs-curriculum.md ("Entry exams" > "WebGL moon") and
@@ -56,7 +58,10 @@ export const exams: ExamDef[] = [
     count: 12,
     passPct: 70,
     secondsPerQuestion: 30,
+    codeCount: 1,
     questions: [
+      ...juniorTraceDebug,
+      ...juniorTasks,
       // pipeline
       {
         topic: "pipeline", difficulty: 1, kind: "predict",
@@ -359,7 +364,10 @@ export const exams: ExamDef[] = [
     count: 14,
     passPct: 70,
     secondsPerQuestion: 40,
+    codeCount: 2,
     questions: [
+      ...midTraceDebug,
+      ...midTasks,
       // shaders_glsl
       {
         topic: "shaders_glsl", difficulty: 2, kind: "order",
@@ -689,7 +697,10 @@ export const exams: ExamDef[] = [
     count: 15,
     passPct: 75,
     secondsPerQuestion: 50,
+    codeCount: 2,
     questions: [
+      ...seniorTraceDebug,
+      ...seniorTasks,
       // matrices
       {
         topic: "matrices", difficulty: 2, kind: "predict",

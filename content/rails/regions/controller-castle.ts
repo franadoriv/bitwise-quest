@@ -1,6 +1,7 @@
 import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L, say } from "../../rust/helpers.ts";
 import { MINI_CONTROLLER, withHelper } from "../mini.ts";
+import { routerTask } from "../tasks.ts";
 
 // REGION 3 · CONTROLLER CASTLE  (routing, strong parameters, filters and views, jobs, cache and security)
 // Rails can't run in the sandbox: lessons follow one request through plain-Ruby mini versions of each
@@ -1468,8 +1469,14 @@ const requestDragon: LessonDef = {
       hint: L("Are there any ? placeholders or extra values for where to quote?", "¿Hay algún placeholder ? o valores extra que where pueda citar?", "where が囲める ? や追加の値はある？"),
       note: "recap-cache-sql",
       explain: L("No ? and no binds: where can't quote anything. The query now returns all rows.", "Sin ? ni valores: where no puede citar nada. La consulta devuelve todas las filas.", "? も値もないので where は何も囲めない。全行が返るクエリに。"),
-      win: [{ t: "attack", from: "hero", to: "enemy" }, { t: "banner", text: L("CASTLE CLEAR!", "¡CASTILLO LIBRE!", "城クリア！") }],
+      win: [{ t: "attack", from: "hero", to: "enemy" }, { t: "banner", text: L("LAST GATE!", "¡ÚLTIMA PUERTA!", "最後の門！") }],
     },
+    { ...routerTask, win: [{ t: "attack", from: "hero", to: "enemy" }, { t: "banner", text: L("CASTLE CLEAR!", "¡CASTILLO LIBRE!", "城クリア！") }] },
+    { kind: "dialog", speaker: "enemy", text: L(
+      "My routes... all lead to 404. The castle is yours, but every request will remember you.",
+      "Mis rutas... todas llevan a 404. El castillo es tuyo, pero cada petición te recordará.",
+      "わがルートが…すべて404へ。城はお前のものだが、全リクエストがお前を覚えているぞ。",
+    ) },
   ],
 };
 

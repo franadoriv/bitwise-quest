@@ -32,6 +32,9 @@ interface TimedBeat { kind: string; time?: number; code?: string; lines?: string
 export function questionSeconds(beat: TimedBeat): number {
   if (beat.time) return beat.time;
   if (beat.kind === "run") return 120;
+  if (beat.kind === "code") return 300;
+  if (beat.kind === "debug") return 240;
+  if (beat.kind === "trace") return 120;
   const lines = (beat.code ?? beat.lines?.join("\n") ?? "").split("\n").filter((l) => l.trim()).length;
   const base = beat.kind === "order" ? 14 : beat.kind === "type" ? 16 : beat.kind === "predict" ? 14 : 12;
   const perLine = beat.kind === "order" ? 3 : 2;
@@ -42,6 +45,11 @@ export function questionSeconds(beat: TimedBeat): number {
 export function questionLimitMs(beat: TimedBeat, mode: TimerMode, boss = false): number {
   const m = mode === "off" && boss ? "normal" : mode;
   return Math.round(questionSeconds(beat) * TIMER_MODES[m].scale * 1000);
+}
+
+/** How many questions a task is worth: a coding task is a mini project, debug and trace are longer reads. */
+export function questionWeight(kind: string): number {
+  return kind === "code" ? 3 : kind === "debug" || kind === "trace" ? 2 : 1;
 }
 
 /**

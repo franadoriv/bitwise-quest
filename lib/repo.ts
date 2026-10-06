@@ -1,6 +1,6 @@
 import "server-only";
 import { LANGUAGE_PACKS } from "@/content/index.ts";
-import type { Beat, CodeLang, NoteDef, EnemyKind, ExamDef, ExamLevel, ExamQuestion, LanguagePack, LessonDef, PlanetDef, RegionDef, Theme } from "./content/types";
+import type { Beat, CodeLang, CodeTaskBeat, DebugBeat, NoteDef, EnemyKind, ExamDef, ExamLevel, ExamQuestion, LanguagePack, LessonDef, PlanetDef, RegionDef, Theme } from "./content/types";
 import { BROWSER_RUNNER_IDS } from "./runners/ids";
 import { isQuestion } from "./content/types";
 import { localized } from "./i18n/messages";
@@ -91,6 +91,35 @@ export interface ExamSummary {
 const langView = (p: LanguagePack): LanguageView => ({ slug: p.slug, parent: p.parent ?? null, name: p.name, tagline: p.tagline, color: p.color, status: p.status, planet: p.planet });
 const codeLangOf = (p: LanguagePack): CodeLang => p.codeLang ?? (p.slug === "rust" ? "rust" : "ts");
 const runInfo = (p: LanguagePack) => ({ runner: p.runner ?? null, codeLang: codeLangOf(p) });
+
+/**
+ * What a player may see of a beat. Coding tasks lose their reference solution and near misses, and
+ * with a server runner the hidden tests stay on the server (only their count is sent).
+ */
+function forPlayer(beat: Beat, pack: LanguagePack): Beat {
+  if (beat.kind === "trace") return { ...beat, verify: undefined };
+  if (beat.kind !== "code" && beat.kind !== "debug") return beat;
+  const serverRun = !!pack.runner && !BROWSER_RUNNER_IDS.has(pack.runner);
+  const hidden = beat.tests.filter((t) => t.hidden).length;
+  return { ...beat, solution: undefined, nearMiss: undefined, tests: serverRun ? beat.tests.filter((t) => !t.hidden) : beat.tests, hiddenCount: hidden };
+}
+
+/** The code language of an active pack (for building coding-task programs). */
+export function getCodeLang(langSlug: string): CodeLang {
+  const p = PACKS.get(langSlug);
+  return p ? codeLangOf(p) : "rust";
+}
+
+/** A coding task by its place in the content (lesson beat or exam question), with all its tests. */
+export function getCodeTask(langSlug: string, scope: "lesson" | "exam", slug: string, index: number): CodeTaskBeat | DebugBeat | null {
+  const pack = PACKS.get(langSlug);
+  if (!pack || pack.status !== "active") return null;
+  const beat =
+    scope === "lesson"
+      ? LESSONS.get(langSlug)?.get(slug)?.lesson.beats[index]
+      : pack.exams.find((e) => e.slug === slug)?.questions[index];
+  return beat?.kind === "code" || beat?.kind === "debug" ? beat : null;
+}
 const guideOf = (p: LanguagePack): Guide => ({ name: p.planet.guide.name, sprite: p.planet.guide.sprite });
 
 // ─── queries ────────────────────────────────────────────────────────────────
@@ -145,7 +174,7 @@ export function getLessonPlay(langSlug: string, lessonSlug: string): LessonPlay 
     languageSlug: langSlug,
     ...runInfo(pack),
     guide: guideOf(pack),
-    beats: lesson.beats.map((beat, index) => ({ lessonId: id, index, beat, lesson: lesson.slug })),
+    beats: lesson.beats.map((beat, index) => ({ lessonId: id, index, beat: forPlayer(beat, pack), lesson: lesson.slug })),
     notes: { [lesson.slug]: notesOf(lesson) },
   };
 }
@@ -160,7 +189,7 @@ export function getReviewPlay(langSlug: string, keys: string[]): LessonPlay | nu
     const [slug, idx] = key.split("#");
     const entry = LESSONS.get(langSlug)?.get(slug);
     const beat = entry?.lesson.beats[Number(idx)];
-    if (entry && beat && isQuestion(beat) && beat.kind !== "run") {
+    if (entry && beat && isQuestion(beat) && beat.kind !== "run" && beat.kind !== "code" && beat.kind !== "debug") {
       beats.push({ lessonId: entry.id, index: Number(idx), lesson: slug, beat: { ...beat, setup: undefined, win: undefined } });
       notes[slug] ??= notesOf(entry.lesson);
     }
@@ -195,15 +224,32 @@ export function getExams(langSlug: string): { language: LanguageView; exams: Exa
 }
 
 /** Hard questions (difficulty 3) get 40% more time, like a real screening that weights them. */
-export const questionTime = (exam: ExamDef, q: ExamQuestion) => Math.round(exam.secondsPerQuestion * (q.difficulty === 3 ? 1.4 : 1));
+export const questionTime = (exam: ExamDef, q: ExamQuestion) =>
+  q.kind === "code" ? q.time ?? (q.mode === "paper" ? 600 : 480)
+  : q.kind === "debug" ? q.time ?? (q.mode === "paper" ? 420 : 360)
+  : q.kind === "trace" ? q.time ?? 90 + 15 * q.rows.length
+  : Math.round(exam.secondsPerQuestion * (q.difficulty === 3 ? 1.4 : 1));
 
-/** Draws `count` questions round-robin across topics so every attempt is balanced and different. */
-function sampleQuestions(bank: ExamQuestion[], count: number) {
+/** Kinds drawn apart from the topic-balanced pool: each exam takes its own count of them, last. */
+const SPECIAL_KINDS = ["trace", "debug", "code"] as const;
+type SpecialKind = (typeof SPECIAL_KINDS)[number];
+const isSpecial = (q: ExamQuestion) => (SPECIAL_KINDS as readonly string[]).includes(q.kind);
+
+/** Draws `count` questions balanced across topics; trace, debug and coding tasks are drawn separately and come last. */
+function sampleQuestions(bank: ExamQuestion[], count: number, special: Record<SpecialKind, number>) {
+  const extra = SPECIAL_KINDS.flatMap((kind) =>
+    bank.map((q, i) => (q.kind === kind ? i : -1)).filter((i) => i >= 0).sort(() => Math.random() - 0.5).slice(0, special[kind]),
+  );
+  return [...sampleRegular(bank, count - extra.length), ...extra];
+}
+
+function sampleRegular(bank: ExamQuestion[], count: number) {
   const byTopic = new Map<string, number[]>();
-  bank.forEach((q, i) => byTopic.set(q.topic, [...(byTopic.get(q.topic) ?? []), i]));
+  bank.forEach((q, i) => { if (!isSpecial(q)) byTopic.set(q.topic, [...(byTopic.get(q.topic) ?? []), i]); });
   const pools = [...byTopic.values()].map((ids) => ids.sort(() => Math.random() - 0.5)).sort(() => Math.random() - 0.5);
   const picked: number[] = [];
-  while (picked.length < Math.min(count, bank.length)) {
+  const available = [...byTopic.values()].reduce((n, ids) => n + ids.length, 0);
+  while (picked.length < Math.min(count, available)) {
     for (const pool of pools) if (pool.length && picked.length < count) picked.push(pool.pop()!);
   }
   return picked.sort((a, b) => (bank[a].difficulty ?? 2) - (bank[b].difficulty ?? 2));
@@ -221,7 +267,11 @@ export function getExamPlay(langSlug: string, examSlug: string): LessonPlay | nu
     speaker: "master",
     text: localized("exam.introDialog", (l) => ({ title: typeof title === "string" ? title : title[l], count: exam.count, secs: exam.secondsPerQuestion, pct: exam.passPct })),
   };
-  const ids = sampleQuestions(exam.questions, exam.count);
+  const drawn = (kind: SpecialKind, wanted: number | undefined) => {
+    const inBank = exam.questions.filter((q) => q.kind === kind).length;
+    return Math.min(inBank, wanted ?? (inBank ? 1 : 0));
+  };
+  const ids = sampleQuestions(exam.questions, exam.count, { trace: drawn("trace", exam.traceCount), debug: drawn("debug", exam.debugCount), code: drawn("code", exam.codeCount) });
   const bugs = pack.planet.bugs;
   return {
     slug: exam.slug,
@@ -237,7 +287,7 @@ export function getExamPlay(langSlug: string, examSlug: string): LessonPlay | nu
     guide: guideOf(pack),
     beats: [
       { lessonId: 0, index: -1, lesson: "", beat: intro },
-      ...ids.map((i) => ({ lessonId: 0, index: i, lesson: "", beat: { ...exam.questions[i], time: questionTime(exam, exam.questions[i]), setup: undefined, win: undefined } as Beat })),
+      ...ids.map((i) => ({ lessonId: 0, index: i, lesson: "", beat: forPlayer({ ...exam.questions[i], time: questionTime(exam, exam.questions[i]), setup: undefined, win: undefined } as Beat, pack) })),
     ],
     exam: {
       slug: exam.slug,

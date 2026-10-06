@@ -1,6 +1,11 @@
 import type { ExamDef } from "../../lib/content/types.ts";
 import { L } from "../../lib/i18n/text.ts";
 import { MINI_CONTROLLER, MINI_RECORD, withHelper } from "./mini.ts";
+import {
+  cacheFetchTask, callbacksTask, escapeTask, findByTask, fullMessagesTask, permitTask, queryTask, rackTask,
+  requireParamsTask, restActionTask, transactionTask, validatesTask,
+} from "./tasks.ts";
+import { juniorTraceDebug, midTraceDebug, seniorTraceDebug } from "./trace-debug.ts";
 
 // Entry exams that simulate company technical screenings for Ruby on Rails roles.
 // Topic mix, bank sizes and question ideas follow docs/research/rails-curriculum.md (entry exams) and
@@ -68,7 +73,13 @@ export const exams: ExamDef[] = [
     count: 12,
     passPct: 70,
     secondsPerQuestion: 30,
+    codeCount: 1,
     questions: [
+      ...juniorTraceDebug,
+      permitTask,
+      findByTask,
+      fullMessagesTask,
+      restActionTask,
       // active_record_basics
       {
         topic: "active_record_basics", difficulty: 1, kind: "pick",
@@ -360,7 +371,13 @@ puts tableize("BookClub")`,
     count: 14,
     passPct: 70,
     secondsPerQuestion: 40,
+    codeCount: 2,
     questions: [
+      ...midTraceDebug,
+      callbacksTask,
+      queryTask,
+      escapeTask,
+      requireParamsTask,
       // relations
       {
         topic: "relations", difficulty: 2, kind: "predict", prompt: PRINT,
@@ -684,7 +701,13 @@ puts tableize("BookClub")`,
     count: 15,
     passPct: 75,
     secondsPerQuestion: 50,
+    codeCount: 2,
     questions: [
+      ...seniorTraceDebug,
+      cacheFetchTask,
+      transactionTask,
+      rackTask,
+      validatesTask,
       // n_plus_one
       {
         topic: "n_plus_one", difficulty: 2, kind: "pick",

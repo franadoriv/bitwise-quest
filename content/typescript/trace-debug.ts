@@ -1,0 +1,703 @@
+import type { ExamQuestion } from "../../lib/content/types.ts";
+import { L } from "../../lib/i18n/text.ts";
+
+// Written-test formats for planet Scriptara (TypeScript): trace tables (dry-run the code, fill the
+// values) and debugging tasks (tap the buggy line, then fix it). The validator type-checks and runs
+// every `verify`, and proves each fix passes the tests while the buggy code and the near misses fail.
+// Debug tasks use the coding-task harness: tests run after the player's file as one module.
+
+const code = (...lines: string[]) => lines.join("\n");
+
+const JSON_BRIEF = L(
+  "Write arrays as JSON.stringify prints them, with no spaces: [1,2].",
+  "Escribe los arrays como los imprime JSON.stringify, sin espacios: [1,2].",
+  "配列は JSON.stringify の形で空白なしに書く：[1,2]。",
+);
+
+// ─── JUNIOR ───────────────────────────────────────────────────────────────
+
+/** Junior trace: two names for one array, and a real copy. */
+export const sharedArrayTrace: ExamQuestion = {
+  kind: "trace",
+  topic: "objects",
+  difficulty: 1,
+  prompt: L("Trace table: one array, two names", "Tabla de traza: un array, dos nombres", "トレース：1つの配列と2つの名前"),
+  brief: JSON_BRIEF,
+  code: code(
+    "const a = [1, 2];",
+    "const b = a;",
+    "const c = [...a];",
+    "b.push(3);",
+    "c.push(4);",
+    "a[0] = 9;",
+  ),
+  columns: ["a", "b", "c"],
+  rows: [
+    { label: L("after line 4", "tras la línea 4", "4行目の後"), cells: ["[1,2,3]", "[1,2,3]", "[1,2]"], given: [0] },
+    { label: L("after line 5", "tras la línea 5", "5行目の後"), cells: ["[1,2,3]", "[1,2,3]", "[1,2,4]"] },
+    { label: L("after line 6", "tras la línea 6", "6行目の後"), cells: ["[9,2,3]", "[9,2,3]", "[1,2,4]"] },
+  ],
+  verify: code(
+    "const a = [1, 2];",
+    "const b = a;",
+    "const c = [...a];",
+    "const show = () => console.log([a, b, c].map((x) => JSON.stringify(x)).join(\" | \"));",
+    "b.push(3);",
+    "show();",
+    "c.push(4);",
+    "show();",
+    "a[0] = 9;",
+    "show();",
+  ),
+  explain: L(
+    "b = a copies the reference, so a and b are one array. [...a] made a new array c, so c only sees its own push.",
+    "b = a copia la referencia: a y b son el mismo array. [...a] creó un array nuevo c, que solo ve su propio push.",
+    "b = a は参照のコピーで a と b は同じ配列。[...a] は新しい配列 c を作るので c は自分の push だけ。",
+  ),
+};
+
+/** Junior trace: + with a string on one side, and % on numbers. */
+export const prependTrace: ExamQuestion = {
+  kind: "trace",
+  topic: "values",
+  difficulty: 1,
+  prompt: L("Trace table: a string and a sum", "Tabla de traza: un string y una suma", "トレース：文字列と合計"),
+  code: code(
+    "let s = \"\";",
+    "let sum = 0;",
+    "for (const p of [7, 2, 5]) {",
+    "  s = p + s;",
+    "  sum = sum + (p % 3);",
+    "}",
+  ),
+  columns: ["p", "s", "sum"],
+  rows: [
+    { label: L("pass 1", "vuelta 1", "1周目"), cells: ["7", "7", "1"], given: [0] },
+    { label: L("pass 2", "vuelta 2", "2周目"), cells: ["2", "27", "3"] },
+    { label: L("pass 3", "vuelta 3", "3周目"), cells: ["5", "527", "5"] },
+  ],
+  verify: code(
+    "let s = \"\";",
+    "let sum = 0;",
+    "for (const p of [7, 2, 5]) {",
+    "  s = p + s;",
+    "  sum = sum + (p % 3);",
+    "  console.log(`${p} | ${s} | ${sum}`);",
+    "}",
+  ),
+  explain: L(
+    "s is a string, so p + s glues text, with p in front: 7, 27, 527. sum adds remainders: 7%3=1, 2%3=2, 5%3=2.",
+    "s es un string, así que p + s pega texto con p delante: 7, 27, 527. sum suma restos: 7%3=1, 2%3=2, 5%3=2.",
+    "s は文字列なので p + s は p を前に連結：7、27、527。sum は余りの合計：7%3=1、2%3=2、5%3=2。",
+  ),
+};
+
+// ─── MID ──────────────────────────────────────────────────────────────────
+
+/** Mid trace: sync code, then microtasks, then timers. */
+export const queueOrderTrace: ExamQuestion = {
+  kind: "trace",
+  topic: "event_loop",
+  difficulty: 2,
+  prompt: L("Trace table: the order of the log", "Tabla de traza: el orden del log", "トレース：log の順番"),
+  brief: L(
+    "Each row is one entry of log once everything has run, in order.",
+    "Cada fila es una entrada de log cuando todo terminó, en orden.",
+    "各行は全部実行し終えた後の log の要素（順番通り）。",
+  ),
+  code: code(
+    "const log: string[] = [];",
+    "log.push(\"A\");",
+    "setTimeout(() => log.push(\"B\"), 0);",
+    "Promise.resolve().then(() => log.push(\"C\"));",
+    "queueMicrotask(() => log.push(\"D\"));",
+    "log.push(\"E\");",
+  ),
+  columns: ["log[i]"],
+  rows: [
+    { label: "i = 0", cells: ["A"], given: [0] },
+    { label: "i = 1", cells: ["E"] },
+    { label: "i = 2", cells: ["C"] },
+    { label: "i = 3", cells: ["D"] },
+    { label: "i = 4", cells: ["B"] },
+  ],
+  verify: code(
+    "const log: string[] = [];",
+    "log.push(\"A\");",
+    "setTimeout(() => log.push(\"B\"), 0);",
+    "Promise.resolve().then(() => log.push(\"C\"));",
+    "queueMicrotask(() => log.push(\"D\"));",
+    "log.push(\"E\");",
+    "setTimeout(() => log.forEach((x) => console.log(x)), 20);",
+  ),
+  explain: L(
+    "Sync code first (A, E). Then microtasks in the order they were queued (C, D). The timer runs last (B).",
+    "Primero el código síncrono (A, E). Luego las microtareas en el orden en que se encolaron (C, D). El timer, al final (B).",
+    "まず同期処理（A、E）。次にマイクロタスクを登録順に（C、D）。タイマーは最後（B）。",
+  ),
+};
+
+/** Mid trace: var shares one binding across the loop, let makes one per pass. */
+export const varLetClosureTrace: ExamQuestion = {
+  kind: "trace",
+  topic: "closures",
+  difficulty: 2,
+  prompt: L("Trace table: closures made in loops", "Tabla de traza: closures creados en bucles", "トレース：ループで作るクロージャ"),
+  brief: L(
+    "Each row is what that call returns, after both loops have finished.",
+    "Cada fila es lo que devuelve esa llamada, cuando ya terminaron los dos bucles.",
+    "各行は、両方のループが終わった後にその呼び出しが返す値。",
+  ),
+  code: code(
+    "const fns: Array<() => number> = [];",
+    "for (var i = 0; i < 3; i++) fns.push(() => i * 10);",
+    "for (let j = 0; j < 3; j++) fns.push(() => j * 10);",
+  ),
+  columns: ["returns"],
+  rows: [
+    { label: "fns[0]()", cells: ["30"] },
+    { label: "fns[1]()", cells: ["30"] },
+    { label: "fns[2]()", cells: ["30"] },
+    { label: "fns[3]()", cells: ["0"], given: [0] },
+    { label: "fns[4]()", cells: ["10"] },
+    { label: "fns[5]()", cells: ["20"] },
+  ],
+  verify: code(
+    "const fns: Array<() => number> = [];",
+    "for (var i = 0; i < 3; i++) fns.push(() => i * 10);",
+    "for (let j = 0; j < 3; j++) fns.push(() => j * 10);",
+    "for (const f of fns) console.log(f());",
+  ),
+  explain: L(
+    "var i is one variable; when the calls run it is already 3, so all three give 30. let j is a new binding each pass: 0, 10, 20.",
+    "var i es una sola variable; al llamar ya vale 3, así que las tres dan 30. let j es un binding nuevo por vuelta: 0, 10, 20.",
+    "var i は1つの変数で、呼ぶ時には 3。だから3つとも 30。let j は毎周新しい束縛：0、10、20。",
+  ),
+};
+
+/** Mid debug: the default sort compares numbers as text. */
+export const medianSortDebug: ExamQuestion = {
+  kind: "debug",
+  mode: "ide",
+  topic: "arrays",
+  difficulty: 2,
+  prompt: L("Debug: the median of a list", "Depura: la mediana de una lista", "デバッグ：リストの中央値"),
+  brief: L(
+    "median(nums) should return the middle value of the numbers in order (the mean of the two middle ones when the count is even), without changing nums. But median([10, 9, 2]) returns 2 instead of 9.",
+    "median(nums) debería devolver el valor central de los números ordenados (la media de los dos centrales si hay una cantidad par), sin cambiar nums. Pero median([10, 9, 2]) devuelve 2 en vez de 9.",
+    "median(nums) は数を並べた中央の値を返す（偶数個なら中央2つの平均）。nums は変えない。でも median([10, 9, 2]) が 9 ではなく 2 になる。",
+  ),
+  code: code(
+    "function median(nums: number[]): number {",
+    "  const s = [...nums].sort();",
+    "  const mid = Math.floor(s.length / 2);",
+    "  if (s.length % 2 === 1) return s[mid];",
+    "  return (s[mid - 1] + s[mid]) / 2;",
+    "}",
+  ),
+  bugLine: 2,
+  solution: code(
+    "function median(nums: number[]): number {",
+    "  const s = [...nums].sort((a, b) => a - b);",
+    "  const mid = Math.floor(s.length / 2);",
+    "  if (s.length % 2 === 1) return s[mid];",
+    "  return (s[mid - 1] + s[mid]) / 2;",
+    "}",
+  ),
+  nearMiss: [
+    // Sorts correctly but in place: the caller's array changes.
+    code(
+      "function median(nums: number[]): number {",
+      "  const s = nums.sort((a, b) => a - b);",
+      "  const mid = Math.floor(s.length / 2);",
+      "  if (s.length % 2 === 1) return s[mid];",
+      "  return (s[mid - 1] + s[mid]) / 2;",
+      "}",
+    ),
+    // Still compares the numbers as strings.
+    code(
+      "function median(nums: number[]): number {",
+      "  const s = nums.map(String).sort().map(Number);",
+      "  const mid = Math.floor(s.length / 2);",
+      "  if (s.length % 2 === 1) return s[mid];",
+      "  return (s[mid - 1] + s[mid]) / 2;",
+      "}",
+    ),
+  ],
+  tests: [
+    { run: "console.log(median([10, 9, 2]));", expect: "9" },
+    { run: "console.log(median([3, 1, 2]));", expect: "2" },
+    { run: "console.log(median([100, 25, 3, 4]));", expect: "14.5", hidden: true },
+    { run: "{\n  const xs = [3, 1, 2];\n  median(xs);\n  console.log(JSON.stringify(xs));\n}", expect: "[3,1,2]", hidden: true },
+    { run: "console.log(median([5]));", expect: "5", hidden: true },
+  ],
+  explain: L(
+    "sort() with no comparator sorts as strings, so \"10\" < \"2\". (a, b) => a - b sorts numbers by value, on the copy.",
+    "sort() sin comparador ordena como strings, así que \"10\" < \"2\". (a, b) => a - b ordena por valor, sobre la copia.",
+    "比較関数なしの sort() は文字列順なので \"10\" < \"2\"。(a, b) => a - b ならコピーを数値順に並べる。",
+  ),
+};
+
+/** Mid debug: an async callback inside forEach is never awaited. */
+export const asyncForEachDebug: ExamQuestion = {
+  kind: "debug",
+  mode: "ide",
+  topic: "async",
+  difficulty: 2,
+  prompt: L("Debug: the total of async prices", "Depura: el total de precios async", "デバッグ：非同期の価格の合計"),
+  brief: L(
+    "totalPrice(ids, getPrice) should ask getPrice for each id, one after another, and resolve to the sum of the prices. But await totalPrice([1, 2], async (id) => id * 10) gives 0 instead of 30.",
+    "totalPrice(ids, getPrice) debería pedir a getPrice el precio de cada id, uno tras otro, y resolver con la suma. Pero await totalPrice([1, 2], async (id) => id * 10) da 0 en vez de 30.",
+    "totalPrice(ids, getPrice) は各 id の価格を順に getPrice で取り、合計で resolve するはず。でも await totalPrice([1, 2], async (id) => id * 10) が 30 ではなく 0。",
+  ),
+  code: code(
+    "async function totalPrice(ids: number[], getPrice: (id: number) => Promise<number>): Promise<number> {",
+    "  let total = 0;",
+    "  ids.forEach(async (id) => {",
+    "    total += await getPrice(id);",
+    "  });",
+    "  return total;",
+    "}",
+  ),
+  bugLine: 3,
+  solution: code(
+    "async function totalPrice(ids: number[], getPrice: (id: number) => Promise<number>): Promise<number> {",
+    "  let total = 0;",
+    "  for (const id of ids) {",
+    "    total += await getPrice(id);",
+    "  }",
+    "  return total;",
+    "}",
+  ),
+  nearMiss: [
+    // map starts the callbacks but nobody waits for the promises.
+    code(
+      "async function totalPrice(ids: number[], getPrice: (id: number) => Promise<number>): Promise<number> {",
+      "  let total = 0;",
+      "  ids.map(async (id) => {",
+      "    total += await getPrice(id);",
+      "  });",
+      "  return total;",
+      "}",
+    ),
+    // forEach returns undefined: awaiting it waits one tick, not for the callbacks.
+    code(
+      "async function totalPrice(ids: number[], getPrice: (id: number) => Promise<number>): Promise<number> {",
+      "  let total = 0;",
+      "  await ids.forEach(async (id) => {",
+      "    total += await getPrice(id);",
+      "  });",
+      "  return total;",
+      "}",
+    ),
+  ],
+  tests: [
+    { run: "console.log(await totalPrice([1, 2], async (id) => id * 10));", expect: "30" },
+    { run: "console.log(await totalPrice([], async (id) => id));", expect: "0" },
+    { run: "console.log(await totalPrice([5], async (id) => id + 1));", expect: "6", hidden: true },
+    {
+      run: "{\n  const seen: number[] = [];\n  const t = await totalPrice([3, 1, 2], async (id) => {\n    seen.push(id);\n    await Promise.resolve();\n    return id;\n  });\n  console.log(t, JSON.stringify(seen));\n}",
+      expect: "6 [3,1,2]",
+      hidden: true,
+    },
+    { run: "console.log(await totalPrice([1, 2, 3, 4], async (id) => { await null; await null; return id * 2; }));", expect: "20", hidden: true },
+  ],
+  explain: L(
+    "forEach ignores the promises its async callback returns, so return total ran before any await. for...of awaits each price in turn.",
+    "forEach ignora las promesas de su callback async, así que return total corrió antes de los await. for...of espera cada precio.",
+    "forEach は async コールバックの Promise を無視し、await より先に return total が走る。for...of なら1つずつ待つ。",
+  ),
+};
+
+// ─── SENIOR ───────────────────────────────────────────────────────────────
+
+/** Senior trace: values sent into a generator with next(arg). */
+export const generatorNextTrace: ExamQuestion = {
+  kind: "trace",
+  topic: "iterators",
+  difficulty: 3,
+  prompt: L("Trace table: talking to a generator", "Tabla de traza: hablar con un generador", "トレース：ジェネレータとのやりとり"),
+  brief: L(
+    "Each row is one call, in order; write the value field of what it returns.",
+    "Cada fila es una llamada, en orden; escribe el campo value de lo que devuelve.",
+    "各行は順番の呼び出し1回。戻り値の value を書く。",
+  ),
+  code: code(
+    "function* counter(): Generator<number, void, number | undefined> {",
+    "  let n = 0;",
+    "  while (true) {",
+    "    const step = yield n;",
+    "    n += step ?? 1;",
+    "  }",
+    "}",
+    "const g = counter();",
+  ),
+  columns: [".value"],
+  rows: [
+    { label: "g.next(5)", cells: ["0"] },
+    { label: "g.next()", cells: ["1"] },
+    { label: "g.next(10)", cells: ["11"] },
+    { label: "g.next()", cells: ["12"] },
+    { label: "g.next(-12)", cells: ["0"] },
+  ],
+  verify: code(
+    "function* counter(): Generator<number, void, number | undefined> {",
+    "  let n = 0;",
+    "  while (true) {",
+    "    const step = yield n;",
+    "    n += step ?? 1;",
+    "  }",
+    "}",
+    "const g = counter();",
+    "console.log(g.next(5).value);",
+    "console.log(g.next().value);",
+    "console.log(g.next(10).value);",
+    "console.log(g.next().value);",
+    "console.log(g.next(-12).value);",
+  ),
+  explain: L(
+    "The first next() only runs to the first yield, so its 5 is lost. Each later argument becomes the value of yield n, i.e. step.",
+    "El primer next() solo llega al primer yield, así que su 5 se pierde. Cada argumento siguiente es el valor de yield n, o sea step.",
+    "最初の next() は最初の yield まで進むだけで 5 は捨てられる。以降の引数が yield n の値、つまり step になる。",
+  ),
+};
+
+/** Senior debug (ide): a truthiness check on the cache misses falsy results. */
+export const memoizeFalsyDebug: ExamQuestion = {
+  kind: "debug",
+  mode: "ide",
+  topic: "collections",
+  difficulty: 3,
+  prompt: L("Debug: a cache that forgets", "Depura: una caché que olvida", "デバッグ：忘れるキャッシュ"),
+  brief: L(
+    "memoize(fn) should call fn once per distinct list of arguments and answer repeats from the cache, whatever fn returns. But a memoized square called twice with 0 runs fn twice.",
+    "memoize(fn) debería llamar a fn una vez por cada lista de argumentos distinta y responder las repeticiones desde la caché, devuelva lo que devuelva fn. Pero un cuadrado memoizado llamado dos veces con 0 ejecuta fn dos veces.",
+    "memoize(fn) は引数の組ごとに fn を1回だけ呼び、2回目以降は何を返す関数でもキャッシュから答えるはず。でも 0 で2回呼ぶと fn が2回走る。",
+  ),
+  code: code(
+    "function memoize<A extends unknown[], R>(fn: (...args: A) => R): (...args: A) => R {",
+    "  const cache = new Map<string, R>();",
+    "  return (...args: A): R => {",
+    "    const key = JSON.stringify(args);",
+    "    const hit = cache.get(key);",
+    "    if (hit) return hit;",
+    "    const value = fn(...args);",
+    "    cache.set(key, value);",
+    "    return value;",
+    "  };",
+    "}",
+  ),
+  bugLine: 6,
+  solution: code(
+    "function memoize<A extends unknown[], R>(fn: (...args: A) => R): (...args: A) => R {",
+    "  const cache = new Map<string, R>();",
+    "  return (...args: A): R => {",
+    "    const key = JSON.stringify(args);",
+    "    const hit = cache.get(key);",
+    "    if (cache.has(key)) return hit as R;",
+    "    const value = fn(...args);",
+    "    cache.set(key, value);",
+    "    return value;",
+    "  };",
+    "}",
+  ),
+  nearMiss: [
+    // Still misses results that are undefined.
+    code(
+      "function memoize<A extends unknown[], R>(fn: (...args: A) => R): (...args: A) => R {",
+      "  const cache = new Map<string, R>();",
+      "  return (...args: A): R => {",
+      "    const key = JSON.stringify(args);",
+      "    const hit = cache.get(key);",
+      "    if (hit !== undefined) return hit;",
+      "    const value = fn(...args);",
+      "    cache.set(key, value);",
+      "    return value;",
+      "  };",
+      "}",
+    ),
+    // != null also skips null and undefined results.
+    code(
+      "function memoize<A extends unknown[], R>(fn: (...args: A) => R): (...args: A) => R {",
+      "  const cache = new Map<string, R>();",
+      "  return (...args: A): R => {",
+      "    const key = JSON.stringify(args);",
+      "    const hit = cache.get(key);",
+      "    if (hit != null) return hit;",
+      "    const value = fn(...args);",
+      "    cache.set(key, value);",
+      "    return value;",
+      "  };",
+      "}",
+    ),
+  ],
+  tests: [
+    { run: "{\n  let calls = 0;\n  const sq = memoize((n: number) => { calls++; return n * n; });\n  sq(0);\n  sq(0);\n  console.log(calls);\n}", expect: "1" },
+    { run: "{\n  let calls = 0;\n  const sq = memoize((n: number) => { calls++; return n * n; });\n  console.log(sq(3), sq(3), calls);\n}", expect: "9 9 1" },
+    { run: "{\n  let calls = 0;\n  const add = memoize((a: number, b: number) => { calls++; return a + b; });\n  console.log(add(1, 2), add(2, 1), add(1, 2), calls);\n}", expect: "3 3 3 2", hidden: true },
+    { run: "{\n  let calls = 0;\n  const isEmpty = memoize((s: string) => { calls++; return s === \"\"; });\n  console.log(isEmpty(\"a\"), isEmpty(\"a\"), calls);\n}", expect: "false false 1", hidden: true },
+    { run: "{\n  let calls = 0;\n  const touch = memoize((id: number): void => { calls += id; });\n  touch(5);\n  touch(5);\n  console.log(calls);\n}", expect: "5", hidden: true },
+  ],
+  explain: L(
+    "if (hit) treats cached 0, \"\", false and undefined as misses. cache.has(key) asks whether the key was stored, whatever its value.",
+    "if (hit) trata 0, \"\", false y undefined guardados como fallos. cache.has(key) pregunta si la clave existe, valga lo que valga.",
+    "if (hit) は保存済みの 0・\"\"・false・undefined をミス扱いする。cache.has(key) は値に関係なくキーの有無を見る。",
+  ),
+};
+
+/** Senior debug (paper): a shallow spread shares the nested object with the old state. */
+export const shallowSettingsDebug: ExamQuestion = {
+  kind: "debug",
+  mode: "paper",
+  topic: "objects",
+  difficulty: 3,
+  prompt: L("Debug: settings history that rewrites itself", "Depura: un historial que se reescribe", "デバッグ：書き換わる設定の履歴"),
+  brief: L(
+    "setVolume and setTheme must return new settings and never change the old ones, so history keeps every version. But after history(start, [(s) => setVolume(s, \"music\", 80)]) both versions show music 80: the first should still be 50.",
+    "setVolume y setTheme deben devolver ajustes nuevos sin cambiar los anteriores, para que history guarde cada versión. Pero tras history(start, [(s) => setVolume(s, \"music\", 80)]) las dos versiones muestran music 80: la primera debería seguir en 50.",
+    "setVolume と setTheme は新しい設定を返し古いものは変えない。history が全版を残すため。でも history(start, [(s) => setVolume(s, \"music\", 80)]) の後、両方の music が 80。最初は 50 のはず。",
+  ),
+  code: code(
+    "type Audio = { music: number; sfx: number };",
+    "type Settings = { theme: string; audio: Audio };",
+    "",
+    "const clamp = (n: number) => Math.min(100, Math.max(0, n));",
+    "",
+    "function setVolume(s: Settings, channel: keyof Audio, value: number): Settings {",
+    "  const next = { ...s };",
+    "  next.audio[channel] = clamp(value);",
+    "  return next;",
+    "}",
+    "",
+    "function setTheme(s: Settings, theme: string): Settings {",
+    "  return { ...s, theme };",
+    "}",
+    "",
+    "function history(start: Settings, edits: Array<(s: Settings) => Settings>): Settings[] {",
+    "  const out = [start];",
+    "  for (const edit of edits) out.push(edit(out[out.length - 1]));",
+    "  return out;",
+    "}",
+  ),
+  bugLine: 7,
+  solution: code(
+    "type Audio = { music: number; sfx: number };",
+    "type Settings = { theme: string; audio: Audio };",
+    "",
+    "const clamp = (n: number) => Math.min(100, Math.max(0, n));",
+    "",
+    "function setVolume(s: Settings, channel: keyof Audio, value: number): Settings {",
+    "  const next = { ...s, audio: { ...s.audio } };",
+    "  next.audio[channel] = clamp(value);",
+    "  return next;",
+    "}",
+    "",
+    "function setTheme(s: Settings, theme: string): Settings {",
+    "  return { ...s, theme };",
+    "}",
+    "",
+    "function history(start: Settings, edits: Array<(s: Settings) => Settings>): Settings[] {",
+    "  const out = [start];",
+    "  for (const edit of edits) out.push(edit(out[out.length - 1]));",
+    "  return out;",
+    "}",
+  ),
+  nearMiss: [
+    // Still the same audio object as the old settings.
+    code(
+      "type Audio = { music: number; sfx: number };",
+      "type Settings = { theme: string; audio: Audio };",
+      "",
+      "const clamp = (n: number) => Math.min(100, Math.max(0, n));",
+      "",
+      "function setVolume(s: Settings, channel: keyof Audio, value: number): Settings {",
+      "  const next = { ...s, audio: s.audio };",
+      "  next.audio[channel] = clamp(value);",
+      "  return next;",
+      "}",
+      "",
+      "function setTheme(s: Settings, theme: string): Settings {",
+      "  return { ...s, theme };",
+      "}",
+      "",
+      "function history(start: Settings, edits: Array<(s: Settings) => Settings>): Settings[] {",
+      "  const out = [start];",
+      "  for (const edit of edits) out.push(edit(out[out.length - 1]));",
+      "  return out;",
+      "}",
+    ),
+    // Object.assign is a shallow copy too.
+    code(
+      "type Audio = { music: number; sfx: number };",
+      "type Settings = { theme: string; audio: Audio };",
+      "",
+      "const clamp = (n: number) => Math.min(100, Math.max(0, n));",
+      "",
+      "function setVolume(s: Settings, channel: keyof Audio, value: number): Settings {",
+      "  const next = Object.assign({}, s);",
+      "  next.audio[channel] = clamp(value);",
+      "  return next;",
+      "}",
+      "",
+      "function setTheme(s: Settings, theme: string): Settings {",
+      "  return { ...s, theme };",
+      "}",
+      "",
+      "function history(start: Settings, edits: Array<(s: Settings) => Settings>): Settings[] {",
+      "  const out = [start];",
+      "  for (const edit of edits) out.push(edit(out[out.length - 1]));",
+      "  return out;",
+      "}",
+    ),
+  ],
+  tests: [
+    {
+      run: "{\n  const h = history({ theme: \"dark\", audio: { music: 50, sfx: 50 } }, [(s) => setVolume(s, \"music\", 80)]);\n  console.log(h[0].audio.music, h[1].audio.music);\n}",
+      expect: "50 80",
+    },
+    { run: "console.log(setVolume({ theme: \"dark\", audio: { music: 50, sfx: 50 } }, \"sfx\", 150).audio.sfx);", expect: "100" },
+    {
+      run: "{\n  const h = history({ theme: \"dark\", audio: { music: 10, sfx: 20 } }, [\n    (s) => setVolume(s, \"sfx\", -5),\n    (s) => setTheme(s, \"light\"),\n    (s) => setVolume(s, \"music\", 70),\n  ]);\n  console.log(h.map((s) => `${s.theme}:${s.audio.music}/${s.audio.sfx}`).join(\" \"));\n}",
+      expect: "dark:10/20 dark:10/0 light:10/0 light:70/0",
+      hidden: true,
+    },
+    {
+      run: "{\n  const start = { theme: \"dark\", audio: { music: 40, sfx: 60 } };\n  setVolume(start, \"music\", 0);\n  console.log(JSON.stringify(start));\n}",
+      expect: "{\"theme\":\"dark\",\"audio\":{\"music\":40,\"sfx\":60}}",
+      hidden: true,
+    },
+    {
+      run: "{\n  const a = { theme: \"dark\", audio: { music: 1, sfx: 2 } };\n  const b = setVolume(a, \"music\", 3);\n  console.log(a.audio === b.audio, b.audio.sfx);\n}",
+      expect: "false 2",
+      hidden: true,
+    },
+  ],
+  explain: L(
+    "{ ...s } copies one level: next.audio is the old audio object, so the write changed every version. Copy audio too.",
+    "{ ...s } copia un solo nivel: next.audio es el objeto audio viejo, así que la escritura cambió todas las versiones. Copia audio también.",
+    "{ ...s } は1段だけのコピーで next.audio は古い audio と同じ。書き込みが全版を変えた。audio もコピーする。",
+  ),
+};
+
+/** Senior debug (paper): map passes the index as parseInt's radix. */
+export const parseIntMapDebug: ExamQuestion = {
+  kind: "debug",
+  mode: "paper",
+  topic: "arrays",
+  difficulty: 3,
+  prompt: L("Debug: scores that vanish", "Depura: puntuaciones que desaparecen", "デバッグ：消えるスコア"),
+  brief: L(
+    "summarize(csv) reads comma-separated scores (non-negative; each read like parseInt reads it, so \"12pts\" is 12 and \"7.9\" is 7), skips blanks and junk, and returns count, best and total. But summarize(\"7, 12, 30\") gives count 1 instead of 3.",
+    "summarize(csv) lee puntuaciones separadas por comas (no negativas; cada una se lee como parseInt, así que \"12pts\" es 12 y \"7.9\" es 7), salta vacíos y basura, y devuelve count, best y total. Pero summarize(\"7, 12, 30\") da count 1 en vez de 3.",
+    "summarize(csv) はカンマ区切りのスコア（0以上。parseInt と同じ読み方で \"12pts\" は 12、\"7.9\" は 7）を読み、空やゴミは飛ばして count・best・total を返す。でも summarize(\"7, 12, 30\") の count が 3 ではなく 1。",
+  ),
+  code: code(
+    "type Summary = { count: number; best: number; total: number };",
+    "",
+    "function parseScores(csv: string): number[] {",
+    "  return csv",
+    "    .split(\",\")",
+    "    .map((s) => s.trim())",
+    "    .filter((s) => s !== \"\")",
+    "    .map(parseInt);",
+    "}",
+    "",
+    "function summarize(csv: string): Summary {",
+    "  const scores = parseScores(csv).filter((n) => !Number.isNaN(n));",
+    "  let best = 0;",
+    "  let total = 0;",
+    "  for (const n of scores) {",
+    "    total += n;",
+    "    if (n > best) best = n;",
+    "  }",
+    "  return { count: scores.length, best, total };",
+    "}",
+  ),
+  bugLine: 8,
+  solution: code(
+    "type Summary = { count: number; best: number; total: number };",
+    "",
+    "function parseScores(csv: string): number[] {",
+    "  return csv",
+    "    .split(\",\")",
+    "    .map((s) => s.trim())",
+    "    .filter((s) => s !== \"\")",
+    "    .map((s) => parseInt(s, 10));",
+    "}",
+    "",
+    "function summarize(csv: string): Summary {",
+    "  const scores = parseScores(csv).filter((n) => !Number.isNaN(n));",
+    "  let best = 0;",
+    "  let total = 0;",
+    "  for (const n of scores) {",
+    "    total += n;",
+    "    if (n > best) best = n;",
+    "  }",
+    "  return { count: scores.length, best, total };",
+    "}",
+  ),
+  nearMiss: [
+    // Number rejects "12pts" instead of reading 12.
+    code(
+      "type Summary = { count: number; best: number; total: number };",
+      "",
+      "function parseScores(csv: string): number[] {",
+      "  return csv",
+      "    .split(\",\")",
+      "    .map((s) => s.trim())",
+      "    .filter((s) => s !== \"\")",
+      "    .map(Number);",
+      "}",
+      "",
+      "function summarize(csv: string): Summary {",
+      "  const scores = parseScores(csv).filter((n) => !Number.isNaN(n));",
+      "  let best = 0;",
+      "  let total = 0;",
+      "  for (const n of scores) {",
+      "    total += n;",
+      "    if (n > best) best = n;",
+      "  }",
+      "  return { count: scores.length, best, total };",
+      "}",
+    ),
+    // parseFloat keeps the decimals of "7.9".
+    code(
+      "type Summary = { count: number; best: number; total: number };",
+      "",
+      "function parseScores(csv: string): number[] {",
+      "  return csv",
+      "    .split(\",\")",
+      "    .map((s) => s.trim())",
+      "    .filter((s) => s !== \"\")",
+      "    .map(parseFloat);",
+      "}",
+      "",
+      "function summarize(csv: string): Summary {",
+      "  const scores = parseScores(csv).filter((n) => !Number.isNaN(n));",
+      "  let best = 0;",
+      "  let total = 0;",
+      "  for (const n of scores) {",
+      "    total += n;",
+      "    if (n > best) best = n;",
+      "  }",
+      "  return { count: scores.length, best, total };",
+      "}",
+    ),
+  ],
+  tests: [
+    { run: "console.log(JSON.stringify(summarize(\"7, 12, 30\")));", expect: "{\"count\":3,\"best\":30,\"total\":49}" },
+    { run: "console.log(JSON.stringify(summarize(\"\")));", expect: "{\"count\":0,\"best\":0,\"total\":0}" },
+    { run: "console.log(JSON.stringify(summarize(\"5,,abc, 12pts\")));", expect: "{\"count\":2,\"best\":12,\"total\":17}", hidden: true },
+    { run: "console.log(JSON.stringify(summarize(\"7.9, 2, 3\")));", expect: "{\"count\":3,\"best\":7,\"total\":12}", hidden: true },
+    { run: "console.log(JSON.stringify(summarize(\"1,2,3,4,5,6,7,8,9,10,11\")));", expect: "{\"count\":11,\"best\":11,\"total\":66}", hidden: true },
+  ],
+  explain: L(
+    "map calls parseInt(value, index, array): the index becomes the radix, so \"12\" in base 1 is NaN. Pass only s and radix 10.",
+    "map llama a parseInt(valor, índice, array): el índice pasa a ser la base, y \"12\" en base 1 es NaN. Pasa solo s y base 10.",
+    "map は parseInt(値, 添字, 配列) と呼ぶので添字が基数になり、\"12\" は1進で NaN。s と基数 10 だけ渡す。",
+  ),
+};
+
+export const juniorTraceDebug: ExamQuestion[] = [sharedArrayTrace, prependTrace];
+export const midTraceDebug: ExamQuestion[] = [queueOrderTrace, varLetClosureTrace, medianSortDebug, asyncForEachDebug];
+export const seniorTraceDebug: ExamQuestion[] = [generatorNextTrace, memoizeFalsyDebug, shallowSettingsDebug, parseIntMapDebug];

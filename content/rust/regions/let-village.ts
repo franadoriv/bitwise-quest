@@ -1,5 +1,6 @@
 import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L, enemySays, say } from "../helpers.ts";
+import { healTask } from "../tasks.ts";
 
 // REGION 1 · LET VILLAGE  (variables, mut, types, shadowing)
 
@@ -788,6 +789,7 @@ const boss1: LessonDef = {
     { kind: "pick", time: 12, prompt: L("Add 10", "Suma 10", "10を足せ"), code: "let mut gold = 0;\ngold ___ 10;", hint: L("You need one symbol that adds and stores at once. Which comes first: the math or the =?", "Necesitas un símbolo que sume y guarde a la vez. ¿Qué va primero: la operación o el =?", "足して結果をしまう記号が必要。先に来るのは計算の記号？それとも = ？"), note: "recap-mut", options: ["+=", "++", "=+"], answer: 0, check: { compiles: true, wrongFail: true }, explain: L("+=", "+=", "+=") },
     { kind: "predict", time: 12, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: "let v: bool = 1;", hint: L("What kind of value is 1? Does it match the type written after the colon?", "¿Qué clase de valor es 1? ¿Coincide con el tipo escrito tras los dos puntos?", "1 はどんな種類の値？コロンのあとの型と合っている？"), note: "recap-types", options: [YES, NO], answer: 1, check: { compiles: false }, explain: L("1 is i32, not bool.", "1 es i32, no bool.", "1 は i32 で、bool ではない。") },
     { kind: "type", time: 15, prompt: L("Type of borrowed text", "Tipo de texto prestado", "借用した文字列の型"), code: 'let s: ___ = "hello";', hint: L("It's the text type among the four basics. It starts with a symbol, not a letter.", "Es el tipo de texto de los cuatro básicos. Empieza con un símbolo, no con una letra.", "4つの基本の型のうち文字の型。最初は英字ではなく記号じゃ。"), note: "recap-types", answer: "&str", check: { compiles: true }, explain: L("Text literals are &str.", "Los literales de texto son &str.", "文字列リテラルは &str じゃ。") },
+    healTask,
     enemySays(L(
       "Impossible...! My rock... is... crumbling...",
       "¡Imposible...! Mi roca... se... desmorona...",

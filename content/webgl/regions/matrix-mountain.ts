@@ -1,5 +1,6 @@
 import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { multiplyMat4Task } from "../tasks.ts";
 
 // REGION 3 · MATRIX MOUNTAIN  (matrices and transforms, projection and depth, normals and lighting,
 // framebuffers, performance and context loss). The runner has no GPU: runnable claims are pure math,
@@ -998,6 +999,7 @@ const boss: LessonDef = {
     { kind: "predict", time: 12, prompt: L("Draw calls for 1000 identical rocks, instanced", "Draw calls de 1000 rocas iguales, instanciadas", "同じ岩 1000 個、インスタンスなら？"), code: 'const rocks = new Array<string>(1000).fill("rock");\nconsole.log(new Set(rocks).size);', options: ["1", "1000", "0"], answer: 0, output: "1", check: { compiles: true, stdout: "1" }, hint: L("How many unique values does the Set keep?", "¿Cuántos valores únicos guarda el Set?", "Set に残るユニークな値はいくつ？"), note: "recap-light-speed", explain: L("One mesh type, one instanced draw call.", "Un tipo de malla, un draw call instanciado.", "1 種類なら 1 回のインスタンス描画。") },
     { kind: "predict", time: 15, prompt: COMPILES, code: 'declare const canvas: HTMLCanvasElement;\ncanvas.addEventListener("webglcontextlost", (e) => {\n  e.preventDefault();\n});', options: [YES, NO_TSC], answer: 0, check: { compiles: true }, hint: L("Check which method the code calls, and whether a plain Event has it.", "Mira qué método llama el código y si un Event común lo tiene.", "コードが呼ぶメソッドと、ただの Event にそれがあるかを確認しよう。"), note: "recap-light-speed", explain: L("Every Event has preventDefault: this allows a restore.", "Todo Event tiene preventDefault: así se permite restaurar.", "どの Event にも preventDefault がある。これで復元できる。") },
     { kind: "order", time: 20, prompt: L("Model, then view, then projection", "Model, luego view, luego projection", "model → view → projection の順に"), lines: ["let p = 1;", "p = p * 2; // model", "p = p - 5; // view", "p = p * 10; // projection", "console.log(p);"], check: { compiles: true, stdout: "-30" }, hint: L("Model touches the point first and projection last; the print comes at the end.", "Model toca el punto primero y projection al final; el print va al último.", "点に最初にふれるのは model、最後は projection。表示は一番最後。"), note: "recap-transforms", explain: L("The point meets model first and projection last: ((1×2)−5)×10 = −30.", "El punto pasa primero por model y al final por projection: ((1×2)−5)×10 = −30.", "点は model が最初、projection が最後：((1×2)−5)×10 = −30。") },
+    multiplyMat4Task,
     enemySays(L(
       "Impossible... my keys in order, my depths sorted, my lights clamped. The GPU is yours, painter of Shadera.",
       "Imposible... mis llaves en orden, mis profundidades ordenadas, mis luces recortadas. La GPU es tuya, pintor de Shadera.",

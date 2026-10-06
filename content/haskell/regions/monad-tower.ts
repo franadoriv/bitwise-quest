@@ -1,5 +1,6 @@
 import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { withdrawTask } from "../tasks.ts";
 
 // REGION 4 · MONAD TOWER  (type classes, Functor and Applicative, Monad and do, IO and Data.Map)
 
@@ -1158,6 +1159,7 @@ const boss: LessonDef = {
     { kind: "predict", time: 12, prompt: HAPPENS, code: MAP + '  let m = M.fromList [(1, "owl")]\n  putStrLn (m M.! 2)', options: [L("Crash: key not in map", "Crash: clave ausente", "クラッシュ：キーなし"), '""', "Nothing"], answer: 0, check: { compiles: true, throws: "given key is not an element in the map" }, hint: L("Is key 2 in the map? M.! has no plan for a missing key.", "¿Está la clave 2 en el mapa? M.! no tiene plan para una clave ausente.", "キー2は Map にある？M.! にはキーがないときの備えがない。"), note: "recap-io-map", explain: L("M.! crashes on a missing key.", "M.! falla con una clave ausente.", "M.! はキーがないと落ちる。"), win: [{ t: "shake" }] },
     { kind: "pick", time: 15, prompt: L("Run an action per item", "Una acción por elemento", "要素ごとに実行"), code: '___ putStrLn ["a", "b"]\nputStrLn "done"', options: ["mapM_", "map"], answer: 0, check: { compiles: true, stdout: "a\nb\ndone", wrongFail: true }, hint: L("One option only builds a list of actions; the other runs them. A do line must be an action.", "Una opción solo construye una lista de acciones; la otra las ejecuta. Una línea de do debe ser una acción.", "片方はアクションのリストを作るだけ、もう片方は実行する。do の行はアクションでなければならない。"), note: "recap-io-map", explain: L("map only builds a list of actions; mapM_ runs them.", "map solo arma una lista de acciones; mapM_ las ejecuta.", "map はリストを作るだけ。実行は mapM_。") },
     { kind: "type", time: 12, prompt: L("Give Owl the Show badge", "Dale a Owl la insignia Show", "Owl に Show を"), code: 'data Owl = Owl\n___ Show Owl where\n  show Owl = "hoot"\n\nmain :: IO ()\nmain = print Owl', answer: "instance", check: { compiles: true, stdout: "hoot" }, hint: L("Which keyword gives a class to a type, with your own code for its methods?", "¿Qué palabra clave le da una clase a un tipo, con tu propio código para sus métodos?", "自分のコードでメソッドを書いて、型にクラスを与えるキーワードは？"), note: "recap-classes", explain: L("instance gives a class to one type.", "instance da una clase a un tipo.", "instance で型にクラスを与える。") },
+    withdrawTask,
     enemySays(L(
       "No... every badge earned, every chest opened safely. Lambdara's sky is pure again. Well climbed, functional hero.",
       "No... cada insignia ganada, cada cofre abierto con cuidado. El cielo de Lambdara vuelve a ser puro. Bien subido, héroe funcional.",

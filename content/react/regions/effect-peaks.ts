@@ -1,5 +1,6 @@
 import type { Beat, Effect, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { shouldRunEffectTask } from "../tasks.ts";
 
 // REGION 3 · EFFECT PEAKS  (useEffect and cleanup, dependency arrays, StrictMode, stale closures,
 // useRef, data fetching and race conditions, effects you don't need)
@@ -1421,6 +1422,7 @@ const effectBasilisk: LessonDef = {
       check: { program: comp("  useEffect(() => {\n    let ignore = false;\n    fetchUser(id).then(u => {\n      if (!___) setUser(u);\n    });\n    return () => { ignore = true; };\n  }, [id]);", "ignore", USER, USER_STATE), compiles: true },
       win: HIT,
     },
+    shouldRunEffectTask,
     enemySays(L(
       "My amber... cracked! Your effects clean up after themselves...",
       "Mi ámbar... ¡se agrietó! Tus efectos limpian lo que ensucian...",

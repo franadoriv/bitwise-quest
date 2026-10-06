@@ -1,5 +1,6 @@
 import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { lookupTask } from "../tasks.ts";
 
 // REGION 2 · OPTIONAL FOREST  (optionals, error unions, defer/errdefer, undefined and safety checks)
 
@@ -1866,6 +1867,7 @@ const boss: LessonDef = {
       check: { compiles: true, stdout: "refund" },
       explain: L("errdefer runs only for the failing call, so refund prints once.", "errdefer solo corre en la llamada que falla, así que refund se imprime una vez.", "errdefer は失敗した呼び出しだけ。refund は1回だけ表示。"),
     },
+    lookupTask,
     enemySays(L(
       "Eek! Every bottle checked, every scroll read... Fine! Up on Struct Mountain, my cousins guard the memory itself!",
       "¡Iiih! Cada botella revisada, cada pergamino leído... ¡Bien! ¡En la Montaña Struct mis primos vigilan la memoria misma!",

@@ -1,5 +1,6 @@
 import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { largestShapeTask } from "../tasks.ts";
 
 // REGION 3 · INTERFACE CASTLE  (interfaces, typed nil and embedding, errors as values, generics)
 
@@ -2039,6 +2040,7 @@ const boss: LessonDef = {
       hint: L("You don't compare with a value here: you pull an error of a given type into op. Which function does that?", "Aquí no comparas con un valor: sacas un error de cierto tipo hacia op. ¿Qué función hace eso?", "ここでは値と比べない。ある型の error を op に取り出す。それをする関数は？"),
       note: "recap-errors",
     },
+    largestShapeTask,
     enemySays(L(
       "My shield... you saw the type hiding under the nil. Go on, then: the Channel Tower awaits.",
       "Mi escudo... viste el tipo escondido bajo el nil. Sigue, entonces: te espera la Torre de Canales.",

@@ -1,5 +1,10 @@
 import type { ExamDef } from "../../lib/content/types.ts";
 import { L } from "../../lib/i18n/text.ts";
+import {
+  anagramsTask, composeTask, greetTask, letterCountsTask, loadAllTask, lruCacheTask, moneyTask, parseConfigTask,
+  retryTask, reverseWordsTask, topSpendersTask, withdrawTask,
+} from "./tasks.ts";
+import { juniorTraceDebug, midTraceDebug, seniorTraceDebug } from "./trace-debug.ts";
 
 // Entry exams that simulate company screenings for C# / .NET roles.
 // Topics, levels and bank sizes follow docs/research/csharp-curriculum.md ("Entry exams") and
@@ -29,7 +34,10 @@ export const exams: ExamDef[] = [
     count: 12,
     passPct: 70,
     secondsPerQuestion: 30,
+    codeCount: 1,
     questions: [
+      ...juniorTraceDebug,
+      reverseWordsTask, letterCountsTask, withdrawTask, greetTask,
       // types-strings
       {
         topic: "types-strings", difficulty: 1, kind: "predict", prompt: PRINTS,
@@ -364,7 +372,10 @@ export const exams: ExamDef[] = [
     count: 14,
     passPct: 70,
     secondsPerQuestion: 40,
+    codeCount: 2,
     questions: [
+      ...midTraceDebug,
+      topSpendersTask, moneyTask, parseConfigTask, composeTask,
       // value-reference
       {
         topic: "value-reference", difficulty: 2, kind: "predict", prompt: PRINTS,
@@ -770,7 +781,10 @@ export const exams: ExamDef[] = [
     count: 15,
     passPct: 75,
     secondsPerQuestion: 50,
+    codeCount: 2,
     questions: [
+      ...seniorTraceDebug,
+      loadAllTask, anagramsTask, lruCacheTask, retryTask,
       // async
       {
         topic: "async", difficulty: 2, kind: "predict",

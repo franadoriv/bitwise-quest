@@ -1,5 +1,6 @@
 import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { approachTask } from "../tasks.ts";
 
 // REGION 3 · LOOP TOWER  (render loop and delta time, raycasting, assets/colour/lights/shadows, disposal and performance)
 // Snippets run three r186 without a GPU: math, scene graph, Raycaster, Timer and InstancedMesh run for real;
@@ -1058,6 +1059,7 @@ const boss: LessonDef = {
     { hint: L("Each instance has a 4×4 matrix. Multiply by the number of instances.", "Cada instancia tiene una matriz 4×4. Multiplica por la cantidad de instancias.", "各インスタンスは4×4行列を持つ。インスタンス数を掛けよう。"), note: "recap-memory", kind: "predict", time: 12, prompt: PRINT, code: code("const im = new THREE.InstancedMesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial(), 100);", "console.log(im.instanceMatrix.array.length);"), options: ["1600", "100", "400"], answer: 0, output: "1600", check: { compiles: true, stdout: "1600" }, explain: L("100 instances × 16 numbers per 4×4 matrix.", "100 instancias × 16 números por matriz 4×4.", "100個 × 4×4行列の16個。") },
     { hint: L("clear() detaches. What actually releases GPU resources?", "clear() desconecta. ¿Qué libera de verdad los recursos de la GPU?", "clear() は外すだけ。GPU 資源を本当に解放するのは？"), note: "recap-memory", kind: "pick", time: 15, prompt: L("A route change leaks GPU memory. Fix:", "Un cambio de ruta fuga memoria. Arreglo:", "画面遷移でメモリリーク。直し方は？"), code: "// leaving the 3D page: ___", options: [L("dispose geometries, materials, textures", "dispose de geometrías, materiales y texturas", "形・素材・テクスチャを dispose"), L("only scene.clear()", "solo scene.clear()", "scene.clear() だけ")], answer: 0, explain: L("clear() just detaches children; GPU resources die only with dispose().", "clear() solo desconecta a los hijos; los recursos de GPU mueren solo con dispose().", "clear() は子を外すだけ。GPU 資源は dispose() でしか消えない。") },
     { hint: L("Photos are color images. Which color space constant marks a color image?", "Las fotos son imágenes de color. ¿Qué constante de espacio de color marca una imagen de color?", "写真は色の画像。色の画像を表す色空間の定数は？"), note: "recap-render", kind: "type", time: 15, prompt: L("Tag the photo texture as sRGB", "Marca la textura de foto como sRGB", "写真テクスチャを sRGB に"), code: code("const photo = new THREE.Texture();", "photo.colorSpace = THREE.___;", "console.log(photo.colorSpace);"), answer: "SRGBColorSpace", check: { compiles: true, stdout: "srgb" }, explain: L("Colour maps are sRGB; untagged they look washed out.", "Los mapas de color son sRGB; sin marcar se ven deslavados.", "色テクスチャは sRGB。指定しないと白っぽくなる。") },
+    approachTask,
     enemySays(L(
       "My frames... steady at last. Your loop is clean, your memory swept. The scene is yours, director.",
       "Mis frames... por fin estables. Tu bucle está limpio y tu memoria barrida. La escena es tuya.",

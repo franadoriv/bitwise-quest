@@ -1,5 +1,6 @@
 import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { makeFenceTask } from "../tasks.ts";
 
 // REGION 1 · SCENE VILLAGE  (scene/camera/renderer, meshes, geometry and materials, Object3D transforms)
 // Snippets only use three's math and scene graph: a WebGLRenderer is only ever declared, never constructed.
@@ -893,6 +894,7 @@ const boss: LessonDef = {
     { hint: L("Count the triangles of each shape, then × 3. Does the size argument matter?", "Cuenta los triángulos de cada forma y luego × 3. ¿Importa el tamaño?", "形ごとに三角形を数えて×3。大きさは関係ある？"), note: "recap-geometry", kind: "predict", time: 15, prompt: PRINT, code: IMP + "const g = new THREE.BoxGeometry(2, 2, 2);\nconst p = new THREE.PlaneGeometry(2, 2);\nconsole.log(g.index?.count, p.index?.count);", options: ["36 6", "12 2", "24 4"], answer: 0, output: "36 6", check: { compiles: true, stdout: "36 6" }, explain: L("Indices: 12 triangles × 3 for the box, 2 × 3 for the plane. Size doesn't change counts.", "Índices: 12 triángulos × 3 en la caja, 2 × 3 en el plano. El tamaño no cambia la cuenta.", "箱は12三角形×3、平面は2×3。大きさで数は変わらない。") },
     { hint: L("There's a method that sets the same number on x, y and z in one call.", "Hay un método que pone el mismo número en x, y y z en una sola llamada.", "x・y・z に同じ数を1回で入れるメソッドがある。"), note: "recap-pose", kind: "type", time: 15, prompt: L("Grow it 3x in every direction", "Hazlo 3x más grande en todo", "全方向に3倍にしよう"), code: IMP + 'const mesh = new THREE.Mesh();\nmesh.scale.___(3);\nconsole.log(mesh.scale.toArray().join(","));', answer: "setScalar", check: { compiles: true, stdout: "3,3,3" }, explain: L("setScalar(3) sets x, y and z to 3 at once.", "setScalar(3) pone x, y y z en 3 a la vez.", "setScalar(3) で x・y・z を一度に3にする。") },
     { hint: L("Math.PI is half a turn. Where does a point on +X end up after half a turn?", "Math.PI es media vuelta. ¿Dónde termina un punto en +X tras media vuelta?", "Math.PI は半回転。+X の点は半回転後どこへ？"), note: "recap-pose", kind: "predict", time: 15, prompt: PRINT, code: IMP + "const o = new THREE.Object3D();\no.rotation.z = Math.PI;\no.updateMatrix();\nconst p = new THREE.Vector3(1, 0, 0).applyMatrix4(o.matrix);\nconsole.log(p.x.toFixed(2));", options: ["-1.00", "1.00", "0.00"], answer: 0, output: "-1.00", check: { compiles: true, stdout: "-1.00" }, explain: L("Math.PI is a half turn, so +X ends up at -X.", "Math.PI es media vuelta, así que +X termina en -X.", "Math.PI は半回転。+X は -X へ。") },
+    makeFenceTask,
     enemySays(L(
       "Grr... lights on, cameras straight, poses fixed. The forest of parents and children awaits. You'll get lost there!",
       "Grr... luces encendidas, cámaras derechas, poses arregladas. El bosque de padres e hijos te espera. ¡Ahí te perderás!",

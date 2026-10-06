@@ -1,5 +1,6 @@
 import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L, say, enemySays } from "../../rust/helpers.ts";
+import { badgeTask } from "../tasks.ts";
 
 // REGION 1 · OBJECT VILLAGE  (everything is an object: puts/p, numbers, strings, symbols, truthiness, methods)
 // Snippets are whole Ruby 3.4.7 scripts, run as is on Compiler Explorer.
@@ -1480,6 +1481,7 @@ const villageBoss: LessonDef = {
       fallback: [String.raw`name\s*\|\|=\s*"guest"`, String.raw`name\s*=\s*"guest"`, String.raw`\|\|\s*"guest"`],
       explain: L("Calling upcase on nil crashes. Give name a default with name ||= \"guest\" and print it.", "Llamar upcase sobre nil falla. Dale a name un valor por defecto con name ||= \"guest\" e imprímelo.", "nil に upcase を呼ぶと落ちる。name ||= \"guest\" でデフォルトを入れて表示しよう。"),
     },
+    badgeTask,
     enemySays(L(
       "Nooo... you saw through nothing itself! The Enumerable Forest awaits beyond the village.",
       "Nooo... ¡viste a través de la nada misma! El Bosque Enumerable te espera más allá de la aldea.",

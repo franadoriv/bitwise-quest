@@ -150,8 +150,106 @@ export interface RunBeat extends BeatBase {
   explain: Text;
 }
 
-export type Beat = DialogBeat | ActBeat | PickBeat | PredictBeat | OrderBeat | TypeBeat | RunBeat;
-export type QuestionBeat = PickBeat | PredictBeat | OrderBeat | TypeBeat | RunBeat;
+/** One test of a coding task: code that prints the result of a call, and the exact expected output. */
+export interface CodeTest {
+  /** Statement(s) in the pack's language that print one result, e.g. Python `print(top_words("a b a", 1))`. */
+  run: string;
+  /** Exact output of `run` for a correct solution (compared trimmed). */
+  expect: string;
+  /** Hidden tests only report pass/fail; with a server runner they never reach the player's browser. */
+  hidden?: boolean;
+}
+
+/**
+ * Coding task: the player implements something from a brief; hidden and visible tests are appended by
+ * the engine and run on the real toolchain, so ANY implementation that produces the right results
+ * passes. Used in exams (company-style coding rounds) and as region-boss mini projects.
+ */
+export interface CodeTaskBeat extends BeatBase {
+  kind: "code";
+  /** Short task title. */
+  prompt: Text;
+  /** The task statement: what to implement, inputs, outputs, edge cases to consider. */
+  brief: Text;
+  /** Code the editor starts with: signatures and an empty body (never already passing). */
+  starter: string;
+  /** Reference solution: the validator proves it passes every test. Never sent to players. */
+  solution?: string;
+  tests: CodeTest[];
+  /** Plausible wrong solutions; each must fail at least one test (validator only, never sent). */
+  nearMiss?: string[];
+  /**
+   * "ide" (default): highlighted editor, run the tests as often as you like, then submit.
+   * "paper": written-test style for exams: plain editor, no paste, no runs before the single submission.
+   */
+  mode?: "ide" | "paper";
+  /** Set by the server for players: how many hidden tests exist (their code is not sent). */
+  hiddenCount?: number;
+  explain: Text;
+}
+
+/** One row of a trace table: a moment of the run and the value of every column at that moment. */
+export interface TraceRow {
+  /** When the row is taken, e.g. "i = 2" (plain) or L("after the loop", ...). */
+  label: Text;
+  /** Each column's value exactly as the language prints it (compared trimmed, spaces collapsed). */
+  cells: string[];
+  /** Column indexes shown already filled in (the player fills the rest). */
+  given?: number[];
+}
+
+/**
+ * Trace table (written-test classic, e.g. Japan's FE exam): the player dry-runs `code` in their head
+ * and fills the value of each column at each row. No runner at play time: the answers are static,
+ * and the validator proves them by running `verify`.
+ */
+export interface TraceBeat extends BeatBase {
+  kind: "trace";
+  prompt: Text;
+  /** Optional extra instructions (what a row means, how to write a value). */
+  brief?: Text;
+  code: string;
+  /** Column headers: variables or expressions, e.g. ["i", "total"]. */
+  columns: string[];
+  rows: TraceRow[];
+  /**
+   * Validator only (never sent): `code` instrumented to print one line per row with the cells joined
+   * by " | ", e.g. `1 | 3`. Short snippets are completed like `check` programs.
+   */
+  verify?: string;
+  explain: Text;
+}
+
+/**
+ * Debugging task: `code` fails the case described in `brief`. The player first taps the buggy line
+ * (`bugLine`, 1-based), then fixes the code; the fix is judged by the tests like a coding task, so any
+ * correct fix passes. Tapping the wrong line halves the points but the fix can still be made.
+ */
+export interface DebugBeat extends BeatBase {
+  kind: "debug";
+  prompt: Text;
+  /** The symptom: what the code should do and the case where it goes wrong. */
+  brief: Text;
+  /** The buggy code shown and edited (it must fail at least one test). */
+  code: string;
+  /** 1-based line of the bug (the line a reviewer would point at). */
+  bugLine: number;
+  /** Other lines that are also a fair answer (where an equally correct fix can go). */
+  alsoLines?: number[];
+  /** The fixed code: the validator proves it passes every test. Never sent to players. */
+  solution?: string;
+  tests: CodeTest[];
+  /** Plausible wrong fixes; each must fail at least one test (validator only, never sent). */
+  nearMiss?: string[];
+  /** "ide" (default): run the tests freely. "paper" (exams): no runs, one submission. */
+  mode?: "ide" | "paper";
+  /** Set by the server for players: how many hidden tests exist. */
+  hiddenCount?: number;
+  explain: Text;
+}
+
+export type Beat = DialogBeat | ActBeat | PickBeat | PredictBeat | OrderBeat | TypeBeat | RunBeat | CodeTaskBeat | TraceBeat | DebugBeat;
+export type QuestionBeat = PickBeat | PredictBeat | OrderBeat | TypeBeat | RunBeat | CodeTaskBeat | TraceBeat | DebugBeat;
 
 export function isQuestion(b: Beat): b is QuestionBeat {
   return b.kind !== "dialog" && b.kind !== "act";
@@ -201,7 +299,7 @@ export interface RegionDef {
 export type ExamLevel = "junior" | "mid" | "senior";
 
 /** Exam questions are regular beats tagged with a topic from the pack's `topics`. */
-export type ExamQuestion = (PickBeat | PredictBeat | TypeBeat | OrderBeat) & { topic: string; difficulty?: 1 | 2 | 3 };
+export type ExamQuestion = (PickBeat | PredictBeat | TypeBeat | OrderBeat | CodeTaskBeat | TraceBeat | DebugBeat) & { topic: string; difficulty?: 1 | 2 | 3 };
 
 export interface ExamDef {
   slug: string;
@@ -215,6 +313,12 @@ export interface ExamDef {
   passPct: number;
   secondsPerQuestion: number;
   questions: ExamQuestion[];
+  /** Coding tasks drawn per attempt from the bank's `code` questions (default 1 when the bank has any). */
+  codeCount?: number;
+  /** Trace tables drawn per attempt (default 1 when the bank has any). */
+  traceCount?: number;
+  /** Debugging tasks drawn per attempt (default 1 when the bank has any). */
+  debugCount?: number;
 }
 
 export interface TopicDef {

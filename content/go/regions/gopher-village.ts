@@ -1,5 +1,6 @@
 import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { runLengthTask } from "../tasks.ts";
 import { say, enemySays } from "../../rust/helpers.ts";
 
 // REGION 1 · GOPHER VILLAGE  (zero values, :=, functions and loops, strings and runes, defer/panic/recover)
@@ -1395,6 +1396,7 @@ const boss: LessonDef = {
     { kind: "predict", time: 15, prompt: PRINT, code: 'x := 1\ndefer fmt.Println("deferred:", x)\nx = 2\nfmt.Println("now:", x)', options: [L("now: 2, then deferred: 1", "now: 2, luego deferred: 1", "now: 2 のあと deferred: 1"), L("now: 2, then deferred: 2", "now: 2, luego deferred: 2", "now: 2 のあと deferred: 2")], answer: 0, output: "now: 2\ndeferred: 1", check: { compiles: true, stdout: "now: 2\ndeferred: 1" }, explain: L("defer photographs its arguments at the defer line: x was 1.", "defer fotografía sus argumentos en la línea del defer: x valía 1.", "defer は defer の行で引数を写真にとる。x は 1 だった。"), hint: L("The defer line takes a photo of its arguments. What was x at that moment?", "La línea del defer toma una foto de sus argumentos. ¿Cuánto valía x en ese momento?", "defer の行で引数の写真をとる。そのとき x はいくつ？"), note: "recap-defer" },
     { kind: "pick", time: 12, prompt: L("Ignore the quotient", "Ignora el cociente", "商を捨てよう"), code: "func divmod(a, b int) (int, int) {\n\treturn a / b, a % b\n}\n\nfunc main() {\n\t___, r := divmod(9, 4)\n\tfmt.Println(r)\n}", options: ["_", "nil", "void"], answer: 0, check: { compiles: true, stdout: "1", wrongFail: true }, explain: L("_ is the blank identifier: it swallows the value you don't need.", "_ es el identificador vacío: se traga el valor que no necesitas.", "_ はブランク識別子。いらない値をのみこむ。"), hint: L("You need a name that throws a value away without being an unused variable.", "Necesitas un nombre que tire un valor sin ser una variable sin usar.", "未使用変数にならずに値を捨てる名前が必要。"), note: "recap-functions" },
     { kind: "type", time: 15, prompt: L("Catch the panic", "Atrapa el panic", "panic をつかまえろ"), code: 'defer func() {\n\tif r := ___(); r != nil {\n\t\tfmt.Println("saved:", r)\n\t}\n}()\npanic("blub")', answer: "recover", check: { compiles: true, stdout: "saved: blub" }, explain: L("recover() inside a deferred func stops the panic and returns its value.", "recover() dentro de una función diferida detiene el panic y devuelve su valor.", "defer 関数の中の recover() が panic を止めて値を返す。"), hint: L("Which built-in stops a panic when it's called inside a deferred func?", "¿Qué función incorporada detiene un panic cuando se llama dentro de una func diferida?", "defer 関数の中で呼ぶと panic を止める組みこみ関数は？"), note: "recap-defer" },
+    runLengthTask,
     enemySays(L(
       "Blub... you knew every zero, every defer. The Slice Forest lies ahead, where scrolls share secrets.",
       "Blub... conocías cada cero y cada defer. Adelante está el Slice Forest, donde los pergaminos comparten secretos.",

@@ -1,5 +1,6 @@
 import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { enemySays, L, say } from "../helpers.ts";
+import { strongestTask } from "../tasks.ts";
 
 // REGION 4 · TRAIT CASTLE  (struct + impl, traits, default methods, generics and bounds,
 // derive and standard traits, Display, trait objects with dyn)
@@ -1101,6 +1102,7 @@ const boss4: LessonDef = {
     { kind: "predict", time: 12, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: "#[derive(Copy)]\nstruct Scale;", hint: L("Copy has a requirement. Is it in the derive list?", "Copy tiene un requisito. ¿Está en la lista del derive?", "Copy には条件がある。それは derive に入っている？"), note: "recap-derive", options: [L("Yes", "Sí", "はい"), L("No", "No", "いいえ")], answer: 1, explain: L("Copy requires Clone.", "Copy exige Clone.", "Copy には Clone が必要。"), check: { compiles: false } },
     { kind: "type", time: 15, prompt: L("Squad with mixed types", "Tropa con tipos mezclados", "型をまぜた部隊"), code: "let v: Vec<Box<___ Skill>> = vec![Box::new(Mage), Box::new(Archer)];", hint: L("To mix types in a Vec, each box holds a trait object. Which keyword marks one?", "Para mezclar tipos en un Vec, cada caja guarda un objeto de trait. ¿Qué palabra lo marca?", "Vec で型を混ぜるには箱にトレイトオブジェクトを入れる。それを示すキーワードは？"), note: "recap-dyn", answer: "dyn", explain: same("Box<dyn Skill>"), check: { program: withSkill("let v: Vec<Box<dyn Skill>> = vec![Box::new(Mage), Box::new(Archer)];\nprintln!(\"{}\", v.len());"), compiles: true, stdout: "2" } },
     { kind: "predict", time: 15, prompt: L("<T: Skill> uses which dispatch?", "<T: Skill> usa despacho...", "<T: Skill> のディスパッチは？"), code: "fn present<T: Skill>(x: &T)", hint: L("Generic or trait object? Recall which kind of dispatch each one uses.", "¿Genérico u objeto de trait? Recuerda qué tipo de despacho usa cada uno.", "ジェネリクスかトレイトオブジェクトか？それぞれのディスパッチを思い出そう。"), note: "recap-dyn", options: [L("Static (at compile time)", "Estático (al compilar)", "静的（コンパイル時）"), L("Dynamic (at run time)", "Dinámico (al ejecutar)", "動的（実行時）")], answer: 0, explain: L("Generics = static. dyn = dynamic.", "Genéricos = estático. dyn = dinámico.", "ジェネリクス＝静的、dyn＝動的。"), check: { program: withSkill("present(&Mage);", `\n${PRESENT}`), compiles: true, stdout: "Fire!" } },
+    strongestTask,
     enemySays(L(
       "Grrr... every type honored its contract. The castle is yours, Rustacean. The tower awaits.",
       "Grrr... cada tipo cumplió su contrato. El castillo es tuyo, rustáceo. La torre te espera.",

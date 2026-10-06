@@ -1,5 +1,6 @@
 import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { pixelsToClipTask } from "../tasks.ts";
 
 // REGION 1 · PIPELINE VILLAGE  (clip space, the GPU state machine, shaders and GLSL)
 // The runner has no GPU: runnable claims are pure logic; WebGL API claims are type-checked only.
@@ -897,6 +898,7 @@ const boss: LessonDef = {
     { kind: "predict", hint: L("Is gl.TRIANGLES a string or a number constant? What type does drawArrays want?", "¿gl.TRIANGLES es un string o una constante numérica? ¿Qué tipo quiere drawArrays?", "gl.TRIANGLES は文字列？数値の定数？drawArrays が欲しい型は？"), note: "recap-state", time: 12, prompt: COMPILES, code: "declare const gl: WebGL2RenderingContext;\ngl.drawArrays(gl.TRIANGLES, 0, 3);", options: [YES, NO_TSC], answer: 0, check: { compiles: true }, explain: L("gl.TRIANGLES is a number enum: correct.", "gl.TRIANGLES es un enum numérico: correcto.", "gl.TRIANGLES は数値の列挙値。正しい。") },
     { kind: "predict", hint: L("Like a bind point, the variable keeps only its latest value. Which call set it last?", "Como una ranura, la variable guarda solo su último valor. ¿Qué llamada lo fijó por última vez?", "バインド先と同じで、変数は最新の値だけを持つ。最後に設定したのは？"), note: "recap-state", time: 15, prompt: PRINT, code: 'let bound = "none";\nconst bind = (b: string) => { bound = b; };\nbind("grass");\nbind("sky");\nconsole.log("upload to " + bound);', options: ["upload to sky", "upload to grass", "upload to none"], answer: 0, output: "upload to sky", check: { compiles: true, stdout: "upload to sky" }, explain: L("The last bind wins, like ARRAY_BUFFER.", "Gana el último bind, como ARRAY_BUFFER.", "最後のバインドが勝つ。ARRAY_BUFFER と同じ。") },
     { kind: "predict", hint: L("Swizzle order is the order of the letters. Look up each letter in c.", "El orden del swizzle es el de las letras. Busca cada letra en c.", "スウィズルの順は文字の順。c で 1 文字ずつ調べよう。"), note: "recap-shaders", time: 15, prompt: PRINT, code: 'const c = { r: 1, g: 0.5, b: 0, a: 1 };\n// like GLSL c.bgr\nconsole.log([..."bgr"].map((k) => c[k as keyof typeof c]).join(","));', options: ["0,0.5,1", "1,0.5,0", "0,1,0.5"], answer: 0, output: "0,0.5,1", check: { compiles: true, stdout: "0,0.5,1" }, explain: L("Swizzle order is letter order: b, g, r.", "El orden del swizzle es el de las letras: b, g, r.", "スウィズルは文字の順：b、g、r。") },
+    pixelsToClipTask,
     enemySays(L(
       "My stones... clipped, bound and linked. The pipeline flows. The Buffer Forest awaits you.",
       "Mis piedras... recortadas, enlazadas y compiladas. El pipeline fluye. Te espera el Bosque de Buffers.",

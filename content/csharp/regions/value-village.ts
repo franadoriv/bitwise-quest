@@ -1,5 +1,6 @@
 import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { doubledTask } from "../tasks.ts";
 
 // REGION 1 · VALUE VILLAGE  (types and variables, strings and null, value vs reference, equality)
 // Snippets get `using System; System.Collections.Generic; System.Linq; System.Text; System.Threading.Tasks;`
@@ -1221,6 +1222,7 @@ static void Heal(ref int hp) { hp += 20; }
       ],
       explain: L("int is copied into Heal. Pass it with ref (or return the new value) so the caller's hp changes.", "int se copia al entrar en Heal. Pásalo con ref (o devuelve el valor nuevo) para cambiar el hp de quien llama.", "int は Heal にコピーで渡る。ref で渡す（か新しい値を返す）と hp が変わる。"),
     },
+    doubledTask,
     enemySays(L(
       "Copied or shared, you saw through me... The Class Forest waits beyond the village.",
       "Copiado o compartido, viste a través de mí... El Bosque de Clases te espera tras la aldea.",

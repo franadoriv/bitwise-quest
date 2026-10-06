@@ -1,5 +1,6 @@
 import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { healAllTask } from "../tasks.ts";
 import { say, enemySays } from "../../rust/helpers.ts";
 
 // REGION 3 · STRUCT MOUNTAIN  (structs and methods, enums and tagged unions, pointers, slices and sentinels)
@@ -1218,6 +1219,7 @@ const boss: LessonDef = {
     { kind: "predict", time: 18, prompt: PRINT, code: zmain("fn bump(xs: []i32) void {\n    for (xs) |*x| x.* += 1;\n}", 'var arr = [_]i32{ 1, 2, 3, 4 };\nbump(arr[1..3]);\nstd.debug.print("{any}\\n", .{arr});'), options: ["{ 1, 3, 4, 4 }", "{ 2, 3, 4, 5 }", "{ 1, 2, 3, 4 }"], answer: 0, output: "{ 1, 3, 4, 4 }", check: { compiles: true, stdout: "{ 1, 3, 4, 4 }" }, explain: L("The window [1..3] covers only arr[1] and arr[2]; those two get bumped.", "La ventana [1..3] cubre solo arr[1] y arr[2]; esos dos suben.", "窓 [1..3] は arr[1] と arr[2] だけ。その2つが増える。"), hint: L("Which items does [1..3] cover? The end is excluded, and the window shares arr's memory.", "¿Qué elementos cubre [1..3]? El final se excluye y la ventana comparte memoria con arr.", "[1..3] はどの要素？終わりはふくまず、窓は arr とメモリを共有する。"), note: "recap-slices" },
     { kind: "predict", time: 15, prompt: PRINT, code: 'const Item = union(enum) { coins: u32, key };\nconst items = [_]Item{ .{ .coins = 5 }, .key, .{ .coins = 7 } };\nvar total: u32 = 0;\nfor (items) |it| switch (it) {\n    .coins => |c| total += c,\n    .key => total += 100,\n};\nstd.debug.print("{d}\\n", .{total});', options: ["112", "12", "107"], answer: 0, output: "112", check: { compiles: true, stdout: "112" }, explain: L("A field with no type (key) carries no payload. 5 + 100 + 7 = 112.", "Un campo sin tipo (key) no lleva valor. 5 + 100 + 7 = 112.", "型のないフィールド key は値をもたない。5 + 100 + 7 = 112。"), hint: L("Walk the array item by item and follow the prong each one takes.", "Recorre el array uno a uno y sigue la rama de cada elemento.", "配列を1つずつ見て、それぞれの分岐をたどろう。"), note: "recap-unions" },
     { kind: "type", time: 15, prompt: L("Count the a's", "Cuenta las a", "a の数を数えよう"), code: 'std.debug.print("{d}\\n", .{std.mem.___(u8, "banana", "a")});', answer: "count", check: { compiles: true, stdout: "3" }, explain: L("std.mem.count counts how many times the needle appears.", "std.mem.count cuenta cuántas veces aparece la aguja.", "std.mem.count は探す文字列が何回出るか数える。"), hint: L("The std.mem tool that tells how many times something appears.", "La herramienta de std.mem que dice cuántas veces aparece algo.", "何回出てくるかを教える std.mem の道具。"), note: "recap-slices" },
+    healAllTask,
     enemySays(L(
       "Eek! You saw through every copy and window. Up in Comptime Tower, the Leak Jelly drips from the pipes...",
       "¡Iiih! Viste a través de cada copia y ventana. Arriba en Comptime Tower, la Leak Jelly gotea de las tuberías...",

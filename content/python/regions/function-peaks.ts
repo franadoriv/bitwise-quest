@@ -1,4 +1,5 @@
 import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
+import { makeCounterTask } from "../tasks.ts";
 import { L } from "../../../lib/i18n/text.ts";
 
 // REGION 3 · FUNCTION PEAKS (functions and arguments, scope and closures, decorators, exceptions).
@@ -1327,6 +1328,7 @@ const boss: LessonDef = {
       check: { compiles: true, stdout: "HI BO" },
       explain: L("Define the decorator, return the wrapper, then put @shout right above def.", "Define el decorador, devuelve el wrapper y pon @shout justo encima de def.", "デコレータを書き、wrapper を返し、def の真上に @shout。"),
     },
+    makeCounterTask,
     enemySays(L(
       "Grr... no stale list fooled you, no loop variable escaped you. The Object Tower awaits above the clouds.",
       "Grr... ninguna lista vieja te engañó, ninguna variable de bucle se te escapó. La Torre de Objetos te espera.",

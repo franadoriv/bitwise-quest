@@ -1,5 +1,10 @@
 import type { ExamDef } from "../../lib/content/types.ts";
 import { L } from "../../lib/i18n/text.ts";
+import {
+  dupAllTask, gradeTask, joinWithTask, maxValueTask, mostFrequentTask, palindromeTask, parsePortTask, ringTask, shapeAreaTask,
+  sumDigitsTask, sumIntFieldsTask, walletTask,
+} from "./tasks.ts";
+import { juniorTraceDebug, midTraceDebug, seniorTraceDebug } from "./trace-debug.ts";
 
 // Entry exams that simulate company screenings for Zig roles.
 // Topics, levels and bank sizes follow docs/research/zig-curriculum.md ("Entry exams") and
@@ -41,7 +46,10 @@ export const exams: ExamDef[] = [
     count: 12,
     passPct: 70,
     secondsPerQuestion: 30,
+    codeCount: 1,
     questions: [
+      ...juniorTraceDebug,
+      maxValueTask, palindromeTask, sumDigitsTask, gradeTask,
       // basics
       {
         topic: "basics", difficulty: 1, kind: "predict", prompt: COMPILES,
@@ -365,7 +373,10 @@ export const exams: ExamDef[] = [
     count: 14,
     passPct: 70,
     secondsPerQuestion: 40,
+    codeCount: 2,
     questions: [
+      ...midTraceDebug,
+      joinWithTask, mostFrequentTask, walletTask, shapeAreaTask,
       // integers
       {
         topic: "integers", difficulty: 2, kind: "predict", prompt: COMPILES,
@@ -838,7 +849,10 @@ export const exams: ExamDef[] = [
     count: 15,
     passPct: 75,
     secondsPerQuestion: 50,
+    codeCount: 2,
     questions: [
+      ...seniorTraceDebug,
+      ringTask, dupAllTask, parsePortTask, sumIntFieldsTask,
       // safety
       {
         topic: "safety", difficulty: 2, kind: "predict", prompt: COMPILES,

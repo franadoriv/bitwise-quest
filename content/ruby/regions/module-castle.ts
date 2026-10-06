@@ -1,5 +1,6 @@
 import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { runeTask } from "../tasks.ts";
 
 // REGION 3 · MODULE CASTLE  (classes and objects, mixins and lookup, class-level state, equality and copies)
 
@@ -1138,6 +1139,7 @@ const boss: LessonDef = {
       fallback: [String.raw`@names\.each\s*\(\s*&block\s*\)`, String.raw`@names\.each\s*\{\s*\|(\w+)\|\s*(block\.call|yield)\s*\(?\s*\1`, String.raw`@names\.each\s+do\s*\|(\w+)\|\s*(block\.call|yield)\s*\(?\s*\1`],
       explain: L("Enumerable calls each with a block. Pass it on: @names.each(&block).", "Enumerable llama a each con un bloque. Pásalo: @names.each(&block).", "Enumerable は each にブロックを渡す。@names.each(&block) で受け渡そう。"),
     },
+    runeTask,
     enemySays(L(
       "Melting... You saw through every copy and every crest. Climb on: the Meta Tower awaits.",
       "Me derrito... Viste a través de cada copia y cada blasón. Sigue subiendo: te espera la Torre Meta.",

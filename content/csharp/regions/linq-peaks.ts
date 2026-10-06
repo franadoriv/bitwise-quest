@@ -1,5 +1,6 @@
 import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L, say, enemySays } from "../../rust/helpers.ts";
+import { lootSummaryTask } from "../tasks.ts";
 
 // REGION 3 · LINQ PEAKS  (collections and generics, delegates and closures, LINQ basics, deferred execution)
 // Snippets are completed by the validator with `using System; System.Collections.Generic; System.Linq;
@@ -1423,6 +1424,7 @@ const boss: LessonDef = {
       hint: L("Removing inside foreach throws. Remove the even items without changing the list mid-loop.", "Quitar dentro de un foreach lanza. Quita los pares sin cambiar la lista a mitad del recorrido.", "foreach の中で消すと例外。ループの途中で変えずに偶数を消そう。"),
       note: "recap-collections",
     },
+    lootSummaryTask,
   ],
   notes: bossNotes,
 };

@@ -1,5 +1,6 @@
 import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { mergeStockTask } from "../tasks.ts";
 import { say, enemySays } from "../../rust/helpers.ts";
 
 // REGION 2 · SLICE FOREST  (arrays vs slices, append aliasing and copy, maps, structs and receivers)
@@ -1288,6 +1289,7 @@ const boss: LessonDef = {
     { kind: "predict", time: 15, prompt: PRINT, code: "type Counter struct{ n int }\n\nfunc (c Counter) IncV()  { c.n++ }\nfunc (c *Counter) IncP() { c.n++ }\n\nfunc main() {\n\tvar c Counter\n\tc.IncP()\n\tc.IncV()\n\tc.IncP()\n\tfmt.Println(c.n)\n}", options: ["2", "3", "1"], answer: 0, output: "2", check: { compiles: true, stdout: "2" }, explain: L("Only the two pointer-receiver calls change c. IncV works on a copy.", "Solo las dos llamadas con receptor puntero cambian c. IncV trabaja en una copia.", "c を変えるのはポインタレシーバの2回だけ。IncV はコピー。"), hint: L("Count only the calls that can change c: which receivers are pointers?", "Cuenta solo las llamadas que pueden cambiar c: ¿qué receptores son punteros?", "c を変えられる呼び出しだけ数えよう。ポインタレシーバはどれ？"), note: "recap-receivers" },
     { kind: "predict", time: 12, prompt: PRINT, code: "grid := make([][]int, 2)\nfmt.Println(grid[0] == nil, len(grid))", options: ["true 2", "false 2", "true 0"], answer: 0, output: "true 2", check: { compiles: true, stdout: "true 2" }, explain: L("make gives 2 rows, each a zero-value slice: nil until you make it.", "make da 2 filas, cada una un slice en valor cero: nil hasta que lo crees.", "make で2行。各行はゼロ値のスライス、つまり nil。"), hint: L("make([][]int, 2) makes the outer slice. What is each inner slice before you make it?", "make([][]int, 2) crea el slice externo. ¿Qué es cada slice interno antes de crearlo?", "make([][]int, 2) は外側のスライスを作る。内側のスライスは make する前は何？"), note: "recap-copy-nil" },
     { kind: "type", time: 15, prompt: L("Copy so they don't share", "Copia para no compartir", "共有しないようにコピー"), code: "a := []int{1, 2, 3}\nb := make([]int, len(a))\n___(b, a)\nb[0] = 9\nfmt.Println(a[0], b[0])", answer: "copy", check: { compiles: true, stdout: "1 9" }, explain: L("copy fills b's own array, so changing b leaves a untouched.", "copy llena el array propio de b, así que cambiar b no toca a.", "copy は b 自身の配列を埋める。b を変えても a はそのまま。"), hint: L("b already has its own array of the right length. Which built-in fills it from a?", "b ya tiene su propio array del largo correcto. ¿Qué función incorporada lo llena desde a?", "b はもう正しい長さの自分の配列を持っている。a から中身を埋める組みこみ関数は？"), note: "recap-copy-nil" },
+    mergeStockTask,
     enemySays(L(
       "Hisss... you cut through every shared head. The Interface Castle awaits, where shields wear crests.",
       "Hisss... cortaste cada cabeza compartida. El Interface Castle te espera, donde los escudos llevan emblemas.",

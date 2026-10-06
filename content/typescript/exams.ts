@@ -1,5 +1,10 @@
 import type { ExamDef } from "../../lib/content/types.ts";
 import { L } from "../../lib/i18n/text.ts";
+import {
+  bankAccountTask, capitalizeWordsTask, chunkTask, emitterTask, fizzBuzzTask, getPathTask, groupByTask,
+  makeTallyTask, promiseAllTask, rateLimiterTask, retryTask, sumEvenTask,
+} from "./tasks.ts";
+import { juniorTraceDebug, midTraceDebug, seniorTraceDebug } from "./trace-debug.ts";
 
 // Entry exams that simulate company screenings for JavaScript/TypeScript roles.
 // Topics, levels and bank sizes follow docs/research/typescript-react-curriculum.md ("Entry exams")
@@ -26,9 +31,12 @@ export const exams: ExamDef[] = [
       "ジュニア JS/TS 職のオンライン試験：値、等価性、スコープ、クロージャ、配列、型、非同期。",
     ),
     count: 12,
+    codeCount: 1,
     passPct: 70,
     secondsPerQuestion: 30,
     questions: [
+      ...juniorTraceDebug,
+      capitalizeWordsTask, sumEvenTask, makeTallyTask, fizzBuzzTask,
       // values
       {
         topic: "values", difficulty: 1, kind: "predict", prompt: PRINTS,
@@ -293,9 +301,12 @@ export const exams: ExamDef[] = [
       "中級職のコード読解試験：this、クラス、非同期、イベントループ、型の絞り込み、ジェネリクス。",
     ),
     count: 14,
+    codeCount: 2,
     passPct: 70,
     secondsPerQuestion: 40,
     questions: [
+      ...midTraceDebug,
+      groupByTask, retryTask, chunkTask, bankAccountTask,
       // closures
       {
         topic: "closures", difficulty: 1, kind: "predict", prompt: ORDER,
@@ -634,9 +645,12 @@ export const exams: ExamDef[] = [
       "シニアの技術面接：イベントループの難問、非同期の罠、型レベル TS、モジュール、メモリ。",
     ),
     count: 15,
+    codeCount: 2,
     passPct: 75,
     secondsPerQuestion: 50,
     questions: [
+      ...seniorTraceDebug,
+      rateLimiterTask, promiseAllTask, getPathTask, emitterTask,
       // event_loop
       {
         topic: "event_loop", difficulty: 2, kind: "predict", prompt: ORDER,
