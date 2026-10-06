@@ -1,5 +1,6 @@
 import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { armyTask } from "../tasks.ts";
 
 // REGION 2 · CLASS FOREST  (classes and properties, inheritance, interfaces and abstract classes, records and patterns)
 // Snippets get the standard `using` lines added by the validator. Types go after the top-level statements.
@@ -1178,6 +1179,7 @@ static string Rank(int score) => score switch
       note: "recap-records",
       explain: L("No pattern matches 42, so the switch throws SwitchExpressionException. Add _ => \"unknown\".", "Ningún patrón coincide con 42, así que el switch lanza SwitchExpressionException. Agrega _ => \"unknown\".", "42 に合うパターンがなく SwitchExpressionException。_ => \"unknown\" を足そう。"),
     },
+    armyTask,
     enemySays(L(
       "My roots... untangled. You read every blueprint. Climb on: the LINQ Peaks await.",
       "Mis raíces... desenredadas. Leíste cada plano. Sigue subiendo: te esperan los Picos LINQ.",

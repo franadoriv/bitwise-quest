@@ -1,5 +1,6 @@
 import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { makeCounterTask } from "../tasks.ts";
 
 // REGION 2 · CLOSURE FOREST  (functions and arrows, scope and hoisting, closures, this)
 
@@ -1060,6 +1061,7 @@ const boss: LessonDef = {
     { kind: "type", time: 12, prompt: L("Braces need it", "Las llaves lo necesitan", "波かっこには必要"), code: "const sq = (n: number) => { ___ n * n; };\nconsole.log(sq(3));", answer: "return", check: { compiles: true, stdout: "9" }, hint: L("A block body needs a keyword to send its value out.", "Un cuerpo de bloque necesita una palabra clave para sacar su valor.", "ブロックの本体が値を返すにはキーワードが必要。"), note: "functions-recap", explain: L("A block body returns nothing without return.", "Un cuerpo con bloque no devuelve nada sin return.", "ブロックの本体は return がないと何も返さない。") },
     { kind: "order", time: 15, prompt: L("Build once", "Arma once", "once を組み立てよう"), lines: ["function once(fn: () => void) {", "let done = false;", "return () => {", "if (done) return;", "done = true;", "return fn();", "};", "}"], check: { compiles: true }, hint: L("Declare the backpack variable before the inner function. Inside, guard first and call fn last.", "Declara la variable de la mochila antes de la función interna. Adentro, primero el guardia y fn al final.", "内側の関数より前にリュックの変数を宣言。中では先にチェック、fn は最後。"), note: "closure-recap", explain: L("The backpack holds done; flip it before calling fn.", "La mochila guarda done; cámbialo antes de llamar a fn.", "リュックに done。fn を呼ぶ前に true にする。") },
     { kind: "predict", time: 12, prompt: PRINT, code: "function f(...nums: number[]) {\n  return nums.length;\n}\nconsole.log(f(), f(1, 2, 3));", options: ["0 3", "undefined 3", "1 3"], answer: 0, output: "0 3", check: { compiles: true, stdout: "0 3" }, hint: L("A rest parameter is always an array. How many items does it hold with no arguments?", "Un parámetro rest siempre es un array. ¿Cuántos elementos tiene sin argumentos?", "rest 引数はいつも配列。引数なしなら要素はいくつ？"), note: "functions-recap", explain: L("With no arguments, rest is an empty array.", "Sin argumentos, rest es un array vacío.", "引数なしなら rest は空の配列。") },
+    makeCounterTask,
     enemySays(L(
       "No... every scope seen, every this found. Go on, then: the peaks of prototypes await.",
       "No... viste cada scope y hallaste cada this. Sigue, entonces: te esperan los picos de los prototipos.",

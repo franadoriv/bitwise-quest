@@ -1,5 +1,6 @@
 import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { eraseWhereTask } from "../tasks.ts";
 
 // REGION 4 · TEMPLATE TOWER  (templates, constexpr and concepts; lambdas and the STL; C++17/20; threads; UB spotting)
 
@@ -1701,6 +1702,7 @@ const boss: LessonDef = {
       check: { compiles: true, stdout: "32" },
       explain: L("Copying a lambda copies its state: copy starts at 1.", "Copiar una lambda copia su estado: copy empieza en 1.", "ラムダのコピーは状態もコピー。copy は 1 から。"),
     },
+    eraseWhereTask,
     enemySays(L(
       "You... told the defined from the undefined. Velocis bends to your control, knight. For now.",
       "Tú... separaste lo definido de lo indefinido. Velocis se rinde a tu control, caballero. Por ahora.",

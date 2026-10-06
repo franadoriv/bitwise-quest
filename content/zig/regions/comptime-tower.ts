@@ -1,5 +1,6 @@
 import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { keepOddsTask } from "../tasks.ts";
 import { say, enemySays } from "../../rust/helpers.ts";
 
 // REGION 4 · COMPTIME TOWER  (allocators, arenas and ArrayList, comptime values, generic types and testing)
@@ -1108,6 +1109,7 @@ const boss: LessonDef = {
     { kind: "predict", time: 18, prompt: PRINT, code: `${STACK}\npub fn main() void {\n    var s: Stack(u8, 4) = .{};\n    s.push(1);\n    s.push(2);\n    std.debug.print("{any} {any} {any}\\n", .{ s.pop(), s.pop(), s.pop() });\n}`, options: ["2 1 null", "1 2 null", "2 1 0"], answer: 0, output: "2 1 null", check: { compiles: true, stdout: "2 1 null" }, explain: L("Last in, first out: 2, then 1, then the empty stack returns null.", "Último en entrar, primero en salir: 2, luego 1, y la pila vacía da null.", "後入れ先出し。2、1、空になったら null。"), hint: L("Which item comes out first, and what does pop give when empty?", "¿Qué sale primero, y qué da pop si está vacía?", "最初に出るのは？空の時 pop は何を返す？"), note: "recap-comptime" },
     { kind: "predict", time: 12, prompt: PRINT, code: zmain(BOX, 'std.debug.print("{} {}\\n", .{ Box(u8) == Box(u8), Box(u8) == Box(u16) });'), options: ["true false", "false false", "true true"], answer: 0, output: "true false", check: { compiles: true, stdout: "true false" }, explain: L("Same comptime arguments, same type.", "Mismos argumentos comptime, mismo tipo.", "同じ comptime 引数なら同じ型。"), hint: L("Compare the comptime arguments in each pair.", "Compara los argumentos comptime de cada par.", "それぞれの組の comptime 引数をくらべよう。"), note: "recap-comptime" },
     { kind: "pick", time: 15, prompt: L("Plug the leak", "Tapa la fuga", "リークをふさごう"), code: 'var gpa: std.heap.DebugAllocator(.{}) = .init;\ndefer _ = gpa.deinit();\nconst alloc = gpa.allocator();\nconst g = try std.fmt.allocPrint(alloc, "lv{d}", .{9});\n___ alloc.free(g);\nstd.debug.print("{s}\\n", .{g});', options: ["defer", "errdefer"], answer: 0, check: { compiles: true, stdout: "lv9" }, explain: L("defer always frees at scope end; errdefer would free only if an error left the scope.", "defer siempre libera al final; errdefer solo liberaría si saliera un error del bloque.", "defer は必ず最後に解放。errdefer はエラーで抜ける時だけ。"), hint: L("Is an error involved here? One word runs always, the other only on error.", "¿Hay algún error aquí? Una palabra corre siempre, la otra solo con error.", "ここでエラーは起きる？片方は必ず、もう片方はエラーの時だけ動く。"), note: "recap-memory" },
+    keepOddsTask,
     enemySays(L(
       "Blorp... no drips left. Every byte came back to the forge. Comptia's pipes run clean. You are a true Zig engineer!",
       "Blorp... no quedan goteras. Cada byte volvió a la forja. Las tuberías de Comptia están limpias. ¡Eres ingeniero Zig!",

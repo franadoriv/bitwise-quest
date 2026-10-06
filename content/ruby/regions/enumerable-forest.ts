@@ -1,5 +1,6 @@
 import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L, say, enemySays } from "../../rust/helpers.ts";
+import { lootTask } from "../tasks.ts";
 
 // REGION 2 · ENUMERABLE FOREST  (arrays, hashes, ranges, blocks, procs and lambdas, Enumerable)
 // Snippets are whole Ruby 3.4.7 scripts, run as is on Compiler Explorer.
@@ -1523,6 +1524,7 @@ const forestBoss: LessonDef = {
       fallback: [String.raw`counts\s*=\s*Hash\.new\(\s*0\s*\)`, String.raw`\.tally`],
       explain: L("counts[w] is nil the first time, and nil + 1 crashes. Hash.new(0) starts every count at 0.", "counts[w] es nil la primera vez, y nil + 1 falla. Hash.new(0) empieza cada cuenta en 0.", "最初 counts[w] は nil で nil + 1 は落ちる。Hash.new(0) なら 0 から数えられるよ。"),
     },
+    lootTask,
     enemySays(L(
       "My drawers... all emptied! You know every trick of the forest. The Module Castle stands ahead.",
       "Mis cajones... ¡todos vacíos! Conoces cada truco del bosque. El Castillo de Módulos se alza adelante.",

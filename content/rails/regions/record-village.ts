@@ -1,6 +1,7 @@
 import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L, say, enemySays } from "../../rust/helpers.ts";
 import { MINI_RECORD, withHelper } from "../mini.ts";
+import { tableNameTask } from "../tasks.ts";
 
 // REGION 1 · RECORD VILLAGE  (Active Record under the hood: models, finders, lazy relations, migrations)
 // Rails can't run in the sandbox: snippets are small plain-Ruby versions of its mechanisms ("our mini version"),
@@ -1482,6 +1483,7 @@ const boss: LessonDef = {
     { kind: "pick", hint: L("The Rails inflector knows irregular English plurals.", "El inflector de Rails conoce los plurales irregulares del inglés.", "Rails の活用器は英語の不規則な複数形を知っている。"), note: "recap-conventions", time: 12, prompt: L("Rails: table name for model Person?", "Rails: ¿tabla para el modelo Person?", "Rails：モデル Person のテーブル名は？"), code: "# table: ___", options: ["people", "persons", "person"], answer: 0, explain: L("The inflector knows irregular plurals: Person → people.", "El inflector conoce plurales irregulares: Person → people.", "活用器は不規則な複数形を知っている：Person → people。") },
     { kind: "pick", hint: L("Which version forces the records to load right away instead of waiting?", "¿Qué versión obliga a cargar los registros ya mismo en vez de esperar?", "待たずにすぐレコードを読み込ませるのはどっち？"), note: "recap-relations", time: 12, prompt: L("Rails: run the SQL right now", "Rails: ejecuta el SQL ahora mismo", "Rails：今すぐ SQL を走らせる"), code: "posts = ___", options: ["Post.where(pub: true).to_a", "Post.where(pub: true)"], answer: 0, explain: L("to_a loads the records immediately. A bare relation waits until it is used.", "to_a carga los registros de inmediato. Una relación sola espera hasta que se use.", "to_a はすぐ読み込む。リレーションだけなら使われるまで待つ。") },
     { kind: "order", hint: L("You can't apply a file that doesn't exist yet, or undo one that wasn't applied.", "No puedes aplicar un archivo que aún no existe, ni deshacer uno que no se aplicó.", "まだ無いファイルは適用できず、適用していないものは戻せない。"), note: "recap-conventions", time: 20, prompt: L("Rails: create, apply, then undo a migration", "Rails: crea, aplica y deshace una migración", "Rails：移行を作る→適用→戻す"), lines: ["bin/rails generate migration AddBodyToPosts body:text", "bin/rails db:migrate", "bin/rails db:rollback"], explain: L("generate writes the dated file, db:migrate applies it and records the version, db:rollback undoes it.", "generate escribe el archivo fechado, db:migrate lo aplica y registra la versión, db:rollback lo deshace.", "generate が日付つきファイルを作り、db:migrate が適用して記録、db:rollback が戻す。") },
+    tableNameTask,
     enemySays(L(
       "Crumble... my rows scatter. The Association Forest waits ahead, where queries swarm in packs.",
       "Me desmorono... mis filas se dispersan. El Bosque de Asociaciones espera, donde las consultas atacan en enjambre.",

@@ -1,5 +1,6 @@
 import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L, enemySays, say } from "../helpers.ts";
+import { packTask } from "../tasks.ts";
 
 // REGION 2 · OWNERSHIP FOREST  (move, clone, borrowing)
 
@@ -699,6 +700,7 @@ const boss2: LessonDef = {
     { kind: "predict", time: 12, prompt: L("When } closes, the owner...", "Al cerrar } el dueño...", "} で閉じると持ち主は…"), hint: L("What does Rust do with a value when its owner's block ends? Remember: no garbage collector.", "¿Qué hace Rust con un valor cuando termina el bloque de su dueño? Recuerda: no hay recolector de basura.", "持ち主のブロックが終わると、Rust は値をどうする？GC はないよ。"), note: "recap-move", code: '{\n    let s = String::from("x");\n} // what happens to s?', options: [L("Is destroyed (drop)", "Se destruye (drop)", "ドロップされる"), L("Stays alive", "Sigue viva", "生き続ける"), L("Is copied", "Se copia", "コピーされる")], answer: 0, check: { program: "#![allow(unused)]\nstruct S;\nimpl Drop for S {\n    fn drop(&mut self) {\n        println!(\"drop\");\n    }\n}\n\nfn main() {\n    {\n        let s = S;\n        println!(\"inside\");\n    } // s leaves the block\n    println!(\"outside\");\n}\n", compiles: true, stdout: "inside\ndrop\noutside" }, explain: L("End of block → drop.", "Fin del bloque → drop.", "ブロックの終わり → ドロップ。") },
     { kind: "predict", time: 12, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), hint: L("These are read-only borrows. How many readers does the big rule allow at once?", "Son préstamos de solo lectura. ¿Cuántos lectores a la vez permite la gran regla?", "これは読むだけの借用。掟は読む参照を同時にいくつまで許す？"), note: "recap-borrow", code: 'let s = String::from("x");\nlet r1 = &s;\nlet r2 = &s;\nprintln!("{}{}", r1, r2);', options: [YES, NO], answer: 0, check: { compiles: true, stdout: "xx" }, explain: L("Several & are fine.", "Varios & están bien.", "& がいくつあっても大丈夫。") },
     { kind: "type", time: 15, prompt: L("Pass level so it can be modified", "Pasa level para modificarlo", "変更できるように level を渡そう"), hint: L("bump changes the number it receives. How do you lend level so it can be written to?", "bump cambia el número que recibe. ¿Cómo prestas level para que se pueda escribir en él?", "bump は受け取った数を変える。書きこめるように level を貸すには？"), note: "recap-borrow", code: "bump(___ level);", answer: "&mut", check: { program: "#![allow(unused)]\nfn bump(n: &mut i32) {\n    *n += 1;\n}\n\nfn main() {\n    let mut level = 1;\n    bump(&mut level);\n    println!(\"{}\", level);\n}\n", compiles: true, stdout: "2" }, explain: L("bump(&mut level)", "bump(&mut level)", "bump(&mut level) だよ。") },
+    packTask,
     enemySays(L(
       "Grrr... you respected all my rules... The forest is yours, Rustacean.",
       "Grrr... respetaste todas mis reglas... El bosque es tuyo, rustáceo.",

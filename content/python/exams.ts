@@ -1,6 +1,9 @@
 import type { ExamDef } from "../../lib/content/types.ts";
 import { L } from "../../lib/i18n/text.ts";
-import { countVowelsTask, flattenTask, topWordsTask } from "./tasks.ts";
+import {
+  chunkedTask, countVowelsTask, firstUniqueTask, flattenTask, groupAnagramsTask, isPalindromeTask, lruCacheTask,
+  mergeIntervalsTask, parseScoresTask, retryTask, secondLargestTask, topWordsTask,
+} from "./tasks.ts";
 
 // Entry exams that simulate company screenings for Python roles (backend, data, automation).
 // Topics, levels and bank sizes follow docs/research/python-curriculum.md ("Entry exam") and
@@ -29,8 +32,12 @@ export const exams: ExamDef[] = [
     count: 12,
     passPct: 70,
     secondsPerQuestion: 30,
+    codeCount: 1,
     questions: [
       countVowelsTask,
+      secondLargestTask,
+      isPalindromeTask,
+      firstUniqueTask,
       // values
       {
         topic: "values", difficulty: 1, kind: "predict", prompt: PRINTS,
@@ -297,8 +304,12 @@ export const exams: ExamDef[] = [
     count: 14,
     passPct: 70,
     secondsPerQuestion: 40,
+    codeCount: 2,
     questions: [
       topWordsTask,
+      groupAnagramsTask,
+      lruCacheTask,
+      parseScoresTask,
       // mutability
       {
         topic: "mutability", difficulty: 2, kind: "predict", prompt: PRINTS,
@@ -589,8 +600,12 @@ export const exams: ExamDef[] = [
     count: 15,
     passPct: 75,
     secondsPerQuestion: 50,
+    codeCount: 2,
     questions: [
       flattenTask,
+      retryTask,
+      chunkedTask,
+      mergeIntervalsTask,
       // inheritance
       {
         topic: "inheritance", difficulty: 3, kind: "predict", prompt: PRINTS,

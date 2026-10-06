@@ -1,4 +1,5 @@
 import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
+import { formatClockTask } from "../tasks.ts";
 import { L } from "../../../lib/i18n/text.ts";
 
 // REGION 1 · NAME VILLAGE  (names and values, numbers, strings, truthiness, == vs is)
@@ -907,6 +908,7 @@ const boss: LessonDef = {
     { kind: "predict", time: 15, prompt: PRINT, hint: L("Read the spec after the colon as fill, alignment, width. How many fill characters are needed?", "Lee lo que va tras los dos puntos como relleno, alineación, ancho. ¿Cuántos rellenos hacen falta?", "コロンの後は「埋める文字・寄せ方・幅」。埋める文字はいくつ必要？"), note: "recap-strings", code: "print(f\"{'hi':*^6}\")", options: ["**hi**", "hi****", "******"], answer: 0, output: "**hi**", check: { compiles: true, stdout: "**hi**" }, explain: L("After the colon: fill with *, ^ centers, width 6. So two stars on each side.", "Tras los dos puntos: relleno *, ^ centra, ancho 6. Dos estrellas a cada lado.", "コロンの後は「* で埋める・^ で中央・幅 6」。両側に * が2つずつ。") },
     { kind: "predict", time: 12, prompt: PRINT, hint: L("None is falsy. Is a string that holds a space empty?", "None es falsy. ¿Un string que contiene un espacio está vacío?", "None は偽。空白が入った文字列は空？"), note: "recap-truth", code: 'print(bool(None), bool(" "))', options: ["False True", "False False", "True True"], answer: 0, output: "False True", check: { compiles: true, stdout: "False True" }, explain: L("None is falsy. \" \" holds a space, so it's not empty: truthy.", "None es falsy. \" \" contiene un espacio, no está vacío: truthy.", "None は偽。\" \" は空白が入っているので空じゃない：真。") },
     { kind: "predict", time: 12, prompt: PRINT, hint: L("Python never treats text as a number. Are an int and a float with the same value equal?", "Python nunca trata un texto como número. ¿Un int y un float con el mismo valor son iguales?", "Python は文字列を数値あつかいしない。同じ値の int と float は等しい？"), note: "recap-truth", code: 'print(1 == "1", 1 == 1.0)', options: ["False True", "True True", "False False"], answer: 0, output: "False True", check: { compiles: true, stdout: "False True" }, explain: L("Python never converts text to numbers on its own. 1 and 1.0 are equal numbers.", "Python nunca convierte texto en número por su cuenta. 1 y 1.0 son números iguales.", "Python は文字列を勝手に数値にしない。1 と 1.0 は等しい数値。") },
+    formatClockTask,
     enemySays(L(
       "Crumble... you read every stone. The Collection Forest lies ahead, where lists share secrets.",
       "Me desmorono... leíste cada piedra. Adelante está el Bosque de Colecciones, donde las listas comparten secretos.",

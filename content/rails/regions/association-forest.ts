@@ -1,6 +1,7 @@
 import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
 import { MINI_RECORD, withHelper } from "../mini.ts";
+import { commentsLoaderTask } from "../tasks.ts";
 
 // REGION 2 · ASSOCIATION FOREST  (associations, N+1 queries, validations, callbacks and concerns)
 // Verified claims run on plain Ruby 3.4.7 with our mini Active Record (mini.ts) prepended; Rails API
@@ -1307,6 +1308,7 @@ const boss: LessonDef = {
       fallback: [String.raw`=\s*find_authors\(`],
       explain: L("Preload once with find_authors on the unique ids, then read names from the hash: 31 trips become 2.", "Precarga una vez con find_authors y los ids únicos, luego lee del hash: 31 viajes pasan a 2.", "一意の id で find_authors を1回、名前はハッシュから。31往復が2往復に。"),
     },
+    commentsLoaderTask,
   ],
 };
 

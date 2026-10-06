@@ -1,5 +1,6 @@
 import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { inventoryTask } from "../tasks.ts";
 import { enemySays, say } from "../../rust/helpers.ts";
 
 // REGION 1 · JSX VILLAGE  (JSX, components, props, lists and keys)
@@ -1003,6 +1004,7 @@ const jsxGremlin: LessonDef = {
       hint: L("React writes style keys as CSS names and adds a unit to plain numeric sizes.", "React escribe las claves de style como nombres CSS y agrega una unidad a los tamaños numéricos.", "React は style のキーを CSS の名前で書き、数値だけのサイズに単位を付ける。"),
       note: "recap-slots",
     },
+    inventoryTask,
     enemySays(L(
       "Grr... no stray zeros, no missing keys... The village is yours, component crafter!",
       "Grr... ni ceros sueltos ni keys perdidas... ¡La aldea es tuya, artesano de componentes!",

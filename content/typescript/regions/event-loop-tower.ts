@@ -1,5 +1,6 @@
 import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { loadAllTask } from "../tasks.ts";
 
 // REGION 5 · EVENT LOOP TOWER (timers and the call stack, promises, async/await and errors,
 // microtasks vs macrotasks). Stage mapping: hero = call stack, ally = microtask queue (VIP line),
@@ -1363,6 +1364,7 @@ const boss: LessonDef = {
       ),
       check: { compiles: true, stdout: "1\n4\n6\n3\n5\n2" },
     },
+    loadAllTask,
     enemySays(L(
       "Impossible... you read my queues like an open scroll. The tower is yours, master of the loop.",
       "Imposible... lees mis colas como un pergamino abierto. La torre es tuya, maestro del bucle.",

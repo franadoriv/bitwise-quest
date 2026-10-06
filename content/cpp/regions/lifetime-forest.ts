@@ -1,5 +1,6 @@
 import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { lanternTask } from "../tasks.ts";
 
 // REGION 2 · LIFETIME FOREST  (classes and initialization, destructors and RAII, copy vs move and
 // the rule of 3/5/0, smart pointers and cycles)
@@ -1304,6 +1305,7 @@ const boss: LessonDef = {
       note: "boss-owners",
       explain: L("Members like std::string, std::vector and std::unique_ptr already copy, move and clean up correctly.", "Miembros como std::string, std::vector y std::unique_ptr ya copian, mueven y limpian bien.", "std::string、vector、unique_ptr などは、コピーもムーブも後片付けも正しくこなす。"),
     },
+    lanternTask,
     enemySays(L(
       "No... my rituals are broken. You know when every object lives and dies. The castle of shapes awaits!",
       "No... mis rituales se rompen. Sabes cuándo vive y muere cada objeto. ¡El castillo de las formas te espera!",

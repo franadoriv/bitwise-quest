@@ -1,5 +1,6 @@
 import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { interleaveTask } from "../tasks.ts";
 
 // REGION 2 · BUFFER FOREST  (typed arrays and buffers, attributes, stride and offset, indexed drawing, textures)
 // The runner has no GPU: runnable claims are pure logic; WebGL API claims are type-checked only.
@@ -1036,6 +1037,7 @@ const boss: LessonDef = {
     { kind: "predict", time: 15, prompt: PRINT, code: "const texel = (u: number, size: number) =>\n  Math.min(Math.floor(u * size), size - 1);\nconsole.log(texel(0.75, 4));", options: ["3", "4", "2"], answer: 0, output: "3", check: { compiles: true, stdout: "3" }, hint: L("Multiply u by the size and floor it; clamp only if it reaches the size.", "Multiplica u por el tamaño y redondea abajo; limita solo si llega al tamaño.", "u に大きさをかけて切り捨て。大きさに届いたときだけおさめる。"), note: "recap-mesh-texture", explain: L("0.75 × 4 = 3, inside 0..3.", "0.75 × 4 = 3, dentro de 0..3.", "0.75 × 4 = 3、0..3 の中。") },
     { kind: "predict", time: 15, prompt: L("Normalized byte 51 becomes…", "El byte normalizado 51 es…", "正規化した 51 は？"), code: "console.log((51 / 255).toFixed(1));", options: ["0.2", "0.5", "51.0"], answer: 0, output: "0.2", check: { compiles: true, stdout: "0.2" }, hint: L("Normalized bytes are divided by 255 on their way to the shader.", "Los bytes normalizados se dividen entre 255 camino al shader.", "正規化したバイトはシェーダーへ行くとき 255 で割られる。"), note: "recap-bytes", explain: L("51 / 255 = 0.2 exactly.", "51 / 255 = 0.2 exacto.", "51 / 255 = ちょうど 0.2。") },
     { kind: "predict", time: 15, prompt: L("Two quads: which indices?", "Dos quads: ¿qué índices?", "四角形 2 つの番号は？"), code: 'const quads = 2;\nconst out: number[] = [];\nfor (let q = 0; q < quads; q++) out.push(q * 4, q * 4 + 1, q * 4 + 2);\nconsole.log(out.join(","));', options: ["0,1,2,4,5,6", "0,1,2,6,7,8", "0,1,2,3,4,5"], answer: 0, output: "0,1,2,4,5,6", check: { compiles: true, stdout: "0,1,2,4,5,6" }, hint: L("Follow the loop: q is 0, then 1, and each quad's base is q × 4.", "Sigue el bucle: q vale 0 y luego 1, y la base de cada quad es q × 4.", "ループを追おう：q は 0、次に 1。四角形の基準は q × 4。"), note: "recap-mesh-texture", explain: L("Each quad starts 4 vertices later.", "Cada quad empieza 4 vértices después.", "四角形ごとに頂点 4 つずつ進む。") },
+    interleaveTask,
     enemySays(L(
       "All my heads... packed, strided and indexed. Take the bytes, then. Matrix Mountain looms ahead.",
       "Todas mis cabezas... empacadas, con stride e indexadas. Llévate los bytes. Más allá se alza la Montaña Matriz.",

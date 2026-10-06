@@ -1,5 +1,6 @@
 import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { enemySays, L, say } from "../helpers.ts";
+import { totalDamageTask } from "../tasks.ts";
 
 // REGION 5 · FEARLESS TOWER  (closures and move, thread::spawn and join, Arc vs Rc, Mutex and
 // Arc<Mutex<T>>, RwLock, mpsc channels, Send and Sync)
@@ -1235,6 +1236,7 @@ const boss5: LessonDef = {
     { kind: "type", time: 12, prompt: ASK_KEY, code: 'use std::sync::Mutex;\nlet m = Mutex::new(1);\nlet mut g = m.___().unwrap();\n*g += 1;\nprintln!("{}", *g);', hint: L("Which Mutex method waits for the key and returns a guard?", "¿Qué método de Mutex espera la llave y devuelve un guard?", "鍵を待ってガードを返す Mutex のメソッドは？"), note: "recap-mutex", answer: "lock", explain: L("m.lock().unwrap()", "m.lock().unwrap()", "m.lock().unwrap() だよ。"), check: { compiles: true, stdout: "2" } },
     { kind: "predict", time: 15, prompt: WHAT_PRINTS, code: `${CH}let (tx, rx) = mpsc::channel();\nfor i in 1..=3 {\n    let tx = tx.clone();\n    thread::spawn(move || { tx.send(i).unwrap(); });\n}\ndrop(tx);\nlet mut t = 0;\nfor n in rx { t += n; }\nprintln!("{}", t);`, hint: L("Every message arrives, in some order. Does order change a sum, and what lets the loop end?", "Cada mensaje llega, en algún orden. ¿Cambia el orden una suma, y qué deja terminar el bucle?", "どのメッセージも順不同で届く。順番で合計は変わる？ループを終わらせるのは？"), note: "recap-channels", options: ["6", "3", KEEPS_WAITING], answer: 0, explain: L("1 + 2 + 3, and drop(tx) closes the channel.", "1 + 2 + 3, y drop(tx) cierra el canal.", "1 + 2 + 3。drop(tx) でチャネルが閉じる。"), check: { compiles: true, stdout: "6" } },
     { kind: "pick", time: 15, prompt: L("Badge to move to another thread", "Insignia para mudarse de hilo", "スレッドを移るためのバッジ"), code: "fn f<T: ___ + 'static>(x: T) {\n    std::thread::spawn(move || drop(x));\n}", hint: L("Which badge means 'this value can be moved to another thread'?", "¿Qué insignia significa 'este valor se puede mover a otro hilo'?", "「この値は別のスレッドへ移せる」という意味のバッジは？"), note: "recap-channels", options: ["Send", "Sync", "Copy"], answer: 0, explain: L("Moving to another thread requires Send.", "Mover a otro hilo exige Send.", "別スレッドへ移すには Send が必要。"), check: { compiles: true, wrongFail: true } },
+    totalDamageTask,
     enemySays(L(
       "Grrr... not a single data race. Your threads work without fear. The Tower is yours, Rustacean.",
       "Grrr... ni una carrera de datos. Tus hilos trabajan sin miedo. La Torre es tuya, rustáceo.",

@@ -1,5 +1,6 @@
 import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { findFirstTask } from "../tasks.ts";
 
 // REGION 1 · VALUE VILLAGE  (types and const, references, pointers with stack vs heap, vector and string)
 
@@ -1326,6 +1327,7 @@ const boss: LessonDef = {
     { kind: "predict", time: 15, prompt: PRINT, code: "int x = 10;\nint* p = &x;\nint** pp = &p;\n**pp = 20;\nstd::cout << x;", options: ["20", "10", L("An address", "Una dirección", "住所")], answer: 0, output: "20", check: { compiles: true, stdout: "20" }, hint: L("Follow the stars one at a time: *pp is p, so where does **pp lead?", "Sigue las estrellas de una en una: *pp es p, entonces ¿adónde lleva **pp?", "星を1つずつたどろう。*pp は p。では **pp はどこへ？"), note: "boss-aliases", explain: L("pp is a key to the key p. **pp opens p, then opens x: x becomes 20.", "pp es una llave hacia la llave p. **pp abre p y luego abre x: x pasa a 20.", "pp は鍵 p への鍵。**pp で p を開け、さらに x を開けて 20 に。") },
     { kind: "predict", time: 12, prompt: PRINT, code: 'char s[] = "hi";\nstd::cout << sizeof(s);', options: ["3", "2", "8"], answer: 0, output: "3", check: { compiles: true, stdout: "3" }, hint: L("Count the letters, plus the hidden marker every text literal ends with.", "Cuenta las letras, más la marca oculta con la que termina todo texto literal.", "文字数に、リテラルの最後の隠れた印を足そう。"), note: "boss-numbers", explain: L("A text literal ends with a hidden '\\0' marker: h, i, '\\0' is 3 chars.", "Un texto literal termina con una marca oculta '\\0': h, i, '\\0' son 3 chars.", "文字列リテラルの最後には隠れた '\\0' がある。h, i, '\\0' で 3。") },
     { kind: "predict", time: 12, prompt: SAFE, code: "std::vector<int> v{1, 2, 3};\nint* p = &v[0];\nstd::cout << p[3];", options: [L("No: index 3 is past the end", "No: el índice 3 está fuera", "いいえ：3 番は範囲外"), L("Yes: it shows 0", "Sí: muestra 0", "はい：0 が出る")], answer: 0, check: { compiles: true }, hint: L("List the valid indexes of a 3-element vector. Is 3 among them?", "Haz la lista de índices válidos de un vector de 3 elementos. ¿Está el 3?", "要素 3 個の vector の有効な番号は？3 は入っている？"), note: "boss-safety", explain: L("Valid indexes are 0, 1, 2. p[3] reads past the end: UB, just like v[3].", "Los índices válidos son 0, 1, 2. p[3] lee fuera del final: UB, igual que v[3].", "有効なのは 0, 1, 2。p[3] は範囲外を読むので v[3] と同じく UB。") },
+    findFirstTask,
     enemySays(L(
       "Crumble... you followed every key. But in the Lifetime Forest, objects are born and die. Beware!",
       "Me desmorono... seguiste cada llave. Pero en el Bosque de Vida los objetos nacen y mueren. ¡Cuidado!",

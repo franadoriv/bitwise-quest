@@ -14,9 +14,12 @@ import type { CodeTest } from "../lib/content/types.ts";
 import { runAll, VERIFIABLE_LANGS } from "./remote-run.ts";
 
 const VERIFY = process.argv.includes("--verify");
+// A snippet that rejects a promise nobody handles must fail its own job, not stop the whole run.
+process.on("unhandledRejection", () => {});
 const ONLY = process.argv.find((a) => a.startsWith("--lang="))?.slice(7);
 /** --only=<text>: report and verify only items whose location contains <text> (e.g. a region slug or "exam:"). */
 const FILTER = process.argv.find((a) => a.startsWith("--only="))?.slice(7);
+// e.g. --only=task (coding tasks), --only=exam: (exam banks)
 const inScope = (where: string) => !FILTER || where.includes(FILTER);
 
 const ACTORS = ["hero", "ally", "enemy"];
@@ -173,9 +176,9 @@ function checkBeat(where: string, b: Beat, pack: LanguagePack) {
       if (!b.solution) { err(where, "a coding task needs a reference `solution`"); break; }
       if (b.starter.trim() === b.solution.trim()) err(where, "starter equals the solution");
       if (!b.nearMiss?.length) warn(where, "add a `nearMiss` (a plausible wrong solution) to prove the tests catch mistakes");
-      jobs.push({ lang: LANG, where: `${where} (solution)`, program: buildTaskProgram(LANG, b.solution, b.tests), compiles: true, task: b.tests });
-      jobs.push({ lang: LANG, where: `${where} (starter)`, program: buildTaskProgram(LANG, b.starter, b.tests), compiles: true, task: b.tests, taskMustFail: true });
-      (b.nearMiss ?? []).forEach((m, i) => jobs.push({ lang: LANG, where: `${where} (nearMiss ${i})`, program: buildTaskProgram(LANG, m, b.tests), compiles: true, task: b.tests, taskMustFail: true }));
+      jobs.push({ lang: LANG, where: `${where} (task solution)`, program: buildTaskProgram(LANG, b.solution, b.tests), compiles: true, task: b.tests });
+      jobs.push({ lang: LANG, where: `${where} (task starter)`, program: buildTaskProgram(LANG, b.starter, b.tests), compiles: true, task: b.tests, taskMustFail: true });
+      (b.nearMiss ?? []).forEach((m, i) => jobs.push({ lang: LANG, where: `${where} (task nearMiss ${i})`, program: buildTaskProgram(LANG, m, b.tests), compiles: true, task: b.tests, taskMustFail: true }));
       break;
     }
     case "run":

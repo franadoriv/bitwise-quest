@@ -1,5 +1,6 @@
 import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { runeDamageTask } from "../tasks.ts";
 
 // REGION 4 · META TOWER  (exceptions, dynamic dispatch and metaprogramming, pattern matching, threads and Ractors)
 
@@ -1096,6 +1097,7 @@ const boss: LessonDef = {
       fallback: [String.raw`\n\s*else\b`, String.raw`\brescue\b`, String.raw`in\s*\{\s*type:\s*:spell`, String.raw`\n\s*in\s+(_|Hash|\{\s*\})`],
       explain: L("{type: :spell} fits no rune, so case/in raises. Add an else branch (or a catch-all in) to handle it.", "{type: :spell} no encaja en ninguna runa y case/in lanza error. Agrega un else (o un in que acepte todo).", "{type: :spell} に合うルーンがなく例外に。else（か何でも合う in）を足そう。"),
     },
+    runeDamageTask,
     enemySays(L(
       "No fair! You read my tricks, my runes and my locks. The tower is yours... for now. Hee...",
       "¡No es justo! Leíste mis trucos, mis runas y mis candados. La torre es tuya... por ahora. Ji...",

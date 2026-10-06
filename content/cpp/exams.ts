@@ -1,5 +1,9 @@
 import type { ExamDef } from "../../lib/content/types.ts";
 import { L } from "../../lib/i18n/text.ts";
+import {
+  accountTask, clampAllTask, countWordsTask, joinAllTask, linkedListTask, lruCacheTask, palindromeTask,
+  parallelSumTask, reverseWordsTask, scopedCounterTask, sortByLengthTask, sumCsvTask,
+} from "./tasks.ts";
 
 // Entry exams that simulate company screenings for C++ roles (game studios, systems, trading firms).
 // Topics, levels and bank sizes follow docs/research/cpp-curriculum.md ("Entry exam") and
@@ -53,7 +57,10 @@ export const exams: ExamDef[] = [
     count: 12,
     passPct: 70,
     secondsPerQuestion: 30,
+    codeCount: 1,
     questions: [
+      // coding tasks (docs/research/coding-tasks-and-written-tests.md)
+      reverseWordsTask, clampAllTask, palindromeTask, accountTask,
       // basics
       {
         topic: "basics", difficulty: 1, kind: "predict", prompt: PRINTS,
@@ -378,7 +385,10 @@ export const exams: ExamDef[] = [
     count: 14,
     passPct: 70,
     secondsPerQuestion: 40,
+    codeCount: 2,
     questions: [
+      // coding tasks (docs/research/coding-tasks-and-written-tests.md)
+      countWordsTask, scopedCounterTask, sortByLengthTask, linkedListTask,
       // move
       {
         topic: "move", difficulty: 2, kind: "predict", prompt: PRINTS,
@@ -796,7 +806,10 @@ export const exams: ExamDef[] = [
     count: 15,
     passPct: 75,
     secondsPerQuestion: 50,
+    codeCount: 2,
     questions: [
+      // coding tasks (docs/research/coding-tasks-and-written-tests.md)
+      lruCacheTask, joinAllTask, sumCsvTask, parallelSumTask,
       // move
       {
         topic: "move", difficulty: 3, kind: "predict", prompt: PRINTS,

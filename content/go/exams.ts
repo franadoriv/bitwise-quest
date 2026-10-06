@@ -1,6 +1,19 @@
 import type { ExamDef } from "../../lib/content/types.ts";
 import { L } from "../../lib/i18n/text.ts";
-import { dedupeTask } from "./tasks.ts";
+import {
+  dedupeTask,
+  mergeIntervalsTask,
+  parallelMapTask,
+  parseAgeTask,
+  parseKVTask,
+  pipelineTask,
+  reverseWordsTask,
+  secondLargestTask,
+  stackTask,
+  topKTask,
+  topLetterTask,
+  withdrawTask,
+} from "./tasks.ts";
 
 // Entry exams that simulate company screenings for Go backend roles.
 // Topics, levels and bank sizes follow docs/research/go-curriculum.md ("Entry exams") and
@@ -73,7 +86,12 @@ export const exams: ExamDef[] = [
     count: 12,
     passPct: 70,
     secondsPerQuestion: 30,
+    codeCount: 1,
     questions: [
+      reverseWordsTask,
+      secondLargestTask,
+      topLetterTask,
+      parseAgeTask,
       // basics
       {
         topic: "basics", difficulty: 1, kind: "predict", prompt: COMPILES,
@@ -355,8 +373,12 @@ export const exams: ExamDef[] = [
     count: 14,
     passPct: 70,
     secondsPerQuestion: 40,
+    codeCount: 2,
     questions: [
       dedupeTask,
+      stackTask,
+      topKTask,
+      withdrawTask,
       // slices
       {
         topic: "slices", difficulty: 2, kind: "predict", prompt: PRINTS,
@@ -753,7 +775,12 @@ export const exams: ExamDef[] = [
     count: 15,
     passPct: 75,
     secondsPerQuestion: 50,
+    codeCount: 2,
     questions: [
+      parallelMapTask,
+      mergeIntervalsTask,
+      pipelineTask,
+      parseKVTask,
       // interfaces
       {
         topic: "interfaces", difficulty: 3, kind: "predict", prompt: HAPPENS,

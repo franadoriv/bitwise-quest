@@ -1,5 +1,6 @@
 import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { shapesTask } from "../tasks.ts";
 
 // REGION 3 · POLYMORPH CASTLE  (inheritance, virtual/override/final, slicing and virtual destructors, operators)
 
@@ -1766,6 +1767,7 @@ const boss: LessonDef = {
       check: { compiles: true, stdout: "doubleint" },
       explain: L("Promotions win: float goes to double, char to int.", "Ganan las promociones: float pasa a double, char a int.", "昇格が優先：float は double、char は int へ。"),
     },
+    shapesTask,
     enemySays(L(
       "My vtable... read entry by entry. Climb, then: Template Tower forges a new mold for every type.",
       "Mi vtable... leída entrada por entrada. Sube, entonces: la Torre de Plantillas forja un molde para cada tipo.",

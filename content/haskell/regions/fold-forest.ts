@@ -1,5 +1,6 @@
 import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L, say, enemySays } from "../../rust/helpers.ts";
+import { applyAllTask } from "../tasks.ts";
 
 // REGION 2 · FOLD FOREST  (recursion, higher-order functions, currying and composition, folds)
 
@@ -1280,6 +1281,7 @@ const boss: LessonDef = {
       explain: L("subtract 1 is a function waiting for a number; (-1) would just be a number.", "subtract 1 es una función que espera un número; (-1) sería solo un número.", "subtract 1 は数を待つ関数。(-1) はただの数。"),
       win: [{ t: "print", text: "[4,5]" }, { t: "attack", from: "hero", to: "enemy" }],
     },
+    applyAllTask,
     enemySays(L(
       "Crumble... every box opened at once. But on Lazy Mountain, boxes wait forever, and something hides inside them...",
       "Derrumbe... todas las cajas abiertas al instante. Pero en la Montaña Perezosa las cajas esperan para siempre, y algo se esconde dentro...",

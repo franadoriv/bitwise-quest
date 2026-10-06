@@ -1,5 +1,6 @@
 import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L, say, enemySays } from "../../rust/helpers.ts";
+import { saveAllTask } from "../tasks.ts";
 
 // REGION 4 · TASK TOWER  (exceptions, using and disposal, async/await)
 // Snippets are completed by the validator with `using System; System.Collections.Generic; System.Linq;
@@ -1036,6 +1037,7 @@ const boss: LessonDef = {
       hint: L("The try ends before LoadAsync fails, so the error is lost. Make the try wait for the task.", "El try termina antes de que LoadAsync falle y el error se pierde. Haz que el try espere al task.", "LoadAsync が失敗する前に try が終わり、エラーが消える。try に Task を待たせよう。"),
       note: "recap-async-errors",
     },
+    saveAllTask,
   ],
   notes: bossNotes,
 };

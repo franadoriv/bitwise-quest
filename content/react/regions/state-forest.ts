@@ -1,5 +1,6 @@
 import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { applyQueueTask } from "../tasks.ts";
 import { enemySays, say } from "../../rust/helpers.ts";
 
 // REGION 2 · STATE FOREST  (useState, events, immutable updates, sharing state)
@@ -1185,6 +1186,7 @@ const stateShade: LessonDef = {
       hint: L("Which special prop makes React treat a component as a brand-new instance?", "¿Qué prop especial hace que React trate a un componente como una instancia totalmente nueva?", "React にまったく新しいインスタンスだと思わせる特別なプロップスは？"),
       note: "recap-state",
     },
+    applyQueueTask,
     enemySays(L(
       "No stale snapshot fooled you... my crystals stay whole. The forest is yours, state keeper!",
       "Ninguna foto vieja te engañó... mis cristales siguen intactos. ¡El bosque es tuyo, guardián del estado!",

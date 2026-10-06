@@ -1,5 +1,6 @@
 import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L, say, enemySays } from "../../rust/helpers.ts";
+import { describeListTask } from "../tasks.ts";
 
 // REGION 1 · LAMBDA VILLAGE  (expressions, immutability, types, lists and strings, patterns and guards)
 
@@ -1344,6 +1345,7 @@ const boss: LessonDef = {
       explain: L("7 `mod` 2 is what is left after dividing: 1.", "7 `mod` 2 es lo que sobra al dividir: 1.", "7 `mod` 2 は割った余りの 1。"),
       win: [{ t: "print", text: "1" }, { t: "attack", from: "hero", to: "enemy" }],
     },
+    describeListTask,
     enemySays(L(
       "No holes left to nibble... Fine. In the Fold Forest, functions travel as values. You won't cover THAT so easily!",
       "No quedan huecos que morder... Bien. En el Bosque Fold las funciones viajan como valores. ¡Eso no lo cubrirás tan fácil!",

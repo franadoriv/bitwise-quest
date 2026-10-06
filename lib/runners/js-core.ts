@@ -148,7 +148,13 @@ export async function executeJs(
       "require", "module", "exports", "console", "setTimeout", "clearTimeout", "setInterval", "clearInterval", "process", "global", "setImmediate",
       `return (async () => {\n${compiled}\n})();`,
     );
-    await fn(requireShim, module, module.exports, consoleShim, setT, clearT, setI, clearI, undefined, undefined, undefined);
+    // A promise that never settles must not hang the run: race the program against the deadline and
+    // keep whatever it printed so far (a real timer also keeps Node's event loop alive meanwhile).
+    let lateTimer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<"late">((r) => { lateTimer = realSet(() => r("late"), Math.max(0, deadline - Date.now())); });
+    const program = fn(requireShim, module, module.exports, consoleShim, setT, clearT, setI, clearI, undefined, undefined, undefined) as Promise<unknown>;
+    const first = await Promise.race([program.then(() => "done" as const), late]).finally(() => realClear(lateTimer));
+    if (first === "late") timedOut = true;
     // let pending timers and their promise chains settle
     while (pending.size > 0 && Date.now() < deadline) await new Promise((r) => realSet(r, 2));
     if (pending.size > 0) {

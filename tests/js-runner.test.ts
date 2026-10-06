@@ -67,3 +67,10 @@ test("Node-only globals are hidden so verification matches the browser", async (
   const r = await executeJs("console.log(typeof process, typeof setImmediate, typeof global);");
   assert.equal(r.stdout, "undefined undefined undefined");
 });
+
+test("a promise that never settles times out and keeps the output so far", async () => {
+  const r = await executeJs('console.log("before");\nawait new Promise(() => {});\nconsole.log("after");', { timeoutMs: 80 });
+  assert.equal(r.timedOut, true);
+  assert.equal(r.ok, false);
+  assert.equal(r.stdout, "before");
+});

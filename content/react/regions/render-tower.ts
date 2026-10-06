@@ -1,5 +1,6 @@
 import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { shallowEqualTask } from "../tasks.ts";
 
 // REGION 4 · RENDER TOWER  (context and useReducer, memo/useMemo/useCallback and when not to,
 // custom hooks and the rules of hooks, Suspense/lazy, error boundaries, transitions, "use client")
@@ -1400,6 +1401,7 @@ const renderOverlord: LessonDef = {
       ),
       check: { compiles: true, program: prog('function Counter() {\n  const [n] = useState(0);\n  return <p>{n}</p>;\n}\nfunction App({ show }: { show: boolean }) {\n  return <div>{show ? <Counter key="a" /> : <Counter key="b" />}</div>;\n}') },
     },
+    shallowEqualTask,
     enemySays(L(
       "My storm... calmed by a single shield and a stable key? The tower is quiet... for now.",
       "¿Mi tormenta... calmada por un escudo y una llave estable? La torre está en calma... por ahora.",

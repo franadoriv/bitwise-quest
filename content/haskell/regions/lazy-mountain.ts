@@ -1,5 +1,6 @@
 import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
+import { searchTreeTask } from "../tasks.ts";
 
 // REGION 3 · LAZY MOUNTAIN  (infinite lists, thunks and bottom, algebraic data types, Maybe and Either)
 
@@ -1188,6 +1189,7 @@ const boss: LessonDef = {
     { kind: "predict", time: 12, prompt: HAPPENS, code: 'print (read "abc" :: Int)', options: [L("Crash: no parse", "Crash: no parse", "クラッシュ：no parse"), "0", "Nothing"], answer: 0, check: { compiles: true, throws: "no parse" }, hint: L("read is not the safe parser. What does it do with text that is not a number?", "read no es el lector seguro. ¿Qué hace con un texto que no es un número?", "read は安全な読み取りではない。数字でない文字列をどうする？"), note: "recap-bottom", explain: L("read is partial: bad text crashes. readMaybe is the safe one.", "read es parcial: un texto malo falla. readMaybe es el seguro.", "read は部分関数。安全なのは readMaybe。"), win: [{ t: "shake" }] },
     { kind: "predict", time: 12, prompt: PRINT, code: "print (either length negate (Left \"abc\" :: Either String Int))", options: ["3", "-3", '"abc"'], answer: 0, output: "3", check: { compiles: true, stdout: "3" }, hint: L("either f g: which function handles a Left? Apply it to what is inside.", "either f g: ¿qué función maneja un Left? Aplícala a lo que hay adentro.", "either f g で Left を担当するのはどっちの関数？中身に当てよう。"), note: "recap-maybe-either", explain: L("either f g uses f on a Left and g on a Right.", "either f g usa f con Left y g con Right.", "either f g は Left に f、Right に g。") },
     { kind: "type", time: 12, prompt: L("A failure with a reason", "Un fallo con razón", "理由つきの失敗"), code: 'check :: Int -> Either String Int\ncheck n = if n < 0 then ___ "negative" else Right n\n\nmain :: IO ()\nmain = print (check (-1))', answer: "Left", check: { compiles: true, stdout: 'Left "negative"' }, hint: L("The function returns an Either. Which side carries an error?", "La función devuelve un Either. ¿Qué lado lleva un error?", "関数は Either を返す。エラーを運ぶのはどっち側？"), note: "recap-maybe-either", explain: L("Left holds the error scroll; Right the good item.", "Left guarda el pergamino de error; Right el objeto bueno.", "Left はエラーの巻物、Right はよいアイテム。") },
+    searchTreeTask,
     enemySays(L(
       "No... you opened only what you needed, and every empty chest had a plan. The tower above awaits.",
       "No... abriste solo lo necesario y cada cofre vacío tenía un plan. La torre de arriba te espera.",

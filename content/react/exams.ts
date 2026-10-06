@@ -1,5 +1,6 @@
 import type { ExamDef } from "../../lib/content/types.ts";
 import { L } from "../../lib/i18n/text.ts";
+import { juniorTasks, midTasks, seniorTasks } from "./tasks.ts";
 
 // Entry exams that simulate company technical screenings for React roles.
 // Topic mix, bank sizes and question ideas follow docs/research/typescript-react-curriculum.md
@@ -42,7 +43,9 @@ export const exams: ExamDef[] = [
     count: 12,
     passPct: 70,
     secondsPerQuestion: 30,
+    codeCount: 1,
     questions: [
+      ...juniorTasks,
       // jsx
       {
         topic: "jsx", difficulty: 2, kind: "predict", prompt: PRINTS,
@@ -305,7 +308,9 @@ export const exams: ExamDef[] = [
     count: 14,
     passPct: 70,
     secondsPerQuestion: 40,
+    codeCount: 2,
     questions: [
+      ...midTasks,
       // state
       {
         topic: "state", difficulty: 2, kind: "predict", prompt: AFTER_CLICK,
@@ -598,7 +603,9 @@ export const exams: ExamDef[] = [
     count: 15,
     passPct: 75,
     secondsPerQuestion: 50,
+    codeCount: 2,
     questions: [
+      ...seniorTasks,
       // rendering
       {
         topic: "rendering", difficulty: 2, kind: "predict", prompt: L("Which one does NOT re-render Player?", "¿Cuál NO re-renderiza a Player?", "Player を再レンダーしないのは？"),

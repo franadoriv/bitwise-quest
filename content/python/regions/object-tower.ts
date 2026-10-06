@@ -1,4 +1,5 @@
 import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
+import { ledgerTask } from "../tasks.ts";
 import { L } from "../../../lib/i18n/text.ts";
 
 // REGION 4 · OBJECT TOWER (classes and attributes, inheritance and dataclasses, generators and
@@ -1201,6 +1202,7 @@ const boss: LessonDef = {
       check: { compiles: true, stdout: "[1, 2, 3]" },
       explain: L("Start i at 1, loop while i <= n, yield i, then step i up.", "Empieza i en 1, repite mientras i <= n, haz yield i y luego súbelo.", "i を 1 から、i <= n の間ループ、yield i して i を増やす。"),
     },
+    ledgerTask,
     enemySays(L(
       "Impossible... every await remembered, every door closed. The tower is yours, keeper of the one obvious way.",
       "Imposible... recordaste cada await y cerraste cada puerta. La torre es tuya, guardián del camino obvio.",
