@@ -8,7 +8,7 @@ type Reply = { code?: unknown; stdout?: unknown; stderr?: unknown; didExecute?: 
 const lines = (v: unknown) => (Array.isArray(v) ? (v as Line[]).map((l) => String(l?.text ?? "")).join("\n") : "");
 
 /** Optional per-language step that decides what counts as program output (see Zig). */
-type Split = (out: { stdout: string; stderr: string; ok: boolean }) => { stdout: string; stderr: string };
+type Split = (out: { stdout: string; stderr: string; ok: boolean }) => { stdout: string; stderr: string; phase?: "compile" | "runtime" };
 
 function godbolt(id: string, compiler: string, lang: string, userArguments: string, clean: (s: string) => string, split?: Split, timeoutMs = 20_000): LanguageRunner {
   return {
@@ -35,9 +35,9 @@ function godbolt(id: string, compiler: string, lang: string, userArguments: stri
       }
       const ok = data.code === 0;
       const raw = { stdout: lines(data.stdout), stderr: lines(data.stderr), ok };
-      const out = split ? split(raw) : raw;
+      const out: ReturnType<Split> = split ? split(raw) : raw;
       const stdoutText = out.stdout ? out.stdout + "\n" : "";
-      return { ok, stdout: stdoutText, stderr: clean(out.stderr), available: true, ...(ok ? {} : { phase: "runtime" as const }) };
+      return { ok, stdout: stdoutText, stderr: clean(out.stderr), available: true, ...(ok ? {} : { phase: out.phase ?? ("runtime" as const) }) };
     },
   };
 }
@@ -95,7 +95,23 @@ const cleanHaskell = (s: string) =>
     .join("\n")
     .trim();
 
+/** Ruby has no build step: a SyntaxError surfaces when the script starts, so report it as a compile error. */
+const splitRuby: Split = ({ stdout, stderr, ok }) => {
+  if (ok || !/\(SyntaxError\)/.test(stderr)) return { stdout, stderr };
+  const at = stderr.search(/^.*syntax errors? found/m);
+  return { stdout, stderr: at === -1 ? stderr : stderr.slice(at), phase: "compile" };
+};
+
+const cleanRuby = (s: string) =>
+  stripAnsi(s)
+    .split("\n")
+    .map((l) => l.replace(/\/app\/(?:output\.s|example\.rb)/g, "main.rb"))
+    .filter((l) => !/^(Compiler returned:|Program terminated with signal)/.test(l))
+    .join("\n")
+    .trim();
+
 export const godboltCpp = godbolt("godbolt-cpp", "g142", "c++", "-std=c++20 -O1", cleanCpp);
 export const godboltCsharp = godbolt("godbolt-csharp", "dotnet100csharpcoreclr", "csharp", "", cleanCs);
 export const godboltZig = godbolt("godbolt-zig", "z0152", "zig", "", cleanZig, splitZig, 30_000);
 export const godboltHaskell = godbolt("godbolt-haskell", "ghc984", "haskell", "", cleanHaskell);
+export const godboltRuby = godbolt("godbolt-ruby", "ruby347", "ruby", "", cleanRuby, splitRuby);

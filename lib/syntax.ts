@@ -30,6 +30,10 @@ const GRAMMARS: Record<string, Grammar> = {
     keywords: ["using", "namespace", "class", "struct", "record", "interface", "enum", "public", "private", "protected", "internal", "static", "readonly", "const", "sealed", "abstract", "virtual", "override", "new", "return", "if", "else", "for", "foreach", "in", "while", "do", "switch", "case", "default", "break", "continue", "try", "catch", "finally", "throw", "async", "await", "var", "this", "base", "null", "true", "false", "is", "as", "out", "ref", "params", "get", "set", "init", "with", "where", "yield", "lock", "event", "delegate", "operator", "typeof", "nameof", "when", "and", "or", "not", "required"],
     types: ["int", "long", "short", "byte", "char", "bool", "float", "double", "decimal", "string", "object", "void", "dynamic", "uint", "ulong"],
   },
+  ruby: {
+    keywords: ["def", "end", "class", "module", "if", "elsif", "else", "unless", "while", "until", "for", "in", "do", "return", "yield", "begin", "rescue", "ensure", "raise", "case", "when", "then", "self", "super", "nil", "true", "false", "and", "or", "not", "lambda", "proc", "attr_accessor", "attr_reader", "attr_writer", "include", "extend", "require", "private", "protected", "public", "next", "break", "redo", "retry", "alias", "defined?", "loop"],
+    types: ["Integer", "Float", "String", "Symbol", "Array", "Hash", "Proc", "Struct", "Comparable", "Enumerable", "Kernel", "Object", "NilClass", "puts", "p", "print"],
+  },
   zig: {
     keywords: ["const", "var", "fn", "pub", "return", "if", "else", "while", "for", "switch", "break", "continue", "defer", "errdefer", "try", "catch", "orelse", "unreachable", "struct", "enum", "union", "error", "comptime", "inline", "test", "and", "or", "null", "undefined", "true", "false", "async", "await", "export", "extern", "packed", "threadlocal", "noreturn", "anytype"],
     types: ["u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128", "isize", "f16", "f32", "f64", "bool", "void", "type", "anyerror", "comptime_int", "comptime_float"],
@@ -59,6 +63,8 @@ const LEXERS: Record<string, RegExp> = {
   python: lexer("#.*$", String.raw`(?:[rRbBfFuU]{1,2})?(?:"""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')`, String.raw`^[ \t]*@[\w.]+`),
 };
 LEXERS.tsx = LEXERS.ts;
+// Ruby: # comments; :symbols, @ivars and $globals highlighted as macros (no ?a char literals).
+LEXERS.ruby = lexer("#(?!\\{).*$", String.raw`"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'`, String.raw`(?<![\w:]):[A-Za-z_]\w*[?!]?|@@?[A-Za-z_]\w*|\$[A-Za-z_]\w*`);
 LEXERS.zig = lexer(String.raw`\/\/.*$`, String.raw`\\\\.*$|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'`, String.raw`@[A-Za-z_]\w*`);
 // Haskell: -- and {- -} comments; a quote after an identifier is a prime (x'), not a char literal.
 LEXERS.haskell = lexer(String.raw`--.*$|\{-[\s\S]*?-\}`, String.raw`"(?:\\.|[^"\\])*"|(?<![\w'])'(?:\\.|[^'\\])'`, String.raw`^[ \t]*\{-#[\s\S]*?#-\}`);

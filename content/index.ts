@@ -9,6 +9,8 @@ import { python } from "./python/index.ts";
 import { csharp } from "./csharp/index.ts";
 import { go } from "./go/index.ts";
 import { cpp } from "./cpp/index.ts";
+import { ruby } from "./ruby/index.ts";
+import { rails } from "./rails/index.ts";
 import { zig } from "./zig/index.ts";
 import { haskell } from "./haskell/index.ts";
 
@@ -25,6 +27,8 @@ export const LANGUAGE_PACKS: LanguagePack[] = [
   csharp,
   go,
   cpp,
+  ruby,
+  rails,
   zig,
   haskell,
 ];

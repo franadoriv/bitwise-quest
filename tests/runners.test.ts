@@ -85,4 +85,5 @@ test("highlighter knows every code language", () => {
   assert.deepEqual(kinds('var s = $"a{b}";', "csharp"), ["kw:var", 'str:$"a{b}"']);
   assert.deepEqual(kinds("const x = @import(\"std\");", "zig"), ["kw:const", "mac:@import", 'str:"std"']);
   assert.deepEqual(kinds("f x' = 'a' -- c", "haskell"), ["str:'a'", "com:-- c"]);
+  assert.deepEqual(kinds('def hi = puts "a#{@n}" # c\nh = { k: :v }', "ruby"), ["kw:def", "type:puts", 'str:"a#{@n}"', "com:# c", "mac::v"]);
 });
