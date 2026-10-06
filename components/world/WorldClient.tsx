@@ -66,6 +66,12 @@ function World({ content, save }: { content: Content; save: SaveData }) {
     gsap.fromTo(panel.current, { y: 30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3, ease: "back.out(2)" });
   }, [selected]);
 
+  // Arrive from the galaxy's fade to black.
+  const fadeRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    gsap.fromTo(fadeRef.current, { opacity: 1 }, { opacity: 0, duration: 0.6, ease: "power2.out" });
+  }, []);
+
   useEffect(() => {
     if (!nextRef.current) return;
     const t = gsap.to(nextRef.current, { y: -4, duration: 0.35, repeat: -1, yoyo: true, ease: "steps(2)" });
@@ -191,6 +197,7 @@ function World({ content, save }: { content: Content; save: SaveData }) {
           </div>
         </div>
       )}
+      <div ref={fadeRef} aria-hidden style={{ position: "absolute", inset: 0, background: "var(--p0)", opacity: 0, pointerEvents: "none", zIndex: 700 }} />
     </div>
   );
 }

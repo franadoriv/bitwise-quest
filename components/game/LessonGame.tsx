@@ -269,7 +269,8 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
       setTimeout(() => stage.current?.healEnemy(), 500);
     }
     if (h <= 0) {
-      setTimeout(() => { music.play("jingle:gameover"); setPhase("gameover"); }, 900);
+      // After the game-over jingle, a calm loop keeps playing while the player decides.
+      setTimeout(() => { music.play("jingle:gameover", { then: "card" }); setPhase("gameover"); }, 900);
       if (!review && saveRef.current) {
         void commit(recordFailedRun(saveRef.current, play.languageSlug, play.slug, stats.current.attempts.map((a) => ({ beat: a.beat, correct: a.correct }))));
       }

@@ -44,6 +44,7 @@ function Galaxy({ planets }: { planets: PlanetEntry[] }) {
   useEffect(() => { gsap.fromTo(panel.current, { y: 24, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3, ease: "back.out(2)" }); }, [selected]);
 
   const [landing, setLanding] = useState<Landing | null>(null);
+  const fadeRef = useRef<HTMLDivElement>(null);
   const select = (i: number) => { if (landing || i === selected || i < 0 || i >= planets.length) return; sfx.whoosh(); setSelected(i); };
   const land = (el: Element | null, target: LanguageView = lang) => {
     if (landing) return;
@@ -53,7 +54,8 @@ function Galaxy({ planets }: { planets: PlanetEntry[] }) {
     const moon = cur.moons.findIndex((m) => m.language.slug === target.slug);
     setLanding({ planet: selected, moon: moon >= 0 ? moon : undefined });
     router.prefetch(`/play/${target.slug}`);
-    setTimeout(() => fx.flash("var(--white)", 0.8), 700);
+    // Fade to black while the camera dives, so the zoom and the fade finish together.
+    gsap.fromTo(fadeRef.current, { opacity: 0 }, { opacity: 1, duration: 0.85, ease: "power2.in" });
     setTimeout(() => router.push(`/play/${target.slug}`), 900);
   };
   const doneIn = (m: MoonEntry) => m.lessonSlugs.filter((s) => save?.langs[m.language.slug]?.lessons[s]?.doneAt).length;
@@ -127,6 +129,7 @@ function Galaxy({ planets }: { planets: PlanetEntry[] }) {
           </button>
         </div>
       </main>
+      <div ref={fadeRef} aria-hidden style={{ position: "absolute", inset: 0, background: "var(--p0)", opacity: 0, pointerEvents: "none", zIndex: 700 }} />
     </div>
   );
 }
