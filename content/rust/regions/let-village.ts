@@ -1,103 +1,10 @@
-import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
+import type { LessonDef, RegionDef } from "../../../lib/content/types.ts";
 import { L, enemySays, say } from "../helpers.ts";
 
 // REGION 1 · LET VILLAGE  (variables, mut, types, shadowing)
 
 const YES = L("Yes", "Sí", "はい");
 const NO = L("No", "No", "いいえ");
-
-// Codex notes: long explanations players can reopen from any question (📖).
-// Examples use names and values different from the questions so they never give an answer away.
-const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
-const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
-/** A runnable example; the validator checks `output` against the real compiler. */
-const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code, output, caption });
-/** An example that must NOT compile (verified too). */
-const bad = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: false } });
-
-const letBasicsNotes: NoteDef[] = [
-  note("let-variables", L("Creating variables with let", "Crear variables con let", "let で変数を作る"),
-    p(
-      "A variable is a name stuck to a value, like a label on a box. In Rust you create one with the keyword let, followed by the name, an equals sign, the value and a semicolon: let name = value; From then on, writing the name means \"the value inside\".",
-      "Una variable es un nombre pegado a un valor, como la etiqueta de una caja. En Rust se crea con la palabra clave let, seguida del nombre, un signo igual, el valor y un punto y coma: let nombre = valor; Desde ahí, escribir el nombre significa \"el valor que guarda\".",
-      "変数とは、値に貼った名前のラベルのようなもの。Rustでは let というキーワードで作る。let のあとに名前、=、値、そしてセミコロンを書く：let 名前 = 値; それ以降、名前を書けば「中の値」という意味になる。",
-    ),
-    ex('let lives = 3;\nlet stars = 12;\nprintln!("{} {}", lives, stars);', "3 12",
-      L("Two variables, each with its own name and value", "Dos variables, cada una con su nombre y valor", "名前と値をもつ2つの変数")),
-    p(
-      "Why let? Each language picks its own words: JavaScript uses var or let, C uses int, Python uses no keyword at all. Rust always uses let, so var or int in Rust code is rejected by the compiler. The = here doesn't mean \"equals\" as in math: it means \"store this value under this name\".",
-      "¿Por qué let? Cada lenguaje elige sus palabras: JavaScript usa var o let, C usa int y Python no usa ninguna. Rust siempre usa let, así que el compilador rechaza var o int en código Rust. Aquí el = no significa \"es igual\" como en matemáticas: significa \"guarda este valor con este nombre\".",
-      "なぜ let なのか？言語ごとに使う言葉が違う。JavaScriptは var や let、Cは int、Pythonは何も書かない。Rustでは必ず let。var や int を書くとコンパイラに拒否される。ここの = は数学の「等しい」ではなく「この名前でこの値をしまう」という意味じゃ。",
-    ),
-    p(
-      "Names follow simple rules: letters, digits and underscores, but they can't start with a digit or contain spaces. Rust style is snake_case: all lowercase, with underscores between words, like max_speed. Pick names that say what the value means; hp is clearer than h.",
-      "Los nombres siguen reglas simples: letras, dígitos y guiones bajos, pero no pueden empezar con un dígito ni tener espacios. El estilo de Rust es snake_case: todo en minúsculas y con guiones bajos entre palabras, como max_speed. Elige nombres que digan qué significa el valor; hp es más claro que h.",
-      "名前のルールはかんたん。英字・数字・アンダースコアが使えるが、数字で始めたり空白を入れたりはできない。Rustの書き方は snake_case：全部小文字で、単語の間を _ でつなぐ（例：max_speed）。値の意味がわかる名前にしよう。h より hp のほうがわかりやすい。",
-    ),
-    bad("let 2nd_place = 5;",
-      L("Does not compile: a name can't start with a digit", "No compila: un nombre no puede empezar con un dígito", "コンパイル不可：名前は数字で始められない")),
-    p(
-      "Common mistake: forgetting the semicolon. Every let statement ends with ; and without it the compiler stops with \"expected `;`\". Read a let line as a sentence: let (create) lives (named lives) = 3 (holding 3) ; (done).",
-      "Error común: olvidar el punto y coma. Toda instrucción let termina en ; y sin él el compilador se detiene con \"expected `;`\". Lee una línea let como una frase: let (crea) lives (llamada lives) = 3 (que guarda 3) ; (listo).",
-      "よくあるミス：セミコロンを忘れること。let の文は必ず ; で終わり、ないとコンパイラが \"expected `;`\" と言って止まる。let の行は文として読もう：let（作る）lives（lives という名前で）= 3（3を入れて）;（おしまい）。",
-    ),
-  ),
-  note("println-slots", L("Printing with println! and {}", "Imprimir con println! y {}", "println! と {} で表示"),
-    p(
-      "println! prints a line of text on the screen. The text goes inside double quotes, and whatever is between the quotes is printed exactly as written. The ! means println! is a macro, a special kind of Rust command; just remember to always write it.",
-      "println! imprime una línea de texto en la pantalla. El texto va entre comillas dobles, y lo que esté entre las comillas se imprime tal cual. El ! indica que println! es una macro, un tipo especial de comando de Rust; solo recuerda escribirlo siempre.",
-      "println! は画面に1行の文字を表示する。文字は二重引用符 \" \" の中に書き、引用符の中身はそのまま表示される。! は println! がマクロ（Rustの特別な命令）であるしるし。いつも ! をつけると覚えよう。",
-    ),
-    ex('println!("Good morning");\nprintln!("See you soon");', "Good morning\nSee you soon",
-      L("Each println! prints one line, exactly as written", "Cada println! imprime una línea, tal cual", "println! 1つで1行、書いたとおりに表示")),
-    p(
-      "To print a variable's value, put {} in the text where the value should go, and add the variable after a comma. Each {} is a slot that is filled, in order, with the values after the text. Two slots need two values.",
-      "Para imprimir el valor de una variable, pon {} en el texto donde debe ir el valor y añade la variable después de una coma. Cada {} es un hueco que se rellena, en orden, con los valores que siguen al texto. Dos huecos necesitan dos valores.",
-      "変数の値を表示するには、値を入れたい場所に {} を書き、カンマのあとに変数を書く。{} は穴で、文字のあとに並べた値が順番に入る。穴が2つなら値も2つ必要じゃ。",
-    ),
-    ex('let speed = 4;\nlet laps = 2;\nprintln!("speed {} after {} laps", speed, laps);', "speed 4 after 2 laps"),
-    p(
-      "Quotes change everything. Without quotes, lives is a variable and Rust uses its value. With quotes, \"lives\" is just text: the five letters l-i-v-e-s. Both compile, so the compiler can't warn you; you only notice when the output shows a word instead of a number.",
-      "Las comillas lo cambian todo. Sin comillas, lives es una variable y Rust usa su valor. Con comillas, \"lives\" es solo texto: las cinco letras l-i-v-e-s. Ambas compilan, así que el compilador no te avisa; solo lo notas cuando la salida muestra una palabra en vez de un número.",
-      "引用符ですべてが変わる。引用符なしの lives は変数で、Rustはその値を使う。引用符つきの \"lives\" はただの文字、l-i-v-e-s の5文字じゃ。どちらもコンパイルできるので警告は出ない。数字ではなく単語が表示されて初めて気づく。",
-    ),
-    ex('let lives = 3;\nprintln!("{}", "lives");\nprintln!("{}", lives);', "lives\n3",
-      L("The same name, with and without quotes", "El mismo nombre, con y sin comillas", "同じ名前、引用符ありとなし")),
-    p(
-      "Common mistakes: leaving a {} with no value after the comma (it does not compile: each slot needs a value), or adding symbols from other languages, like $lives; Rust variable names never start with $. Remember: the text says where the value goes, and the values after the comma say what goes there.",
-      "Errores comunes: dejar un {} sin valor después de la coma (no compila: cada hueco necesita un valor) o añadir símbolos de otros lenguajes, como $lives; en Rust los nombres de variables nunca empiezan con $. Recuerda: el texto dice dónde va el valor, y los valores tras la coma dicen qué va ahí.",
-      "よくあるミス：カンマのあとに値がない {} を残すこと（穴には値が必要なのでコンパイルできない）。他の言語のくせで $lives のように記号をつけること。Rustの変数名は $ で始まらない。文字は「どこに」、カンマのあとの値は「何を」入れるかを決めるのじゃ。",
-    ),
-    bad('let lives = 3;\nprintln!("{} and {}", lives);',
-      L("Does not compile: two slots, only one value", "No compila: dos huecos y un solo valor", "コンパイル不可：穴が2つで値が1つ")),
-  ),
-  note("fn-main", L("Every program starts in fn main", "Todo programa empieza en fn main", "プログラムは fn main から"),
-    p(
-      "A Rust program needs a starting point, and that point is a function called main. fn means \"function\", main is its name, and the () after it hold its inputs (none here). When you run the program, Rust jumps into main and runs its lines from top to bottom.",
-      "Un programa en Rust necesita un punto de partida, y ese punto es una función llamada main. fn significa \"función\", main es su nombre y los () guardan sus entradas (aquí ninguna). Al ejecutar el programa, Rust entra en main y ejecuta sus líneas de arriba abajo.",
-      "Rustのプログラムには出発点が必要で、それが main という関数じゃ。fn は「関数」、main は名前、後ろの () は入力（ここではなし）を入れる場所。プログラムを動かすと、Rustは main に入り、上から下へ順に行を実行する。",
-    ),
-    p(
-      "The body of main lives between curly braces { and }. The opening brace goes right after fn main(), and the closing brace is the very last line. Everything inside is indented with four spaces, so you can see at a glance what belongs to main.",
-      "El cuerpo de main va entre llaves { y }. La llave de apertura va justo después de fn main(), y la de cierre es la última línea. Todo lo de dentro se indenta con cuatro espacios, para ver de un vistazo qué pertenece a main.",
-      "main の中身は波かっこ { と } の間に書く。開きかっこは fn main() のすぐあと、閉じかっこは一番最後の行。中の行は4つの空白で字下げして、main に属するものがひと目でわかるようにする。",
-    ),
-    ex('fn main() {\n    println!("first");\n    println!("second");\n}', "first\nsecond",
-      L("Lines inside main run from top to bottom", "Las líneas de main se ejecutan de arriba abajo", "main の中は上から下へ実行される")),
-    p(
-      "Order matters inside main. A variable must be created with let before any line uses it; if you use a name before its let, the compiler says it cannot find that value. It's like a recipe: you can't stir the soup before you pour it into the pot.",
-      "El orden importa dentro de main. Una variable debe crearse con let antes de que alguna línea la use; si usas un nombre antes de su let, el compilador dice que no encuentra ese valor. Es como una receta: no puedes remover la sopa antes de echarla en la olla.",
-      "main の中では順番が大事。変数は、使う行より前に let で作らないといけない。let より前に名前を使うと、コンパイラは「その値が見つからない」と言う。料理のレシピと同じで、鍋に入れる前にスープはかき混ぜられない。",
-    ),
-    bad('println!("{}", score);\nlet score = 9;',
-      L("Does not compile: score is used before its let", "No compila: score se usa antes de su let", "コンパイル不可：let より前に score を使っている")),
-    p(
-      "In many questions you will see only a few lines without fn main. That's a shortcut: imagine them inside main. In the run exercises you write whole programs, so keep the fn main() { ... } shell and change only what's inside.",
-      "En muchas preguntas verás solo unas líneas sin fn main. Es un atajo: imagínalas dentro de main. En los ejercicios de ejecutar escribes programas completos, así que conserva la envoltura fn main() { ... } y cambia solo lo de dentro.",
-      "多くの問題では fn main のない数行だけが出てくる。これは省略で、main の中にあると考えよう。実行の課題では完全なプログラムを書くので、fn main() { ... } の外枠は残して、中身だけを変えるのじゃ。",
-    ),
-  ),
-];
 
 const letBasics: LessonDef = {
   slug: "hello-let",
