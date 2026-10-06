@@ -6,7 +6,7 @@
 
 **A retro arcade game for learning programming languages by playing.**
 NES/Game Boy pixel art, constant feedback and a world that reacts to your code.
-Playable now: **Rust**, **TypeScript/JavaScript** (with **React**, **WebGL** and **three.js** moons), **Python**, **Go**, **C++** and **C#**.
+Playable now: **Rust**, **TypeScript/JavaScript** (with **React**, **WebGL** and **three.js** moons), **Python**, **Go**, **C++**, **C#**, **Zig** and **Haskell**.
 
 [![CI](https://github.com/franadoriv/bitwise-quest/actions/workflows/ci.yml/badge.svg)](https://github.com/franadoriv/bitwise-quest/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
@@ -41,6 +41,8 @@ The whole game, UI and every piece of content, is available in **English**, **Es
 | ![TypeScript lesson](docs/screenshots/lesson-ts.png) | ![React exercise rendered in a Web Worker](docs/screenshots/lesson-react.png) |
 | **Planet Serpentia: real Python in your browser** | **Planet Concurra (Go)** |
 | ![Python async exercise run with CPython in WebAssembly](docs/screenshots/lesson-python.png) | ![Go panic and recover exercise on the Go Playground](docs/screenshots/lesson-go.png) |
+| **Planet Comptia (Zig): allocators and the leak checker** | **Planet Lambdara (Haskell)** |
+| ![Zig allocator exercise](docs/screenshots/lesson-zig.png) | ![Galaxy: planet Lambdara](docs/screenshots/galaxy-haskell.png) |
 | **Planet Velocis (C++20)** | **Planet Sharpholm (C#, .NET 10)** |
 | ![C++ move semantics exercise](docs/screenshots/lesson-cpp.png) | ![C# records exercise](docs/screenshots/lesson-csharp.png) |
 | **Planet map** | **Code controls the world** |
@@ -68,7 +70,7 @@ Each lesson is a series of challenges that take a few seconds each and follow th
 | Predict | Guesses what the code prints or whether it compiles |
 | Type | Types the token, with character-by-character feedback |
 | Order | Builds the program line by line |
-| Run | Fixes a real program and runs it: Rust and Go on their official playgrounds, C++ and C# on Compiler Explorer, JS/TS/React/three.js and Python right in the browser |
+| Run | Fixes a real program and runs it: Rust and Go on their official playgrounds, C++, C#, Zig and Haskell on Compiler Explorer, JS/TS/React/three.js and Python right in the browser |
 
 ## Features
 
@@ -81,7 +83,7 @@ Each lesson is a series of challenges that take a few seconds each and follow th
 - **Three languages:** English, Español and 日本語 for both UI and content, switchable in-game.
 - **16:9 frame** that scales with the window, with a portrait layout for mobile.
 - **Three palettes:** Orange, Game Boy and NES.
-- **Verified content:** every claim about the compiler is actually compiled or run before it ships: Rust and Go on their official playgrounds, C++ and C# on Compiler Explorer, Python in CPython (WebAssembly), and TypeScript, React, WebGL and three.js with `tsc --strict` plus the game's own runner.
+- **Verified content:** every claim about the compiler is actually compiled or run before it ships: Rust and Go on their official playgrounds, C++, C#, Zig and Haskell on Compiler Explorer, Python in CPython (WebAssembly), and TypeScript, React, WebGL and three.js with `tsc --strict` plus the game's own runner.
 - **JS/TS and Python run in your browser:** TypeScript, React, three.js and Python exercises execute in a sandboxed Web Worker on the player's machine, with a hard timeout (Python is CPython compiled to WebAssembly, served by the game itself); the server never runs player code.
 
 ## Planets and moons
@@ -97,8 +99,8 @@ Each lesson is a series of challenges that take a few seconds each and follow th
 | **Concurra** | Planet | Go | Gopi, a tunnel digger | Official Go Playground | Playable: 4 regions + entry exams |
 | **Velocis** | Planet | C++20 | Vecta, a steel knight | Compiler Explorer (g++ 14) | Playable: 4 regions + entry exams |
 | **Sharpholm** | Planet | C# | Hashi, a keen fox | Compiler Explorer (.NET 10) | Playable: 4 regions + entry exams |
-| **Comptia** | Planet | Zig | Iggi | | Under construction |
-| **Lambdara** | Planet | Haskell | Lambo | | Under construction |
+| **Comptia** | Planet | Zig | Iggi, an iguana forge engineer | Compiler Explorer (Zig 0.15) | Playable: 4 regions + entry exams |
+| **Lambdara** | Planet | Haskell | Lambo, a wise owl | Compiler Explorer (GHC 9.8) | Playable: 4 regions + entry exams |
 
 Future moons could cover more frameworks, such as Babylon.js, Vue or Django.
 
@@ -136,8 +138,10 @@ Future moons could cover more frameworks, such as Babylon.js, Vue or Django.
 | Concurra (Go) | Gopher Village · Slice Forest · Interface Castle · Channel Tower | 20 | 222 | 12/22 · 14/24 · 15/26 |
 | Velocis (C++) | Value Village · Lifetime Forest · Polymorph Castle · Template Tower | 20 | 227 | 12/22 · 14/24 · 15/26 |
 | Sharpholm (C#) | Value Village · Class Forest · Linq Peaks · Task Tower | 19 | 194 | 12/22 · 14/24 · 15/26 |
+| Comptia (Zig) | Forge Village · Optional Forest · Struct Mountain · Comptime Tower | 20 | 227 | 12/22 · 14/24 · 15/26 |
+| Lambdara (Haskell) | Lambda Village · Fold Forest · Lazy Mountain · Monad Tower | 20 | 201 | 12/22 · 14/24 · 15/26 |
 
-Every claim in every world is checked by `npm run content:verify` against the real toolchain: 2,600+ snippets in total. The curricula and exam designs come from research into what companies assess, in [`docs/research/`](docs/research/).
+Every claim in every world is checked by `npm run content:verify` against the real toolchain: 3,200+ snippets in total. The curricula and exam designs come from research into what companies assess, in [`docs/research/`](docs/research/).
 
 ## Getting started
 
@@ -163,7 +167,7 @@ Open <http://localhost:3000>, press **START**, pick a memory card slot, name you
 | `npm test` | Unit tests of the save system (codec, migrations, progress rules), the backend abuse protection (rate limits, origin checks, body limits), the JS/TS and Python runners, the snippet wrapper, the highlighter and the music |
 | `npm run e2e` | End-to-end memory card test in headless Chrome (with `npm run dev` running) |
 
-> Rust and Go code challenges send the player's snippet to their official public playgrounds (`play.rust-lang.org`, `go.dev`), and C++ and C# challenges to Compiler Explorer (`godbolt.org`). Only the snippet is sent, through the same quotas and cache. With `BITWISE_RUNNER=off` no external call is made and validation is done locally. JS/TS/React/three.js and Python challenges run in a Web Worker in the player's own browser and never reach the server. The server is stateless and writes nothing to disk; player saves live in the browser's localStorage.
+> Rust and Go code challenges send the player's snippet to their official public playgrounds (`play.rust-lang.org`, `go.dev`), and C++, C#, Zig and Haskell challenges to Compiler Explorer (`godbolt.org`). Only the snippet is sent, through the same quotas and cache. With `BITWISE_RUNNER=off` no external call is made and validation is done locally. JS/TS/React/three.js and Python challenges run in a Web Worker in the player's own browser and never reach the server. The server is stateless and writes nothing to disk; player saves live in the browser's localStorage.
 
 > The API is protected against abuse: same-origin checks, per-client and global rate limits, concurrency caps, bounded JSON bodies, strict validation, a per-request nonce Content-Security-Policy and security headers. See [`docs/security.md`](docs/security.md).
 
@@ -202,9 +206,9 @@ AI agents have instructions in [`AGENTS.md`](AGENTS.md) and step-by-step playboo
 - [x] Full localization: English, Español, 日本語
 - [x] Planets with their own guide and bugs, and a 15-slot memory card with export/import
 - [x] TypeScript/JavaScript planet (Scriptara) and its React moon (Reactia), running in the browser
-- [ ] More moons: WebGL, three.js, Babylon.js
-- [ ] More framework moons, such as WebGL, three.js or Babylon.js
-- [ ] Go, Zig and Haskell planets (Concurra, Comptia and Lambdara are already in the galaxy, under construction)
+- [x] Planets Python, Go, C++, C#, Zig and Haskell, and moons WebGL and three.js
+- [ ] More framework moons, such as Babylon.js, Vue or Django
+- [ ] More planets, such as Java, Kotlin, Swift or SQL
 - [ ] User accounts and leaderboard
 - [ ] More challenge kinds, such as "find the bug" in longer code
 

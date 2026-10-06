@@ -20,12 +20,12 @@ LanguagePack            content/<lang>/index.ts
 | --- | --- | --- |
 | `slug` | string | English, kebab-case, unique across all packs. Routes are `/play/<slug>/...` and the save keys progress by it |
 | `parent` | string? | Set only on **moons**: the slug of the planet the moon orbits (see [Planets and moons](#planets-and-moons)) |
-| `codeLang` | `"rust"` \| `"ts"` \| `"tsx"` \| `"go"` \| `"python"` \| `"cpp"` \| `"csharp"` | Language of the code in the pack (see [`codeLang`](#codelang-the-language-of-the-code)). When omitted it is `"rust"` for the `rust` pack and `"ts"` for every other pack, so always set it explicitly |
+| `codeLang` | `"rust"` \| `"ts"` \| `"tsx"` \| `"go"` \| `"python"` \| `"cpp"` \| `"csharp"` \| `"zig"` \| `"haskell"` | Language of the code in the pack (see [`codeLang`](#codelang-the-language-of-the-code)). When omitted it is `"rust"` for the `rust` pack and `"ts"` for every other pack, so always set it explicitly |
 | `name` | string | Short upper-case label (`"RUST"`, `"TS/JS"`, `"REACT"`) |
 | `tagline` | `L(...)` | Budget 60 |
 | `color` | `#rrggbb` | Cartridge color |
 | `status` | `"active"` \| `"soon"` | `soon` shows the planet or moon locked; its routes answer 404 |
-| `runner` | string? | Runner id: `"rust-playground"`, `"go-playground"`, `"godbolt-cpp"`, `"godbolt-csharp"` (server) or `"js-browser"`, `"py-browser"` (the player's browser). See [adding-a-language.md](adding-a-language.md#choosing-a-runner) |
+| `runner` | string? | Runner id: `"rust-playground"`, `"go-playground"`, `"godbolt-cpp"`, `"godbolt-csharp"`, `"godbolt-zig"`, `"godbolt-haskell"` (server) or `"js-browser"`, `"py-browser"` (the player's browser). See [adding-a-language.md](adding-a-language.md#choosing-a-runner) |
 | `planet` | `PlanetDef` | The planet (or moon) in the galaxy |
 | `regions`, `topics`, `exams` | | As below |
 
@@ -50,8 +50,10 @@ A **planet** is a programming language. A **moon** is a framework of that langua
 | C# | planet | `csharp` | Sharpholm | Hashi (fox) | `csharp` | `godbolt-csharp` | `content/csharp/` |
 | Go | planet | `go` | Concurra | Gopi (tunnel digger) | `go` | `go-playground` | `content/go/` |
 | C++ | planet | `cpp` | Velocis | Vecta (steel knight) | `cpp` | `godbolt-cpp` | `content/cpp/` |
+| Zig | planet | `zig` | Comptia | Iggi (iguana forge engineer) | `zig` | `godbolt-zig` | `content/zig/` |
+| Haskell | planet | `haskell` | Lambdara | Lambo (owl) | `haskell` | `godbolt-haskell` | `content/haskell/` |
 
-All of these are registered in `content/index.ts`; Zig and Haskell remain `soon` placeholders. The newer packs are still being written, with region plans based on the notes in [`docs/research/`](research/).
+All of these are registered in `content/index.ts` and `active`. The newer packs are still being written, with region plans based on the notes in [`docs/research/`](research/).
 
 ## `codeLang`: the language of the code
 
@@ -63,7 +65,7 @@ All of these are registered in `content/index.ts`; Zig and Haskell remain `soon`
 | JSX | no | no | yes (`.tsx` for the type checker, the JSX transform in the runner) |
 | Validator (`content:verify`) | Snippets wrapped in `fn main`, run on the Rust Playground | Module bodies, type-checked with `tsc --strict`, run with the JS runner core | Same as `ts`, with JSX |
 
-`go`, `python`, `cpp` and `csharp` have their own grammars and lexers in `lib/syntax.ts` (comments, strings, and preprocessor lines or decorators highlighted as macros); their validator rules are in [Go, C++, C# and Python packs](#go-c-c-and-python-packs).
+`go`, `python`, `cpp`, `csharp`, `zig` and `haskell` have their own grammars and lexers in `lib/syntax.ts` (comments, strings, and preprocessor lines, decorators or Zig builtins highlighted as macros); their validator rules are in [Go, C++, C#, Zig, Haskell and Python packs](#go-c-c-zig-haskell-and-python-packs).
 
 `codeLang` is what the lesson engine passes to the highlighter as `ctx.lang`, so a grammar in `GRAMMARS` is keyed by `codeLang`, not by pack slug.
 
@@ -230,7 +232,7 @@ The `say(text)` and `enemySays(text)` helpers in `content/<lang>/helpers.ts` bui
 | Field | Meaning |
 | --- | --- |
 | `program` | Full program that replaces the beat's code entirely. Use it when the snippet alone is not a valid program |
-| `compiles` | Whether it must compile (Rust, Go, C++, C#), type-check (TS/TSX) or have no `SyntaxError` (Python) |
+| `compiles` | Whether it must compile (Rust, Go, C++, C#, Zig, Haskell), type-check (TS/TSX) or have no `SyntaxError` (Python) |
 | `stdout` | Exact expected output, trimmed on both sides |
 | `throws` | All languages except Rust: the program compiles (type-checks) but must fail at runtime; text the error must contain (e.g. `"TypeError"`, `"KeyError"`, `"nil map"`) |
 | `wrongFail` | `pick` only: also prove that every wrong option fails |
@@ -238,7 +240,7 @@ The `say(text)` and `enemySays(text)` helpers in `content/<lang>/helpers.ts` bui
 Common rules:
 
 - In `pick` and `type`, `___` is filled with the correct answer (for `pick`, the English text of the option). `order` joins `lines` in the correct order.
-- `check.wrongFail: true` (`pick` only, ignored when `check.program` is set) also builds the program with each wrong option and requires each one **not** to compile (Rust, Go, C++, C#; for Python, to raise a `SyntaxError`) or **not** to type-check (TS/TSX), to avoid ambiguous distractors. Don't use it when a distractor compiles but is semantically worse; explain that in `explain`.
+- `check.wrongFail: true` (`pick` only, ignored when `check.program` is set) also builds the program with each wrong option and requires each one **not** to compile (Rust, Go, C++, C#, Zig, Haskell; for Python, to raise a `SyntaxError`) or **not** to type-check (TS/TSX), to avoid ambiguous distractors. Don't use it when a distractor compiles but is semantically worse; explain that in `explain`.
 
 ### Rust packs
 
@@ -255,20 +257,24 @@ Common rules:
 - A runtime error when no `throws` is set is reported as an error, so `check.stdout` claims must run cleanly.
 - `compiles: false` claims only need the type error; the program is not run.
 
-### Go, C++, C# and Python packs
+### Go, C++, C#, Zig, Haskell and Python packs
 
-These packs are verified by the same runners the game uses: Go on the official Go Playground, C++ (g++ 14, `-std=c++20 -O1`) and C# (.NET 10) on Compiler Explorer, and Python in Pyodide (CPython 3.14 compiled to WebAssembly), which `content:verify` loads inside Node. Remote results are cached in `.snippets/cache-<lang>.json` (gitignored), so re-running the validator only sends new or changed programs.
+These packs are verified by the same runners the game uses: Go on the official Go Playground, C++ (g++ 14, `-std=c++20 -O1`), C# (.NET 10), Zig (0.15.2, Debug) and Haskell (GHC 9.8.4) on Compiler Explorer, and Python in Pyodide (CPython 3.14 compiled to WebAssembly), which `content:verify` loads inside Node. Remote results are cached in `.snippets/cache-<lang>.json` (gitignored), so re-running the validator only sends new or changed programs.
 
 - **Short snippets are completed for you** (`scripts/snippet-wrap.ts`); players only see the snippet:
   - Go: without `package main`, the code is placed in `func main() { ... }` (unless it already declares `func main()`) and, unless it has its own `import`, the standard packages it uses (`fmt.`, `strings.`, `errors.`, `sort.`, `sync.`, `time.`, `strconv.`, `slices.`, `maps.`, `context.`, `math.`, `os.`, `unicode.`, `bytes.`, `atomic.`, `cmp.`, `runtime.`, `utf8.`, `fs.`, `io.`) are imported. Remember that unused variables and imports are compile errors in Go.
   - C++: without `#include`, common standard headers are added (`iostream`, `string`, `vector`, `map`, `unordered_map`, `memory`, `algorithm`, `optional`, `variant`, `ranges`...); without `int main(`, the code is placed in `int main() { ... }`. There is no `using namespace std;`: write `std::`.
   - C#: missing `using System;`, `System.Collections.Generic`, `System.Linq`, `System.Text` and `System.Threading.Tasks` are added on top. Top-level statements work; declare types after the statements.
+  - Zig: without `@import("std")`, `const std = @import("std");` is added; without `pub fn main(`, the code is placed in `pub fn main() !void { ... }` (so `try` works). Unused locals are compile errors (`_ = x;`).
+  - Haskell: without a top-level `main`, the code is placed in `main :: IO ()` / `main = do ...`. Snippets with their own declarations must define `main` themselves.
   - Python: used as is.
-- **`check.compiles`** means the program compiles (Go, C++, C#) or has no `SyntaxError` (Python).
+- **`check.compiles`** means the program compiles (Go, C++, C#, Zig, Haskell) or has no `SyntaxError` (Python).
 - **`check.stdout`** must match the program's output exactly (trimmed), so outputs must be deterministic: no map/`Dictionary`/`HashSet`/`set` iteration order, no timing, no addresses, nothing undefined or unspecified in C++.
-- **`check.throws`** proves a runtime failure: it compiles, then crashes with stderr containing the given text: a Go panic message (`"assignment to entry in nil map"`, `"index out of range"`, `"all goroutines are asleep"`), a C# exception (`"System.NullReferenceException"`, `"KeyNotFoundException"`), a Python exception (`"KeyError"`, `"ZeroDivisionError"`) or a C++ exception (`"std::out_of_range"`). Never claim the output of C++ undefined behavior: ask "is this UB?" with a check that only compiles.
+- **`check.throws`** proves a runtime failure: it compiles, then crashes with stderr containing the given text: a Go panic message (`"assignment to entry in nil map"`, `"index out of range"`, `"all goroutines are asleep"`), a C# exception (`"System.NullReferenceException"`, `"KeyNotFoundException"`), a Python exception (`"KeyError"`, `"ZeroDivisionError"`) a C++ exception (`"std::out_of_range"`), a Zig panic (`"integer overflow"`, `"attempt to use null value"`, `"index out of bounds"`) or a Haskell runtime error (`"Prelude.head: empty list"`, `"Non-exhaustive patterns"`, the text of `error "..."`). Never claim the output of C++ undefined behavior: ask "is this UB?" with a check that only compiles.
 - **Python in the browser has no threads** (`threading.Thread.start()` raises `RuntimeError: can't start new thread`) and no network or `input()`. `asyncio.run(...)` works. Code runs as `main.py`, so tracebacks read `File "main.py", line N`.
-- `run` beats send the full program as written: a Go `starter`/`solution` needs `package main` and `func main()`, C++ needs its `#include`s and `int main()`, C# its `using`s.
+- **Zig prints with `std.debug.print`**, which writes to stderr: the runner (`splitZig` in `lib/runners/godbolt.ts`) counts everything printed before a panic, or before an `error: Name` line from an error returned by `main`, as program output (`stdout`), and the panic or error plus the player's stack frames as the error (standard library startup frames are dropped). Don't use the stdout writer APIs (they changed in Zig 0.15). Zig runs as a Debug build, so overflow, bounds and null checks panic.
+- **File names read like a local build:** Zig errors and traces say `main.zig`, Haskell errors say `Main.hs` (GHC's `output.s: ` prefix on runtime errors is dropped), so `error.compiler` can quote them as a player would see them locally.
+- `run` beats send the full program as written: a Go `starter`/`solution` needs `package main` and `func main()`, C++ needs its `#include`s and `int main()`, C# its `using`s, Zig its `const std = @import("std");` and `pub fn main`, Haskell its `main`.
 
 ### `run` beats
 
@@ -276,7 +282,7 @@ These packs are verified by the same runners the game uses: Go on the official G
 - `starter` is run too and must **not** already print `expect` (otherwise there is nothing to fix). A TS/TSX starter that does not type-check is accepted as broken without running it.
 - `fallback` is a regex source, or an array of them, used when the runner is unavailable or `BITWISE_RUNNER=off`. Any match passes. No fallback may match `starter`, and at least one must match `solution`. List every alternative valid fix.
 - A `run` beat without `solution` produces a warning (it cannot be verified).
-- In the game, TS/TSX and Python `run` beats execute in the player's browser; Rust, Go, C++ and C# go through `/api/run` to the same sandboxes the validator uses (see [architecture.md](architecture.md#code-execution)). Types are stripped, not checked, there, so a player's fix is judged by its output; keep the `expect` tied to behavior.
+- In the game, TS/TSX and Python `run` beats execute in the player's browser; Rust, Go, C++, C#, Zig and Haskell go through `/api/run` to the same sandboxes the validator uses (see [architecture.md](architecture.md#code-execution)). Types are stripped, not checked, there, so a player's fix is judged by its output; keep the `expect` tied to behavior.
 
 ### Writing snippets for the JS runner
 

@@ -29,6 +29,17 @@ function wrapCs(body: string) {
   return missing.map((u) => `using ${u};`).join("\n") + (missing.length ? "\n" : "") + body;
 }
 
+function wrapZig(body: string) {
+  const std = /@import\("std"\)/.test(body) ? "" : 'const std = @import("std");\n\n';
+  const main = /\bpub\s+fn\s+main\s*\(/.test(body) ? body : `pub fn main() !void {\n${body.split("\n").map((l) => "    " + l).join("\n")}\n}\n`;
+  return std + main;
+}
+
+function wrapHaskell(body: string) {
+  if (/^main\s*(::|=)/m.test(body)) return body;
+  return `main :: IO ()\nmain = do\n${body.split("\n").map((l) => "  " + l).join("\n")}\n`;
+}
+
 export function wrapSnippet(lang: CodeLang, body: string): string {
   switch (lang) {
     case "rust":
@@ -40,6 +51,10 @@ export function wrapSnippet(lang: CodeLang, body: string): string {
       return wrapCpp(body);
     case "csharp":
       return wrapCs(body);
+    case "zig":
+      return wrapZig(body);
+    case "haskell":
+      return wrapHaskell(body);
     default:
       return body; // TS/TSX run as module bodies; Python runs as a script
   }

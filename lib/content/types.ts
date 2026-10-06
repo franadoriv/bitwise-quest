@@ -222,7 +222,7 @@ export interface PlanetDef {
 }
 
 /** Language of the code in a pack: drives highlighting, JSX and how the validator checks snippets. */
-export type CodeLang = "rust" | "ts" | "tsx" | "go" | "python" | "cpp" | "csharp";
+export type CodeLang = "rust" | "ts" | "tsx" | "go" | "python" | "cpp" | "csharp" | "zig" | "haskell";
 
 export interface LanguagePack {
   slug: string;
