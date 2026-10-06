@@ -1,6 +1,6 @@
 import "server-only";
 import { LANGUAGE_PACKS } from "@/content/index.ts";
-import type { Beat, CodeLang, EnemyKind, ExamDef, ExamLevel, ExamQuestion, LanguagePack, LessonDef, PlanetDef, RegionDef, Theme } from "./content/types";
+import type { Beat, CodeLang, NoteDef, EnemyKind, ExamDef, ExamLevel, ExamQuestion, LanguagePack, LessonDef, PlanetDef, RegionDef, Theme } from "./content/types";
 import { BROWSER_RUNNER_IDS } from "./runners/ids";
 import { isQuestion } from "./content/types";
 import { localized } from "./i18n/messages";
@@ -61,6 +61,20 @@ export interface LessonPlay {
   beats: PlayBeat[];
   /** Present in exam mode: what the client needs to grade the attempt. */
   exam?: ExamMeta & { level: ExamLevel };
+  /** Long explanations by lesson slug (lessons and reviews; never in exams). */
+  notes?: Record<string, NoteDef[]>;
+}
+
+/**
+ * A lesson's notes. Until a lesson has its own, its teaching dialogs stand in as a single note, so
+ * the explanation button always has something to show.
+ */
+function notesOf(lesson: LessonDef): NoteDef[] {
+  if (lesson.notes?.length) return lesson.notes;
+  const blocks: NoteDef["blocks"] = lesson.beats.flatMap((b) =>
+    b.kind === "dialog" && b.speaker !== "enemy" ? [{ t: "p" as const, text: b.text }, ...(b.code ? [{ t: "code" as const, code: b.code }] : [])] : [],
+  );
+  return blocks.length ? [{ id: "lesson", title: lesson.title, blocks }] : [];
 }
 
 export interface ExamSummary {
@@ -132,6 +146,7 @@ export function getLessonPlay(langSlug: string, lessonSlug: string): LessonPlay 
     ...runInfo(pack),
     guide: guideOf(pack),
     beats: lesson.beats.map((beat, index) => ({ lessonId: id, index, beat, lesson: lesson.slug })),
+    notes: { [lesson.slug]: notesOf(lesson) },
   };
 }
 
@@ -140,12 +155,14 @@ export function getReviewPlay(langSlug: string, keys: string[]): LessonPlay | nu
   const pack = PACKS.get(langSlug);
   if (!pack) return null;
   const beats: PlayBeat[] = [];
+  const notes: Record<string, NoteDef[]> = {};
   for (const key of keys.slice(0, 12)) {
     const [slug, idx] = key.split("#");
     const entry = LESSONS.get(langSlug)?.get(slug);
     const beat = entry?.lesson.beats[Number(idx)];
     if (entry && beat && isQuestion(beat) && beat.kind !== "run") {
       beats.push({ lessonId: entry.id, index: Number(idx), lesson: slug, beat: { ...beat, setup: undefined, win: undefined } });
+      notes[slug] ??= notesOf(entry.lesson);
     }
   }
   return {
@@ -161,6 +178,7 @@ export function getReviewPlay(langSlug: string, keys: string[]): LessonPlay | nu
     ...runInfo(pack),
     guide: guideOf(pack),
     beats,
+    notes,
   };
 }
 

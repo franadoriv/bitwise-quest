@@ -1,4 +1,4 @@
-import type { LessonDef, RegionDef } from "../../../lib/content/types.ts";
+import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L, say, enemySays } from "../../rust/helpers.ts";
 
 // REGION 1 · LAMBDA VILLAGE  (expressions, immutability, types, lists and strings, patterns and guards)
@@ -10,6 +10,122 @@ const YES = L("Yes", "Sí", "はい");
 const NO_GHC = L("No: GHC stops it", "No: GHC lo detiene", "いいえ：GHC が止める");
 const NO_COMPILE = L("Compile error", "Error de compilación", "コンパイルエラー");
 
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example; the validator checks `output` against the real compiler. */
+const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code, output, caption });
+/** An example that must NOT compile (verified too). */
+const bad = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: false } });
+/** An example that compiles and then crashes with this runtime error (verified too). */
+const boom = (code: string, throws: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: true, throws } });
+
+const expressionNotes: NoteDef[] = [
+  note("arithmetic", L("Arithmetic: order, div and mod", "Aritmética: orden, div y mod", "計算：順番と div・mod"),
+    p(
+      "Haskell does arithmetic like math class: * and / are done before + and -. Parentheses change the order: (2 + 3) * 4 is 20. When you write print (...), the parentheses hand the whole calculation to print as one value.",
+      "Haskell calcula como en la escuela: * y / se hacen antes que + y -. Los paréntesis cambian el orden: (2 + 3) * 4 es 20. Al escribir print (...), los paréntesis le entregan todo el cálculo a print como un solo valor.",
+      "Haskell の計算は算数と同じで、* と / が + と - より先。かっこで順番を変えられる：(2 + 3) * 4 は 20。print (...) のかっこは、計算全体をひとつの値として print に渡すためのもの。",
+    ),
+    ex("print (10 - 2 * 3)\nprint ((10 - 2) * 3)", "4\n24",
+      L("Same numbers, different order", "Mismos números, distinto orden", "同じ数でも順番がちがう")),
+    p(
+      "Division comes in three flavors. / always keeps the fraction: 9 / 4 is 2.25. `div` keeps only the whole part: 9 `div` 4 is 2. `mod` gives what is left over: 9 `mod` 4 is 1. The backticks turn a normal function into an operator written between its arguments, so 9 `div` 4 is the same as div 9 4.",
+      "La división viene en tres sabores. / siempre conserva la fracción: 9 / 4 es 2.25. `div` deja solo la parte entera: 9 `div` 4 es 2. `mod` da lo que sobra: 9 `mod` 4 es 1. Las comillas invertidas vuelven operador a una función, así que 9 `div` 4 es lo mismo que div 9 4.",
+      "割り算は3種類。/ は小数を残す：9 / 4 は 2.25。`div` は整数部分だけ：9 `div` 4 は 2。`mod` は余り：9 `mod` 4 は 1。バッククォートで関数を引数の間に書ける。9 `div` 4 は div 9 4 と同じ。",
+    ),
+    ex("print (9 `div` 4, 9 `mod` 4)\nprint (div 9 4, 9 / 4)", "(2,1)\n(2,2.25)",
+      L("Whole part, remainder, fraction", "Parte entera, resto, fracción", "整数部分・余り・小数")),
+    p(
+      "Rule: full groups → `div`; what is left over → `mod`; exact share → /. A classic trick: n `mod` 2 == 0 is True exactly when n is even.",
+      "Regla: grupos completos → `div`; lo que sobra → `mod`; reparto exacto → /. Un truco clásico: n `mod` 2 == 0 es True justo cuando n es par.",
+      "ルール：まるごとのグループ数 → `div`、余り → `mod`、正確な分け前 → /。定番の技：n `mod` 2 == 0 は n が偶数のときだけ True。",
+    ),
+    p(
+      "Common mistake: negative numbers as arguments. abs -3 is read as abs - 3, \"subtract 3 from the function abs\", which makes no sense, so GHC refuses it. Whenever a negative number is an argument, wrap it in parentheses: abs (-3), max (-1) 0.",
+      "Error común: los negativos como argumento. abs -3 se lee como abs - 3, \"restarle 3 a la función abs\", algo sin sentido, así que GHC lo rechaza. Cuando un negativo sea argumento, ponlo entre paréntesis: abs (-3), max (-1) 0.",
+      "よくあるミス：負の数を引数にするとき。abs -3 は abs - 3（関数 abs から 3 を引く）と読まれ、意味をなさないので GHC が拒否する。負の数を引数にするなら必ずかっこで：abs (-3)、max (-1) 0。",
+    ),
+    bad("print (negate -8)",
+      L("Does not compile: read as negate minus 8", "No compila: se lee como negate menos 8", "コンパイル不可：negate ひく 8 と読まれる")),
+    ex("print (negate (-8), max (-1) 0)", "(8,0)",
+      L("Parentheses make the minus part of the number", "Los paréntesis hacen el menos parte del número", "かっこでマイナスが数の一部になる")),
+  ),
+  note("print-show", L("putStrLn, print, show and ++", "putStrLn, print, show y ++", "putStrLn・print・show・++"),
+    p(
+      "There are two ways to put something on the screen. putStrLn takes a String and writes its letters exactly, then ends the line. print takes ANY value (numbers, lists, pairs, text) and writes it the way you would type it in code. That's why print keeps the double quotes around a String.",
+      "Hay dos formas de mostrar algo en pantalla. putStrLn recibe un String y escribe sus letras tal cual, y termina la línea. print recibe CUALQUIER valor (números, listas, pares, texto) y lo escribe como lo teclearías en código. Por eso print conserva las comillas de un String.",
+      "画面に出す方法は2つ。putStrLn は String を受け取り、その文字をそのまま書いて改行する。print はどんな値（数・リスト・ペア・文字列）も受け取り、コードに書くときの形で表示する。だから print だと String に二重引用符がつく。",
+    ),
+    ex("putStrLn \"owl\"\nprint \"owl\"\nprint 7", "owl\n\"owl\"\n7",
+      L("putStrLn writes letters; print shows values as code", "putStrLn escribe letras; print muestra el valor como código", "putStrLn は文字、print はコードの形")),
+    p(
+      "++ joins two Strings into one: \"sun\" ++ \"rise\" is \"sunrise\". Both sides must be text. show turns any value into its text form: show 12 is \"12\". Together they build messages from numbers and words.",
+      "++ une dos String en uno: \"sun\" ++ \"rise\" es \"sunrise\". Ambos lados deben ser texto. show convierte cualquier valor en su forma de texto: show 12 es \"12\". Juntos arman mensajes con números y palabras.",
+      "++ は2つの String をつなげる：\"sun\" ++ \"rise\" は \"sunrise\"。両側とも文字列でなければならない。show はどんな値も文字列にする：show 12 は \"12\"。この2つで数と言葉からメッセージを作れる。",
+    ),
+    ex("let lvl = 3\nputStrLn (\"Level \" ++ show lvl ++ \" cleared\")", "Level 3 cleared"),
+    p(
+      "In fact, print x is just putStrLn (show x). show of a String adds quote characters to it, so the quotes you see from print are part of the text show made. Rule: text meant to be read → putStrLn; a quick look at any value → print.",
+      "De hecho, print x es solo putStrLn (show x). show de un String le agrega caracteres de comillas, así que las comillas que ves con print son parte del texto que hizo show. Regla: texto para leer → putStrLn; un vistazo rápido a cualquier valor → print.",
+      "実は print x は putStrLn (show x) のこと。String に show をかけると引用符の文字が加わる。print で見える引用符は show が作った文字なんじゃ。ルール：読ませる文字 → putStrLn、値をさっと見る → print。",
+    ),
+    ex("putStrLn (show \"hi\")", "\"hi\"",
+      L("show puts the quotes into the text itself", "show mete las comillas en el propio texto", "show は引用符を文字そのものに入れる")),
+    p(
+      "Common mistake: forgetting the parentheses around the message. putStrLn \"Day \" ++ \"two\" is read as (putStrLn \"Day \") ++ \"two\", gluing text onto an action, and GHC refuses. Wrap the whole message: putStrLn (\"Day \" ++ \"two\").",
+      "Error común: olvidar los paréntesis alrededor del mensaje. putStrLn \"Day \" ++ \"two\" se lee como (putStrLn \"Day \") ++ \"two\", pegando texto a una acción, y GHC lo rechaza. Envuelve todo el mensaje: putStrLn (\"Day \" ++ \"two\").",
+      "よくあるミス：メッセージ全体のかっこを忘れること。putStrLn \"Day \" ++ \"two\" は (putStrLn \"Day \") ++ \"two\" と読まれ、動作に文字をつなごうとして GHC に拒否される。putStrLn (\"Day \" ++ \"two\") と全体を包もう。",
+    ),
+    bad("putStrLn \"Day \" ++ \"two\"",
+      L("Does not compile: ++ grabs putStrLn's result", "No compila: ++ toma el resultado de putStrLn", "コンパイル不可：++ が putStrLn の結果をつかむ")),
+  ),
+  note("if-else", L("if always needs else", "if siempre necesita else", "if には必ず else"),
+    p(
+      "In Haskell, if is an expression: it produces a value, just like 2 + 3 does. if test then a else b gives a when the test is True and b when it is False. You can put it anywhere a value fits, even inside print or in the middle of a calculation.",
+      "En Haskell, if es una expresión: produce un valor, igual que 2 + 3. if prueba then a else b da a cuando la prueba es True y b cuando es False. Puedes ponerlo donde quepa un valor, incluso dentro de print o en medio de un cálculo.",
+      "Haskell の if は式で、2 + 3 と同じように値を生む。if 条件 then a else b は、条件が True なら a、False なら b になる。値を置ける場所ならどこでも使える。print の中でも計算の途中でも OK。",
+    ),
+    ex("let hp = 0\nputStrLn (if hp > 0 then \"alive\" else \"fainted\")", "fainted"),
+    p(
+      "Because it must always produce a value, else is required. Without it, what would the expression be when the test is False? There is no \"nothing\" to fall back on, so GHC stops with a parse error. Both branches must also have the same type: then \"big\" else 0 does not compile.",
+      "Como siempre debe producir un valor, else es obligatorio. Sin él, ¿qué valor tendría la expresión cuando la prueba es False? No hay un \"nada\" al que volver, así que GHC se detiene con un parse error. Las dos ramas también deben tener el mismo tipo: then \"big\" else 0 no compila.",
+      "いつも値を生む必要があるので else は必須。else がないと、条件が False のときの値がない。「何もない」という逃げ道はないので GHC は parse error で止まる。両方の枝は同じ型でなければならない：then \"big\" else 0 はコンパイルできない。",
+    ),
+    bad("print (if 5 > 1 then \"big\" else 0)",
+      L("Does not compile: text in one branch, a number in the other", "No compila: texto en una rama y número en la otra", "コンパイル不可：片方が文字列、もう片方が数")),
+    p(
+      "Rule: every if has then and else, and both give the same type. To predict the output, decide the test first, then remember how the result is shown: print puts quotes around text and single quotes around a Char.",
+      "Regla: todo if tiene then y else, y ambos dan el mismo tipo. Para predecir la salida, decide primero la prueba y luego recuerda cómo se muestra el resultado: print pone comillas alrededor del texto y comillas simples alrededor de un Char.",
+      "ルール：if には then と else があり、両方同じ型を返す。出力を予想するには、まず条件を決め、次に結果の見え方を思い出そう。print は文字列を \" \" で、Char を ' ' で囲む。",
+    ),
+    ex("print (if 4 < 2 then 'y' else 'n')", "'n'",
+      L("4 < 2 is False, so the else value is printed", "4 < 2 es False, así que se imprime el valor del else", "4 < 2 は False なので else の値"),
+    ),
+  ),
+  note("let-shadowing", L("Names are bound once", "Los nombres se unen una vez", "名前は一度だけ決まる"),
+    p(
+      "let gives a name to a value: let speed = 4. From then on, speed means 4. Unlike most languages, you can never update it: writing speed = 5 later is not an assignment, it is a parse error. Values in Haskell are immutable, so a name means the same thing everywhere it is visible.",
+      "let le da un nombre a un valor: let speed = 4. Desde ahí, speed significa 4. A diferencia de casi todos los lenguajes, nunca puedes actualizarlo: escribir speed = 5 después no es una asignación, es un parse error. En Haskell los valores son inmutables, así que un nombre significa lo mismo en todo lugar donde se ve.",
+      "let は値に名前をつける：let speed = 4。それ以降 speed は 4 のこと。多くの言語と違って更新はできない。あとで speed = 5 と書いても代入ではなく parse error。Haskell の値は不変なので、名前は見える範囲のどこでも同じ意味になる。",
+    ),
+    p(
+      "What you CAN do is create a new name with let, even with the same spelling. A second let gems = ... makes a brand new gems that hides (shadows) the first one from that line on. The old value still exists and was never modified; you just can't reach it by that name anymore.",
+      "Lo que SÍ puedes hacer es crear un nombre nuevo con let, aunque se escriba igual. Un segundo let gems = ... crea un gems totalmente nuevo que tapa (sombrea) al primero desde esa línea. El valor viejo sigue existiendo y nunca se modificó; solo que ya no lo alcanzas con ese nombre.",
+      "できるのは、let で新しい名前を作ること。つづりが同じでもいい。2つ目の let gems = ... はまったく新しい gems を作り、その行から先で古い gems を隠す（シャドーイング）。古い値は残っていて変わっていない。その名前で届かなくなっただけ。",
+    ),
+    ex("let gems = 4\nprint gems\nlet gems = 9\nprint gems", "4\n9",
+      L("Each print sees the gems visible on its line", "Cada print ve el gems visible en su línea", "print はその行で見える gems を使う")),
+    p(
+      "So instead of changing values, you make new ones from old ones, with new names: let withBonus = base + 5. Both base and withBonus keep their values. This is what makes Haskell code easy to reason about: once you know what a name means, it never surprises you later.",
+      "Así que en vez de cambiar valores, creas valores nuevos a partir de los viejos, con nombres nuevos: let withBonus = base + 5. base y withBonus conservan sus valores. Eso hace fácil razonar sobre el código Haskell: una vez sabes qué significa un nombre, nunca te sorprende después.",
+      "だから値を変えるかわりに、古い値から新しい値を新しい名前で作る：let withBonus = base + 5。base も withBonus も値はそのまま。名前の意味が一度わかれば、あとで驚かされることはない。これが Haskell の読みやすさの秘密じゃ。",
+    ),
+    ex("let base = 10\nlet withBonus = base + 5\nprint (base, withBonus)", "(10,15)"),
+  ),
+];
+
 // ─── 1.1 Everything is an expression ───────────────────────────────────────
 const expressions: LessonDef = {
   slug: "pure-expressions",
@@ -19,6 +135,7 @@ const expressions: LessonDef = {
   xp: 60,
   enemy: "slime",
   enemyName: L("MUTANT SLIME", "SLIME MUTANTE", "へんしんスライム"),
+  notes: expressionNotes,
   beats: [
     say(L(
       "Welcome to Lambda Village! A Haskell program is built from EXPRESSIONS: pieces of code that each produce a value.",
@@ -52,6 +169,8 @@ const expressions: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Which operator does Haskell do first, + or *? It follows the same rule as math class.", "¿Qué operador hace primero Haskell, + o *? Sigue la misma regla que en la escuela.", "+ と * はどちらが先？算数と同じルールじゃ。"),
+      note: "arithmetic",
       code: "print (2 + 3 * 4)",
       options: ["14", "20", "9"],
       answer: 0,
@@ -68,6 +187,8 @@ const expressions: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Three kinds of division: one keeps whole numbers, one gives the leftover, one keeps the fraction.", "Tres divisiones: una deja enteros, otra da lo que sobra y otra conserva la fracción.", "割り算は3種類：整数だけ、余り、小数のまま。"),
+      note: "arithmetic",
       code: "print (7 `div` 2, 7 `mod` 2, 7 / 2)",
       options: ["(3,1,3.5)", "(3.5,1,3.5)", "(3,1,3)"],
       answer: 0,
@@ -79,6 +200,8 @@ const expressions: LessonDef = {
     {
       kind: "pick",
       prompt: L("It must print 3", "Debe imprimir 3", "3 と表示させよう"),
+      hint: L("You want how many full 2s fit in 7: no fraction and no remainder.", "Quieres cuántos 2 completos caben en 7: sin fracción y sin resto.", "7 の中に 2 がまるごと何個入るか。小数も余りもいらない。"),
+      note: "arithmetic",
       code: "print (7 ___ 2)",
       options: ["`div`", "/", "`mod`"],
       answer: 0,
@@ -94,6 +217,8 @@ const expressions: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("One writes the letters as plain text; the other shows the value the way code writes a String.", "Uno escribe las letras como texto; el otro muestra el valor como el código escribe un String.", "片方は文字をそのまま、もう片方はコードの書き方で String を見せる。"),
+      note: "print-show",
       code: "putStrLn (\"Hi, \" ++ \"Lambo\")\nprint (\"Hi, \" ++ \"Lambo\")",
       options: ["Hi, Lambo\n\"Hi, Lambo\"", "Hi, Lambo\nHi, Lambo", "\"Hi, Lambo\"\nHi, Lambo"],
       answer: 0,
@@ -105,6 +230,8 @@ const expressions: LessonDef = {
     {
       kind: "type",
       prompt: L("Join the text: it prints 42!", "Une el texto: imprime 42!", "つなげて 42! と表示"),
+      hint: L("show already made the text \"42\". You need the operator that glues two Strings together.", "show ya hizo el texto \"42\". Necesitas el operador que pega dos String.", "show で \"42\" はできている。String 同士をつなぐ演算子は？"),
+      note: "print-show",
       code: "putStrLn (show 42 ___ \"!\")",
       answer: "++",
       check: { compiles: true, stdout: "42!" },
@@ -119,6 +246,8 @@ const expressions: LessonDef = {
     {
       kind: "predict",
       prompt: COMPILES,
+      hint: L("if is an expression. What value would it have when the test is False?", "if es una expresión. ¿Qué valor tendría cuando la prueba es False?", "if は式。条件が False のとき、値は何になる？"),
+      note: "if-else",
       code: "print (if True then 1)",
       options: [YES, NO_GHC],
       answer: 1,
@@ -129,6 +258,8 @@ const expressions: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Decide the test first, then remember how print shows text.", "Decide primero la prueba y luego recuerda cómo muestra print el texto.", "まず条件を決めて、print が文字列をどう見せるか思い出そう。"),
+      note: "if-else",
       code: "print (if 3 > 2 then \"yes\" else \"no\")",
       options: ["\"yes\"", "yes", "\"no\""],
       answer: 0,
@@ -144,6 +275,8 @@ const expressions: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("The second let doesn't change anything: it makes a new name. Which n is visible at the print?", "El segundo let no cambia nada: crea un nombre nuevo. ¿Qué n se ve en el print?", "2つ目の let は何も変えず、新しい名前を作る。print から見える n は？"),
+      note: "let-shadowing",
       code: "let n = 1\nlet n = 2\nprint n",
       options: ["2", "1", NO_COMPILE],
       answer: 0,
@@ -156,6 +289,8 @@ const expressions: LessonDef = {
     {
       kind: "predict",
       prompt: COMPILES,
+      hint: L("Without parentheses, how does Haskell read the minus sign between abs and 3?", "Sin paréntesis, ¿cómo lee Haskell el signo menos entre abs y 3?", "かっこがないと、abs と 3 の間のマイナスはどう読まれる？"),
+      note: "arithmetic",
       code: "print (abs -3)",
       options: [YES, NO_GHC],
       answer: 1,
@@ -166,6 +301,8 @@ const expressions: LessonDef = {
     {
       kind: "run",
       prompt: L("Count only FULL bags: it must print 3 full bags", "Cuenta solo bolsas LLENAS: debe imprimir 3 full bags", "満杯の袋だけ数えて 3 full bags と表示"),
+      hint: L("/ keeps the fraction, so you get part of a bag. Which division counts only whole groups?", "/ conserva la fracción y te da parte de una bolsa. ¿Qué división cuenta solo grupos enteros?", "/ だと袋の一部まで出る。まるごとのグループだけ数える割り算は？"),
+      note: "arithmetic",
       starter: "main :: IO ()\nmain = do\n  let coins = 17\n  let perBag = 5\n  putStrLn (show (coins / perBag) ++ \" full bags\")\n",
       solution: "main :: IO ()\nmain = do\n  let coins = 17\n  let perBag = 5\n  putStrLn (show (coins `div` perBag) ++ \" full bags\")\n",
       expect: "3 full bags",
@@ -174,6 +311,83 @@ const expressions: LessonDef = {
     },
   ],
 };
+
+const typeNotes: NoteDef[] = [
+  note("signatures", L("Reading type signatures", "Leer firmas de tipo", "型シグネチャを読む"),
+    p(
+      "Every value has a type: 7 is a whole number (Int or Integer), 2.5 is a Double, 'q' is a Char, \"owl\" is a String, True is a Bool. A signature writes the type down: name :: Type. Read :: as \"has type\". GHC checks every use against it before the program ever runs.",
+      "Todo valor tiene un tipo: 7 es un entero (Int o Integer), 2.5 es un Double, 'q' es un Char, \"owl\" es un String, True es un Bool. Una firma escribe el tipo: nombre :: Tipo. Lee :: como \"tiene tipo\". GHC compara cada uso con ella antes de ejecutar el programa.",
+      "値にはみんな型がある：7 は整数（Int か Integer）、2.5 は Double、'q' は Char、\"owl\" は String、True は Bool。シグネチャは 名前 :: 型 と書く。:: は「の型は」と読む。GHC は実行前に、すべての使い方をこれと照らし合わせる。",
+    ),
+    p(
+      "A function's type uses arrows. Int -> Bool takes an Int and gives a Bool. Each extra argument adds an arrow: Int -> Int -> Int takes two Ints and gives one Int. The type after the LAST arrow is always the result; all the others are the inputs, in order.",
+      "El tipo de una función usa flechas. Int -> Bool recibe un Int y da un Bool. Cada argumento extra agrega una flecha: Int -> Int -> Int recibe dos Int y da un Int. El tipo tras la ÚLTIMA flecha siempre es el resultado; los demás son las entradas, en orden.",
+      "関数の型は矢印で書く。Int -> Bool は Int を受け取り Bool を返す。引数が増えるごとに矢印も増える：Int -> Int -> Int は Int を2つ受け取り Int を1つ返す。最後の矢印の後ろの型が結果で、残りは順番どおりの入力じゃ。",
+    ),
+    ex("triple :: Int -> Int\ntriple n = n * 3\n\nmain = print (triple 7)", "21",
+      L("One input, one result", "Una entrada, un resultado", "入力1つ、結果1つ")),
+    ex("perimeter :: Double -> Double -> Double\nperimeter a b = 2 * (a + b)\n\nmain = print (perimeter 1.5 2)", "7.0",
+      L("Two inputs; the last type is the result", "Dos entradas; el último tipo es el resultado", "入力2つ。最後の型が結果")),
+    p(
+      "A Double always prints with a decimal point, even when the value is whole: 7.0, never 7. That's how you can tell a Double from an Int in the output. A plain literal like 2 becomes a Double when the signature asks for one.",
+      "Un Double siempre se imprime con punto decimal, aunque el valor sea entero: 7.0, nunca 7. Así distingues un Double de un Int en la salida. Un literal como 2 se vuelve Double cuando la firma lo pide.",
+      "Double は値が整数でも必ず小数点つきで表示される：7 ではなく 7.0。出力で Double と Int を見分けるコツじゃ。2 のような数字も、シグネチャが求めれば Double になる。",
+    ),
+    p(
+      "Common mistake: separating the inputs with commas, like Int, Int -> Int, as in other languages. Haskell uses only arrows between types. Also, the signature and the equations below it must use exactly the same name.",
+      "Error común: separar las entradas con comas, como Int, Int -> Int, igual que en otros lenguajes. Haskell solo usa flechas entre los tipos. Además, la firma y las ecuaciones de abajo deben usar exactamente el mismo nombre.",
+      "よくあるミス：他の言語のように Int, Int -> Int とカンマで区切ること。Haskell では型の間は矢印だけ。また、シグネチャとその下の式はまったく同じ名前を使うこと。",
+    ),
+  ),
+  note("no-conversion", L("Haskell never converts silently", "Haskell nunca convierte en silencio", "Haskell は勝手に変換しない"),
+    p(
+      "Many languages quietly turn whole numbers into fractions, or numbers into text. Haskell never does. If a function wants an Int and you give it 2.5, or ++ wants text and you give it a number, GHC stops before running, with errors like No instance for (Fractional Int).",
+      "Muchos lenguajes convierten en silencio enteros en fracciones, o números en texto. Haskell nunca. Si una función quiere un Int y le das 2.5, o ++ quiere texto y le das un número, GHC se detiene antes de ejecutar, con errores como No instance for (Fractional Int).",
+      "多くの言語は整数を小数に、数を文字列にこっそり変える。Haskell は絶対にしない。Int が欲しい関数に 2.5 を渡したり、文字列が欲しい ++ に数を渡したりすると、実行前に GHC が止める。エラーは No instance for (Fractional Int) など。",
+    ),
+    p(
+      "The error name tells the story: / only works on fractional types (Double, Float). length always returns an Int, which is not fractional, so dividing it with / is rejected. fromIntegral converts any whole number into whatever number type is needed, and then / accepts it.",
+      "El nombre del error lo explica: / solo funciona con tipos fraccionarios (Double, Float). length siempre devuelve un Int, que no es fraccionario, así que dividirlo con / se rechaza. fromIntegral convierte cualquier entero al tipo numérico que haga falta, y entonces / lo acepta.",
+      "エラー名がヒント：/ は小数の型（Double、Float）にしか使えない。length はいつも Int を返し、Int は小数の型じゃないので / で割れない。fromIntegral は整数を必要な数の型に変換するので、そのあとなら / が使える。",
+    ),
+    bad("let n = length \"wolf\"\nprint (n / 8)",
+      L("Does not compile: n is an Int", "No compila: n es un Int", "コンパイル不可：n は Int")),
+    ex("let n = length \"wolf\"\nprint (fromIntegral n / 8)", "0.5",
+      L("fromIntegral converts n first", "fromIntegral convierte n primero", "先に fromIntegral で n を変換")),
+    p(
+      "Text works the same way: ++ joins two Strings, so gluing a number onto text fails until you convert it with show. And when a function must return fractions, give it a Double signature instead of Int, so / is allowed inside it.",
+      "Con el texto pasa igual: ++ une dos String, así que pegarle un número a un texto falla hasta que lo conviertes con show. Y cuando una función debe devolver fracciones, dale una firma Double en vez de Int, para que / se permita dentro.",
+      "文字列も同じ。++ は String 同士をつなぐので、数をつなぐには show で変換が必要。関数が小数を返すべきなら、シグネチャを Int ではなく Double にしよう。そうすれば中で / が使える。",
+    ),
+    ex("putStrLn (\"HP: \" ++ show 7)", "HP: 7"),
+    p(
+      "Rule: whole number → fraction: fromIntegral. Any value → text: show. Fractions in and out: Double -> Double. Why so strict? Silent conversions hide bugs, like a lost fraction or mixed-up units. GHC makes you say exactly what you mean.",
+      "Regla: entero → fracción: fromIntegral. Cualquier valor → texto: show. Fracciones de entrada y salida: Double -> Double. ¿Por qué tan estricto? Las conversiones silenciosas esconden errores, como una fracción perdida o unidades mezcladas. GHC te hace decir exactamente lo que quieres.",
+      "ルール：整数 → 小数は fromIntegral、値 → 文字列は show、小数を受け取って返すなら Double -> Double。なぜこんなに厳しい？こっそり変換すると、小数が消えたり単位がまざったりするバグが隠れるから。GHC は意図をはっきり書かせるのじゃ。",
+    ),
+  ),
+  note("int-integer", L("Int vs Integer", "Int vs Integer", "Int と Integer"),
+    p(
+      "Int is a fixed-size whole number: 64 bits on today's machines, up to 9223372036854775807. Integer has no limit: it grows to as many digits as needed. Both look the same in code; the difference only shows up with big values.",
+      "Int es un entero de tamaño fijo: 64 bits en las máquinas actuales, hasta 9223372036854775807. Integer no tiene límite: crece hasta los dígitos que hagan falta. En el código se ven iguales; la diferencia solo aparece con valores grandes.",
+      "Int は大きさが決まった整数で、今のマシンでは 64 ビット、最大 9223372036854775807。Integer には上限がなく、必要なだけ桁が増える。コードでは同じに見えるが、違いは大きな値で現れる。",
+    ),
+    p(
+      "When an Int calculation goes past its limit, nothing stops or warns you: it wraps around, like an odometer rolling over, and you get a wrong number. Integer always gives the exact answer.",
+      "Cuando un cálculo con Int pasa su límite, nada te detiene ni te avisa: da la vuelta, como un cuentakilómetros que se reinicia, y obtienes un número erróneo. Integer siempre da la respuesta exacta.",
+      "Int の計算が上限をこえても、止まりも警告もしない。走行距離計が一周するように値が回りこみ、まちがった数になる。Integer はいつも正確な答えを出す。",
+    ),
+    ex("print (maxBound :: Int)\nprint ((maxBound :: Int) + 1)", "9223372036854775807\n-9223372036854775808",
+      L("One past the biggest Int wraps to the smallest", "Uno más que el mayor Int da la vuelta al menor", "最大の Int に 1 足すと最小に回る")),
+    ex("print (3 ^ 50 :: Integer)", "717897987691852588770249",
+      L("Integer keeps every digit", "Integer conserva todos los dígitos", "Integer は全部の桁を保つ")),
+    p(
+      "Rule: Int for counts and positions that stay small (lengths, indexes); Integer for values that can grow big, like powers and factorials. Writing :: Type after an expression picks its type, as in 2 ^ 10 :: Int. A wrong number with no error is the telltale sign of an Int overflow.",
+      "Regla: Int para conteos y posiciones que se mantienen pequeños (largos, índices); Integer para valores que pueden crecer mucho, como potencias y factoriales. Escribir :: Tipo tras una expresión elige su tipo, como en 2 ^ 10 :: Int. Un número erróneo sin error es la señal de un desbordamiento de Int.",
+      "ルール：長さや位置など小さいままの数は Int、べき乗や階乗のように大きくなる値は Integer。式のあとに :: 型 と書くと型を選べる（例：2 ^ 10 :: Int）。エラーなしでおかしな数が出たら、Int のオーバーフローを疑おう。",
+    ),
+  ),
+];
 
 // ─── 1.2 Every value wears a type ──────────────────────────────────────────
 const types: LessonDef = {
@@ -184,6 +398,7 @@ const types: LessonDef = {
   xp: 65,
   enemy: "golem",
   enemyName: L("TYPE GOLEM", "GÓLEM DE TIPOS", "かたゴーレム"),
+  notes: typeNotes,
   beats: [
     say(L(
       "Every value wears a TYPE: Int, Double, Char, String, Bool. A SIGNATURE, name :: Type, says it out loud.",
@@ -216,6 +431,8 @@ const types: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Read the signature: what goes in, and what does the body do with it?", "Lee la firma: ¿qué entra y qué hace el cuerpo con ello?", "シグネチャを読もう。何が入り、本体はそれをどうする？"),
+      note: "signatures",
       code: "double :: Int -> Int\ndouble x = x * 2\n\nmain = print (double 21)",
       options: ["42", "21", "2121"],
       answer: 0,
@@ -228,6 +445,8 @@ const types: LessonDef = {
     {
       kind: "predict",
       prompt: COMPILES,
+      hint: L("Look at the type the function accepts. Is 2.5 that kind of number?", "Mira el tipo que acepta la función. ¿2.5 es ese tipo de número?", "関数が受け取る型を見よう。2.5 はその種類の数？"),
+      note: "no-conversion",
       code: "double :: Int -> Int\ndouble x = x * 2\n\nmain = print (double 2.5)",
       options: [YES, NO_GHC],
       answer: 1,
@@ -244,6 +463,8 @@ const types: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Check the result type in the signature. How does that type print a whole value?", "Revisa el tipo de resultado en la firma. ¿Cómo imprime ese tipo un valor entero?", "シグネチャの結果の型は？その型は整数の値をどう表示する？"),
+      note: "signatures",
       code: "area :: Double -> Double -> Double\narea w h = w * h\n\nmain = print (area 2 3.5)",
       options: ["7.0", "7", "5.5"],
       answer: 0,
@@ -260,6 +481,8 @@ const types: LessonDef = {
     {
       kind: "predict",
       prompt: COMPILES,
+      hint: L("What type does length give back, and which types does / accept?", "¿Qué tipo devuelve length y qué tipos acepta /?", "length はどの型を返す？/ が受け取れる型は？"),
+      note: "no-conversion",
       code: "print (length [1,2,3] / 2)",
       options: [YES, NO_GHC],
       answer: 1,
@@ -270,6 +493,8 @@ const types: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("fromIntegral turns the count into a number / accepts. Then just divide.", "fromIntegral convierte el conteo en un número que / acepta. Luego solo divide.", "fromIntegral で個数を / が使える数にする。あとは割るだけ。"),
+      note: "no-conversion",
       code: "print (fromIntegral (length [1,2,3]) / 2)",
       options: ["1.5", "1", NO_COMPILE],
       answer: 0,
@@ -286,6 +511,8 @@ const types: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("One of these types has a fixed size, the other grows forever. What happens past the limit?", "Uno de estos tipos tiene tamaño fijo y el otro crece sin fin. ¿Qué pasa al pasar el límite?", "片方の型は大きさが固定、もう片方は無限に育つ。上限をこえると？"),
+      note: "int-integer",
       code: "print (2 ^ 64 :: Integer)\nprint (2 ^ 64 :: Int)",
       options: ["18446744073709551616\n0", "18446744073709551616\n18446744073709551616", "0\n0"],
       answer: 0,
@@ -297,6 +524,8 @@ const types: LessonDef = {
     {
       kind: "predict",
       prompt: COMPILES,
+      hint: L("++ joins two Strings. Is every side of it a String?", "++ une dos String. ¿Cada lado es un String?", "++ は String 同士をつなぐ。両側とも String かな？"),
+      note: "no-conversion",
       code: "putStrLn (\"Score: \" ++ 10)",
       options: [YES, NO_GHC],
       answer: 1,
@@ -307,6 +536,8 @@ const types: LessonDef = {
     {
       kind: "type",
       prompt: L("Complete the signature", "Completa la firma", "シグネチャを完成させよう"),
+      hint: L("In a signature, which symbol sits between an input type and the result type?", "En una firma, ¿qué símbolo va entre un tipo de entrada y el tipo de resultado?", "シグネチャで、入力の型と結果の型の間に入る記号は？"),
+      note: "signatures",
       code: "double :: Int ___ Int\ndouble x = x * 2\n\nmain = print (double 4)",
       answer: "->",
       check: { compiles: true, stdout: "8" },
@@ -316,6 +547,8 @@ const types: LessonDef = {
     {
       kind: "run",
       prompt: L("Keep the fraction: it must print half of 7 is 3.5", "Conserva la fracción: debe imprimir half of 7 is 3.5", "小数を残して half of 7 is 3.5 と表示"),
+      hint: L("An Int can't hold a fraction. Change the types in the signature and the kind of division.", "Un Int no puede guardar una fracción. Cambia los tipos de la firma y el tipo de división.", "Int に小数は入らない。シグネチャの型と割り算の種類を変えよう。"),
+      note: "no-conversion",
       starter: "half :: Int -> Int\nhalf x = x `div` 2\n\nmain :: IO ()\nmain = putStrLn (\"half of 7 is \" ++ show (half 7))\n",
       solution: "half :: Double -> Double\nhalf x = x / 2\n\nmain :: IO ()\nmain = putStrLn (\"half of 7 is \" ++ show (half 7))\n",
       expect: "half of 7 is 3.5",
@@ -324,6 +557,107 @@ const types: LessonDef = {
     },
   ],
 };
+
+const listNotes: NoteDef[] = [
+  note("cons-append", L("Building lists with : and ++", "Armar listas con : y ++", ": と ++ でリストを作る"),
+    p(
+      "A list is a row of values of ONE single type, written in brackets: [3,6,9]. [] is the empty list. Since every item shares a type, a list mixing numbers and Chars, or Bools and numbers, does not compile: GHC must know what each item is.",
+      "Una lista es una fila de valores de UN solo tipo, escrita entre corchetes: [3,6,9]. [] es la lista vacía. Como todos los objetos comparten tipo, una lista que mezcla números y Char, o Bool y números, no compila: GHC debe saber qué es cada objeto.",
+      "リストは、ひとつの型の値だけを並べた列で、角かっこで書く：[3,6,9]。[] は空リスト。全要素が同じ型なので、数と Char や Bool と数をまぜたリストはコンパイルできない。GHC は各要素が何かを知る必要がある。",
+    ),
+    bad("print [True, 'x']",
+      L("Does not compile: a Bool and a Char in one list", "No compila: un Bool y un Char en una lista", "コンパイル不可：Bool と Char が同じリストに")),
+    p(
+      ": (say \"cons\") puts ONE item at the front of a list: the left side is a single item, the right side is a list. ++ joins two whole lists: both sides must be lists. So 7 : [8,9] and [7] ++ [8,9] both give [7,8,9].",
+      ": (se dice \"cons\") pone UN objeto al frente de una lista: el lado izquierdo es un solo objeto y el derecho una lista. ++ une dos listas completas: ambos lados deben ser listas. Así, 7 : [8,9] y [7] ++ [8,9] dan [7,8,9].",
+      ":（「コンス」と読む）はリストの先頭に要素をひとつ足す。左は要素ひとつ、右はリスト。++ は2つのリストをまるごとつなぐので、両側ともリスト。7 : [8,9] も [7] ++ [8,9] も [7,8,9] になる。",
+    ),
+    ex("print (5 : [6,7])\nprint ([5,6] ++ [7,8])", "[5,6,7]\n[5,6,7,8]",
+      L(": adds one item at the front; ++ joins lists", ": agrega un objeto al frente; ++ une listas", ": は先頭にひとつ、++ はリスト同士")),
+    p(
+      "Behind the scenes, every list is built with : and []: [5,6,7] is really 5 : 6 : 7 : []. That's why adding at the front with : is instant, while ++ has to walk through its whole left list first, which gets slow when that list is long.",
+      "Por dentro, toda lista se arma con : y []: [5,6,7] en realidad es 5 : 6 : 7 : []. Por eso agregar al frente con : es instantáneo, mientras que ++ debe recorrer toda la lista izquierda primero, lo que se vuelve lento si es larga.",
+      "裏では、リストはみんな : と [] でできている：[5,6,7] の正体は 5 : 6 : 7 : []。だから : で先頭に足すのは一瞬だが、++ は左のリストを最後まで歩く必要があり、長いと遅くなる。",
+    ),
+    ex("print (5 : 6 : 7 : [])", "[5,6,7]"),
+    p(
+      "Rule: item : list, and list ++ list. Common mistakes: writing them the wrong way round, like a list : an item, or using : to add at the END of a list. To add at the end, use ++ with a one-item list: xs ++ [x].",
+      "Regla: objeto : lista, y lista ++ lista. Errores comunes: escribirlos al revés, como una lista : un objeto, o usar : para agregar al FINAL de una lista. Para agregar al final, usa ++ con una lista de un objeto: xs ++ [x].",
+      "ルール：要素 : リスト、リスト ++ リスト。よくあるミス：リスト : 要素 のように逆に書くこと、: で末尾に足そうとすること。末尾に足すなら1個のリストと ++：xs ++ [x]。",
+    ),
+  ),
+  note("strings-lists", L("A String is a list of Char", "Un String es una lista de Char", "String は Char のリスト"),
+    p(
+      "A Char is one character in single quotes: 'z'. A String is text in double quotes: \"zoo\". The key fact: String is just another name for [Char], a list of characters. \"zoo\" and ['z','o','o'] are exactly the same value, written two ways.",
+      "Un Char es un carácter entre comillas simples: 'z'. Un String es texto entre comillas dobles: \"zoo\". Lo clave: String es solo otro nombre para [Char], una lista de caracteres. \"zoo\" y ['z','o','o'] son exactamente el mismo valor, escrito de dos formas.",
+      "Char は一重引用符で囲んだ1文字：'z'。String は二重引用符の文字列：\"zoo\"。大事なのは、String が [Char]（文字のリスト）の別名にすぎないこと。\"zoo\" と ['z','o','o'] は書き方が違うだけで、まったく同じ値じゃ。",
+    ),
+    ex("print ['o','k']\nprint (head \"zoo\")", "\"ok\"\n'z'",
+      L("A list of Char prints as a String", "Una lista de Char se imprime como String", "Char のリストは String として表示")),
+    p(
+      "So every list tool works on text: length counts letters, reverse flips them, take and drop keep or skip letters, ++ joins words. And print shows any list of Char as a String in double quotes.",
+      "Así que toda herramienta de listas funciona con texto: length cuenta letras, reverse las invierte, take y drop guardan o saltan letras, ++ une palabras. Y print muestra cualquier lista de Char como un String entre comillas dobles.",
+      "だからリストの道具は文字列にも使える。length は文字を数え、reverse は逆にし、take と drop は文字を残したり飛ばしたりし、++ は単語をつなぐ。print は Char のリストを二重引用符つきの String として表示する。",
+    ),
+    ex("print (length \"moon\", reverse \"star\")", "(4,\"rats\")"),
+    p(
+      "Watch the quotes: 'm' is one Char, \"m\" is a String that happens to hold one Char. Since : wants a single item on its left, 'm' : \"oon\" builds \"moon\", but a String on the left of : puts a list where a Char is expected. To join two Strings, use ++.",
+      "Fíjate en las comillas: 'm' es un Char, \"m\" es un String que contiene un Char. Como : quiere un solo objeto a su izquierda, 'm' : \"oon\" arma \"moon\", pero un String a la izquierda de : pone una lista donde se espera un Char. Para unir dos String, usa ++.",
+      "引用符に注意。'm' は Char ひとつ、\"m\" は Char を1個もつ String。: の左は要素ひとつなので、'm' : \"oon\" は \"moon\" になる。でも : の左に String を置くと、Char の場所にリストが来てしまう。String 同士は ++ でつなごう。",
+    ),
+    ex("putStrLn ('m' : \"oon\")", "moon"),
+    p(
+      "Rule: single quotes for one Char, double quotes for text. Because a String is a list, everything you learn about lists also works on strings, including the empty list: \"\" is the same as [].",
+      "Regla: comillas simples para un Char, comillas dobles para texto. Como un String es una lista, todo lo que aprendas de listas también sirve para strings, incluida la lista vacía: \"\" es lo mismo que [].",
+      "ルール：1文字は一重引用符、文字列は二重引用符。String はリストなので、リストで学ぶことは全部文字列にも使える。空リストも同じで、\"\" は [] と同じじゃ。",
+    ),
+  ),
+  note("picking-items", L("Picking items: !!, take, drop, head", "Elegir: !!, take, drop, head", "取り出す：!!・take・drop・head"),
+    p(
+      "xs !! n picks the item at position n, counting from 0: the first item is at 0, the second at 1. take n xs keeps the first n items; drop n xs throws them away and keeps the rest. take and drop never crash: asking for more than there is just gives what there is.",
+      "xs !! n elige el objeto en la posición n, contando desde 0: el primero está en 0 y el segundo en 1. take n xs deja los primeros n objetos; drop n xs los descarta y deja el resto. take y drop nunca fallan: pedir más de lo que hay solo da lo que hay.",
+      "xs !! n は位置 n の要素を取り出す。数えるのは 0 からで、最初の要素が 0、2番目が 1。take n xs は最初の n 個を残し、drop n xs はそれを捨てて残りを返す。take と drop は落ちない。多すぎる数を頼んでも、あるだけを返す。",
+    ),
+    ex("let ws = [10,20,30,40]\nprint (ws !! 0, ws !! 3)\nprint (take 3 ws, drop 3 ws)", "(10,40)\n([10,20,30],[40])",
+      L("Positions start at 0", "Las posiciones empiezan en 0", "位置は 0 から")),
+    ex("print (take 9 \"fox\", drop 9 \"fox\")", "(\"fox\",\"\")",
+      L("Asking for too many is safe", "Pedir de más es seguro", "多すぎても安全")),
+    p(
+      "head xs gives the first item and last xs the last one. But they are partial: on an empty list there is no answer. GHC can't know a list will be empty, so the program compiles and then crashes at run time with Prelude.head: empty list. !! with a position past the end crashes too.",
+      "head xs da el primer objeto y last xs el último. Pero son parciales: con una lista vacía no hay respuesta. GHC no puede saber que una lista estará vacía, así que el programa compila y luego cae al ejecutarse con Prelude.head: empty list. !! con una posición más allá del final también cae.",
+      "head xs は最初、last xs は最後の要素を返す。でもこれらは部分関数で、空リストには答えがない。GHC は空になるかを前もって知れないので、コンパイルは通り、実行時に Prelude.head: empty list で落ちる。末尾をこえる位置の !! も落ちる。",
+    ),
+    boom("print (head \"\")", "Prelude.head: empty list",
+      L("Compiles, then crashes: no first letter", "Compila y luego cae: no hay primera letra", "コンパイル後に落ちる：最初の文字がない")),
+    p(
+      "Rule: count positions from 0, and before calling head, last or !! make sure the item exists. When a list might be short or empty, take and drop are safe, and pattern matching (next lesson) lets the empty list have its own answer.",
+      "Regla: cuenta las posiciones desde 0 y, antes de usar head, last o !!, asegúrate de que el objeto existe. Cuando una lista pueda ser corta o vacía, take y drop son seguros, y la coincidencia de patrones (próxima lección) le da a la lista vacía su propia respuesta.",
+      "ルール：位置は 0 から数え、head・last・!! を使う前に要素があるか確かめる。短いか空かもしれないリストには take と drop が安全。次のレッスンのパターンマッチなら、空リストに専用の答えを用意できる。",
+    ),
+  ),
+  note("ranges-comprehensions", L("Ranges and comprehensions", "Rangos y comprensiones", "範囲と内包表記"),
+    p(
+      "[1..5] writes the numbers from 1 to 5 for you. Give the first two items to set the step: [3,6..15] counts by 3. It can count down too: [10,8..1]. Ranges also work on letters, since Char has an order. The end is included when the steps land on it.",
+      "[1..5] escribe por ti los números del 1 al 5. Da los dos primeros objetos para fijar el paso: [3,6..15] cuenta de 3 en 3. También puede contar hacia abajo: [10,8..1]. Los rangos también funcionan con letras, porque Char tiene un orden. El final se incluye si los pasos caen en él.",
+      "[1..5] は 1 から 5 までを自動で書く。最初の2つを書くと間隔が決まる：[3,6..15] は 3 ずつ。逆向きもできる：[10,8..1]。Char には順番があるので文字の範囲も作れる。終わりの値は、ちょうど届くなら含まれる。",
+    ),
+    ex("print [3,6..15]\nprint [10,8..1]\nprint ['p'..'t']", "[3,6,9,12,15]\n[10,8,6,4,2]\n\"pqrst\"",
+      L("A range of Char is a String", "Un rango de Char es un String", "Char の範囲は String")),
+    p(
+      "A comprehension builds a list from a rule, like set notation in math: [expression | x <- source, test]. Read it as \"the expression, for each x taken from the source, keeping only the x where the test is True\". x <- source is the generator; each test after a comma is a filter.",
+      "Una comprensión arma una lista con una regla, como la notación de conjuntos: [expresión | x <- origen, prueba]. Léela como \"la expresión, para cada x tomado del origen, quedándote solo con los x donde la prueba es True\". x <- origen es el generador; cada prueba tras una coma es un filtro.",
+      "内包表記は数学の集合の書き方のように、ルールからリストを作る：[式 | x <- 元, 条件]。「元から取った各 x のうち、条件が True のものについての式」と読む。x <- 元 が生成部、カンマのあとの条件がフィルター。",
+    ),
+    ex("print [n * 10 | n <- [1..6], even n]", "[20,40,60]",
+      L("Filter first, then compute the expression", "Primero el filtro, luego la expresión", "先にフィルター、次に式")),
+    p(
+      "Order of work: x walks the source from left to right, each x must pass every filter, and only then is the expression computed for it. The filter tests the original x, not the result. A comprehension over a String that keeps letters gives back a String.",
+      "Orden del trabajo: x recorre el origen de izquierda a derecha, cada x debe pasar todos los filtros, y solo entonces se calcula la expresión para él. El filtro prueba el x original, no el resultado. Una comprensión sobre un String que guarda letras devuelve un String.",
+      "処理の順番：x は元を左から右へ歩き、各 x が全部のフィルターを通ったときだけ式が計算される。フィルターが調べるのは元の x で、結果ではない。String から文字を残す内包表記は String を返す。",
+    ),
+    ex("print [c | c <- \"hello\", c /= 'l']", "\"heo\""),
+  ),
+];
 
 // ─── 1.3 Rows of items, scrolls of letters ─────────────────────────────────
 const lists: LessonDef = {
@@ -334,6 +668,7 @@ const lists: LessonDef = {
   xp: 65,
   enemy: "ghost",
   enemyName: L("EMPTY GHOST", "FANTASMA VACÍO", "からっぽゴースト"),
+  notes: listNotes,
   beats: [
     say(L(
       "A LIST is a row of values of ONE type: [1,2,3]. : puts one item at the front, ++ joins two rows.",
@@ -362,6 +697,8 @@ const lists: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("One operator joins two lists, the other adds a single item. Where does that item go?", "Un operador une dos listas y el otro agrega un solo objeto. ¿Dónde va ese objeto?", "片方はリスト同士をつなぎ、もう片方は1個を足す。その1個はどこに入る？"),
+      note: "cons-append",
       code: "print ([1,2,3] ++ [4,5])\nprint (0 : [1,2,3])",
       options: ["[1,2,3,4,5]\n[0,1,2,3]", "[1,2,3,[4,5]]\n[0,1,2,3]", "[1,2,3,4,5]\n[1,2,3,0]"],
       answer: 0,
@@ -378,6 +715,8 @@ const lists: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("What is a String made of in Haskell?", "¿De qué está hecho un String en Haskell?", "Haskell の String は何でできている？"),
+      note: "strings-lists",
       code: "print (\"abc\" == ['a','b','c'])",
       options: ["True", "False", NO_COMPILE],
       answer: 0,
@@ -389,6 +728,8 @@ const lists: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("A String is a list, so list tools count and flip its letters.", "Un String es una lista, así que las herramientas de listas cuentan e invierten sus letras.", "String はリスト。リストの道具で文字を数えたり逆にしたりできる。"),
+      note: "strings-lists",
       code: "print (length \"abc\", reverse \"lambda\")",
       options: ["(3,\"adbmal\")", "(3,\"lambda\")", "(6,\"adbmal\")"],
       answer: 0,
@@ -405,6 +746,8 @@ const lists: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Positions start at 0. take keeps the first n items; drop skips them.", "Las posiciones empiezan en 0. take deja los primeros n objetos; drop los salta.", "位置は 0 から。take は最初の n 個を残し、drop は飛ばす。"),
+      note: "picking-items",
       code: "print ([1,2,3] !! 1, take 2 [5,6,7], drop 2 [5,6,7])",
       options: ["(2,[5,6],[7])", "(1,[5,6],[7])", "(2,[6,7],[5])"],
       answer: 0,
@@ -421,6 +764,8 @@ const lists: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("The first two numbers set the step. And how does print show a list of Char?", "Los dos primeros números fijan el paso. ¿Y cómo muestra print una lista de Char?", "最初の2つの数で間隔が決まる。Char のリストは print でどう見える？"),
+      note: "ranges-comprehensions",
       code: "print [2,4..10]\nprint ['a'..'e']",
       options: ["[2,4,6,8,10]\n\"abcde\"", "[2,4,6,8,10]\n['a','b','c','d','e']", "[2,4,10]\n\"ae\""],
       answer: 0,
@@ -432,6 +777,8 @@ const lists: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Keep only the x that pass the test, then apply the expression to each of them.", "Deja solo los x que pasan la prueba y luego aplica la expresión a cada uno.", "条件を通る x だけ残し、それぞれに式を当てはめよう。"),
+      note: "ranges-comprehensions",
       code: "print [x * x | x <- [1..5], odd x]",
       options: ["[1,9,25]", "[1,4,9,16,25]", "[4,16]"],
       answer: 0,
@@ -443,6 +790,8 @@ const lists: LessonDef = {
     {
       kind: "predict",
       prompt: COMPILES,
+      hint: L("How many types can the items of one list have?", "¿Cuántos tipos pueden tener los objetos de una lista?", "ひとつのリストの要素は何種類の型を持てる？"),
+      note: "cons-append",
       code: "print [1, 'a']",
       options: [YES, NO_GHC],
       answer: 1,
@@ -453,6 +802,8 @@ const lists: LessonDef = {
     {
       kind: "predict",
       prompt: COMPILES,
+      hint: L("Look at the quotes. What must sit on the left of : when the right side is a String?", "Mira las comillas. ¿Qué debe ir a la izquierda de : si la derecha es un String?", "引用符を見よう。右が String のとき、: の左には何が来る？"),
+      note: "strings-lists",
       code: "print (\"x\" : \"yz\")",
       options: [YES, NO_GHC],
       answer: 1,
@@ -463,6 +814,8 @@ const lists: LessonDef = {
     {
       kind: "predict",
       prompt: HAPPENS,
+      hint: L("Can GHC tell before running that the list is empty? What happens when head runs on it?", "¿Puede GHC saber antes de ejecutar que la lista está vacía? ¿Qué pasa cuando head corre?", "GHC は実行前にリストが空だとわかる？head が動いたら？"),
+      note: "picking-items",
       code: "putStrLn \"before\"\nprint (head ([] :: [Int]))",
       options: [
         L("before, then crash: Prelude.head: empty list", "before y luego cae: Prelude.head: empty list", "before のあと落ちる：Prelude.head: empty list"),
@@ -477,6 +830,8 @@ const lists: LessonDef = {
     {
       kind: "type",
       prompt: L("Flip the word: it prints \"lwo\"", "Invierte la palabra: imprime \"lwo\"", "単語を逆に：\"lwo\" と表示"),
+      hint: L("A String is a list of letters. Which list function turns the order around?", "Un String es una lista de letras. ¿Qué función de listas da vuelta el orden?", "String は文字のリスト。順番を逆にするリスト関数は？"),
+      note: "strings-lists",
       code: "print (___ \"owl\")",
       answer: "reverse",
       check: { compiles: true, stdout: "\"lwo\"" },
@@ -486,6 +841,8 @@ const lists: LessonDef = {
     {
       kind: "run",
       prompt: L("The sign must show the first six letters: Lambda", "El cartel debe mostrar las seis primeras letras: Lambda", "看板に最初の6文字 Lambda を表示"),
+      hint: L("drop throws letters away. Which function keeps the first n letters instead?", "drop descarta letras. ¿Qué función deja en cambio las primeras n letras?", "drop は文字を捨てる。最初の n 文字を残す関数は？"),
+      note: "picking-items",
       starter: "main :: IO ()\nmain = putStrLn (drop 3 \"Lambdara\")\n",
       solution: "main :: IO ()\nmain = putStrLn (take 6 \"Lambdara\")\n",
       expect: "Lambda",
@@ -494,6 +851,103 @@ const lists: LessonDef = {
     },
   ],
 };
+
+const patternNotes: NoteDef[] = [
+  note("equations", L("Patterns: equations in order", "Patrones: ecuaciones en orden", "パターン：式は上から順に"),
+    p(
+      "A function can be written as several equations, one per case. Each one starts with a pattern that describes the argument: a literal like 0 or 'y' matches exactly that value; a name like n matches anything and gives it that name; _ matches anything and ignores it.",
+      "Una función puede escribirse como varias ecuaciones, una por caso. Cada una empieza con un patrón que describe el argumento: un literal como 0 o 'y' encaja solo con ese valor; un nombre como n encaja con todo y le pone ese nombre; _ encaja con todo y lo ignora.",
+      "関数は、場合ごとに複数の式（等式）で書ける。各式は引数の形を表すパターンで始まる。0 や 'y' のようなリテラルはその値だけに合う。n のような名前は何にでも合い、その名前をつける。_ は何にでも合い、値は使わない。",
+    ),
+    ex("answer :: Char -> String\nanswer 'y' = \"yes\"\nanswer 'n' = \"no\"\nanswer _ = \"maybe\"\n\nmain = print (map answer \"ynq\")", "[\"yes\",\"no\",\"maybe\"]",
+      L("'q' fits no literal, so it falls to _", "'q' no encaja en ningún literal y cae en _", "'q' はどのリテラルにも合わず _ へ")),
+    p(
+      "Haskell tries the equations from top to bottom and uses the FIRST one whose pattern fits. Once one fits, the ones below are ignored for that call. So a catch-all like _ or a plain name must go LAST: placed first, it swallows every value and the equations under it can never run. GHC still compiles it (at most it warns).",
+      "Haskell prueba las ecuaciones de arriba abajo y usa la PRIMERA cuyo patrón encaja. Cuando una encaja, las de abajo se ignoran en esa llamada. Por eso un comodín como _ o un nombre suelto debe ir AL FINAL: si va primero, se traga todos los valores y las ecuaciones de abajo nunca corren. GHC igual lo compila (como mucho, avisa).",
+      "Haskell は式を上から順に試し、パターンが合った最初の式を使う。合ったら、その呼び出しでは下の式は無視される。だから _ や名前だけの「何でも受け」は最後に置く。先頭に置くと全部の値を飲みこみ、下の式は一度も動かない。それでもコンパイルは通る（せいぜい警告）。",
+    ),
+    p(
+      "Lists have two shapes: [] (empty) or (x:xs), a first item x stuck onto the rest xs, which is itself a list, maybe empty. Patterns can use those shapes: (x:_) takes the first item, [x] matches a list with exactly one item, and [] matches only the empty list. The parentheses around x:xs are required.",
+      "Las listas tienen dos formas: [] (vacía) o (x:xs), un primer objeto x pegado al resto xs, que también es una lista, quizá vacía. Los patrones pueden usar esas formas: (x:_) toma el primer objeto, [x] encaja con una lista de exactamente un objeto y [] solo con la lista vacía. Los paréntesis alrededor de x:xs son obligatorios.",
+      "リストの形は2つ：[]（空）か (x:xs)。(x:xs) は先頭の x と残りの xs（これもリストで、空かもしれない）。パターンでこの形を使える：(x:_) は先頭を取り出し、[x] はちょうど1個のリスト、[] は空リストだけに合う。x:xs のまわりのかっこは必須。",
+    ),
+    ex("headline :: [String] -> String\nheadline [] = \"no news\"\nheadline (h:_) = h\n\nmain = do\n  putStrLn (headline [])\n  putStrLn (headline [\"rain\", \"sun\"])", "no news\nrain",
+      L("One equation per list shape", "Una ecuación por forma de lista", "リストの形ごとに1つの式")),
+    p(
+      "Rule: specific patterns first, catch-all last. Pairs can be taken apart the same way: (a, b) as a pattern names both halves. When you predict the result, take the value and test it against each equation from the top, stopping at the first fit.",
+      "Regla: patrones específicos primero, el comodín al final. Los pares se separan igual: (a, b) como patrón nombra ambas mitades. Para predecir el resultado, toma el valor y pruébalo contra cada ecuación desde arriba, deteniéndote en la primera que encaje.",
+      "ルール：具体的なパターンが先、何でも受けは最後。ペアも同じように分けられ、パターン (a, b) で両方に名前がつく。結果を予想するときは、値を上の式から順に当てはめ、最初に合ったところで止まろう。",
+    ),
+  ),
+  note("guards", L("Guards and otherwise", "Guardas y otherwise", "ガードと otherwise"),
+    p(
+      "Patterns check shapes; guards check conditions. After the function name and its arguments, each line | test = result is a guard. Haskell checks them from top to bottom and gives the result of the FIRST test that is True.",
+      "Los patrones revisan formas; las guardas revisan condiciones. Tras el nombre de la función y sus argumentos, cada línea | prueba = resultado es una guarda. Haskell las revisa de arriba abajo y da el resultado de la PRIMERA prueba que sea True.",
+      "パターンは形を、ガードは条件を調べる。関数名と引数のあと、| 条件 = 結果 の各行がガード。Haskell は上から順に調べ、最初に True になった条件の結果を返す。",
+    ),
+    ex("speed :: Int -> String\nspeed kmh\n  | kmh >= 120 = \"fast\"\n  | kmh >= 50 = \"normal\"\n  | otherwise = \"slow\"\n\nmain = print (map speed [130, 50, 20])", "[\"fast\",\"normal\",\"slow\"]",
+      L("Each value stops at the first guard that passes", "Cada valor se detiene en la primera guarda que pasa", "最初に通ったガードで止まる")),
+    p(
+      "Order matters exactly as with equations: once a guard passes, the ones below are never checked. That's why the tests can stay simple: when kmh >= 50 is checked, kmh is already known to be below 120. Put the strictest test first.",
+      "El orden importa igual que con las ecuaciones: cuando una guarda pasa, las de abajo nunca se revisan. Por eso las pruebas pueden ser simples: al revisar kmh >= 50, ya se sabe que kmh es menor que 120. Pon primero la prueba más exigente.",
+      "順番は式と同じく大事。ガードがひとつ通れば、下のガードは調べない。だから条件は単純でいい。kmh >= 50 を調べる時点で、kmh が 120 未満なのはもうわかっている。いちばん厳しい条件を先に書こう。",
+    ),
+    p(
+      "otherwise is not a special keyword: it is just a name for True, defined in the Prelude. As the last guard it always passes, so it catches every value the guards above missed. Without it, a value that fails every test makes the program crash at run time.",
+      "otherwise no es una palabra clave especial: es solo un nombre para True, definido en el Prelude. Como última guarda siempre pasa, así que atrapa todo valor que las guardas de arriba dejaron pasar. Sin ella, un valor que falla todas las pruebas hace caer el programa al ejecutarse.",
+      "otherwise は特別なキーワードではなく、Prelude で定義された True の別名にすぎない。最後のガードに置くと必ず通るので、上のガードがもらした値を全部受け止める。これがないと、全部の条件に外れた値で実行時に落ちる。",
+    ),
+    p(
+      "Layout: the guard lines are indented under the function name, each starting with |, and there is NO = right after the arguments, because each guard has its own =. Common mistake: writing f x = and then the guards, which is a parse error.",
+      "Diseño: las líneas de guarda van indentadas bajo el nombre de la función, cada una empieza con |, y NO hay = justo después de los argumentos, porque cada guarda tiene su propio =. Error común: escribir f x = y luego las guardas, lo que da parse error.",
+      "書き方：ガードの行は関数名の下に字下げして、それぞれ | で始める。引数のすぐあとに = は書かない。= は各ガードが持っているからじゃ。よくあるミス：f x = と書いてからガードを並べること。これは parse error。",
+    ),
+    bad("sizeTag :: Int -> String\nsizeTag n =\n  | n > 9 = \"big\"\n  | otherwise = \"small\"\n\nmain = putStrLn (sizeTag 3)",
+      L("Does not compile: no = before the guards", "No compila: sin = antes de las guardas", "コンパイル不可：ガードの前に = は不要")),
+  ),
+  note("where-case", L("where and case ... of", "where y case ... of", "where と case ... of"),
+    p(
+      "where attaches helper names to an equation. It goes after all the guards, and every guard can use the names it defines. The value is written once and computed once, so you don't repeat a long formula in each test.",
+      "where agrega nombres auxiliares a una ecuación. Va después de todas las guardas, y cada guarda puede usar los nombres que define. El valor se escribe una vez y se calcula una vez, así no repites una fórmula larga en cada prueba.",
+      "where は式に補助の名前をつける。全部のガードのあとに書き、どのガードもその名前を使える。値は一度書いて一度だけ計算されるので、長い式を条件ごとにくり返さずにすむ。",
+    ),
+    ex("ticket :: Int -> Int -> String\nticket age price\n  | cost == 0 = \"free\"\n  | cost < 10 = \"cheap\"\n  | otherwise = \"pricey\"\n  where cost = if age < 5 then 0 else price\n\nmain = print (ticket 3 20, ticket 30 8)", "(\"free\",\"cheap\")",
+      L("cost is shared by every guard", "cost lo comparten todas las guardas", "cost は全ガードで共有")),
+    p(
+      "case expr of matches patterns in the middle of an expression, without writing a new function. Each line below it is pattern -> result, tried from top to bottom like equations. The patterns are the same ones: literals, names, _, [], [x], (x:xs).",
+      "case expr of compara patrones en medio de una expresión, sin escribir una función nueva. Cada línea de abajo es patrón -> resultado, probadas de arriba abajo como las ecuaciones. Los patrones son los mismos: literales, nombres, _, [], [x], (x:xs).",
+      "case 式 of は、新しい関数を書かずに式の途中でパターンを照合する。下の各行は パターン -> 結果 で、式と同じく上から試す。使えるパターンも同じ：リテラル、名前、_、[]、[x]、(x:xs)。",
+    ),
+    ex("let pets = [\"cat\"]\nputStrLn (case pets of\n  [] -> \"no pets\"\n  [p] -> \"only \" ++ p\n  _ -> \"several\")", "only cat",
+      L("[p] fits a list with exactly one item", "[p] encaja con una lista de un solo objeto", "[p] はちょうど1個のリストに合う")),
+    p(
+      "Since a String is a list of Char, the same list patterns work on text: \"\" matches [], a one-letter String matches [_], and longer ones fall through to (x:xs) or _. Both where and case are indentation-sensitive: the lines of each block must line up in the same column.",
+      "Como un String es una lista de Char, los mismos patrones de lista funcionan con texto: \"\" encaja con [], un String de una letra encaja con [_] y los más largos caen en (x:xs) o _. where y case dependen de la indentación: las líneas de cada bloque deben alinearse en la misma columna.",
+      "String は Char のリストなので、リストのパターンは文字列にも使える。\"\" は [] に、1文字の String は [_] に合い、もっと長いものは (x:xs) や _ へ進む。where も case も字下げが意味を持つ。同じブロックの行は同じ列にそろえよう。",
+    ),
+  ),
+  note("cover-shapes", L("Cover every shape", "Cubre todas las formas", "すべての形をカバー"),
+    p(
+      "If no equation, guard or case line fits a value, Haskell has nothing to return. The program still compiles, but it crashes when it reaches that value, with an error like Non-exhaustive patterns in function name. The lines before it run normally.",
+      "Si ninguna ecuación, guarda o línea de case encaja con un valor, Haskell no tiene nada que devolver. El programa igual compila, pero cae al llegar a ese valor, con un error como Non-exhaustive patterns in function nombre. Las líneas anteriores corren normalmente.",
+      "どの式・ガード・case の行も値に合わないと、Haskell は返すものがない。それでもコンパイルは通るが、その値に出会った時点で Non-exhaustive patterns in function 名前 のようなエラーで落ちる。それまでの行はふつうに動く。",
+    ),
+    boom("dayName :: Int -> String\ndayName 6 = \"Saturday\"\ndayName 7 = \"Sunday\"\n\nmain = do\n  putStrLn (dayName 7)\n  putStrLn (dayName 1)", "Non-exhaustive patterns in function dayName",
+      L("Prints Sunday, then crashes on 1", "Imprime Sunday y luego cae con 1", "Sunday を表示し、1 で落ちる")),
+    p(
+      "Guards are a common source of holes: | n < 0 and | n > 0 look complete, but 0 passes neither. Patterns too: a list function with only an (x:xs) equation fails on []. For every function, ask: is there a value that fits nothing?",
+      "Las guardas son una fuente común de huecos: | n < 0 y | n > 0 parecen completas, pero 0 no pasa ninguna. Los patrones también: una función de listas con solo una ecuación (x:xs) falla con []. Para cada función pregúntate: ¿hay algún valor que no encaje en nada?",
+      "ガードは穴ができやすい。| n < 0 と | n > 0 で全部に見えても、0 はどちらも通らない。パターンも同じで、(x:xs) の式しかないリスト関数は [] で落ちる。関数ごとに「どこにも合わない値はないか」と自問しよう。",
+    ),
+    p(
+      "The fix is a catch-all at the end: otherwise for guards, _ or a plain name for patterns, or the missing shape itself, like []. Then every possible input lands somewhere. Compiling with -Wall makes GHC warn about missing cases before you ever run the program.",
+      "La solución es un comodín al final: otherwise para las guardas, _ o un nombre suelto para los patrones, o la forma que falta, como []. Así toda entrada posible cae en algún lado. Compilar con -Wall hace que GHC avise de los casos que faltan antes de ejecutar.",
+      "直し方は最後に受け皿を置くこと。ガードなら otherwise、パターンなら _ か名前だけ、または足りない形そのもの（[] など）。これでどんな入力もどこかに落ちる。-Wall をつけてコンパイルすれば、実行前に GHC が足りない場合を警告してくれる。",
+    ),
+    ex("dayName :: Int -> String\ndayName 6 = \"Saturday\"\ndayName 7 = \"Sunday\"\ndayName _ = \"weekday\"\n\nmain = do\n  putStrLn (dayName 7)\n  putStrLn (dayName 1)", "Sunday\nweekday",
+      L("A final _ catches every other number", "Un _ final atrapa los demás números", "最後の _ が残りの数を受け止める")),
+  ),
+];
 
 // ─── 1.4 Which shape is it? ─────────────────────────────────────────────────
 const patterns: LessonDef = {
@@ -504,6 +958,7 @@ const patterns: LessonDef = {
   xp: 70,
   enemy: "haskell/bottom-wraith",
   enemyName: L("GAP WRAITH", "ESPECTRO HUECO", "すきまレイス"),
+  notes: patternNotes,
   beats: [
     say(L(
       "A function can have several EQUATIONS. Haskell tries them top to bottom and runs the first one whose pattern fits.",
@@ -523,6 +978,8 @@ const patterns: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Test each value against the equations from the top. Which pattern matches anything?", "Prueba cada valor contra las ecuaciones desde arriba. ¿Qué patrón encaja con todo?", "値を上の式から順に当てはめよう。何にでも合うパターンは？"),
+      note: "equations",
       code: "isZero :: Int -> String\nisZero 0 = \"zero\"\nisZero _ = \"other\"\n\nmain = print (isZero 0, isZero 5)",
       options: ["(\"zero\",\"other\")", "(\"zero\",\"zero\")", "(\"other\",\"other\")"],
       answer: 0,
@@ -534,6 +991,8 @@ const patterns: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Equations are tried top to bottom, and the first one that fits wins.", "Las ecuaciones se prueban de arriba abajo, y gana la primera que encaja.", "式は上から順に試され、最初に合ったものが勝つ。"),
+      note: "equations",
       code: "anyF :: Int -> String\nanyF _ = \"any\"\nanyF 0 = \"zero\"\n\nmain = print (anyF 0)",
       options: ["\"any\"", "\"zero\"", NO_COMPILE],
       answer: 0,
@@ -549,6 +1008,8 @@ const patterns: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Which shape does each list have: empty, or a first item followed by the rest?", "¿Qué forma tiene cada lista: vacía, o un primer objeto seguido del resto?", "それぞれのリストの形は？空？それとも先頭と残り？"),
+      note: "equations",
       code: "firstOr :: a -> [a] -> a\nfirstOr d [] = d\nfirstOr _ (x:_) = x\n\nmain = print (firstOr 0 [], firstOr 0 [4,5])",
       options: ["(0,4)", "(0,5)", "(4,4)"],
       answer: 0,
@@ -565,6 +1026,8 @@ const patterns: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Check the guards top to bottom for each number. And how does print show a list of Char?", "Revisa las guardas de arriba abajo para cada número. ¿Y cómo muestra print una lista de Char?", "数ごとにガードを上から調べよう。Char のリストは print でどう見える？"),
+      note: "guards",
       code: "grade :: Int -> Char\ngrade n\n  | n >= 90 = 'A'\n  | n >= 70 = 'B'\n  | otherwise = 'C'\n\nmain = print (map grade [95, 70, 10])",
       options: ["\"ABC\"", "['A','B','C']", "\"AAC\""],
       answer: 0,
@@ -581,6 +1044,8 @@ const patterns: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Compute v once from where, then run through the guards in order for each call.", "Calcula v una vez con where y luego recorre las guardas en orden en cada llamada.", "where で v を計算し、呼び出しごとにガードを順に見よう。"),
+      note: "where-case",
       code: "bmi :: Double -> Double -> String\nbmi w h\n  | v < 18.5 = \"under\"\n  | v < 25 = \"normal\"\n  | otherwise = \"over\"\n  where v = w / h ^ 2\n\nmain = print (bmi 50 1.8, bmi 70 1.75)",
       options: ["(\"under\",\"normal\")", "(\"normal\",\"normal\")", "(\"under\",\"over\")"],
       answer: 0,
@@ -592,6 +1057,8 @@ const patterns: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("An empty String is the empty list, and [_] matches lists of exactly one item.", "Un String vacío es la lista vacía, y [_] encaja con listas de exactamente un objeto.", "空の String は空リスト。[_] はちょうど1個のリストに合う。"),
+      note: "where-case",
       code: "sizeOf :: String -> String\nsizeOf xs = case xs of\n  [] -> \"empty\"\n  [_] -> \"one\"\n  _ -> \"many\"\n\nmain = print (sizeOf \"abc\", sizeOf \"\", sizeOf \"x\")",
       options: ["(\"many\",\"empty\",\"one\")", "(\"many\",\"one\",\"one\")", "(\"one\",\"empty\",\"one\")"],
       answer: 0,
@@ -608,6 +1075,8 @@ const patterns: LessonDef = {
     {
       kind: "predict",
       prompt: HAPPENS,
+      hint: L("Does any equation fit 3? Think about what happens at run time if none does.", "¿Alguna ecuación encaja con 3? Piensa qué pasa al ejecutar si ninguna lo hace.", "3 に合う式はある？なければ実行時にどうなる？"),
+      note: "cover-shapes",
       code: "describe :: Int -> String\ndescribe 1 = \"one\"\ndescribe 2 = \"two\"\n\nmain = putStrLn (describe 3)",
       options: [
         L("Crash: Non-exhaustive patterns", "Cae: Non-exhaustive patterns", "落ちる：Non-exhaustive patterns"),
@@ -622,6 +1091,8 @@ const patterns: LessonDef = {
     {
       kind: "type",
       prompt: L("The last sign always says yes", "El último cartel siempre dice sí", "最後の札はいつも「はい」"),
+      hint: L("You need a name that is always True, used as the final catch-all guard.", "Necesitas un nombre que siempre es True, usado como la guarda final que atrapa todo.", "いつも True の名前を、最後の受け皿のガードに使おう。"),
+      note: "guards",
       code: "sign :: Int -> String\nsign n\n  | n < 0 = \"negative\"\n  | n > 0 = \"positive\"\n  | ___ = \"zero\"\n\nmain = putStrLn (sign 0)",
       answer: "otherwise",
       check: { compiles: true, stdout: "zero" },
@@ -631,6 +1102,8 @@ const patterns: LessonDef = {
     {
       kind: "order",
       prompt: L("Put the function in order", "Ordena la función", "関数を正しい順に並べよう"),
+      hint: L("Signature first, then the name with its argument, then guards from most specific to catch-all.", "Primero la firma, luego el nombre con su argumento y después las guardas, de la más específica a la que atrapa todo.", "シグネチャ、名前と引数、そしてガードを具体的なものから受け皿の順に。"),
+      note: "guards",
       lines: ["grade :: Int -> Char", "grade n", "  | n >= 90 = 'A'", "  | otherwise = 'C'"],
       check: { compiles: true, stdout: "\"AC\"", program: "grade :: Int -> Char\ngrade n\n  | n >= 90 = 'A'\n  | otherwise = 'C'\n\nmain = print (map grade [95, 10])\n" },
       explain: L("Signature first, then the name and argument, then the guards, ending with otherwise.", "Primero la firma, luego el nombre y el argumento, después las guardas, terminando en otherwise.", "まずシグネチャ、次に名前と引数、そしてガード。最後は otherwise。"),
@@ -638,6 +1111,8 @@ const patterns: LessonDef = {
     {
       kind: "run",
       prompt: L("Cover the missing shape: describe 0 must print zero", "Cubre la forma que falta: describe 0 debe imprimir zero", "足りない形を補って describe 0 で zero"),
+      hint: L("0 fails both tests. Add a final guard that catches whatever is left.", "0 falla ambas pruebas. Agrega una guarda final que atrape lo que quede.", "0 はどちらの条件も通らない。残りを受け止める最後のガードを足そう。"),
+      note: "cover-shapes",
       starter: "describe :: Int -> String\ndescribe n\n  | n < 0 = \"negative\"\n  | n > 0 = \"positive\"\n\nmain :: IO ()\nmain = do\n  putStrLn (describe 5)\n  putStrLn (describe 0)\n",
       solution: "describe :: Int -> String\ndescribe n\n  | n < 0 = \"negative\"\n  | n > 0 = \"positive\"\n  | otherwise = \"zero\"\n\nmain :: IO ()\nmain = do\n  putStrLn (describe 5)\n  putStrLn (describe 0)\n",
       expect: "zero",
@@ -646,6 +1121,86 @@ const patterns: LessonDef = {
     },
   ],
 };
+
+const villageBossNotes: NoteDef[] = [
+  note("partial-functions", L("Partial functions crash", "Las funciones parciales caen", "部分関数は落ちる"),
+    p(
+      "A partial function has no answer for some inputs. head, last, maximum and minimum have nothing to give for an empty list, and xs !! n has nothing when n is past the end. GHC can't see this ahead of time, so these programs compile and then crash at run time.",
+      "Una función parcial no tiene respuesta para algunas entradas. head, last, maximum y minimum no tienen nada que dar con una lista vacía, y xs !! n no tiene nada si n pasa el final. GHC no puede verlo de antemano, así que estos programas compilan y luego caen al ejecutarse.",
+      "部分関数は、一部の入力に答えがない関数。head・last・maximum・minimum は空リストに返すものがなく、xs !! n は n が末尾をこえると返すものがない。GHC は前もってそれを見抜けないので、コンパイルは通り、実行時に落ちる。",
+    ),
+    boom("print (minimum ([] :: [Double]))", "Prelude.minimum: empty list",
+      L("The smallest of nothing does not exist", "El menor de nada no existe", "何もない中の最小値はない")),
+    boom("print (\"abc\" !! 3)", "Prelude.!!: index too large",
+      L("Positions 0, 1 and 2 exist; 3 does not", "Existen las posiciones 0, 1 y 2; la 3 no", "位置 0・1・2 はあるが 3 はない")),
+    p(
+      "The error names the culprit: Prelude.head: empty list, Prelude.!!: index too large. Rule: before using one, make sure the list is not empty and the position is in range, or use pattern matching with a [] equation so the empty list gets its own answer.",
+      "El error nombra al culpable: Prelude.head: empty list, Prelude.!!: index too large. Regla: antes de usar una, asegúrate de que la lista no esté vacía y la posición exista, o usa patrones con una ecuación [] para que la lista vacía tenga su propia respuesta.",
+      "エラーが犯人を教えてくれる：Prelude.head: empty list、Prelude.!!: index too large。ルール：使う前にリストが空でないこと、位置が範囲内であることを確かめる。または [] の式を書いて、空リストに専用の答えを用意しよう。",
+    ),
+    ex("safeTop :: [Int] -> Int\nsafeTop [] = 0\nsafeTop xs = maximum xs\n\nmain = print (safeTop [], safeTop [4,8,1])", "(0,8)",
+      L("The empty list gets its own equation", "La lista vacía tiene su propia ecuación", "空リストには専用の式")),
+    p(
+      "Pattern matching can leave the same kind of hole: a function or case missing a shape crashes with Non-exhaustive patterns. Cover [] and (x:xs), or end with _ or otherwise.",
+      "La coincidencia de patrones puede dejar el mismo tipo de hueco: una función o un case al que le falta una forma cae con Non-exhaustive patterns. Cubre [] y (x:xs), o termina con _ u otherwise.",
+      "パターンマッチにも同じ穴ができる。形が足りない関数や case は Non-exhaustive patterns で落ちる。[] と (x:xs) の両方を書くか、最後に _ や otherwise を置こう。",
+    ),
+  ),
+  note("recap-numbers", L("Recap: numbers and types", "Repaso: números y tipos", "復習：数と型"),
+    p(
+      "Three divisions: `div` keeps the whole part, `mod` gives the remainder, / keeps the fraction. Backticks let you write a two-argument function between its arguments.",
+      "Tres divisiones: `div` deja la parte entera, `mod` da el resto, / conserva la fracción. Las comillas invertidas permiten escribir una función de dos argumentos entre ellos.",
+      "割り算は3つ：`div` は整数部分、`mod` は余り、/ は小数。バッククォートを使うと、2引数の関数を引数の間に書ける。",
+    ),
+    ex("print (17 `div` 5, 17 `mod` 5)", "(3,2)"),
+    p(
+      "/ needs a fractional type, and Haskell never converts for you. length always returns an Int, so dividing by it needs fromIntegral on the Int side. To glue a number onto text, convert it with show.",
+      "/ necesita un tipo fraccionario, y Haskell nunca convierte por ti. length siempre devuelve un Int, así que dividir entre él necesita fromIntegral del lado del Int. Para pegar un número a un texto, conviértelo con show.",
+      "/ には小数の型が必要で、Haskell は勝手に変換しない。length はいつも Int を返すので、それで割るには Int の側に fromIntegral が要る。数を文字列につなぐなら show で変換しよう。",
+    ),
+    ex("let prices = [4, 6, 8]\nprint (sum prices / fromIntegral (length prices))", "6.0",
+      L("An average: convert the count first", "Un promedio: convierte primero el conteo", "平均：先に個数を変換")),
+    p(
+      "Rule: whole → fraction with fromIntegral, value → text with show. Int wraps silently past its limit; Integer stays exact.",
+      "Regla: entero → fracción con fromIntegral, valor → texto con show. Int da la vuelta en silencio al pasar su límite; Integer sigue exacto.",
+      "ルール：整数 → 小数は fromIntegral、値 → 文字列は show。Int は上限をこえると黙って回りこみ、Integer は正確なまま。",
+    ),
+  ),
+  note("recap-lists", L("Recap: lists and comprehensions", "Repaso: listas y comprensiones", "復習：リストと内包表記"),
+    p(
+      "A comprehension [expr | x <- source, test] takes each x from the source, keeps only those that pass the test, and computes expr for each. Over a String it gives a list of Char, which print shows as a String in quotes.",
+      "Una comprensión [expr | x <- origen, prueba] toma cada x del origen, deja solo los que pasan la prueba y calcula expr para cada uno. Sobre un String da una lista de Char, que print muestra como un String entre comillas.",
+      "内包表記 [式 | x <- 元, 条件] は元から x を1つずつ取り、条件を通ったものだけ式を計算する。String が元なら結果は Char のリストで、print は引用符つきの String として表示する。",
+    ),
+    ex("print [c | c <- \"pepper\", c /= 'p']", "\"eer\""),
+    p(
+      "Nested calls run from the inside out: in take 2 (drop 1 xs), drop runs first because it sits in the inner parentheses, and take works on its result.",
+      "Las llamadas anidadas corren de adentro hacia afuera: en take 2 (drop 1 xs), drop corre primero porque está en los paréntesis interiores, y take trabaja sobre su resultado.",
+      "入れ子の呼び出しは内側から外側へ。take 2 (drop 1 xs) では、内側のかっこにある drop が先に動き、take はその結果に働く。",
+    ),
+    ex("print (drop 1 (reverse [5,6,7,8]))", "[7,6,5]",
+      L("reverse first, then drop", "Primero reverse, luego drop", "先に reverse、次に drop")),
+    p(
+      "Remember: positions count from 0, take and drop never crash, and head, last and !! do when the item isn't there.",
+      "Recuerda: las posiciones cuentan desde 0, take y drop nunca caen, y head, last y !! sí caen cuando el objeto no existe.",
+      "思い出そう：位置は 0 から数え、take と drop は落ちないが、head・last・!! は要素がないと落ちる。",
+    ),
+  ),
+  note("recap-patterns", L("Recap: patterns and guards", "Repaso: patrones y guardas", "復習：パターンとガード"),
+    p(
+      "Patterns take values apart by shape: (a, b) splits a pair, [] is the empty list, (x:xs) is a first item plus the rest. Equations are tried from top to bottom, and the first one that fits wins.",
+      "Los patrones separan valores por su forma: (a, b) divide un par, [] es la lista vacía, (x:xs) es un primer objeto más el resto. Las ecuaciones se prueban de arriba abajo, y gana la primera que encaja.",
+      "パターンは形で値を分ける。(a, b) はペアを分け、[] は空リスト、(x:xs) は先頭と残り。式は上から順に試され、最初に合ったものが使われる。",
+    ),
+    ex("addPair :: (Int, Int) -> Int\naddPair (a, b) = a + b\n\nmain = print (addPair (3, 4))", "7"),
+    p(
+      "Guards check conditions from top to bottom and stop at the first True; otherwise (just True) catches the rest. If nothing fits a value, the program crashes with Non-exhaustive patterns, so always cover every shape: [] and (x:xs), or end with _.",
+      "Las guardas revisan condiciones de arriba abajo y se detienen en el primer True; otherwise (que es True) atrapa el resto. Si nada encaja con un valor, el programa cae con Non-exhaustive patterns, así que cubre siempre todas las formas: [] y (x:xs), o termina con _.",
+      "ガードは上から条件を調べ、最初の True で止まる。otherwise（中身は True）が残りを受け止める。値に何も合わないと Non-exhaustive patterns で落ちるので、[] と (x:xs) の両方を書くか、最後に _ を置こう。",
+    ),
+    ex("temp :: Int -> String\ntemp c\n  | c >= 30 = \"hot\"\n  | c >= 15 = \"mild\"\n  | otherwise = \"cold\"\n\nmain = print (map temp [35, 15, 0])", "[\"hot\",\"mild\",\"cold\"]"),
+  ),
+];
 
 // ─── BOSS · The Partial Moth ────────────────────────────────────────────────
 const boss: LessonDef = {
@@ -656,6 +1211,7 @@ const boss: LessonDef = {
   xp: 160,
   enemy: "haskell/partial-moth",
   enemyName: L("PARTIAL MOTH", "POLILLA PARCIAL", "パーシャルモス"),
+  notes: villageBossNotes,
   beats: [
     enemySays(L(
       "Flutter... I am the PARTIAL MOTH. I nibble holes where your functions forget a shape. Let's see what you missed!",
@@ -664,6 +1220,8 @@ const boss: LessonDef = {
     )),
     {
       kind: "predict", time: 15, prompt: HAPPENS,
+      hint: L("Like head, last needs at least one item. Is there one, and can GHC notice before running?", "Como head, last necesita al menos un objeto. ¿Hay alguno? ¿Puede GHC notarlo antes de ejecutar?", "head と同じく last にも要素が要る。あるかな？GHC は実行前に気づける？"),
+      note: "partial-functions",
       code: "print (last ([] :: [Int]))",
       options: [L("Crash: Prelude.last: empty list", "Cae: Prelude.last: empty list", "落ちる：Prelude.last: empty list"), "0", NO_COMPILE],
       answer: 0,
@@ -673,6 +1231,8 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 15, prompt: HAPPENS,
+      hint: L("Count the valid positions starting from 0. Does position 5 exist?", "Cuenta las posiciones válidas desde 0. ¿Existe la posición 5?", "0 から有効な位置を数えよう。位置 5 はある？"),
+      note: "partial-functions",
       code: "print ([1,2,3] !! 5)",
       options: [L("Crash: index too large", "Cae: index too large", "落ちる：index too large"), "3", NO_COMPILE],
       answer: 0,
@@ -682,6 +1242,8 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 15, prompt: HAPPENS,
+      hint: L("What is the biggest item of a list with no items? Think compile time vs run time.", "¿Cuál es el mayor objeto de una lista sin objetos? Piensa en compilar vs ejecutar.", "要素のないリストの最大値は？コンパイル時と実行時を考えよう。"),
+      note: "partial-functions",
       code: "print (maximum ([] :: [Int]))",
       options: [L("Crash: empty list", "Cae: empty list", "落ちる：empty list"), "0", NO_COMPILE],
       answer: 0,
@@ -691,6 +1253,8 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 15, prompt: COMPILES,
+      hint: L("Check the type that length returns, and what / requires.", "Revisa el tipo que devuelve length y lo que exige /.", "length が返す型と、/ が必要とする型を確かめよう。"),
+      note: "recap-numbers",
       code: "print (sum [1,2,3] / length [1,2,3])",
       options: [YES, NO_GHC],
       answer: 1,
@@ -700,6 +1264,8 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 12, prompt: PRINT,
+      hint: L("Keep only the letters that pass the test. How does print show a list of Char?", "Deja solo las letras que pasan la prueba. ¿Cómo muestra print una lista de Char?", "条件を通る文字だけ残す。Char のリストは print でどう見える？"),
+      note: "recap-lists",
       code: "print [c | c <- \"banana\", c == 'a']",
       options: ["\"aaa\"", "3", "\"bnn\""],
       answer: 0,
@@ -710,6 +1276,8 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 12, prompt: PRINT,
+      hint: L("Work from the inner parentheses outward.", "Trabaja desde los paréntesis interiores hacia afuera.", "内側のかっこから外へ順に考えよう。"),
+      note: "recap-lists",
       code: "print (take 3 (reverse [1..10]))",
       options: ["[10,9,8]", "[1,2,3]", "[3,2,1]"],
       answer: 0,
@@ -720,6 +1288,8 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 15, prompt: PRINT,
+      hint: L("The pattern takes the pair apart. In which order does the result put the pieces back?", "El patrón separa el par. ¿En qué orden vuelve a juntar las piezas el resultado?", "パターンがペアを分ける。結果はどの順で組み直す？"),
+      note: "recap-patterns",
       code: "swap :: (a, b) -> (b, a)\nswap (x, y) = (y, x)\n\nmain = print (swap (1, \"one\"))",
       options: ["(\"one\",1)", "(1,\"one\")", NO_COMPILE],
       answer: 0,
@@ -730,6 +1300,8 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 15, prompt: PRINT,
+      hint: L("For each number, check the guards top to bottom and stop at the first True.", "Para cada número, revisa las guardas de arriba abajo y detente en el primer True.", "数ごとにガードを上から調べ、最初の True で止まろう。"),
+      note: "recap-patterns",
       code: "label :: Int -> String\nlabel n\n  | n > 100 = \"huge\"\n  | n > 10 = \"big\"\n  | otherwise = \"small\"\n\nmain = print (map label [5, 50, 500])",
       options: ["[\"small\",\"big\",\"huge\"]", "[\"small\",\"big\",\"big\"]", "[\"small\",\"huge\",\"huge\"]"],
       answer: 0,
@@ -740,6 +1312,8 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 15, prompt: HAPPENS,
+      hint: L("Which shapes does the case cover? Does the argument fit any of them?", "¿Qué formas cubre el case? ¿El argumento encaja en alguna?", "case はどの形をカバーしている？引数はどれかに合う？"),
+      note: "partial-functions",
       code: "firstOne :: [Int] -> Int\nfirstOne xs = case xs of\n  (x:_) -> x\n\nmain = print (firstOne [])",
       options: [L("Crash: Non-exhaustive patterns", "Cae: Non-exhaustive patterns", "落ちる：Non-exhaustive patterns"), "0", NO_COMPILE],
       answer: 0,
@@ -750,6 +1324,8 @@ const boss: LessonDef = {
     {
       kind: "pick", time: 15,
       prompt: L("Cover the empty list", "Cubre la lista vacía", "空リストをカバーしよう"),
+      hint: L("The second equation handles a list with a first item. Which shape is still missing?", "La segunda ecuación cubre una lista con primer objeto. ¿Qué forma falta todavía?", "2つ目の式は先頭のあるリスト用。まだ足りない形は？"),
+      note: "recap-patterns",
       code: "firstOr :: Int -> [Int] -> Int\nfirstOr d ___ = d\nfirstOr _ (x:_) = x\n\nmain = print (firstOr 7 [], firstOr 7 [1])",
       options: ["[]", "(x:xs)", "[_]"],
       answer: 0,
@@ -760,6 +1336,8 @@ const boss: LessonDef = {
     {
       kind: "type", time: 15,
       prompt: L("The remainder: it prints 1", "El resto: imprime 1", "余りを出そう：1 と表示"),
+      hint: L("Not the whole part of the division: you want what is left over.", "No la parte entera de la división: quieres lo que sobra.", "割り算の整数部分ではなく、余りが欲しい。"),
+      note: "recap-numbers",
       code: "print (7 `___` 2)",
       answer: "mod",
       check: { compiles: true, stdout: "1" },

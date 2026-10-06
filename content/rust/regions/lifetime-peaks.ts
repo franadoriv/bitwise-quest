@@ -1,4 +1,4 @@
-import type { LessonDef, RegionDef } from "../../../lib/content/types.ts";
+import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { enemySays, L, say } from "../helpers.ts";
 
 // REGION 3 · LIFETIME PEAKS  (scope, dangling references, 'a, structs with references, 'static)
@@ -7,6 +7,75 @@ const LONGEST = "fn longest<'a>(x: &'a str, y: &'a str) -> &'a str {\n    if x.l
 
 const YES = L("Yes", "Sí", "はい");
 const NO = L("No", "No", "いいえ");
+
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example; the validator checks `output` against the real compiler. */
+const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code, output, caption });
+/** An example that must NOT compile (verified too). */
+const bad = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: false } });
+
+const danglingNotes: NoteDef[] = [
+  note("outlive-owner", L("A borrow can't outlive its owner", "Un préstamo no sobrevive al dueño", "借用は持ち主より長生きできない"),
+    p(
+      "Every variable lives from its let until the closing } of the block it was created in. That stretch is its scope. A reference borrows from an owner, so it is only safe while the owner is alive. The rule: a reference must never be used after its owner's scope has ended.",
+      "Cada variable vive desde su let hasta la } que cierra el bloque donde se creó. Ese tramo es su ámbito (scope). Una referencia toma prestado de un dueño, así que solo es segura mientras el dueño vive. La regla: nunca se puede usar una referencia después de que termine el ámbito de su dueño.",
+      "変数は let から、作られたブロックの閉じかっこ } まで生きる。この範囲をスコープという。参照は持ち主から借りているので、持ち主が生きている間しか安全じゃない。ルール：持ち主のスコープが終わったあとで参照を使ってはいけない。",
+    ),
+    p(
+      "If it were allowed, the reference would point to memory that was already freed: a dangling reference. In C or C++ that compiles and later crashes or reads garbage. Rust's borrow checker compares the scopes at compile time and stops with error E0597, \"does not live long enough\".",
+      "Si se permitiera, la referencia apuntaría a memoria ya liberada: una referencia colgante. En C o C++ eso compila y luego falla o lee basura. El borrow checker de Rust compara los ámbitos al compilar y se detiene con el error E0597, \"does not live long enough\".",
+      "もし許されたら、参照はもう片づけられたメモリを指してしまう。これがダングリング参照だ。C や C++ ではコンパイルが通り、あとでクラッシュしたりゴミを読んだりする。Rustの借用チェッカーはコンパイル時にスコープを比べ、エラー E0597「does not live long enough」で止める。",
+    ),
+    bad("let view;\n{\n    let scene = String::from(\"valley\");\n    view = &scene;\n}\nprintln!(\"{}\", view);",
+      L("E0597: scene dies at } but view is used after it", "E0597: scene muere en } pero view se usa después", "E0597：scene は } で消えるのに、そのあと view を使っている")),
+    p(
+      "The opposite direction is always fine: a reference that ends before its owner. If the borrow lives inside an inner block and the owner outside it, the borrow finishes first and the owner simply keeps going.",
+      "La dirección contraria siempre está bien: una referencia que termina antes que su dueño. Si el préstamo vive en un bloque interior y el dueño fuera de él, el préstamo termina primero y el dueño simplemente sigue.",
+      "逆向きならいつでも OK。持ち主より先に終わる参照だ。借用が内側のブロックにあり、持ち主がその外にいれば、借用が先に終わり、持ち主はそのまま生き続ける。",
+    ),
+    ex("let peak = String::from(\"summit\");\n{\n    let glance = &peak;\n    println!(\"inner {}\", glance);\n}\nprintln!(\"outer {}\", peak);", "inner summit\nouter summit",
+      L("glance ends at the inner }, peak lives on", "glance termina en la } interior, peak sigue viva", "glance は内側の } で終わり、peak は生き続ける")),
+    p(
+      "Two ways to fix a dangling borrow: create the owner in an outer scope, so it lives at least as long as the reference, or stop borrowing and move the value itself, so the new variable becomes the owner and nothing dies early.",
+      "Dos formas de arreglar un préstamo colgante: crear el dueño en un ámbito exterior, para que viva al menos tanto como la referencia, o dejar de prestar y mover el valor, para que la nueva variable sea la dueña y nada muera antes de tiempo.",
+      "ダングリング借用の直し方は2つ。持ち主を外側のスコープで作り、参照と同じかそれ以上長く生きるようにする。または借りるのをやめて値そのものをムーブし、新しい変数を持ち主にする。そうすれば何も早く消えない。",
+    ),
+    p(
+      "Common mistake: reading the code top to bottom and thinking \"the value was there when I borrowed it, so it's fine\". What matters is the moment the reference is USED. Find each use, then check that the owner's } hasn't been passed yet.",
+      "Error común: leer el código de arriba abajo y pensar \"el valor estaba ahí cuando lo pedí prestado, así que está bien\". Lo que importa es el momento en que se USA la referencia. Busca cada uso y revisa que todavía no se haya pasado la } del dueño.",
+      "よくあるミス：上から読んで「借りたときには値があったから大丈夫」と考えること。大事なのは参照を「使う」瞬間だ。使っている場所をそれぞれ探し、持ち主の } をまだ過ぎていないか確かめよう。",
+    ),
+  ),
+  note("return-owned", L("Don't return a borrow of a local", "No devuelvas un préstamo de algo local", "ローカル値の借用は返せない"),
+    p(
+      "A function's local variables live only until the function's closing }. When the function returns, they are dropped. So returning &local would hand the caller a reference to something that no longer exists: a dangling reference.",
+      "Las variables locales de una función solo viven hasta la } que la cierra. Cuando la función retorna, se destruyen. Así que devolver &local le daría a quien llama una referencia a algo que ya no existe: una referencia colgante.",
+      "関数のローカル変数は、関数の閉じかっこ } までしか生きない。関数が戻るとドロップされる。だから &ローカル を返すと、もう存在しないものへの参照を呼んだ側に渡すことになる。ダングリング参照だ。",
+    ),
+    bad("fn make_title() -> &String {\n    let t = String::from(\"hero\");\n    &t\n}",
+      L("Rejected: t dies when make_title returns", "Rechazado: t muere cuando make_title retorna", "拒否される：t は make_title が戻ると消える")),
+    p(
+      "Rust rejects this when compiling. For a function with no reference inputs it reports E0106, missing lifetime specifier: the returned borrow has nothing it could come from. Adding a lifetime won't help, because no owner outside the function exists.",
+      "Rust lo rechaza al compilar. En una función sin referencias de entrada informa E0106, missing lifetime specifier: el préstamo devuelto no tiene de dónde salir. Añadir un lifetime no ayuda, porque no existe ningún dueño fuera de la función.",
+      "Rustはこれをコンパイル時に拒否する。参照の入力がない関数では E0106「missing lifetime specifier」と報告する。返す借用には借りる元がないからだ。ライフタイムを書き足しても直らない。関数の外に持ち主がいないのだから。",
+    ),
+    p(
+      "The fix: return the owned value itself. Ownership moves out of the function to the caller, who becomes the new owner. Nothing is copied and nothing dangles.",
+      "La solución: devuelve el valor con su propiedad. La propiedad sale de la función hacia quien llama, que pasa a ser el nuevo dueño. Nada se copia y nada queda colgando.",
+      "直し方：所有権ごと値を返す。所有権は関数の外の呼んだ側へムーブし、呼んだ側が新しい持ち主になる。何もコピーされず、何もダングリングにならない。",
+    ),
+    ex("fn make_title() -> String {\n    let t = String::from(\"hero\");\n    t\n}\n\nlet title = make_title();\nprintln!(\"{}\", title);", "hero",
+      L("The String moves out to the caller", "El String sale hacia quien llama", "String が呼んだ側へムーブする")),
+    p(
+      "Common mistake: trying &str or 'static to dodge the error. A &str still borrows from somewhere, and text built while the program runs isn't 'static. When a function creates a value, return it by value.",
+      "Error común: probar &str o 'static para esquivar el error. Un &str sigue prestando de algún sitio, y un texto creado mientras el programa corre no es 'static. Cuando una función crea un valor, devuélvelo por valor.",
+      "よくあるミス：エラーをかわそうと &str や 'static を試すこと。&str もどこかから借りているし、実行中に作った文字列は 'static ではない。関数が値を作ったなら、値そのものを返そう。",
+    ),
+  ),
+];
 
 const dangling: LessonDef = {
   slug: "scope-and-dangling",
@@ -59,6 +128,8 @@ const dangling: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("Where does x's scope end? Is r still used after that point?", "¿Dónde termina el ámbito de x? ¿Se sigue usando r después de ese punto?", "x のスコープはどこで終わる？そのあとで r はまだ使われている？"),
+      note: "outlive-owner",
       prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"),
       code: "let r;\n{\n    let x = 5;\n    r = &x;\n}\nprintln!(\"{}\", r);",
       options: [L("Yes: prints 5", "Sí: imprime 5", "はい：5 と表示"), L("No: x does not live long enough", "No: x no vive lo suficiente", "いいえ：x の寿命が足りない")],
@@ -70,6 +141,8 @@ const dangling: LessonDef = {
     },
     {
       kind: "pick",
+      hint: L("Any borrow of x ends with x at the }. Think about who should own the gold after the block.", "Cualquier préstamo de x termina con x en la }. Piensa quién debería ser dueño del oro tras el bloque.", "x の借用は x と一緒に } で終わる。ブロックのあと、金の持ち主は誰であるべき？"),
+      note: "outlive-owner",
       prompt: L("Make the gold survive the block", "Que el oro sobreviva al bloque", "金をブロックの外まで残そう"),
       code: 'let r;\n{\n    let x = String::from("gold");\n    r = ___;\n}\nprintln!("{}", r);',
       options: ["x", "&x", "&mut x"],
@@ -85,6 +158,8 @@ const dangling: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("Compare the scopes: which one ends first here, the borrow r or the owner x?", "Compara los ámbitos: ¿cuál termina primero aquí, el préstamo r o el dueño x?", "スコープを比べよう。先に終わるのは借用 r？持ち主 x？"),
+      note: "outlive-owner",
       prompt: L(
         "The reference dies BEFORE the owner. What does it print?",
         "La referencia muere ANTES que el dueño. ¿Qué imprime?",
@@ -132,6 +207,8 @@ const dangling: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("When create returns, what happens to its local s? What would &s point to then?", "Cuando create retorna, ¿qué pasa con su s local? ¿A qué apuntaría &s entonces?", "create が戻ると、ローカルの s はどうなる？そのとき &s は何を指す？"),
+      note: "return-owned",
       prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"),
       code: 'fn create() -> &String {\n    let s = String::from("map");\n    &s\n}',
       options: [YES, L("No: the reference would dangle", "No: la referencia saldría colgando", "いいえ：参照がダングリングになる")],
@@ -145,6 +222,8 @@ const dangling: LessonDef = {
     },
     {
       kind: "pick",
+      hint: L("s is created inside the function. Should the caller receive a loan of it, or the value itself?", "s se crea dentro de la función. ¿Quien llama debería recibir un préstamo o el valor mismo?", "s は関数の中で作られる。呼んだ側が受け取るのは借用？値そのもの？"),
+      note: "return-owned",
       prompt: L("Return the map without leaving anything dangling", "Devuelve el mapa sin colgar nada", "ダングリングなしで地図を返そう"),
       code: 'fn create() -> ___ {\n    let s = String::from("map");\n    s\n}\n\nprintln!("{}", create());',
       options: ["String", "&String", "&str"],
@@ -159,6 +238,8 @@ const dangling: LessonDef = {
     },
     {
       kind: "order",
+      hint: L("A borrow needs an owner that already exists, and you can only use the borrow after making it.", "Un préstamo necesita un dueño que ya exista, y solo puedes usar el préstamo después de crearlo.", "借用には、もう存在する持ち主が必要。借用を使えるのは作ったあとだけ。"),
+      note: "outlive-owner",
       prompt: L("Order it: the owner is born before the borrow", "Ordena: el dueño nace antes que el préstamo", "並べよう：持ち主は借用より先に生まれる"),
       lines: ['let x = String::from("light");', "let r = &x;", 'println!("{}", r);'],
       explain: L(
@@ -171,6 +252,8 @@ const dangling: LessonDef = {
     },
     {
       kind: "run",
+      hint: L("treasure dies at the inner }, but r is used after it. Make the owner live as long as r.", "treasure muere en la } interior, pero r se usa después. Haz que el dueño viva tanto como r.", "treasure は内側の } で消えるのに r はそのあと使われる。持ち主を r と同じだけ生かそう。"),
+      note: "outlive-owner",
       prompt: L("Fix it: it must print Found: crown", "Arréglalo: debe imprimir Found: crown", "直そう：Found: crown と表示させてね"),
       starter: 'fn main() {\n    let r;\n    {\n        let treasure = String::from("crown");\n        r = &treasure;\n    }\n    println!("Found: {}", r);\n}\n',
       expect: "Found: crown",
@@ -188,7 +271,90 @@ const dangling: LessonDef = {
       ),
     },
   ],
+  notes: danglingNotes,
 };
+
+const annotationsNotes: NoteDef[] = [
+  note("lifetime-syntax", L("Writing lifetimes: <'a> and &'a", "Escribir lifetimes: <'a> y &'a", "ライフタイムの書き方：<'a> と &'a"),
+    p(
+      "A lifetime is a name for \"how long a borrow is valid\". It's written as an apostrophe plus a short name: 'a, 'b, 'w. Like generic types, a lifetime is first declared in angle brackets after the function name, fn pick<'a>(...), and then used on references: &'a str.",
+      "Un lifetime es un nombre para \"cuánto tiempo es válido un préstamo\". Se escribe con un apóstrofo y un nombre corto: 'a, 'b, 'w. Como los tipos genéricos, primero se declara entre ángulos después del nombre de la función, fn pick<'a>(...), y luego se usa en las referencias: &'a str.",
+      "ライフタイムは「借用がいつまで有効か」につける名前。アポストロフィと短い名前で書く：'a、'b、'w。ジェネリクスの型と同じように、まず関数名のあとの山かっこで宣言し（fn pick<'a>(...)）、それから参照に使う：&'a str。",
+    ),
+    ex("fn first_word<'w>(text: &'w str) -> &'w str {\n    text.split(' ').next().unwrap()\n}\n\nprintln!(\"{}\", first_word(\"brave new world\"));", "brave",
+      L("Declared once in <'w>, then used on the input and the output", "Se declara una vez en <'w> y se usa en la entrada y la salida", "<'w> で一度宣言し、入力と出力で使う")),
+    p(
+      "Where the pieces go: the & first, then the lifetime, then the type, with a space before the type: &'a str, &'a String, &'a mut i32. Inside the angle brackets you write only the name with its apostrophe, with no &.",
+      "Dónde va cada pieza: primero el &, luego el lifetime, luego el tipo, con un espacio antes del tipo: &'a str, &'a String, &'a mut i32. Dentro de los ángulos solo escribes el nombre con su apóstrofo, sin &.",
+      "順番：まず &、次にライフタイム、最後に型。型の前には空白を入れる：&'a str、&'a String、&'a mut i32。山かっこの中には、アポストロフィつきの名前だけを書き、& は書かない。",
+    ),
+    p(
+      "When a function takes several references and returns one, putting the same 'a on the inputs and the output connects them: the result is borrowed from those inputs. Every reference the result might come from needs the label, and so does the return type.",
+      "Cuando una función recibe varias referencias y devuelve una, poner el mismo 'a en las entradas y en la salida las conecta: el resultado se presta de esas entradas. Toda referencia de la que pueda venir el resultado necesita la etiqueta, y el tipo de retorno también.",
+      "参照を複数受け取って1つ返す関数では、入力と出力に同じ 'a をつけるとつながる。「結果はこれらの入力から借りている」という意味だ。結果の元になりうる参照すべてと、戻り値の型にラベルが必要。",
+    ),
+    ex("fn louder<'a>(p: &'a str, q: &'a str) -> &'a str {\n    if p.contains('!') { p } else { q }\n}\n\nprintln!(\"{}\", louder(\"hi\", \"hey!\"));", "hey!",
+      L("Both inputs and the output share the same 'a", "Las dos entradas y la salida comparten el mismo 'a", "2つの入力と出力が同じ 'a を共有する")),
+    p(
+      "Common mistakes: forgetting the apostrophe (a alone would be a type name, not a lifetime), declaring <'a> but leaving the return type as plain &str, or putting the pieces in the wrong order. Lifetimes never change how the code runs; they only describe it to the compiler.",
+      "Errores comunes: olvidar el apóstrofo (a solo sería un nombre de tipo, no un lifetime), declarar <'a> pero dejar el retorno como &str sin más, o poner las piezas en el orden equivocado. Los lifetimes nunca cambian cómo se ejecuta el código; solo se lo describen al compilador.",
+      "よくあるミス：アポストロフィを忘れる（a だけだと型の名前になり、ライフタイムではない）、<'a> を宣言したのに戻り値を &str のままにする、順番を間違える。ライフタイムはコードの動きを変えない。コンパイラに説明するだけだ。",
+    ),
+  ),
+  note("lifetime-contract", L("'a is a contract, not a lifespan", "'a es un contrato, no una vida", "'a は契約、寿命は延びない"),
+    p(
+      "Writing 'a doesn't make anything live longer. It's a promise checked at every call: \"the returned reference is valid only while all the inputs marked 'a are still alive\". Rust picks 'a as the overlap of those inputs, so in practice the shortest-lived one decides.",
+      "Escribir 'a no hace que nada viva más. Es una promesa que se comprueba en cada llamada: \"la referencia devuelta solo es válida mientras sigan vivas todas las entradas marcadas con 'a\". Rust elige 'a como el tramo común de esas entradas, así que en la práctica decide la que vive menos.",
+      "'a を書いても、何かが長生きするわけではない。呼び出しのたびに確かめられる約束だ：「返す参照は、'a のついた入力がすべて生きている間だけ有効」。Rustは 'a をそれらの入力が重なる期間にするので、実際には一番早く消えるものが決める。",
+    ),
+    p(
+      "Why the shortest? Inside the function, the result might come from any input marked 'a, and the compiler doesn't run the code to find out which. To stay safe it assumes it could be any of them, so the result must not be used after any of them dies.",
+      "¿Por qué la más corta? Dentro de la función, el resultado podría venir de cualquier entrada marcada con 'a, y el compilador no ejecuta el código para averiguar cuál. Para ir a lo seguro supone que puede ser cualquiera, así que el resultado no puede usarse después de que muera alguna.",
+      "なぜ一番短いもの？関数の中では、結果は 'a のついたどの入力から来てもおかしくない。コンパイラはコードを実行してどれかを確かめたりしない。安全のため、どれでもありうると考える。だから、どれか1つでも消えたあとに結果を使ってはいけない。",
+    ),
+    ex("fn louder<'a>(p: &'a str, q: &'a str) -> &'a str {\n    if p.contains('!') { p } else { q }\n}\nlet calm = String::from(\"hello\");\n{\n    let loud = String::from(\"wow!\");\n    println!(\"{}\", louder(&calm, &loud));\n}", "wow!",
+      L("Used inside the block, while both inputs are alive: fine", "Se usa dentro del bloque, con ambas entradas vivas: bien", "両方の入力が生きているブロック内で使う：OK")),
+    bad("fn louder<'a>(p: &'a str, q: &'a str) -> &'a str {\n    if p.contains('!') { p } else { q }\n}\nlet calm = String::from(\"hello\");\nlet out;\n{\n    let loud = String::from(\"wow!\");\n    out = louder(&calm, &loud);\n}\nprintln!(\"{}\", out);",
+      L("E0597: loud dies at } but out is used after it", "E0597: loud muere en } pero out se usa después", "E0597：loud は } で消えるのに、そのあと out を使っている")),
+    p(
+      "Common mistake: reasoning about which value would actually be returned. Even when you can see the result comes from the input that lives longer, the compiler only reads the signature: the result is tied to every input marked 'a.",
+      "Error común: razonar sobre qué valor se devolvería en realidad. Aunque veas que el resultado vendría de la entrada que vive más, el compilador solo lee la firma: el resultado queda atado a todas las entradas marcadas con 'a.",
+      "よくあるミス：実際にどの値が返るかで考えること。長生きする入力から結果が来るとわかっていても、コンパイラはシグネチャしか見ない。結果は 'a のついたすべての入力に結びついている。",
+    ),
+  ),
+  note("elision", L("Elision: when Rust fills in 'a", "Elisión: cuando Rust pone el 'a", "省略ルール：Rust が 'a を補う"),
+    p(
+      "Most functions with references need no lifetime annotations, because the compiler applies elision rules: patterns so common that Rust writes the 'a for you. You only write lifetimes when these rules can't decide.",
+      "La mayoría de las funciones con referencias no necesitan anotar lifetimes, porque el compilador aplica las reglas de elisión: patrones tan comunes que Rust escribe el 'a por ti. Solo escribes lifetimes cuando estas reglas no pueden decidir.",
+      "参照を使う関数のほとんどは、ライフタイムを書かなくていい。コンパイラが省略（エリジョン）ルールを使うからだ。とてもよくある形なので、Rustが 'a を代わりに書いてくれる。自分で書くのは、ルールで決められないときだけ。",
+    ),
+    p(
+      "Rule one: if there is exactly one input reference, the output borrows from it. fn tail(s: &str) -> &str is read as fn tail<'a>(s: &'a str) -> &'a str. There's only one place the result could come from, so nothing is ambiguous.",
+      "Regla uno: si hay exactamente una referencia de entrada, la salida se presta de ella. fn tail(s: &str) -> &str se lee como fn tail<'a>(s: &'a str) -> &'a str. Solo hay un lugar de donde puede venir el resultado, así que nada es ambiguo.",
+      "ルール1：入力の参照がちょうど1つなら、出力はそこから借りる。fn tail(s: &str) -> &str は fn tail<'a>(s: &'a str) -> &'a str と読まれる。結果の元は1か所しかないので、あいまいさがない。",
+    ),
+    ex("fn last_char(s: &str) -> &str {\n    &s[s.len() - 1..]\n}\n\nprintln!(\"{}\", last_char(\"oxide\"));", "e",
+      L("One input reference: no 'a needed", "Una referencia de entrada: no hace falta 'a", "入力の参照が1つ：'a は不要")),
+    p(
+      "Rule two: in a method that takes &self, the output borrows from self. A getter like fn title(&self) -> &str needs no annotation, because returning a piece of the struct is by far the most common case.",
+      "Regla dos: en un método que recibe &self, la salida se presta de self. Un getter como fn title(&self) -> &str no necesita anotación, porque devolver una parte del struct es, por mucho, el caso más común.",
+      "ルール2：&self を受け取るメソッドでは、出力は self から借りる。fn title(&self) -> &str のようなゲッターに注釈はいらない。構造体の一部を返すのが一番よくある使い方だからだ。",
+    ),
+    ex("struct Pet { kind: String }\nimpl Pet {\n    fn kind(&self) -> &str { &self.kind }\n}\nlet cat = Pet { kind: String::from(\"cat\") };\nprintln!(\"{}\", cat.kind());", "cat"),
+    p(
+      "When a function has two or more input references and no &self, the rules can't pick one, and you get E0106, missing lifetime specifier. That's the moment to write <'a> yourself and say where the result comes from.",
+      "Cuando una función tiene dos o más referencias de entrada y no tiene &self, las reglas no pueden elegir una, y obtienes E0106, missing lifetime specifier. Ese es el momento de escribir <'a> tú mismo y decir de dónde viene el resultado.",
+      "入力の参照が2つ以上あって &self がない関数では、ルールで1つを選べず、E0106「missing lifetime specifier」になる。そのときこそ自分で <'a> を書き、結果がどこから来るかを示そう。",
+    ),
+    bad("fn pick(first: &str, second: &str) -> &str {\n    second\n}",
+      L("E0106: two input references, the compiler can't guess", "E0106: dos referencias de entrada, el compilador no adivina", "E0106：入力の参照が2つで、コンパイラは決められない")),
+    p(
+      "Common mistake: thinking that parameters which aren't references break elision. Only reference inputs count: fn cut(s: &str, n: usize) -> &str still has a single input reference, so it compiles without 'a.",
+      "Error común: creer que los parámetros que no son referencias rompen la elisión. Solo cuentan las referencias de entrada: fn cut(s: &str, n: usize) -> &str sigue teniendo una sola referencia de entrada, así que compila sin 'a.",
+      "よくあるミス：参照ではないパラメータがあると省略ルールが使えないと思うこと。数えるのは参照の入力だけ。fn cut(s: &str, n: usize) -> &str は参照の入力が1つなので、'a なしでコンパイルできる。",
+    ),
+  ),
+];
 
 const annotations: LessonDef = {
   slug: "lifetime-annotations",
@@ -238,6 +404,8 @@ const annotations: LessonDef = {
     )),
     {
       kind: "pick",
+      hint: L("Lifetimes are declared like generic types, but their names start with a special mark.", "Los lifetimes se declaran como tipos genéricos, pero sus nombres empiezan con una marca especial.", "ライフタイムはジェネリクスのように宣言するが、名前の最初に特別な記号がつく。"),
+      note: "lifetime-syntax",
       prompt: L("Declare the generic lifetime", "Declara el lifetime genérico", "ジェネリックなライフタイムを宣言しよう"),
       code: "fn longest<___>(x: &'a str, y: &'a str) -> &'a str {\n    if x.len() > y.len() { x } else { y }\n}\n\nprintln!(\"{}\", longest(\"axe\", \"sword\"));",
       options: ["'a", "a", "&a", "<a>"],
@@ -252,6 +420,8 @@ const annotations: LessonDef = {
     },
     {
       kind: "type",
+      hint: L("The inputs already show the pattern. The output is a reference under the same contract.", "Las entradas ya muestran el patrón. La salida es una referencia con el mismo contrato.", "入力にもう形が書いてある。出力も同じ契約の参照だ。"),
+      note: "lifetime-syntax",
       prompt: L("The output follows the same contract", "La salida cumple el mismo contrato", "戻り値も同じ契約に従う"),
       code: "fn longest<'a>(x: &'a str, y: &'a str) -> ___ str {\n    if x.len() > y.len() { x } else { y }\n}",
       answer: "&'a",
@@ -264,6 +434,8 @@ const annotations: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("Under one shared 'a, how long is res allowed to live? Compare that with where it's used.", "Con un solo 'a compartido, ¿cuánto puede vivir res? Compáralo con el lugar donde se usa.", "'a を共有すると res はいつまで生きてよい？使われる場所と比べよう。"),
+      note: "lifetime-contract",
       prompt: L("b dies first. Does it compile?", "b muere antes. ¿Compila?", "b が先に消える。コンパイルできる？"),
       code: `${LONGEST}\nlet a = String::from("long sword");\nlet res;\n{\n    let b = String::from("dagger");\n    res = longest(&a, &b);\n}\nprintln!("{}", res);`,
       options: [L("Yes: prints long sword", "Sí: imprime long sword", "はい：long sword と表示"), L("No: b does not live long enough", "No: b no vive lo suficiente", "いいえ：b の寿命が足りない")],
@@ -300,6 +472,8 @@ const annotations: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("Count the input references. How many places could the result be borrowed from?", "Cuenta las referencias de entrada. ¿De cuántos lugares podría venir prestado el resultado?", "入力の参照を数えよう。結果を借りられる元はいくつある？"),
+      note: "elision",
       prompt: L("A single input. Does it compile?", "Una sola entrada. ¿Compila?", "入力は1つ。コンパイルできる？"),
       code: 'fn first(s: &str) -> &str {\n    &s[..1]\n}\n\nprintln!("{}", first("rust"));',
       options: [L("Yes: prints r", "Sí: imprime r", "はい：r と表示"), L("No: 'a is missing", "No: falta 'a", "いいえ：'a がない")],
@@ -314,6 +488,8 @@ const annotations: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("Count the input references, and check whether there's a &self. Can Rust tell where the result comes from?", "Cuenta las referencias de entrada y revisa si hay &self. ¿Puede Rust saber de dónde viene el resultado?", "入力の参照を数え、&self があるか確かめよう。結果の元を Rust は決められる？"),
+      note: "elision",
       prompt: L("Two inputs, no 'a. Does it compile?", "Dos entradas, sin 'a. ¿Compila?", "入力2つで 'a なし。コンパイルできる？"),
       code: "fn choose(x: &str, y: &str) -> &str {\n    x\n}",
       options: [YES, L("No: 'a is missing", "No: falta 'a", "いいえ：'a がない")],
@@ -327,6 +503,8 @@ const annotations: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("This is a method that takes &self. Which elision rule covers that case?", "Es un método que recibe &self. ¿Qué regla de elisión cubre ese caso?", "これは &self を受け取るメソッド。どの省略ルールが当てはまる？"),
+      note: "elision",
       prompt: L("A &self method, no 'a. Does it compile?", "Método con &self, sin 'a. ¿Compila?", "&self のメソッドで 'a なし。通る？"),
       code: 'struct Hero { name: String }\n\nimpl Hero {\n    fn name(&self) -> &str { &self.name }\n}\n\nlet h = Hero { name: String::from("Ferro") };\nprintln!("{}", h.name());',
       options: [L("Yes: prints Ferro", "Sí: imprime Ferro", "はい：Ferro と表示"), L("No: 'a is missing", "No: falta 'a", "いいえ：'a がない")],
@@ -341,6 +519,8 @@ const annotations: LessonDef = {
     },
     {
       kind: "run",
+      hint: L("Two inputs and one output: elision can't decide. Declare a lifetime and use it on all three references.", "Dos entradas y una salida: la elisión no decide. Declara un lifetime y úsalo en las tres referencias.", "入力2つと出力1つは省略ルールで決められない。ライフタイムを宣言し、3つの参照につけよう。"),
+      note: "lifetime-syntax",
       prompt: L("Fix it: it must print Winner: hammer", "Arréglalo: debe imprimir Winner: hammer", "直そう：Winner: hammer と表示させてね"),
       starter: 'fn longest(x: &str, y: &str) -> &str {\n    if x.len() > y.len() { x } else { y }\n}\n\nfn main() {\n    let a = String::from("hammer");\n    let b = String::from("pick");\n    println!("Winner: {}", longest(&a, &b));\n}\n',
       expect: "Winner: hammer",
@@ -356,7 +536,89 @@ const annotations: LessonDef = {
       ),
     },
   ],
+  notes: annotationsNotes,
 };
+
+const structsStaticNotes: NoteDef[] = [
+  note("struct-refs", L("Structs that hold references", "Structs que guardan referencias", "参照を持つ構造体"),
+    p(
+      "A struct usually owns its data, with fields like String. But a field can also be a reference, borrowing text that lives somewhere else. Then the struct needs a lifetime: struct Label<'a> { text: &'a str }. It reads: a Label can't outlive the text it borrows.",
+      "Un struct normalmente es dueño de sus datos, con campos como String. Pero un campo también puede ser una referencia que presta un texto que vive en otro lado. Entonces el struct necesita un lifetime: struct Label<'a> { text: &'a str }. Se lee: un Label no puede vivir más que el texto que toma prestado.",
+      "構造体はふつう String などのフィールドで自分のデータを持つ。でもフィールドを参照にして、別の場所にある文字列を借りることもできる。そのときはライフタイムが必要：struct Label<'a> { text: &'a str }。「Label は借りた文字列より長く生きられない」と読む。",
+    ),
+    ex("struct Label<'a> { text: &'a str }\n\nlet sign = String::from(\"Danger ahead\");\nlet tag = Label { text: &sign[..6] };\nprintln!(\"{}\", tag.text);", "Danger",
+      L("tag borrows the first six letters of sign", "tag toma prestadas las primeras seis letras de sign", "tag は sign の最初の6文字を借りる")),
+    p(
+      "Both places need the lifetime: declared after the struct's name, <'a>, and used on each reference field, &'a str. Without them the compiler stops with E0106, missing lifetime specifier, because a struct definition has no elision rules to fall back on.",
+      "Ambos lugares necesitan el lifetime: declarado tras el nombre del struct, <'a>, y usado en cada campo referencia, &'a str. Sin ellos el compilador se detiene con E0106, missing lifetime specifier, porque la definición de un struct no tiene reglas de elisión a las que recurrir.",
+      "ライフタイムは2か所に必要。構造体名のあとで <'a> と宣言し、参照のフィールドそれぞれで &'a str と使う。ないとコンパイラは E0106「missing lifetime specifier」で止まる。構造体の定義には省略ルールがないからだ。",
+    ),
+    bad("struct Label { text: &str }",
+      L("E0106: a reference field needs a lifetime", "E0106: un campo referencia necesita un lifetime", "E0106：参照のフィールドにはライフタイムが必要")),
+    p(
+      "The borrow checker then tracks the struct like any other reference: if the borrowed String dies while the struct is still in use, you get E0597. Create the owner first, in a scope at least as long as the struct's.",
+      "Luego el borrow checker vigila el struct como cualquier otra referencia: si el String prestado muere mientras el struct sigue en uso, obtienes E0597. Crea primero el dueño, en un ámbito al menos tan largo como el del struct.",
+      "そのあと借用チェッカーは、構造体をほかの参照と同じように見張る。構造体を使っている間に借りた String が消えると E0597 になる。持ち主を先に、構造体と同じかそれ以上長いスコープで作ろう。",
+    ),
+    p(
+      "If you'd rather not manage lifetimes, the field can own its data instead: text: String. Then the struct carries its own copy and needs no lifetime. Owning is simpler; borrowing avoids a copy.",
+      "Si prefieres no manejar lifetimes, el campo puede ser dueño de sus datos: text: String. Así el struct lleva su propia copia y no necesita lifetime. Ser dueño es más simple; prestar evita una copia.",
+      "ライフタイムを扱いたくなければ、フィールドに自分のデータを持たせればいい：text: String。構造体は自分のコピーを持ち、ライフタイムは不要になる。持つほうが簡単で、借りるほうはコピーを省ける。",
+    ),
+    ex("struct Memo { text: String }\n\nlet m = Memo { text: String::from(\"buy rope\") };\nprintln!(\"{}\", m.text);", "buy rope",
+      L("An owning field: no lifetime needed", "Un campo dueño: no hace falta lifetime", "自分で持つフィールド：ライフタイム不要")),
+    p(
+      "Common mistakes: writing the lifetime without the & (a lifetime alone is not a type), using &mut when you only read, or reaching for 'static. Text from a String created at runtime is not 'static; give the struct a lifetime parameter instead.",
+      "Errores comunes: escribir el lifetime sin el & (un lifetime solo no es un tipo), usar &mut cuando solo lees, o recurrir a 'static. El texto de un String creado al ejecutar no es 'static; dale al struct un parámetro de lifetime.",
+      "よくあるミス：& なしでライフタイムだけ書く（ライフタイムだけでは型にならない）、読むだけなのに &mut を使う、'static に頼る。実行中に作った String の文字列は 'static ではない。構造体にライフタイムのパラメータをつけよう。",
+    ),
+  ),
+  note("static-literals", L("'static: lives for the whole program", "'static: vive todo el programa", "'static：プログラムが終わるまで"),
+    p(
+      "'static is a special, built-in lifetime: the reference is valid for the entire run of the program. You don't declare it in <>; it already exists. The most common 'static values are string literals: text written in double quotes directly in the code.",
+      "'static es un lifetime especial e integrado: la referencia es válida durante toda la ejecución del programa. No se declara en <>; ya existe. Los valores 'static más comunes son los literales de texto: texto escrito entre comillas dobles directamente en el código.",
+      "'static は特別な組みこみのライフタイムで、参照がプログラムの実行中ずっと有効という意味。<> で宣言する必要はなく、最初からある。一番よく見る 'static の値は文字列リテラル、つまりコードに直接 \" \" で書いた文字列だ。",
+    ),
+    p(
+      "Why do literals live forever? Their text is stored inside the program file itself and loaded once when the program starts. No block owns it and nothing drops it, so a &'static str to it can be kept, passed around and returned from functions safely.",
+      "¿Por qué los literales viven para siempre? Su texto se guarda dentro del propio archivo del programa y se carga una vez al arrancar. Ningún bloque es su dueño y nada lo destruye, así que un &'static str hacia él se puede guardar, pasar y devolver desde funciones con seguridad.",
+      "なぜリテラルはずっと生きるのか？その文字列はプログラムのファイルそのものに保存され、起動時に一度読みこまれる。どのブロックも持ち主ではなく、何もドロップしない。だから &'static str は安全にとっておけるし、渡したり関数から返したりできる。",
+    ),
+    ex("let saved;\n{\n    let tip: &'static str = \"carry water\";\n    saved = tip;\n}\nprintln!(\"{}\", saved);", "carry water",
+      L("The block ends, but the literal is still alive", "El bloque termina, pero el literal sigue vivo", "ブロックは終わっても、リテラルは生きている")),
+    p(
+      "How to write it: & then 'static then the type, as in let motto: &'static str = \"go\"; Every literal in double quotes already has this type, so you mostly write it in return types, where Rust asks you to spell it out.",
+      "Cómo se escribe: & luego 'static luego el tipo, como en let motto: &'static str = \"go\"; Todo literal entre comillas dobles ya tiene este tipo, así que sobre todo lo escribes en tipos de retorno, donde Rust te pide ponerlo explícito.",
+      "書き方：&、'static、型の順。たとえば let motto: &'static str = \"go\"; 二重引用符のリテラルはどれも最初からこの型なので、書くのはおもに戻り値の型。そこでは Rust がはっきり書くよう求めるからだ。",
+    ),
+    p(
+      "Common mistake: thinking \"a function can never return a reference\". It can, when the reference points to something that outlives the call, and a literal outlives everything.",
+      "Error común: pensar que \"una función nunca puede devolver una referencia\". Sí puede, cuando la referencia apunta a algo que sobrevive a la llamada, y un literal sobrevive a todo.",
+      "よくあるミス：「関数は参照を絶対に返せない」と思うこと。呼び出しより長く生きるものを指していれば返せる。そしてリテラルは何よりも長く生きる。",
+    ),
+  ),
+  note("static-misuse", L("'static is not a quick fix", "'static no es un parche rápido", "'static は応急処置じゃない"),
+    p(
+      "When the compiler complains about lifetimes, it's tempting to write 'static everywhere. But 'static is a strong promise: the data must truly live until the program ends. Literals keep that promise; text built while the program runs doesn't.",
+      "Cuando el compilador se queja de lifetimes, tienta escribir 'static en todas partes. Pero 'static es una promesa fuerte: los datos deben vivir de verdad hasta que el programa termine. Los literales cumplen esa promesa; el texto creado mientras el programa corre, no.",
+      "ライフタイムでコンパイラに怒られると、どこにでも 'static を書きたくなる。でも 'static は強い約束で、データが本当にプログラムの終わりまで生きなければならない。リテラルはこの約束を守れるが、実行中に作った文字列は守れない。",
+    ),
+    p(
+      "format!, String::from and to_string all create a new String at runtime, owned by whoever holds it. That String will be dropped some day, so a reference to it can never be 'static. A function that builds text should return the String itself, handing its ownership to the caller.",
+      "format!, String::from y to_string crean un String nuevo al ejecutar, cuyo dueño es quien lo tiene. Ese String se destruirá algún día, así que una referencia a él nunca puede ser 'static. Una función que construye texto debe devolver el String mismo y entregar su propiedad a quien llama.",
+      "format!、String::from、to_string は、どれも実行中に新しい String を作り、持っている人が持ち主になる。その String はいつかドロップされるので、それへの参照は決して 'static にならない。文字列を組み立てる関数は String そのものを返し、所有権を呼んだ側に渡そう。",
+    ),
+    ex("fn badge(rank: u8) -> String {\n    format!(\"rank {}\", rank)\n}\n\nlet b = badge(3);\nprintln!(\"{}\", b);", "rank 3",
+      L("format! builds a String, returned with its ownership", "format! crea un String, devuelto con su propiedad", "format! が作った String を所有権ごと返す")),
+    bad("fn badge(rank: u8) -> &'static str {\n    &format!(\"rank {}\", rank)\n}",
+      L("Does not compile: the new String dies when badge returns", "No compila: el String nuevo muere cuando badge retorna", "コンパイル不可：新しい String は badge が戻ると消える")),
+    p(
+      "Rule of thumb: text written in quotes in the code can be &'static str. Anything computed or built at runtime: return a String. Borrowing from an input: use a named lifetime like 'a.",
+      "Regla práctica: el texto escrito entre comillas en el código puede ser &'static str. Lo que se calcula o construye al ejecutar: devuelve un String. Lo que se presta de una entrada: usa un lifetime con nombre como 'a.",
+      "目安：コードに引用符で書いた文字列なら &'static str でいい。実行中に計算したり組み立てたりしたものは String を返す。入力から借りるなら 'a のような名前つきライフタイムを使う。",
+    ),
+  ),
+];
 
 const structsStatic: LessonDef = {
   slug: "structs-and-static",
@@ -390,6 +652,8 @@ const structsStatic: LessonDef = {
     )),
     {
       kind: "pick",
+      hint: L("The field borrows text under the struct's contract. Look at how the struct's header names that contract.", "El campo presta texto bajo el contrato del struct. Mira cómo nombra ese contrato la cabecera del struct.", "フィールドは構造体の契約のもとで文字列を借りる。見出しで契約がどう名づけられているか見よう。"),
+      note: "struct-refs",
       prompt: L("Complete the borrowed field", "Completa el campo prestado", "借用フィールドを完成させよう"),
       code: 'struct Excerpt<\'a> { part: ___ str }\n\nlet book = String::from("Rust is great");\nlet e = Excerpt { part: &book[..4] };\nprintln!("{}", e.part);',
       options: ["&'a", "&", "'a", "&mut"],
@@ -405,6 +669,8 @@ const structsStatic: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("The field is a reference. What does every reference stored in a struct need?", "El campo es una referencia. ¿Qué necesita toda referencia guardada en un struct?", "フィールドは参照だ。構造体にしまう参照には何が必要？"),
+      note: "struct-refs",
       prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"),
       code: "struct Excerpt { part: &str }",
       options: [YES, L("No: the lifetime is missing", "No: falta el lifetime", "いいえ：ライフタイムがない")],
@@ -418,6 +684,8 @@ const structsStatic: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("e borrows from book. Compare where book's scope ends with where e is used.", "e toma prestado de book. Compara dónde termina el ámbito de book con dónde se usa e.", "e は book から借りている。book のスコープの終わりと、e を使う場所を比べよう。"),
+      note: "struct-refs",
       prompt: L("book dies before e. Does it compile?", "book muere antes que e. ¿Compila?", "book が e より先に消える。通る？"),
       code: "struct Excerpt<'a> { part: &'a str }\n\nlet e;\n{\n    let book = String::from(\"Rust is great\");\n    e = Excerpt { part: &book[..4] };\n}\nprintln!(\"{}\", e.part);",
       options: [L("Yes: prints Rust", "Sí: imprime Rust", "はい：Rust と表示"), L("No: book does not live long enough", "No: book no vive lo suficiente", "いいえ：book の寿命が足りない")],
@@ -451,6 +719,8 @@ const structsStatic: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("Where does text written in quotes live? Does it die when greeting returns?", "¿Dónde vive el texto escrito entre comillas? ¿Muere cuando greeting retorna?", "引用符で書いた文字列はどこにある？greeting が戻ると消える？"),
+      note: "static-literals",
       prompt: L("What does it print?", "¿Qué imprime?", "何が表示される？"),
       code: 'fn greeting() -> &\'static str {\n    "hello, apprentice"\n}\n\nprintln!("{}", greeting());',
       options: ["hello, apprentice", L("Error: dangling reference", "Error: referencia colgante", "エラー：ダングリング参照")],
@@ -465,6 +735,8 @@ const structsStatic: LessonDef = {
     },
     {
       kind: "type",
+      hint: L("Text in quotes lives for the whole program. Which built-in lifetime says exactly that?", "El texto entre comillas vive todo el programa. ¿Qué lifetime integrado dice justo eso?", "引用符の文字列はプログラムの間ずっと生きる。それを表す組みこみのライフタイムは？"),
+      note: "static-literals",
       prompt: L("Write the lifetime of literals", "Escribe el lifetime de los literales", "リテラルのライフタイムを書こう"),
       code: 'fn title() -> &___ str {\n    "Peak"\n}',
       answer: "'static",
@@ -478,6 +750,8 @@ const structsStatic: LessonDef = {
     )),
     {
       kind: "pick",
+      hint: L("format! builds new text while the program runs. Who should own it after the function returns?", "format! crea texto nuevo mientras el programa corre. ¿Quién debería ser su dueño tras retornar la función?", "format! は実行中に新しい文字列を作る。関数が戻ったあと、持ち主は誰であるべき？"),
+      note: "static-misuse",
       prompt: L("format! creates NEW text. What do you return?", "format! crea un texto NUEVO. ¿Qué devuelves?", "format! は新しい文字列を作る。何を返す？"),
       code: 'fn name(id: u32) -> ___ {\n    format!("hero-{}", id)\n}\n\nprintln!("{}", name(7));',
       options: ["String", "&'static str", "&str"],
@@ -491,6 +765,8 @@ const structsStatic: LessonDef = {
     },
     {
       kind: "run",
+      hint: L("Scroll holds a reference field. Give the struct a lifetime parameter and use it on the field.", "Scroll tiene un campo referencia. Dale al struct un parámetro de lifetime y úsalo en el campo.", "Scroll は参照のフィールドを持つ。構造体にライフタイムを宣言し、フィールドで使おう。"),
+      note: "struct-refs",
       prompt: L("Fix it: it must print Reading: Fire rune", "Arréglalo: debe imprimir Reading: Fire rune", "直そう：Reading: Fire rune と表示させてね"),
       starter: 'struct Scroll {\n    text: &str,\n}\n\nfn main() {\n    let ink = String::from("Fire rune");\n    let p = Scroll { text: &ink };\n    println!("Reading: {}", p.text);\n}\n',
       expect: "Reading: Fire rune",
@@ -506,7 +782,55 @@ const structsStatic: LessonDef = {
       ),
     },
   ],
+  notes: structsStaticNotes,
 };
+
+const bossNotes: NoteDef[] = [
+  note("recap-scope", L("Recap: scopes and dangling borrows", "Repaso: ámbitos y préstamos colgantes", "復習：スコープとダングリング"),
+    p(
+      "A reference can't be used after its owner's scope ends: that's E0597, does not live long enough. Fix it by creating the owner in an outer scope, or by moving the value instead of borrowing it.",
+      "Una referencia no se puede usar después de que termine el ámbito de su dueño: eso es E0597, does not live long enough. Se arregla creando el dueño en un ámbito exterior o moviendo el valor en vez de prestarlo.",
+      "持ち主のスコープが終わったあとに参照は使えない。これが E0597「does not live long enough」だ。持ち主を外側のスコープで作るか、借りずに値をムーブすれば直る。",
+    ),
+    bad("let pointer;\n{\n    let stone = String::from(\"jade\");\n    pointer = &stone;\n}\nprintln!(\"{}\", pointer);",
+      L("E0597: stone dies before pointer is used", "E0597: stone muere antes de usar pointer", "E0597：pointer を使う前に stone が消える")),
+    p(
+      "A function can't return a reference to its own local variable: the local dies when the function returns. Return the owned value instead, so ownership moves to the caller.",
+      "Una función no puede devolver una referencia a su propia variable local: la variable muere cuando la función retorna. Devuelve el valor con su propiedad, para que la propiedad pase a quien llama.",
+      "関数は自分のローカル変数への参照を返せない。関数が戻るとローカル変数は消えるからだ。代わりに所有権ごと値を返し、所有権を呼んだ側へムーブしよう。",
+    ),
+    ex("fn forge() -> String {\n    String::from(\"axe\")\n}\nlet tool = forge();\nprintln!(\"{}\", tool);", "axe"),
+  ),
+  note("recap-annotations", L("Recap: 'a and elision", "Repaso: 'a y elisión", "復習：'a と省略ルール"),
+    p(
+      "Declare a lifetime in angle brackets with an apostrophe, then use it on references: &'a str. Putting the same 'a on the inputs and the output means the result is valid only while all those inputs are alive.",
+      "Declara un lifetime entre ángulos con un apóstrofo y luego úsalo en las referencias: &'a str. Poner el mismo 'a en las entradas y en la salida significa que el resultado solo es válido mientras vivan todas esas entradas.",
+      "ライフタイムはアポストロフィつきで山かっこの中に宣言し、参照に使う：&'a str。入力と出力に同じ 'a をつけると、「それらの入力がすべて生きている間だけ結果は有効」という意味になる。",
+    ),
+    ex("fn shorter<'a>(p: &'a str, q: &'a str) -> &'a str {\n    if p.len() < q.len() { p } else { q }\n}\nprintln!(\"{}\", shorter(\"cliff\", \"ice\"));", "ice"),
+    p(
+      "Elision: with one input reference, or in a &self method, Rust fills in the lifetime for you. With two input references and no &self it can't guess: E0106. And if one input of an 'a function dies before the result is used, that's E0597.",
+      "Elisión: con una sola referencia de entrada, o en un método con &self, Rust pone el lifetime por ti. Con dos referencias de entrada y sin &self no puede adivinar: E0106. Y si una entrada de una función con 'a muere antes de usar el resultado, es E0597.",
+      "省略ルール：入力の参照が1つのとき、または &self のメソッドでは、Rustがライフタイムを補ってくれる。入力の参照が2つで &self がなければ決められず E0106。'a の関数で、結果を使う前に入力の1つが消えれば E0597。",
+    ),
+    bad("fn shorter<'a>(p: &'a str, q: &'a str) -> &'a str {\n    if p.len() < q.len() { p } else { q }\n}\nlet base = String::from(\"cliff\");\nlet out;\n{\n    let other = String::from(\"ice\");\n    out = shorter(&base, &other);\n}\nprintln!(\"{}\", out);",
+      L("E0597: other dies before out is used", "E0597: other muere antes de usar out", "E0597：out を使う前に other が消える")),
+  ),
+  note("recap-static-structs", L("Recap: structs and 'static", "Repaso: structs y 'static", "復習：構造体と 'static"),
+    p(
+      "A struct with a reference field needs a lifetime in two places: after the struct's name and on the field, as in struct Tag<'a> { name: &'a str }. Without it you get E0106. The struct can't outlive what it borrows.",
+      "Un struct con un campo referencia necesita un lifetime en dos lugares: tras el nombre del struct y en el campo, como en struct Tag<'a> { name: &'a str }. Sin él obtienes E0106. El struct no puede vivir más que lo que toma prestado.",
+      "参照のフィールドを持つ構造体には、ライフタイムが2か所に必要。構造体名のあとと、フィールドだ：struct Tag<'a> { name: &'a str }。ないと E0106。構造体は借りたものより長く生きられない。",
+    ),
+    ex("struct Tag<'a> { name: &'a str }\nlet owner = String::from(\"ember\");\nlet t = Tag { name: &owner };\nprintln!(\"{}\", t.name);", "ember"),
+    p(
+      "String literals are &'static str: they live for the whole program. Text created at runtime (String::from, format!) is not 'static; return it as a String.",
+      "Los literales de texto son &'static str: viven todo el programa. El texto creado al ejecutar (String::from, format!) no es 'static; devuélvelo como String.",
+      "文字列リテラルは &'static str で、プログラム全体の間生きる。実行中に作った文字列（String::from、format!）は 'static ではないので、String として返そう。",
+    ),
+    ex("let motto: &'static str = \"stay sharp\";\nprintln!(\"{}\", motto);", "stay sharp"),
+  ),
+];
 
 const boss3: LessonDef = {
   slug: "boss-lifetimes",
@@ -522,21 +846,22 @@ const boss3: LessonDef = {
       "SOY EL GUARDIÁN DEL MONTE. Ninguna referencia colgante cruza mi paso. ¡Demuéstralo!",
       "我は山の番人なり。ダングリング参照は一つも通さぬ。力を見せてみよ！",
     )),
-    { kind: "predict", time: 12, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: "let r;\n{\n    let x = 1;\n    r = &x;\n}\nprintln!(\"{}\", r);", options: [YES, NO], answer: 1, explain: L("x dies before r.", "x muere antes que r.", "x は r より先に消える。"), check: { compiles: false } },
-    { kind: "pick", time: 12, prompt: L("Declare the lifetime", "Declara el lifetime", "ライフタイムを宣言しよう"), code: "fn f<___>(x: &'a str) -> &'a str { x }", options: ["'a", "a", "&a"], answer: 0, explain: L("<'a>", "<'a>", "<'a>"), check: { compiles: true, wrongFail: true } },
-    { kind: "predict", time: 12, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: "fn f(x: &str, y: &str) -> &str { y }", options: [YES, NO], answer: 1, explain: L("Two inputs: 'a is missing.", "Dos entradas: falta 'a.", "入力が2つ。'a が必要だよ。"), check: { compiles: false } },
-    { kind: "type", time: 12, prompt: L("Lifetime of a literal", "Lifetime de un literal", "リテラルのライフタイム"), code: 'let s: &___ str = "rock";', answer: "'static", explain: L("&'static str", "&'static str", "&'static str"), check: { compiles: true } },
-    { kind: "pick", time: 12, prompt: L("Return something created inside", "Devuelve algo creado dentro", "中で作った値を返そう"), code: 'fn create() -> ___ { String::from("x") }', options: ["String", "&String", "&'static String"], answer: 0, explain: L("Return ownership.", "Devuelve la propiedad.", "所有権を返そう。"), check: { compiles: true, wrongFail: true } },
-    { kind: "predict", time: 12, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: "struct S { r: &str }", options: [YES, NO], answer: 1, explain: L("S<'a> and &'a str are missing.", "Falta S<'a> y &'a str.", "S<'a> と &'a str が必要だよ。"), check: { compiles: false } },
-    { kind: "predict", time: 12, prompt: L("What does it print?", "¿Qué imprime?", "何が表示される？"), code: `${LONGEST}\nprintln!("{}", longest("peak", "summit"));`, options: ["summit", "peak", L("Error", "Error", "エラー")], answer: 0, explain: L("summit is longer.", "summit es más largo.", "summit のほうが長い。"), check: { compiles: true, stdout: "summit" } },
-    { kind: "predict", time: 15, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: `${LONGEST}\nlet a = String::from("aaaa");\nlet res;\n{\n    let b = String::from("b");\n    res = longest(&a, &b);\n}\nprintln!("{}", res);`, options: [YES, NO], answer: 1, explain: L("b dies before res is used.", "b muere antes de usar res.", "res を使う前に b が消える。"), check: { compiles: false } },
-    { kind: "type", time: 15, prompt: L("Borrowed field of the struct", "Campo prestado del struct", "構造体の借用フィールド"), code: "struct Excerpt<'a> { part: ___ str }", answer: "&'a", explain: L("part: &'a str", "part: &'a str", "part: &'a str"), check: { compiles: true } },
+    { kind: "predict", time: 12, hint: L("Compare the scopes: does x still exist when r is printed?", "Compara los ámbitos: ¿x sigue existiendo cuando se imprime r?", "スコープを比べよう。r を表示するとき x はまだある？"), note: "recap-scope", prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: "let r;\n{\n    let x = 1;\n    r = &x;\n}\nprintln!(\"{}\", r);", options: [YES, NO], answer: 1, explain: L("x dies before r.", "x muere antes que r.", "x は r より先に消える。"), check: { compiles: false } },
+    { kind: "pick", time: 12, hint: L("Lifetime names are declared like generics and start with a special mark.", "Los nombres de lifetime se declaran como genéricos y empiezan con una marca especial.", "ライフタイム名はジェネリクスのように宣言し、最初に特別な記号がつく。"), note: "recap-annotations", prompt: L("Declare the lifetime", "Declara el lifetime", "ライフタイムを宣言しよう"), code: "fn f<___>(x: &'a str) -> &'a str { x }", options: ["'a", "a", "&a"], answer: 0, explain: L("<'a>", "<'a>", "<'a>"), check: { compiles: true, wrongFail: true } },
+    { kind: "predict", time: 12, hint: L("Count the input references. Can elision tell where the result is borrowed from?", "Cuenta las referencias de entrada. ¿Puede la elisión saber de dónde se presta el resultado?", "入力の参照を数えよう。結果の借り元を省略ルールで決められる？"), note: "recap-annotations", prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: "fn f(x: &str, y: &str) -> &str { y }", options: [YES, NO], answer: 1, explain: L("Two inputs: 'a is missing.", "Dos entradas: falta 'a.", "入力が2つ。'a が必要だよ。"), check: { compiles: false } },
+    { kind: "type", time: 12, hint: L("Text in quotes lives for the whole program. Which built-in lifetime says so?", "El texto entre comillas vive todo el programa. ¿Qué lifetime integrado lo dice?", "引用符の文字列はプログラムの間ずっと生きる。それを表す組みこみのライフタイムは？"), note: "recap-static-structs", prompt: L("Lifetime of a literal", "Lifetime de un literal", "リテラルのライフタイム"), code: 'let s: &___ str = "rock";', answer: "'static", explain: L("&'static str", "&'static str", "&'static str"), check: { compiles: true } },
+    { kind: "pick", time: 12, hint: L("The String is created inside the function. Should the caller get a loan or the value itself?", "El String se crea dentro de la función. ¿Quien llama debe recibir un préstamo o el valor mismo?", "String は関数の中で作られる。呼んだ側が受け取るのは借用？値そのもの？"), note: "recap-scope", prompt: L("Return something created inside", "Devuelve algo creado dentro", "中で作った値を返そう"), code: 'fn create() -> ___ { String::from("x") }', options: ["String", "&String", "&'static String"], answer: 0, explain: L("Return ownership.", "Devuelve la propiedad.", "所有権を返そう。"), check: { compiles: true, wrongFail: true } },
+    { kind: "predict", time: 12, hint: L("The field is a reference. What does a reference stored in a struct always need?", "El campo es una referencia. ¿Qué necesita siempre una referencia guardada en un struct?", "フィールドは参照だ。構造体にしまう参照にいつも必要なものは？"), note: "recap-static-structs", prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: "struct S { r: &str }", options: [YES, NO], answer: 1, explain: L("S<'a> and &'a str are missing.", "Falta S<'a> y &'a str.", "S<'a> と &'a str が必要だよ。"), check: { compiles: false } },
+    { kind: "predict", time: 12, hint: L("longest returns the input with more characters. Count the letters of each.", "longest devuelve la entrada con más caracteres. Cuenta las letras de cada una.", "longest は文字数の多いほうを返す。それぞれの文字を数えよう。"), note: "recap-annotations", prompt: L("What does it print?", "¿Qué imprime?", "何が表示される？"), code: `${LONGEST}\nprintln!("{}", longest("peak", "summit"));`, options: ["summit", "peak", L("Error", "Error", "エラー")], answer: 0, explain: L("summit is longer.", "summit es más largo.", "summit のほうが長い。"), check: { compiles: true, stdout: "summit" } },
+    { kind: "predict", time: 15, hint: L("Under one shared 'a, how long may res live? Check where b's scope ends.", "Con un solo 'a compartido, ¿cuánto puede vivir res? Revisa dónde termina el ámbito de b.", "'a を共有すると res はいつまで生きてよい？b のスコープの終わりを確かめよう。"), note: "recap-annotations", prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: `${LONGEST}\nlet a = String::from("aaaa");\nlet res;\n{\n    let b = String::from("b");\n    res = longest(&a, &b);\n}\nprintln!("{}", res);`, options: [YES, NO], answer: 1, explain: L("b dies before res is used.", "b muere antes de usar res.", "res を使う前に b が消える。"), check: { compiles: false } },
+    { kind: "type", time: 15, hint: L("The field is a reference governed by the struct's lifetime. Look at how the header declares it.", "El campo es una referencia regida por el lifetime del struct. Mira cómo lo declara la cabecera.", "このフィールドは構造体のライフタイムに従う参照。見出しの宣言を見よう。"), note: "recap-static-structs", prompt: L("Borrowed field of the struct", "Campo prestado del struct", "構造体の借用フィールド"), code: "struct Excerpt<'a> { part: ___ str }", answer: "&'a", explain: L("part: &'a str", "part: &'a str", "part: &'a str"), check: { compiles: true } },
     enemySays(L(
       "Grrr... your borrows always make it home. Climb on, Rustacean: the summit is yours.",
       "Grrr... tus préstamos siempre vuelven a casa. Sube, rustáceo: la cumbre es tuya.",
       "ぐぬぬ…おぬしの借用は必ず持ち主に帰る。登るがよい、Rustacean よ。頂上はおぬしのものだ。",
     )),
   ],
+  notes: bossNotes,
 };
 
 export const lifetimePeaks: RegionDef = {

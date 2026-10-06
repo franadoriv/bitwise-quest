@@ -49,7 +49,7 @@ test("export file name has player and seconds", () => {
 });
 
 // ─── progress ───────────────────────────────────────────────────────────────
-import { completeExam, completeLesson, completeReview, dueReviews, worldState, type WorldContent } from "../lib/save/progress.ts";
+import { TICKET_PRICE, buyTicket, completeExam, completeLesson, completeReview, dueReviews, setTimerPref, spendTicket, worldState, type WorldContent } from "../lib/save/progress.ts";
 
 const content: WorldContent = {
   regions: [
@@ -85,4 +85,59 @@ test("exams skip mastered regions in order", () => {
   assert.equal(save.langs.rust.lessons.a2.skipped, true);
   assert.equal(save.langs.rust.lessons.b1, undefined);
   assert.equal(worldState(content, save.langs.rust).regions[1].unlocked, true);
+});
+
+test("v1 saves migrate to v2 with hint tickets and the default timer", () => {
+  const s = migrate({ version: 1, player: { name: "Ada" }, stats: { xp: 50, coins: 12 }, langs: {} });
+  assert.equal(s.version, 2);
+  assert.equal(s.stats.tickets, 5);
+  assert.equal(s.stats.coins, 12);
+  assert.equal(s.prefs.timer, "normal");
+  // an invalid timer value is repaired, unknown prefs survive
+  const t = migrate({ version: 2, prefs: { timer: "warp", future: 1 }, stats: { tickets: 2 } });
+  assert.equal(t.prefs.timer, "normal");
+  assert.equal(t.stats.tickets, 2);
+  assert.equal((t.prefs as unknown as { future: number }).future, 1);
+});
+
+test("hint tickets: spend, buy, and earn by perfect clears and daily play", () => {
+  const s = newSave("Ada");
+  assert.equal(s.stats.tickets, 5);
+  const spent = spendTicket(s)!;
+  assert.equal(spent.stats.tickets, 4);
+  assert.equal(s.stats.tickets, 5, "pure: the original is untouched");
+  assert.equal(spendTicket({ ...s, stats: { ...s.stats, tickets: 0 } }), null);
+
+  assert.equal(buyTicket(s), null, "no coins yet");
+  const rich = { ...s, stats: { ...s.stats, coins: TICKET_PRICE + 5 } };
+  const bought = buyTicket(rich)!;
+  assert.deepEqual([bought.stats.coins, bought.stats.tickets], [5, 6]);
+
+  assert.equal(setTimerPref(s, "fast").prefs.timer, "fast");
+
+  const world: WorldContent = { regions: [{ slug: "r", name: "R", subtitle: "", theme: "village", lessons: [{ slug: "a", title: "A", mode: "lesson", xp: 40 }, { slug: "b", title: "B", mode: "lesson", xp: 40 }] }] } as unknown as WorldContent;
+  const day = Date.UTC(2026, 9, 6, 12);
+  const perfect = completeLesson(s, "rust", world, { slug: "a", title: "A", mode: "lesson", xp: 40 }, { score: 900, mistakes: 0, maxCombo: 8, correct: 8, attempts: [] }, day);
+  assert.equal(perfect.reward.stars, 3);
+  assert.equal(perfect.reward.ticketsGained, 2, "3 stars + first play of the day");
+  assert.equal(perfect.save.stats.tickets, 7);
+  const again = completeLesson(perfect.save, "rust", world, { slug: "b", title: "B", mode: "lesson", xp: 40 }, { score: 100, mistakes: 3, maxCombo: 1, correct: 5, attempts: [] }, day + 1000);
+  assert.equal(again.reward.ticketsGained, 0, "same day, not perfect");
+  assert.equal(again.save.stats.tickets, 7);
+});
+
+test("timer: question time scales with code size and timer mode; notes cost 25%", async () => {
+  const { questionSeconds, questionLimitMs, questionPoints } = await import("../lib/game-rules.ts");
+  assert.equal(questionSeconds({ kind: "pick", code: "let x = 5;" }), 14);
+  assert.ok(questionSeconds({ kind: "predict", code: "a\nb\nc\nd\ne\nf" }) > questionSeconds({ kind: "predict", code: "a" }));
+  assert.equal(questionSeconds({ kind: "run" }), 120);
+  assert.equal(questionSeconds({ kind: "pick", time: 33 }), 33);
+  assert.equal(questionLimitMs({ kind: "pick", code: "x" }, "off"), 0);
+  assert.equal(questionLimitMs({ kind: "pick", code: "x" }, "off", true), 14000, "bosses are always timed");
+  assert.ok(questionLimitMs({ kind: "pick", code: "x" }, "relaxed") > questionLimitMs({ kind: "pick", code: "x" }, "fast"));
+  assert.equal(questionPoints({ speed: 1, combo: 1, mode: "normal", usedNote: false }), 160);
+  assert.equal(questionPoints({ speed: 1, combo: 1, mode: "fast", usedNote: false }), 190);
+  assert.equal(questionPoints({ speed: 1, combo: 1, mode: "off", usedNote: false }), 100);
+  assert.equal(questionPoints({ speed: 1, combo: 1, mode: "normal", usedNote: true }), 75);
+  assert.equal(questionPoints({ speed: 0.5, combo: 3, mode: "normal", usedNote: false }), 156);
 });

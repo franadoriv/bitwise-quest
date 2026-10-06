@@ -23,6 +23,8 @@ CI (`.github/workflows/ci.yml`) runs `content:check`, `npm test`, `typecheck` an
 - **Migration:** a newer `version` is refused with `newer`; an old, partial shape is normalized (defaults filled, name trimmed, unknown keys and unknown languages preserved).
 - **Export file name:** `BitwiseQuest_<player>_<YYYY-MM-DD_HH-MM-SS>.bwq`, with Latin accents folded (Ñandú → Nandu), other scripts kept (ゆうき), punctuation removed, and `Player` when nothing is left.
 - **Progress rules:** lessons unlock in order, rewards accumulate, a missed beat becomes a due review and moves up a Leitner box; an exam skips mastered regions in order and unlocks the next one.
+- **Save v2:** a v1 save migrates with 5 hint tickets and the `"normal"` timer (an invalid timer is repaired, unknown prefs survive); tickets are spent, bought for coins and earned by 3-star clears and the first play of a day.
+- **Timer and scoring** (`lib/game-rules.ts`): question time grows with code size and scales with the timer mode, bosses are always timed, and opening the guidebook costs 25% and the speed bonus.
 
 When the save format changes, add a fixture test here (see [save-system.md](save-system.md#changing-the-save-format)).
 
@@ -148,6 +150,8 @@ npm run playtest -- /play/rust/lesson/one-owner --locale=ja --out=.playtest/ja
 | `BASE_URL` | Server URL (default `http://localhost:3000`) |
 | `CHROME_PATH` | Chrome binary (default: the macOS install location) |
 | `PLAYTEST_DEBUG` | When set, logs every beat the bot recognizes |
+| `PLAYTEST_HELP` | When set (`1`), on the first `pick`/`predict` the bot opens the guidebook and spends a hint ticket, saving `guidebook` and `hint` screenshots |
+| `PLAYTEST_TIMER` | `off`, `relaxed`, `normal` or `fast`: the mode to pick in the pre-lesson timer modal (default: the preselected one). The modal is always screenshotted as `timer` |
 
 The bot answers from the content data (matching prompts in the chosen locale), makes `--mistakes` errors on purpose and exits with code 1 on page errors, if it doesn't reach the end, or if the result was not saved.
 

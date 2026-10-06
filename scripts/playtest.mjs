@@ -73,8 +73,17 @@ const shot = (name) => page.screenshot({ path: `${out}/${String(n++).padStart(2,
 const seen = new Set();
 const once = async (k) => { if (!seen.has(k)) { seen.add(k); await sleep(600); await shot(k); } };
 
+// Pre-lesson timer modal (lessons, bosses, reviews): pick a mode and start.
+const timerStart = page.locator(`[aria-labelledby="timer-title"] button`, { hasText: M["timer.start"] });
+if (await timerStart.waitFor({ timeout: 6000 }).then(() => true, () => false)) {
+  await sleep(500);
+  await shot("timer");
+  if (process.env.PLAYTEST_TIMER) await page.locator(`[aria-labelledby="timer-title"] [role="radio"]`).nth(["off", "relaxed", "normal", "fast"].indexOf(process.env.PLAYTEST_TIMER)).click();
+  await timerStart.click();
+}
 await sleep(4500);
 let finished = false;
+let helped = !process.env.PLAYTEST_HELP;
 for (let step = 0; step < 200 && !finished; step++) {
   if (await page.locator(`text=${M["lesson.gameOver"]}`).count()) { await shot("gameover"); console.log("GAME OVER"); break; }
   if (await page.locator(`text=/${[M["common.maxCombo"], M["exam.byTopic"], M["exam.saveError"]].map(esc).join("|")}/`).count()) { await sleep(3500); await shot("result"); finished = true; break; }
@@ -89,6 +98,17 @@ for (let step = 0; step < 200 && !finished; step++) {
   const beat = cands.find(fits) ?? cands.find((b) => code.includes(norm(b.code?.split("___")[0]).slice(0, 30))) ?? cands[0];
   if (!beat) { await sleep(400); continue; }
   lastBeat = `${beat.kind} "${prompt}"`;
+  // PLAYTEST_HELP=1: on the first multiple-choice question, open the guidebook and spend a hint.
+  if (!helped && (beat.kind === "pick" || beat.kind === "predict")) {
+    helped = true;
+    const explain = page.locator(`main button[aria-label="${M["lesson.explain"]}"]`);
+    if (await explain.count()) {
+      await explain.click(); await sleep(700); await shot("guidebook");
+      await page.locator(`[aria-labelledby="note-title"] button`, { hasText: M["note.back"] }).click(); await sleep(500);
+    }
+    const hintBtn = page.locator(`main button[aria-label="${M["lesson.hint"]}"]`);
+    if (await hintBtn.count() && await hintBtn.isEnabled()) { await hintBtn.click(); await sleep(700); await shot("hint"); }
+  }
   if (process.env.PLAYTEST_DEBUG) console.log(`step ${step}: ${lastBeat}`);
   try {
     if (beat.kind === "act") {

@@ -1,4 +1,4 @@
-import type { Beat, LessonDef, RegionDef, Text } from "../../../lib/content/types.ts";
+import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
 
 // REGION 3 · LOOP TOWER  (render loop and delta time, raycasting, assets/colour/lights/shadows, disposal and performance)
@@ -12,6 +12,74 @@ const code = (...lines: string[]) => ["import * as THREE from \"three\";", ...li
 const PRINT = L("What does it print?", "¿Qué imprime?", "何が表示される？");
 const YES = L("Yes", "Sí", "はい");
 const NO = L("No", "No", "いいえ");
+
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example (wrap three snippets with code()); the validator checks `output` with the real runner. */
+const ex = (src: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code: src, output, caption });
+/** An example that is only type-checked (it uses a declared WebGLRenderer or a loader). */
+const typed = (src: string, caption: Text): NoteBlock => ({ t: "code", code: src, caption, check: { compiles: true } });
+/** An example that must NOT compile (verified too). */
+const bad = (src: string, caption: Text): NoteBlock => ({ t: "code", code: src, caption, check: { compiles: false } });
+
+const renderLoopNotes: NoteDef[] = [
+  note("delta-time", L("Delta time: speed per second", "Delta time: velocidad por segundo", "デルタタイム：1秒あたりの速さ"),
+    p(
+      "requestAnimationFrame calls your function once per screen refresh. Screens refresh at different rates (60, 120, 144 times a second or more), and a busy computer can skip frames. So the number of frames per second is not something your code controls.",
+      "requestAnimationFrame llama a tu función una vez por refresco de pantalla. Las pantallas se refrescan a ritmos distintos (60, 120, 144 veces por segundo o más), y un equipo ocupado puede saltarse frames. Así que la cantidad de frames por segundo no la controla tu código.",
+      "requestAnimationFrame は画面が更新されるたびに関数を1回呼ぶ。画面の更新回数はさまざま（1秒に60・120・144回以上）で、忙しいパソコンはフレームを飛ばすこともある。だから1秒のフレーム数はコードでは決められない。",
+    ),
+    p(
+      "If you move a fixed amount every frame, the speed depends on the screen: more frames per second means more steps per second. A game written that way runs 2.4 times faster on a 144 Hz monitor than on a 60 Hz one.",
+      "Si mueves una cantidad fija en cada frame, la velocidad depende de la pantalla: más frames por segundo son más pasos por segundo. Un juego escrito así corre 2.4 veces más rápido en un monitor de 144 Hz que en uno de 60 Hz.",
+      "毎フレーム決まった量だけ動かすと、速さが画面しだいになる。1秒のフレームが多いほど、1秒の歩数も増える。そう書いたゲームは、144Hz のモニターだと 60Hz の2.4倍速で動いてしまう。",
+    ),
+    ex("const step = 0.5; // added every frame\nconsole.log(step * 30, step * 144);", "15 72",
+      L("Same code, 30 fps vs 144 fps: very different speeds", "El mismo código a 30 fps y a 144 fps: velocidades muy distintas", "同じコードでも 30fps と 144fps で速さが大ちがい")),
+    p(
+      "The fix is delta time. dt is the number of seconds since the previous frame. Write speeds in units per second and move speed × dt each frame. On a fast screen there are more frames but each dt is smaller, so the distance per second comes out the same everywhere.",
+      "El arreglo es el delta time. dt es la cantidad de segundos desde el frame anterior. Escribe las velocidades en unidades por segundo y mueve velocidad × dt en cada frame. En una pantalla rápida hay más frames pero cada dt es más pequeño, así que la distancia por segundo sale igual en todas partes.",
+      "解決策はデルタタイム。dt は前のフレームからの秒数。速さを「1秒あたりの量」で書き、毎フレーム 速さ × dt だけ動かす。速い画面ではフレームが多いぶん dt が小さいので、1秒の移動量はどこでも同じになる。",
+    ),
+    ex("const speed = 3; // units per second\nconst at30 = speed * (1 / 30) * 30;\nconst at120 = speed * (1 / 120) * 120;\nconsole.log(at30.toFixed(2), at120.toFixed(2));", "3.00 3.00",
+      L("One second of frames adds up to the same distance", "Un segundo de frames suma la misma distancia", "1秒ぶんのフレームを足すと同じ距離")),
+    p(
+      "Common trap: when a tab is hidden, the browser pauses requestAnimationFrame. When the player comes back, the first dt can be several seconds long and objects teleport or fall through floors. Clamp it with Math.min(dt, 0.1) so a single frame never moves more than a tenth of a second's worth.",
+      "Trampa común: cuando una pestaña se oculta, el navegador pausa requestAnimationFrame. Al volver el jugador, el primer dt puede durar varios segundos y los objetos se teletransportan o atraviesan el suelo. Limítalo con Math.min(dt, 0.1) para que un solo frame nunca avance más de una décima de segundo.",
+      "よくある落とし穴：タブが隠れると、ブラウザは requestAnimationFrame を止める。戻ってきた最初の dt は数秒にもなり、物体がワープしたり床をすり抜けたりする。Math.min(dt, 0.1) でおさえて、1フレームで0.1秒ぶん以上動かないようにしよう。",
+    ),
+    ex("const dt = Math.min(4, 0.1); // back after 4 s away\nconsole.log(dt * 20);", "2"),
+  ),
+  note("timer", L("THREE.Timer and the frame loop", "THREE.Timer y el bucle de frames", "THREE.Timer とフレームのループ"),
+    p(
+      "THREE.Timer measures dt for you. Call timer.update(time) once at the start of every frame, where time is the timestamp in milliseconds that the animation loop passes to your function. Then timer.getDelta() returns the seconds since the previous update. (THREE.Clock is the older, deprecated way.)",
+      "THREE.Timer mide dt por ti. Llama a timer.update(time) una vez al comienzo de cada frame, donde time es la marca de tiempo en milisegundos que el bucle de animación le pasa a tu función. Luego timer.getDelta() devuelve los segundos desde el update anterior. (THREE.Clock es la forma vieja y obsoleta.)",
+      "THREE.Timer が dt を測ってくれる。毎フレームの最初に timer.update(time) を1回呼ぶ。time はアニメーションのループが関数に渡すミリ秒の時刻。そのあと timer.getDelta() が前回の update からの秒数を返す（THREE.Clock は古くて非推奨）。",
+    ),
+    p(
+      "Watch the units: update() takes milliseconds, getDelta() answers in seconds (the milliseconds divided by 1000). getDelta() doesn't change until the next update(), so you can read it as many times as you like within one frame and always get the same value.",
+      "Ojo con las unidades: update() recibe milisegundos y getDelta() responde en segundos (los milisegundos divididos por 1000). getDelta() no cambia hasta el próximo update(), así que puedes leerlo cuantas veces quieras dentro de un frame y siempre obtienes lo mismo.",
+      "単位に注意。update() はミリ秒を受け取り、getDelta() は秒（ミリ秒÷1000）で答える。getDelta() は次の update() まで変わらないので、1フレームの中で何回読んでも同じ値になる。",
+    ),
+    ex(code("const t = new THREE.Timer();", "t.update(500);", "t.update(540);", "console.log(t.getDelta().toFixed(3), t.getDelta().toFixed(3));"), "0.040 0.040",
+      L("40 ms apart is 0.040 s, read twice in the same frame", "40 ms de diferencia son 0.040 s, leído dos veces", "40ms 差は 0.040 秒。同じフレームで2回読んでも同じ")),
+    p(
+      "A frame has a natural order. First tick the timer, then read dt, then move everything using dt, and only at the end paint the frame with renderer.render. Reading dt before the tick gives last frame's value, and painting before moving shows every change one frame late.",
+      "Un frame tiene un orden natural. Primero avanza el timer, luego lee dt, después mueve todo usando dt y solo al final pinta el frame con renderer.render. Leer dt antes de avanzar da el valor del frame anterior, y pintar antes de mover muestra cada cambio un frame tarde.",
+      "1フレームには自然な順番がある。まずタイマーを進め、dt を読み、dt で全部を動かし、最後に renderer.render で描く。進める前に dt を読むと前のフレームの値になり、動かす前に描くと変化が1フレーム遅れて見える。",
+    ),
+    typed(code("declare const renderer: THREE.WebGLRenderer;", "declare const scene: THREE.Scene, camera: THREE.Camera, ship: THREE.Object3D;", "const clock = new THREE.Timer();", "function frame(time: number) {", "  clock.update(time);", "  ship.position.z -= 4 * clock.getDelta();", "  renderer.render(scene, camera);", "}", "renderer.setAnimationLoop(frame);"),
+      L("Type-checked only: setAnimationLoop calls frame every refresh", "Solo se verifica el tipo: setAnimationLoop llama a frame en cada refresco", "型チェックのみ：setAnimationLoop が毎回 frame を呼ぶ")),
+    p(
+      "Timer has one more trick: setTimescale(n) multiplies every delta. 0.5 gives slow motion and 0 pauses the game, without touching any movement code.",
+      "Timer tiene un truco más: setTimescale(n) multiplica cada delta. 0.5 da cámara lenta y 0 pausa el juego, sin tocar el código de movimiento.",
+      "Timer にはもうひとつ技がある。setTimescale(n) は毎回の delta に掛け算する。0.5 でスローモーション、0 で一時停止。動きのコードは一切変えなくていい。",
+    ),
+    ex(code("const t = new THREE.Timer();", "t.setTimescale(0.5); // slow motion", "t.update(0);", "t.update(200);", "console.log(t.getDelta().toFixed(2));"), "0.10"),
+  ),
+];
 
 // ─── 3.1 The heartbeat: render loop and delta time ─────────────────────────
 const renderLoop: LessonDef = {
@@ -49,6 +117,8 @@ const renderLoop: LessonDef = {
     {
       kind: "predict",
       prompt: L("Units per second at 60 and 120 fps?", "¿Unidades por segundo a 60 y 120 fps?", "60fps と 120fps で1秒に何進む？"),
+      hint: L("Multiply the step per frame by the number of frames in one second, for each screen.", "Multiplica el paso por frame por la cantidad de frames en un segundo, para cada pantalla.", "1フレームの移動量に、1秒のフレーム数を掛けよう。画面ごとに。"),
+      note: "delta-time",
       code: "const perFrame = 0.1; // x += 0.1 every frame\nconsole.log(perFrame * 60, perFrame * 120);",
       options: ["6 12", "6 6", "12 6"],
       answer: 0,
@@ -66,6 +136,8 @@ const renderLoop: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Units per second × seconds = units. How many seconds is dt here?", "Unidades por segundo × segundos = unidades. ¿Cuántos segundos es dt aquí?", "1秒あたりの量×秒数＝移動量。ここでの dt は何秒？"),
+      note: "delta-time",
       code: "const speed = 4; // units per second\nconst dt = 0.25; // seconds since last frame\nconsole.log(speed * dt);",
       options: ["1", "4", "16"],
       answer: 0,
@@ -82,6 +154,8 @@ const renderLoop: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("update() takes milliseconds, but getDelta() answers in seconds. Does reading it twice change it?", "update() recibe milisegundos, pero getDelta() responde en segundos. ¿Leerlo dos veces lo cambia?", "update() はミリ秒、getDelta() は秒で答える。2回読むと変わる？"),
+      note: "timer",
       code: code("const timer = new THREE.Timer();", "timer.update(1000); // time in ms", "timer.update(1016);", "console.log(timer.getDelta(), timer.getDelta());"),
       options: ["0.016 0.016", "16 16", "0.016 0"],
       answer: 0,
@@ -94,6 +168,8 @@ const renderLoop: LessonDef = {
     {
       kind: "type",
       prompt: L("Tick the timer for this frame", "Haz avanzar el timer en este frame", "このフレームのタイマーを進めよう"),
+      hint: L("Which Timer method records the timestamp of a new frame?", "¿Qué método de Timer registra la marca de tiempo de un nuevo frame?", "新しいフレームの時刻を記録する Timer のメソッドは？"),
+      note: "timer",
       code: code("const timer = new THREE.Timer();", "timer.update(0);", "timer.___(250);", "console.log(timer.getDelta());"),
       answer: "update",
       check: { compiles: true, stdout: "0.25" },
@@ -108,6 +184,8 @@ const renderLoop: LessonDef = {
     {
       kind: "predict",
       prompt: L("Tab hidden for 2.5 s. How far?", "Pestaña oculta 2.5 s. ¿Cuánto avanza?", "2.5秒タブを隠した。どれだけ進む？"),
+      hint: L("Math.min picks the smaller of its two numbers. Which dt is actually used?", "Math.min elige el menor de sus dos números. ¿Qué dt se usa en realidad?", "Math.min は2つの数の小さい方を選ぶ。実際に使われる dt は？"),
+      note: "delta-time",
       code: "const speed = 10;\nconst dt = Math.min(2.5, 0.1);\nconsole.log(speed * dt);",
       options: ["1", "25", "10"],
       answer: 0,
@@ -118,6 +196,8 @@ const renderLoop: LessonDef = {
     },
     {
       kind: "order",
+      hint: L("Each line needs the result of the one before it. What must happen before dt exists?", "Cada línea necesita el resultado de la anterior. ¿Qué debe pasar antes de que exista dt?", "各行は前の行の結果を使う。dt ができる前に何が必要？"),
+      note: "timer",
       prompt: L("Order one frame of the loop", "Ordena un frame del bucle", "1フレームの処理を並べよう"),
       lines: ["timer.update(time);", "const dt = timer.getDelta();", "cube.rotation.y += 2 * dt;", "renderer.render(scene, camera);"],
       check: {
@@ -128,6 +208,8 @@ const renderLoop: LessonDef = {
     },
     {
       kind: "run",
+      hint: L("SPEED is in units per second, but the loop adds it once per frame. Scale each step by dt.", "SPEED está en unidades por segundo, pero el bucle lo suma una vez por frame. Escala cada paso por dt.", "SPEED は1秒あたりの量なのに毎フレームそのまま足している。各ステップに dt を掛けよう。"),
+      note: "delta-time",
       prompt: L("Make it fps-independent: 5 units in 1 s", "Hazlo independiente de fps: 5 unidades en 1 s", "fps に左右されず1秒で5進ませよう"),
       starter: code(
         "const SPEED = 5; // units per second",
@@ -154,7 +236,84 @@ const renderLoop: LessonDef = {
       explain: L("Multiply by dt: each frame moves SPEED × dt, so one second adds up to 5 at any fps.", "Multiplica por dt: cada frame mueve SPEED × dt, así un segundo suma 5 a cualquier fps.", "dt を掛けよう。毎フレーム SPEED × dt 進めば、どの fps でも1秒で5になる。"),
     },
   ],
+  notes: renderLoopNotes,
 };
+
+const raycastingNotes: NoteDef[] = [
+  note("ndc", L("Pixels to NDC", "De píxeles a NDC", "ピクセルから NDC へ"),
+    p(
+      "To pick objects with the pointer, the Raycaster needs the pointer position in normalized device coordinates (NDC), not in pixels. In NDC the canvas spans -1 to +1 on both axes, whatever its size: x is -1 at the left edge and +1 at the right, y is -1 at the bottom and +1 at the top, and the center is (0, 0).",
+      "Para elegir objetos con el puntero, el Raycaster necesita la posición del puntero en coordenadas normalizadas de dispositivo (NDC), no en píxeles. En NDC el canvas va de -1 a +1 en ambos ejes, sea cual sea su tamaño: x es -1 en el borde izquierdo y +1 en el derecho, y es -1 abajo y +1 arriba, y el centro es (0, 0).",
+      "ポインターで物体を選ぶには、Raycaster にポインターの位置をピクセルではなく正規化デバイス座標（NDC）で渡す。NDC ではキャンバスの大きさに関係なく、両方の軸が -1〜+1。x は左端 -1・右端 +1、y は下端 -1・上端 +1、中心は (0, 0)。",
+    ),
+    p(
+      "For x: divide the pixel by the width (0 to 1), double it (0 to 2) and subtract 1 (-1 to 1). For y there's a twist: screen pixels count DOWN from the top, but NDC y grows UP. So flip it: y = -(py / h) * 2 + 1. Forgetting that minus is the classic bug where clicks in the upper half pick things in the lower half.",
+      "Para x: divide el píxel por el ancho (0 a 1), duplícalo (0 a 2) y resta 1 (-1 a 1). Para y hay un detalle: los píxeles de pantalla cuentan hacia ABAJO desde arriba, pero la y de NDC crece hacia ARRIBA. Así que invierte: y = -(py / h) * 2 + 1. Olvidar ese signo menos es el bug clásico donde los clics en la mitad de arriba eligen cosas de la mitad de abajo.",
+      "x は、ピクセルを幅で割り（0〜1）、2倍して（0〜2）、1を引く（-1〜1）。y には注意点がある。画面のピクセルは上から下へ数えるけど、NDC の y は上へ増える。だから反転して y = -(py / h) * 2 + 1。このマイナスを忘れると、上半分のクリックで下半分の物を選んでしまう定番のバグになる。",
+    ),
+    ex('const toNdc = (px: number, py: number, w: number, h: number) =>\n  [(px / w) * 2 - 1, -(py / h) * 2 + 1];\nconsole.log(toNdc(1000, 500, 1000, 500).join(","), toNdc(250, 125, 1000, 500).join(","));', "1,-1 -0.5,0.5",
+      L("Bottom-right corner, then a point up and to the left", "Esquina de abajo a la derecha, luego un punto arriba a la izquierda", "右下の角、次に左上寄りの点")),
+    p(
+      "Use the canvas size, not the window's, when the canvas doesn't fill the page. Then raycaster.setFromCamera(ndc, camera) builds a ray that starts at the camera and passes through that point of the picture.",
+      "Usa el tamaño del canvas, no el de la ventana, cuando el canvas no ocupa toda la página. Luego raycaster.setFromCamera(ndc, camera) construye un rayo que parte de la cámara y pasa por ese punto de la imagen.",
+      "キャンバスがページ全体でないときは、ウィンドウではなくキャンバスの大きさを使おう。そのあと raycaster.setFromCamera(ndc, camera) で、カメラから出て画面のその点を通る光線ができる。",
+    ),
+    ex(code("const cam = new THREE.PerspectiveCamera(50, 1, 0.1, 100);", "cam.position.z = 5; cam.updateMatrixWorld();", "const ray = new THREE.Raycaster();", "ray.setFromCamera(new THREE.Vector2(0, 0), cam);", "console.log(ray.ray.origin.z, ray.ray.direction.z.toFixed(1));"), "5 -1.0",
+      L("The center of the screen: straight ahead from the camera", "El centro de la pantalla: recto desde la cámara", "画面の中心＝カメラの真正面")),
+  ),
+  note("raycaster-hits", L("Reading the hits", "Leer los impactos", "当たりの読み方"),
+    p(
+      "intersectObject(object) and intersectObjects(list) return an array of hits sorted nearest first, no matter in which order the objects were added. Each hit has distance (from the ray's origin), point (where it touched, in world space) and object (the mesh that was hit). So hits[0] is what the player sees under the pointer.",
+      "intersectObject(objeto) e intersectObjects(lista) devuelven un array de impactos ordenados del más cercano al más lejano, sin importar en qué orden se agregaron los objetos. Cada impacto tiene distance (desde el origen del rayo), point (dónde tocó, en el mundo) y object (la malla tocada). Así, hits[0] es lo que el jugador ve bajo el puntero.",
+      "intersectObject(物体) と intersectObjects(リスト) は当たりの配列を返す。物体を追加した順に関係なく、近い順に並ぶ。各当たりは distance（光線の原点からの距離）、point（ワールドでの当たった場所）、object（当たったメッシュ）を持つ。だから hits[0] がポインターの下に見えている物だよ。",
+    ),
+    ex(code(
+      "const scene = new THREE.Scene();",
+      "for (const [name, x] of [[\"red\", 4], [\"blue\", -2]] as const) {",
+      "  const b = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());",
+      "  b.name = name; b.position.x = x; scene.add(b);",
+      "}",
+      "scene.updateMatrixWorld();",
+      "const rc = new THREE.Raycaster(new THREE.Vector3(-10, 0.1, 0.2), new THREE.Vector3(1, 0, 0));",
+      "const hits = rc.intersectObjects(scene.children);",
+      "console.log(hits.map((h) => h.object.name).join(\",\"), hits[0].distance);",
+    ), "blue,red 7.5",
+      L("blue was added second but it's closer, so it comes first", "blue se agregó segunda, pero está más cerca y va primero", "blue は後から追加したけど近いので先頭")),
+    p(
+      "near and far limit where hits count. By default near is 0 and far is Infinity: the ray starts at its origin and never ends. Set far when you want a short ray, like a sword's reach: new THREE.Raycaster(origin, direction, near, far).",
+      "near y far limitan dónde cuentan los impactos. Por defecto near es 0 y far es Infinity: el rayo empieza en su origen y nunca termina. Fija far cuando quieras un rayo corto, como el alcance de una espada: new THREE.Raycaster(origen, dirección, near, far).",
+      "near と far は当たりを数える範囲。初期値は near が 0、far が Infinity で、光線は原点から始まって終わりがない。剣の届く距離のように短い光線にしたいなら far を決めよう：new THREE.Raycaster(原点, 向き, near, far)。",
+    ),
+    p(
+      "intersectObjects(list, recursive) also tests the children inside groups, because recursive is true by default. A Group has no geometry, so it can never be hit itself; with recursive = false only the objects in the list are tested and the meshes inside groups are missed. Loaded glTF models are groups, so keep the default.",
+      "intersectObjects(lista, recursive) también prueba los hijos dentro de grupos, porque recursive es true por defecto. Un Group no tiene geometría, así que nunca se le puede tocar a él; con recursive = false solo se prueban los objetos de la lista y se pierden las mallas dentro de grupos. Los modelos glTF cargados son grupos, así que deja el valor por defecto.",
+      "intersectObjects(リスト, recursive) はグループの中の子も調べる。recursive の初期値が true だから。Group 自身は形がないので当たらない。recursive = false だとリストの物体しか調べず、グループの中のメッシュを見のがす。glTF モデルはグループなので、初期値のままにしよう。",
+    ),
+    ex(code("const box = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());", "const outer = new THREE.Group(), inner = new THREE.Group();", "outer.add(inner); inner.add(box);", "outer.updateMatrixWorld();", "const rc = new THREE.Raycaster(new THREE.Vector3(0.1, 5, 0.2), new THREE.Vector3(0, -1, 0));", "console.log(rc.intersectObject(outer).length, rc.intersectObject(outer, false).length);"), "1 0",
+      L("The box is two groups deep: only the recursive call finds it", "La caja está dos grupos adentro: solo la llamada recursiva la encuentra", "箱はグループ2段の奥。見つけるのは recursive の呼び出しだけ")),
+  ),
+  note("ray-gotchas", L("Why a ray misses or hits a ghost", "Rayos que fallan o tocan fantasmas", "光線が外れる・残像に当たる理由"),
+    p(
+      "The ray tests each mesh where its matrixWorld says it is, not where its position says. The renderer refreshes matrixWorld before drawing each frame, so in a running app it's usually fine. But if you move a mesh and cast a ray right away, before a render, the ray still sees the old place. Call mesh.updateMatrixWorld() (or scene.updateMatrixWorld()) first.",
+      "El rayo prueba cada malla donde dice su matrixWorld, no donde dice su position. El renderer refresca matrixWorld antes de dibujar cada frame, así que en una app en marcha suele ir bien. Pero si mueves una malla y lanzas un rayo enseguida, antes de un render, el rayo aún ve el lugar viejo. Llama antes a mesh.updateMatrixWorld() (o scene.updateMatrixWorld()).",
+      "光線は、各メッシュを position ではなく matrixWorld が示す場所で調べる。レンダラーは毎フレーム描く前に matrixWorld を更新するので、動いているアプリならふつうは大丈夫。でもメッシュを動かしてすぐ、描画の前に光線を撃つと、光線は古い場所を見る。先に mesh.updateMatrixWorld()（か scene.updateMatrixWorld()）を呼ぼう。",
+    ),
+    ex(code("const box = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());", "box.position.y = 10; // moved far away", "box.updateMatrixWorld();", "const rc = new THREE.Raycaster(new THREE.Vector3(0.1, 0.1, 5), new THREE.Vector3(0, 0, -1));", "console.log(rc.intersectObject(box).length);"), "0",
+      L("Updated right after the move, so the ray sees the new place", "Actualizada tras moverla, el rayo ve el lugar nuevo", "動かした直後に更新したので、光線は新しい場所を見る")),
+    p(
+      "Raycasting also respects material.side. With the default FrontSide, a triangle only counts when seen from the front, the side its normal points to. A plane seen from behind is invisible to the renderer and to rays alike. Set side = THREE.DoubleSide to make both faces count, for drawing and for picking.",
+      "El raycasting también respeta material.side. Con el FrontSide por defecto, un triángulo solo cuenta visto de frente, del lado al que apunta su normal. Un plano visto desde atrás es invisible para el renderer y también para los rayos. Pon side = THREE.DoubleSide para que cuenten ambas caras, al dibujar y al elegir.",
+      "レイキャストは material.side にも従う。初期値の FrontSide では、三角形は法線が向いている表側から見たときだけ数えられる。裏から見た板は、レンダラーにも光線にも見えない。side = THREE.DoubleSide にすれば、描画でも選択でも両面が数えられる。",
+    ),
+    ex(code("const wall = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), new THREE.MeshBasicMaterial({ side: THREE.BackSide }));", "const front = new THREE.Raycaster(new THREE.Vector3(0.5, 0.5, 5), new THREE.Vector3(0, 0, -1));", "console.log(front.intersectObject(wall).length);"), "0",
+      L("BackSide only counts from behind, so a ray from the front misses", "BackSide solo cuenta desde atrás: un rayo de frente falla", "BackSide は裏側だけ。正面からの光線は外れる")),
+    p(
+      "When clicks miss, run this checklist: is NDC y flipped? Did you use the canvas size? Are the matrices up to date? Is recursive still true? Does the material's side face the ray? Is the target within near and far?",
+      "Cuando los clics fallan, repasa esta lista: ¿la y de NDC está invertida? ¿Usaste el tamaño del canvas? ¿Las matrices están al día? ¿recursive sigue en true? ¿El side del material mira al rayo? ¿El blanco está entre near y far?",
+      "クリックが外れるときのチェックリスト：NDC の y は反転した？キャンバスの大きさを使った？行列は最新？recursive は true のまま？マテリアルの side は光線の方を向いている？的は near と far の間？",
+    ),
+  ),
+];
 
 // ─── 3.2 The pointing wand: raycasting ─────────────────────────────────────
 const raycasting: LessonDef = {
@@ -189,6 +348,8 @@ const raycasting: LessonDef = {
     {
       kind: "predict",
       prompt: L("Pixels to NDC on an 800×600 canvas", "Píxeles a NDC en un lienzo de 800×600", "800×600 のキャンバスで NDC は？"),
+      hint: L("Plug each pixel pair into both formulas step by step: divide, double, shift.", "Mete cada par de píxeles en ambas fórmulas paso a paso: divide, duplica, desplaza.", "各ピクセルを式に入れて順に計算：割る、2倍、ずらす。"),
+      note: "ndc",
       code: "const ndc = (px: number, py: number) =>\n  [(px / 800) * 2 - 1, -(py / 600) * 2 + 1];\nconsole.log(ndc(400, 300).join(\",\"), ndc(0, 0).join(\",\"));",
       options: ["0,0 -1,1", "0,0 -1,-1", "400,300 0,0"],
       answer: 0,
@@ -200,6 +361,8 @@ const raycasting: LessonDef = {
     {
       kind: "pick",
       prompt: L("Pointer at the top edge: NDC y is…", "Puntero en el borde superior: y en NDC es…", "上端のポインター：NDC の y は？"),
+      hint: L("Pixel row 0 is the top. In NDC, is up positive or negative?", "La fila de píxeles 0 es la de arriba. En NDC, ¿arriba es positivo o negativo?", "ピクセルの0行目は上端。NDC では上はプラス？マイナス？"),
+      note: "ndc",
       code: "const toY = (py: number, h: number) => -(py / h) * 2 + 1;\nconsole.log(toY(0, 600) === ___);",
       options: ["1", "-1", "0"],
       answer: 0,
@@ -224,6 +387,8 @@ const raycasting: LessonDef = {
         "const rc = new THREE.Raycaster(new THREE.Vector3(0.2, 0.1, 10), new THREE.Vector3(0, 0, -1));",
         "console.log(rc.intersectObjects(scene.children).map((h) => h.object.name).join(\",\"));",
       ),
+      hint: L("The results don't follow the order the boxes were added. What are they sorted by?", "Los resultados no siguen el orden en que se agregaron las cajas. ¿Por qué se ordenan?", "結果は箱を追加した順ではない。何の順に並ぶ？"),
+      note: "raycaster-hits",
       options: ["near,far", "far,near", "near"],
       answer: 0,
       output: "near,far",
@@ -234,6 +399,8 @@ const raycasting: LessonDef = {
     {
       kind: "predict",
       prompt: L("The default ray length?", "¿El largo del rayo por defecto?", "光線の長さの初期値は？"),
+      hint: L("By default, a ray starts right at its origin. Does it ever stop?", "Por defecto, un rayo empieza justo en su origen. ¿Termina alguna vez?", "初期設定の光線は原点から始まる。どこかで終わる？"),
+      note: "raycaster-hits",
       code: code("const rc = new THREE.Raycaster();", "console.log(rc.near, rc.far);"),
       options: ["0 Infinity", "0.1 2000", "0 100"],
       answer: 0,
@@ -258,6 +425,8 @@ const raycasting: LessonDef = {
         "const rc = new THREE.Raycaster(new THREE.Vector3(0.2, 0.1, 10), new THREE.Vector3(0, 0, -1));",
         "console.log(rc.intersectObjects(scene.children).length, rc.intersectObjects(scene.children, false).length);",
       ),
+      hint: L("A Group has no shape to hit. Which call looks inside it, and which doesn't?", "Un Group no tiene forma que tocar. ¿Qué llamada mira adentro y cuál no?", "Group には当たる形がない。中を見る呼び出しと、見ない呼び出しは？"),
+      note: "raycaster-hits",
       options: ["1 0", "1 1", "0 0"],
       answer: 0,
       output: "1 0",
@@ -271,6 +440,8 @@ const raycasting: LessonDef = {
     )),
     {
       kind: "predict",
+      hint: L("The ray reads matrixWorld, not position. When does matrixWorld learn about the move?", "El rayo lee matrixWorld, no position. ¿Cuándo se entera matrixWorld del movimiento?", "光線が読むのは position ではなく matrixWorld。いつ移動が反映される？"),
+      note: "ray-gotchas",
       prompt: L("Hits before and after the update?", "¿Impactos antes y después de actualizar?", "更新の前と後の当たり数は？"),
       code: code(
         "const box = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());",
@@ -290,6 +461,8 @@ const raycasting: LessonDef = {
     },
     {
       kind: "predict",
+      hint: L("Which way does a plane face by default, and which side does the first ray come from?", "¿Hacia dónde mira un plano por defecto y desde qué lado viene el primer rayo?", "板はもともとどっちを向いている？最初の光線はどちら側から？"),
+      note: "ray-gotchas",
       prompt: L("Ray from behind a plane, then DoubleSide", "Rayo desde atrás del plano, luego DoubleSide", "板の裏から撃つ。次に DoubleSide"),
       code: code(
         "const plane = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial());",
@@ -306,6 +479,8 @@ const raycasting: LessonDef = {
     },
     {
       kind: "run",
+      hint: L("Pixel 150 is in the upper half, but this NDC y comes out negative. Flip the y formula.", "El píxel 150 está en la mitad de arriba, pero esta y en NDC sale negativa. Invierte la fórmula de y.", "150 は上半分なのに、この NDC の y はマイナスになる。y の式を反転しよう。"),
+      note: "ndc",
       prompt: L("The wand picks the trap. Make it hit the gem", "La varita elige la trampa. Haz que toque la gema", "杖が罠を選んでしまう。宝石に当てよう"),
       starter: code(
         "const camera = new THREE.PerspectiveCamera(50, 800 / 600, 0.1, 100);",
@@ -336,7 +511,85 @@ const raycasting: LessonDef = {
       explain: L("Flip y: -(py / 600) * 2 + 1. Pixel 150 is in the upper half, so NDC y must be positive.", "Invierte y: -(py / 600) * 2 + 1. El píxel 150 está en la mitad de arriba, así que y en NDC debe ser positiva.", "y を反転しよう：-(py / 600) * 2 + 1。150 は上半分だから NDC の y はプラスになるはず。"),
     },
   ],
+  notes: raycastingNotes,
 };
+
+const assetsNotes: NoteDef[] = [
+  note("gltf", L("Loading glTF models", "Cargar modelos glTF", "glTF モデルを読みこむ"),
+    p(
+      "Detailed models are built in 3D tools and exported as glTF: a .gltf file (JSON plus side files) or a single binary .glb. three's GLTFLoader lives in the addons folder, so you import it separately: import { GLTFLoader } from \"three/addons/loaders/GLTFLoader.js\".",
+      "Los modelos detallados se hacen en herramientas 3D y se exportan como glTF: un archivo .gltf (JSON más archivos aparte) o un único .glb binario. El GLTFLoader de three vive en la carpeta addons, así que se importa aparte: import { GLTFLoader } from \"three/addons/loaders/GLTFLoader.js\".",
+      "細かいモデルは3Dツールで作り、glTF で書き出す。.gltf（JSON と別ファイル）か、1つのバイナリ .glb。three の GLTFLoader は addons フォルダにあるので、別に import する：import { GLTFLoader } from \"three/addons/loaders/GLTFLoader.js\"。",
+    ),
+    p(
+      "loadAsync(url) returns a Promise, so you await it. What arrives is a gltf object, and that object is NOT an Object3D: it's a package holding scene (a Group with the model), animations, cameras and more. You add gltf.scene to your own scene. Until the Promise resolves there is nothing to add.",
+      "loadAsync(url) devuelve una Promise, así que la esperas con await. Lo que llega es un objeto gltf, y ese objeto NO es un Object3D: es un paquete que contiene scene (un Group con el modelo), animations, cameras y más. Lo que agregas a tu escena es gltf.scene. Hasta que la Promise se resuelve no hay nada que agregar.",
+      "loadAsync(url) は Promise を返すので await で待つ。届くのは gltf オブジェクトで、これは Object3D ではない。scene（モデル入りの Group）、animations、cameras などが入った荷物なんだ。自分のシーンに追加するのは gltf.scene。Promise が解決するまでは、追加できる物はない。",
+    ),
+    typed(code("import { GLTFLoader } from \"three/addons/loaders/GLTFLoader.js\";", "const world = new THREE.Scene();", "const { scene: lantern, animations } = await new GLTFLoader().loadAsync(\"/lantern.glb\");", "world.add(lantern);", "console.log(animations.length);"),
+      L("Type-checked only: unpack scene and animations from the package", "Solo se verifica el tipo: saca scene y animations del paquete", "型チェックのみ：荷物から scene と animations を取り出す")),
+    p(
+      "gltf.scene is an ordinary tree of objects. Names set in the 3D tool are kept, so getObjectByName finds a part, and traverse visits every piece when you want to change materials or turn on shadows.",
+      "gltf.scene es un árbol de objetos normal. Los nombres puestos en la herramienta 3D se conservan, así que getObjectByName encuentra una pieza, y traverse visita cada parte cuando quieres cambiar materiales o activar sombras.",
+      "gltf.scene はふつうの物体の木。3Dツールでつけた名前は残るので、getObjectByName で部品を見つけられる。マテリアルを変えたり影をオンにしたりするときは traverse で全部を回ろう。",
+    ),
+    ex(code("const model = new THREE.Group(); // stands in for a loaded scene", "const lid = new THREE.Mesh(); lid.name = \"Lid\";", "model.add(lid);", "console.log(model.getObjectByName(\"Lid\") === lid);"), "true"),
+    p(
+      "Common mistakes: adding the gltf package itself, forgetting await (and trying to add a Promise), or a wrong file path. TypeScript catches the first two, because neither a gltf nor a Promise is an Object3D.",
+      "Errores comunes: agregar el paquete gltf en sí, olvidar el await (e intentar agregar una Promise) o una ruta de archivo equivocada. TypeScript atrapa los dos primeros, porque ni un gltf ni una Promise son un Object3D.",
+      "よくあるミス：gltf の荷物そのものを追加する、await を忘れて Promise を追加しようとする、ファイルのパスをまちがえる。最初の2つは TypeScript が見つける。gltf も Promise も Object3D ではないからだよ。",
+    ),
+    bad(code("import { GLTFLoader } from \"three/addons/loaders/GLTFLoader.js\";", "const world = new THREE.Scene();", "const pending = new GLTFLoader().loadAsync(\"/lantern.glb\");", "world.add(pending);"),
+      L("Does not compile: without await, it's a Promise", "No compila: sin await es una Promise", "コンパイル不可：await なしでは Promise のまま")),
+  ),
+  note("color-space", L("Color spaces for textures", "Espacios de color en texturas", "テクスチャの色空間"),
+    p(
+      "Image files store colors in sRGB, a curved scale made for screens, but lighting math must happen in linear light. A texture's colorSpace tells three how to read its pixels: THREE.SRGBColorSpace means \"this is a color picture, convert it to linear\"; THREE.NoColorSpace means \"these are raw numbers, use them as they are\".",
+      "Los archivos de imagen guardan los colores en sRGB, una escala curva pensada para pantallas, pero las cuentas de iluminación deben hacerse en luz lineal. El colorSpace de una textura le dice a three cómo leer sus píxeles: THREE.SRGBColorSpace significa \"es una imagen de color, conviértela a lineal\"; THREE.NoColorSpace significa \"son números en bruto, úsalos tal cual\".",
+      "画像ファイルは画面向けの曲がった目盛り sRGB で色を持つけど、光の計算はリニアでする必要がある。テクスチャの colorSpace は three にピクセルの読み方を伝える。THREE.SRGBColorSpace は「色の画像だからリニアに変換して」、THREE.NoColorSpace は「ただの数だからそのまま使って」という意味。",
+    ),
+    p(
+      "A texture you create or load by hand starts without a color space. For color images (the main map, an emissive map) set texture.colorSpace = THREE.SRGBColorSpace, or they look pale and washed out. GLTFLoader sets the right value on every texture for you.",
+      "Una textura que creas o cargas a mano empieza sin espacio de color. Para imágenes de color (el map principal, un emissive map) pon texture.colorSpace = THREE.SRGBColorSpace, o se verán pálidas y deslavadas. GLTFLoader pone el valor correcto en cada textura por ti.",
+      "自分で作ったり手で読みこんだテクスチャは、色空間なしで始まる。色の画像（メインの map や emissive map）は texture.colorSpace = THREE.SRGBColorSpace にしよう。でないと白っぽく色あせて見える。GLTFLoader は全テクスチャに正しい値を入れてくれる。",
+    ),
+    ex(code("const poster = new THREE.Texture();", "poster.colorSpace = THREE.SRGBColorSpace;", "console.log(poster.colorSpace === THREE.SRGBColorSpace, poster.colorSpace === THREE.NoColorSpace);"), "true false"),
+    p(
+      "Data textures, such as normal, roughness, metalness and ambient occlusion maps, store directions or amounts, not colors. Keep them in NoColorSpace: converting them as if they were sRGB would distort the numbers, bending normals and changing how rough a surface looks.",
+      "Las texturas de datos, como los mapas de normales, roughness, metalness y oclusión ambiental, guardan direcciones o cantidades, no colores. Déjalas en NoColorSpace: convertirlas como si fueran sRGB deformaría los números, doblando normales y cambiando qué tan rugosa se ve una superficie.",
+      "法線・roughness・metalness・アンビエントオクルージョンなどのデータテクスチャが持つのは、色ではなく向きや量。NoColorSpace のままにしよう。sRGB として変換すると数がゆがみ、法線が曲がったり表面のザラザラ感が変わったりする。",
+    ),
+    ex(code("const bumps = new THREE.Texture();", "const mat = new THREE.MeshStandardMaterial({ normalMap: bumps });", "console.log(mat.normalMap === bumps, bumps.colorSpace === THREE.NoColorSpace);"), "true true",
+      L("A data map keeps the default: no color space", "Un mapa de datos conserva el valor por defecto: sin espacio de color", "データのマップは初期値（色空間なし）のまま")),
+    p(
+      "Rule of thumb: if a person would call it a picture, it's sRGB; if it's data that only looks like a picture, it's NoColorSpace.",
+      "Regla práctica: si una persona lo llamaría una foto o dibujo, es sRGB; si son datos que solo parecen una imagen, es NoColorSpace.",
+      "目安：人が「絵」と呼ぶものなら sRGB。絵に見えるだけのデータなら NoColorSpace。",
+    ),
+  ),
+  note("shadows", L("Lights and shadows", "Luces y sombras", "ライトと影"),
+    p(
+      "AmbientLight and HemisphereLight light everything evenly, as if from every direction at once. Without a direction they can't cast shadows, so they have no shadow property. DirectionalLight (a sun), PointLight (a bulb) and SpotLight (a flashlight) come from somewhere, so each one has a shadow object with its own shadow camera.",
+      "AmbientLight y HemisphereLight iluminan todo de forma pareja, como si llegaran de todas las direcciones a la vez. Sin dirección no pueden proyectar sombras, así que no tienen propiedad shadow. DirectionalLight (un sol), PointLight (un foco) y SpotLight (una linterna) vienen de algún lugar, así que cada una tiene un objeto shadow con su propia cámara de sombra.",
+      "AmbientLight と HemisphereLight は、あらゆる方向から同時に来るように全体を均一に照らす。向きがないので影を落とせず、shadow プロパティもない。DirectionalLight（太陽）・PointLight（電球）・SpotLight（懐中電灯）はどこかから来る光なので、それぞれ専用の影カメラを持つ shadow オブジェクトがある。",
+    ),
+    ex(code("const bulb = new THREE.PointLight();", "const sky = new THREE.HemisphereLight();", "console.log(\"shadow\" in bulb, \"shadow\" in sky);"), "true false"),
+    p(
+      "Shadows are expensive (the scene is drawn again from the light's point of view), so everything starts switched off. You need four switches: renderer.shadowMap.enabled on the renderer, castShadow on the light, castShadow on each mesh that throws a shadow, and receiveShadow on each surface that shows one. Miss any one and there is no shadow.",
+      "Las sombras son caras (la escena se dibuja otra vez desde el punto de vista de la luz), así que todo empieza apagado. Necesitas cuatro interruptores: renderer.shadowMap.enabled en el renderer, castShadow en la luz, castShadow en cada malla que proyecta sombra y receiveShadow en cada superficie que la muestra. Si falta uno, no hay sombra.",
+      "影は重い（光の目線からシーンをもう一度描く）ので、最初は全部オフ。スイッチは4つ：レンダラーの renderer.shadowMap.enabled、ライトの castShadow、影を落とすメッシュごとの castShadow、影を映す面ごとの receiveShadow。1つでも欠けると影は出ない。",
+    ),
+    typed(code("declare const renderer: THREE.WebGLRenderer;", "const lamp = new THREE.SpotLight(0xffffff, 50);", "const statue = new THREE.Mesh(), ground = new THREE.Mesh();", "renderer.shadowMap.enabled = true;", "lamp.castShadow = true;", "statue.castShadow = true;", "ground.receiveShadow = true;"),
+      L("Type-checked only: all four switches on", "Solo se verifica el tipo: los cuatro interruptores encendidos", "型チェックのみ：4つのスイッチを全部オン")),
+    p(
+      "These flags belong to each object and are not inherited. Setting castShadow or receiveShadow on a Group does nothing for the meshes inside it. For a loaded model, traverse it and set the flag on every Mesh.",
+      "Estas banderas pertenecen a cada objeto y no se heredan. Poner castShadow o receiveShadow en un Group no hace nada por las mallas que contiene. En un modelo cargado, recórrelo con traverse y pon la bandera en cada Mesh.",
+      "このフラグは物体ごとのもので、子には受けつがれない。Group に castShadow や receiveShadow を立てても、中のメッシュには効かない。読みこんだモデルは traverse で回り、Mesh ごとにフラグを立てよう。",
+    ),
+    ex(code("const tree = new THREE.Group();", "tree.add(new THREE.Mesh(), new THREE.Mesh());", "tree.receiveShadow = true;", "let receivers = 0;", "tree.traverse((o) => { if (o instanceof THREE.Mesh && o.receiveShadow) receivers++; });", "console.log(receivers);"), "0",
+      L("The group's flag doesn't reach the meshes inside", "La bandera del grupo no llega a las mallas de adentro", "グループのフラグは中のメッシュに届かない")),
+  ),
+];
 
 // ─── 3.3 Treasure from afar: assets, colour, lights and shadows ────────────
 const assets: LessonDef = {
@@ -366,6 +619,8 @@ const assets: LessonDef = {
     {
       kind: "pick",
       prompt: L("What goes into the scene?", "¿Qué entra en la escena?", "シーンに入れるのは？"),
+      hint: L("loadAsync resolves to a package, not an object. Which part of it is the Group to add?", "loadAsync devuelve un paquete, no un objeto. ¿Qué parte de él es el Group que se agrega?", "loadAsync が返すのは物体ではなく荷物。追加する Group はどの部分？"),
+      note: "gltf",
       code: code("import { GLTFLoader } from \"three/addons/loaders/GLTFLoader.js\";", "const scene = new THREE.Scene();", "const gltf = await new GLTFLoader().loadAsync(\"/chest.glb\");", "scene.add(___);"),
       options: ["gltf.scene", "gltf", "gltf.mesh"],
       answer: 0,
@@ -380,6 +635,8 @@ const assets: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("A brand-new texture doesn't know what its pixels mean. What's the safe default?", "Una textura nueva no sabe qué significan sus píxeles. ¿Cuál es el valor seguro por defecto?", "新しいテクスチャは、ピクセルの意味を知らない。安全な初期値は？"),
+      note: "color-space",
       code: code("const tex = new THREE.Texture();", "console.log(tex.colorSpace === THREE.NoColorSpace, THREE.SRGBColorSpace);"),
       options: ["true srgb", "false srgb", "true linear"],
       answer: 0,
@@ -390,6 +647,8 @@ const assets: LessonDef = {
     {
       kind: "pick",
       prompt: L("Colour space for a normal map", "Espacio de color de un normal map", "法線マップの色空間は？"),
+      hint: L("Does a normal map hold colors, or directions stored as numbers?", "¿Un normal map guarda colores o direcciones guardadas como números?", "法線マップが持つのは色？それとも数で表した向き？"),
+      note: "color-space",
       code: code("const normalMap = new THREE.Texture();", "normalMap.colorSpace = ___;"),
       options: ["THREE.NoColorSpace", "THREE.SRGBColorSpace"],
       answer: 0,
@@ -404,6 +663,8 @@ const assets: LessonDef = {
     {
       kind: "predict",
       prompt: L("Which light has a shadow camera?", "¿Qué luz tiene cámara de sombra?", "影のカメラを持つライトは？"),
+      hint: L("A shadow needs a direction to come from. Which of these lights has one?", "Una sombra necesita una dirección de origen. ¿Cuál de estas luces la tiene?", "影には光が来る向きが必要。向きを持つライトはどっち？"),
+      note: "shadows",
       code: code("console.log(\"shadow\" in new THREE.AmbientLight(), \"shadow\" in new THREE.SpotLight());"),
       options: ["false true", "true true", "true false"],
       answer: 0,
@@ -419,6 +680,8 @@ const assets: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Shadows cost a lot of GPU time. Would three turn them on for you?", "Las sombras cuestan mucho tiempo de GPU. ¿three las encendería por ti?", "影は GPU の負担が大きい。three が勝手にオンにする？"),
+      note: "shadows",
       code: code("const mesh = new THREE.Mesh();", "const sun = new THREE.DirectionalLight();", "console.log(mesh.castShadow, mesh.receiveShadow, sun.castShadow);"),
       options: ["false false false", "true true true", "false false true"],
       answer: 0,
@@ -431,6 +694,8 @@ const assets: LessonDef = {
     {
       kind: "type",
       prompt: L("Let the sun cast shadows", "Haz que el sol proyecte sombras", "太陽に影を落とさせよう"),
+      hint: L("It's the same flag a mesh uses to throw a shadow onto others.", "Es la misma bandera que usa una malla para proyectar sombra sobre otras.", "メッシュがほかの物に影を落とすときと同じフラグだよ。"),
+      note: "shadows",
       code: code("const sun = new THREE.DirectionalLight(0xffffff, 3);", "sun.___ = true;", "console.log(sun.castShadow);"),
       answer: "castShadow",
       check: { compiles: true, stdout: "true" },
@@ -439,6 +704,8 @@ const assets: LessonDef = {
     },
     {
       kind: "order",
+      hint: L("Each line uses a name created by the line before it.", "Cada línea usa un nombre creado por la línea anterior.", "各行は、前の行で作った名前を使う。"),
+      note: "gltf",
       prompt: L("Load the chest, then add it", "Carga el cofre y luego agrégalo", "宝箱を読みこんで追加しよう"),
       lines: ["const loader = new GLTFLoader();", "const gltf = await loader.loadAsync(\"/chest.glb\");", "scene.add(gltf.scene);"],
       check: {
@@ -449,6 +716,8 @@ const assets: LessonDef = {
     },
     {
       kind: "run",
+      hint: L("Flags on a Group are not inherited. Visit every node and set the flag on each Mesh.", "Las banderas de un Group no se heredan. Visita cada nodo y pon la bandera en cada Mesh.", "Group のフラグは受けつがれない。全ノードを回って Mesh ごとに立てよう。"),
+      note: "shadows",
       prompt: L("Every mesh of the model must cast a shadow", "Cada malla del modelo debe proyectar sombra", "モデルの全メッシュに影を落とさせよう"),
       starter: code(
         "const part = (name: string) => { const m = new THREE.Mesh(); m.name = name; return m; };",
@@ -475,7 +744,64 @@ const assets: LessonDef = {
       explain: L("The flag isn't inherited. traverse visits every node, so set castShadow on each Mesh inside.", "La bandera no se hereda. traverse visita cada nodo: pon castShadow en cada Mesh de adentro.", "フラグは子に受けつがれない。traverse で全ノードを回り、中の Mesh ごとに castShadow を立てよう。"),
     },
   ],
+  notes: assetsNotes,
 };
+
+const disposeNotes: NoteDef[] = [
+  note("dispose", L("Freeing GPU memory with dispose()", "Liberar la GPU con dispose()", "dispose() で GPU メモリを解放"),
+    p(
+      "Geometries, materials and textures are uploaded to the GPU the first time they're drawn: vertex buffers, compiled shaders, image data. JavaScript's garbage collector can't see GPU memory. scene.remove(mesh), or clear(), only detaches the object from the tree; the copies on the GPU stay.",
+      "Las geometrías, los materiales y las texturas se suben a la GPU la primera vez que se dibujan: buffers de vértices, shaders compilados, datos de imagen. El recolector de basura de JavaScript no ve la memoria de la GPU. scene.remove(mesh), o clear(), solo desconecta el objeto del árbol; las copias en la GPU se quedan.",
+      "ジオメトリ・マテリアル・テクスチャは、初めて描かれたときに GPU へ送られる。頂点バッファ、コンパイル済みのシェーダー、画像データ。JavaScript のガベージコレクタは GPU のメモリが見えない。scene.remove(mesh) や clear() は木から外すだけで、GPU 上のコピーは残る。",
+    ),
+    p(
+      "To free them, call dispose() on each one: geometry.dispose(), material.dispose(), and texture.dispose() for every texture the material uses. dispose() fires a \"dispose\" event; the renderer listens for it and deletes the matching GPU resources.",
+      "Para liberarlos, llama a dispose() en cada uno: geometry.dispose(), material.dispose() y texture.dispose() para cada textura que use el material. dispose() lanza un evento \"dispose\"; el renderer lo escucha y borra los recursos correspondientes de la GPU.",
+      "解放するには、それぞれの dispose() を呼ぶ。geometry.dispose()、material.dispose()、それにマテリアルが使うテクスチャごとに texture.dispose()。dispose() は \"dispose\" イベントを出し、レンダラーがそれを聞いて GPU の資源を消す。",
+    ),
+    ex(code("const skin = new THREE.MeshBasicMaterial();", "const log: string[] = [];", "skin.addEventListener(\"dispose\", () => log.push(\"freed\"));", "console.log(log.length);", "skin.dispose();", "console.log(log.join());"), "0\nfreed",
+      L("The event fires only when dispose() is called", "El evento solo se lanza al llamar a dispose()", "イベントは dispose() を呼んだときだけ出る")),
+    p(
+      "Shared resources need care. When several meshes share one material or geometry, dispose it only after the last mesh that uses it is gone. A common approach is to dispose everything together when leaving a level or a page.",
+      "Los recursos compartidos requieren cuidado. Cuando varias mallas comparten un material o una geometría, libéralo solo después de que se vaya la última malla que lo usa. Una práctica común es liberar todo junto al salir de un nivel o una página.",
+      "共有している資源には注意。複数のメッシュが1つのマテリアルやジオメトリを使っているなら、最後の利用者がいなくなってから dispose しよう。レベルやページを出るときにまとめて全部 dispose するのがよくあるやり方だよ。",
+    ),
+    p(
+      "To spot a leak, watch renderer.info.memory: it counts the geometries and textures that live on the GPU right now. If the numbers keep growing as you switch levels, something isn't being disposed. scene.children.length can't tell you this, because it only counts what's on stage.",
+      "Para detectar una fuga, vigila renderer.info.memory: cuenta las geometrías y texturas que viven ahora en la GPU. Si los números siguen creciendo al cambiar de nivel, algo no se está liberando. scene.children.length no te lo puede decir, porque solo cuenta lo que está en escena.",
+      "リークを見つけるには renderer.info.memory を見よう。今 GPU にあるジオメトリとテクスチャの数だよ。レベルを切りかえるたびに増え続けるなら、何かが dispose されていない。scene.children.length は舞台の上しか数えないので、これはわからない。",
+    ),
+    typed(code("declare const renderer: THREE.WebGLRenderer;", "const { geometries, textures } = renderer.info.memory;", "console.log(`gpu: ${geometries} geometries, ${textures} textures`);"),
+      L("Type-checked only: log this after each level change", "Solo se verifica el tipo: regístralo tras cada cambio de nivel", "型チェックのみ：レベルを変えるたびに表示しよう")),
+  ),
+  note("instancing", L("Draw calls and InstancedMesh", "Draw calls e InstancedMesh", "ドローコールと InstancedMesh"),
+    p(
+      "Every visible mesh costs about one draw call: the CPU telling the GPU \"draw this now\". Each call has overhead, so thousands of them per frame make the CPU the bottleneck even when the triangles are few. A forest of 1000 separate tree meshes means about 1000 calls every frame.",
+      "Cada malla visible cuesta más o menos un draw call: la CPU diciéndole a la GPU \"dibuja esto ahora\". Cada llamada tiene un costo fijo, así que miles por frame convierten a la CPU en el cuello de botella aunque haya pocos triángulos. Un bosque de 1000 mallas de árbol separadas son unas 1000 llamadas por frame.",
+      "見えるメッシュ1つにつき、だいたい1回のドローコール（CPU が GPU に「これを描いて」と頼むこと）がかかる。1回ごとに手間がかかるので、1フレームに何千回もあると、三角形が少なくても CPU が足を引っぱる。別々の木のメッシュが1000本なら、毎フレーム約1000回だ。",
+    ),
+    p(
+      "InstancedMesh(geometry, material, count) draws count copies of one geometry and one material in a single call. Each copy, an instance, has its own 4×4 matrix, stored in instanceMatrix: one buffer with count × 16 numbers. Use it whenever many objects share the same geometry and material.",
+      "InstancedMesh(geometría, material, count) dibuja count copias de una geometría y un material en una sola llamada. Cada copia, una instancia, tiene su propia matriz 4×4, guardada en instanceMatrix: un buffer con count × 16 números. Úsala siempre que muchos objetos compartan la misma geometría y material.",
+      "InstancedMesh(ジオメトリ, マテリアル, count) は、1つの形と素材のコピーを count 個、1回の呼び出しで描く。コピー1つ1つ（インスタンス）は自分の4×4行列を持ち、instanceMatrix（count × 16 個の数のバッファ）に入る。同じ形と素材の物がたくさんあるときに使おう。",
+    ),
+    ex(code("const rocks = new THREE.InstancedMesh(new THREE.SphereGeometry(), new THREE.MeshBasicMaterial(), 5);", "console.log(rocks.count, rocks.instanceMatrix.array.length / rocks.count);"), "5 16",
+      L("16 numbers per instance", "16 números por instancia", "インスタンス1つにつき16個の数")),
+    p(
+      "setMatrixAt(index, matrix) writes one instance's transform, and getMatrixAt(index, target) reads it back. A handy way to build the matrix is a helper Object3D: set its position, rotation and scale, call updateMatrix(), and pass its matrix.",
+      "setMatrixAt(índice, matriz) escribe la transformación de una instancia, y getMatrixAt(índice, destino) la lee. Una forma práctica de armar la matriz es un Object3D auxiliar: ajusta su posición, rotación y escala, llama a updateMatrix() y pasa su matrix.",
+      "setMatrixAt(番号, 行列) で1つのインスタンスの変形を書き、getMatrixAt(番号, 入れ物) で読み出す。行列を作るには補助の Object3D が便利。位置・回転・大きさを決めて updateMatrix() を呼び、その matrix を渡そう。",
+    ),
+    ex(code("const rocks = new THREE.InstancedMesh(new THREE.SphereGeometry(), new THREE.MeshBasicMaterial(), 5);", "const helper = new THREE.Object3D();", "helper.position.set(0, 3, 0);", "helper.updateMatrix();", "rocks.setMatrixAt(4, helper.matrix);", "const back = new THREE.Matrix4();", "rocks.getMatrixAt(4, back);", "console.log(back.elements[13]);"), "3"),
+    p(
+      "After changing instance matrices, set instanceMatrix.needsUpdate = true. That bumps the buffer's version number, and the renderer uploads the buffer again whenever the version has changed. Forget it and the instances stay where they were on screen.",
+      "Después de cambiar las matrices de las instancias, pon instanceMatrix.needsUpdate = true. Eso sube el número de versión del buffer, y el renderer vuelve a subir el buffer cada vez que la versión cambió. Si lo olvidas, las instancias se quedan donde estaban en pantalla.",
+      "インスタンスの行列を変えたら instanceMatrix.needsUpdate = true にしよう。バッファの version 番号が上がり、レンダラーは version が変わるたびにバッファを送り直す。忘れると、画面のインスタンスは元の場所のまま。",
+    ),
+    ex(code("const rocks = new THREE.InstancedMesh(new THREE.SphereGeometry(), new THREE.MeshBasicMaterial(), 5);", "rocks.instanceMatrix.needsUpdate = true;", "rocks.instanceMatrix.needsUpdate = true;", "console.log(rocks.instanceMatrix.version);"), "2",
+      L("Each needsUpdate = true adds one to the version", "Cada needsUpdate = true suma uno a la versión", "needsUpdate = true のたびに version が1増える")),
+  ),
+];
 
 // ─── 3.4 Sweep the stage: disposal and performance ─────────────────────────
 const dispose: LessonDef = {
@@ -506,6 +832,8 @@ const dispose: LessonDef = {
     {
       kind: "pick",
       prompt: L("Does scene.remove(mesh) free GPU memory?", "¿scene.remove(mesh) libera la GPU?", "scene.remove で GPU メモリは空く？"),
+      hint: L("remove() edits the scene tree. Does the GPU ever hear about it?", "remove() edita el árbol de la escena. ¿La GPU se entera de eso?", "remove() はシーンの木を変えるだけ。GPU はそれを知る？"),
+      note: "dispose",
       code: "scene.remove(mesh);\n// GPU memory freed? ___",
       options: [NO, YES],
       answer: 0,
@@ -514,6 +842,8 @@ const dispose: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("dispose() announces itself with an event. How many times did it run here?", "dispose() se anuncia con un evento. ¿Cuántas veces se ejecutó aquí?", "dispose() はイベントで知らせる。ここでは何回呼ばれた？"),
+      note: "dispose",
       code: code("const geo = new THREE.BoxGeometry();", "let events = 0;", "geo.addEventListener(\"dispose\", () => events++);", "geo.dispose();", "console.log(events);"),
       options: ["1", "0", "undefined"],
       answer: 0,
@@ -531,6 +861,8 @@ const dispose: LessonDef = {
       kind: "pick",
       prompt: L("Where do you spot a leak?", "¿Dónde detectas una fuga?", "リークを見つける場所は？"),
       code: code("declare const renderer: THREE.WebGLRenderer;", "declare const scene: THREE.Scene;", "console.log(___);"),
+      hint: L("One option counts what's on stage, the other counts what's on the GPU.", "Una opción cuenta lo que está en escena; la otra, lo que está en la GPU.", "片方は舞台の上を、もう片方は GPU の上を数える。"),
+      note: "dispose",
       options: ["renderer.info.memory.geometries", "scene.children.length"],
       answer: 0,
       check: { compiles: true },
@@ -539,6 +871,8 @@ const dispose: LessonDef = {
     {
       kind: "pick",
       prompt: L("10 meshes share a material. Remove one:", "10 mallas comparten material. Quitas una:", "10個で共有するマテリアル。1個外すと？"),
+      hint: L("Who else still draws with that material after one mesh leaves?", "¿Quién más sigue dibujando con ese material cuando se va una malla?", "1つ外したあとも、そのマテリアルで描いているのは誰？"),
+      note: "dispose",
       code: "scene.remove(meshes[0]);\n// dispose the shared material now? ___",
       options: [L("No, only when none use it", "No, solo cuando nadie la use", "いいえ、誰も使わなくなったら"), L("Yes, right away", "Sí, de inmediato", "はい、すぐに")],
       answer: 0,
@@ -552,6 +886,8 @@ const dispose: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("count is the number of instances. Each instance stores one 4×4 matrix.", "count es la cantidad de instancias. Cada instancia guarda una matriz 4×4.", "count はインスタンスの数。各インスタンスは4×4行列を1つ持つ。"),
+      note: "instancing",
       code: code("const trees = new THREE.InstancedMesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial(), 3);", "console.log(trees.count, trees.instanceMatrix.array.length);"),
       options: ["3 48", "3 3", "1 16"],
       answer: 0,
@@ -564,6 +900,8 @@ const dispose: LessonDef = {
     {
       kind: "type",
       prompt: L("Place instance 1 at x = 7", "Pon la instancia 1 en x = 7", "インスタンス1を x = 7 へ"),
+      hint: L("getMatrixAt reads one instance's matrix. Its partner writes one.", "getMatrixAt lee la matriz de una instancia. Su pareja la escribe.", "getMatrixAt は1つの行列を読む。その相棒が書く。"),
+      note: "instancing",
       code: code("const trees = new THREE.InstancedMesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial(), 3);", "trees.___(1, new THREE.Matrix4().makeTranslation(7, 0, 0));", "const out = new THREE.Matrix4();", "trees.getMatrixAt(1, out);", "console.log(out.elements[12]);"),
       answer: "setMatrixAt",
       check: { compiles: true, stdout: "7" },
@@ -573,6 +911,8 @@ const dispose: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("needsUpdate is a signal for the renderer. Which number changes to send it?", "needsUpdate es una señal para el renderer. ¿Qué número cambia para enviarla?", "needsUpdate はレンダラーへの合図。合図のために変わる数は？"),
+      note: "instancing",
       code: code("const trees = new THREE.InstancedMesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial(), 3);", "const before = trees.instanceMatrix.version;", "trees.instanceMatrix.needsUpdate = true;", "console.log(before, trees.instanceMatrix.version);"),
       options: ["0 1", "0 0", "1 1"],
       answer: 0,
@@ -583,6 +923,8 @@ const dispose: LessonDef = {
     {
       kind: "pick",
       prompt: L("1000 moving trees, same mesh and material", "1000 árboles en movimiento, misma malla y material", "同じ形と素材の木1000本が動く"),
+      hint: L("Same geometry, same material, many copies: count the draw calls of each option.", "Misma geometría, mismo material, muchas copias: cuenta los draw calls de cada opción.", "同じ形・同じ素材がたくさん。それぞれのドローコール数を数えよう。"),
+      note: "instancing",
       code: "// best way to draw them: ___",
       options: ["InstancedMesh", L("1000 separate meshes", "1000 mallas separadas", "別々のメッシュ1000個")],
       answer: 0,
@@ -590,6 +932,8 @@ const dispose: LessonDef = {
     },
     {
       kind: "run",
+      hint: L("remove() alone frees nothing. Before removing each mesh, dispose its geometry and material.", "remove() solo no libera nada. Antes de quitar cada malla, libera su geometría y su material.", "remove() だけでは何も解放されない。外す前に形とマテリアルを dispose しよう。"),
+      note: "dispose",
       prompt: L("clear() leaks! Dispose before removing", "¡clear() tiene fugas! Libera antes de quitar", "clear() がリーク！外す前に解放しよう"),
       starter: code(
         "const scene = new THREE.Scene();",
@@ -623,7 +967,71 @@ const dispose: LessonDef = {
       explain: L("Before remove, call child.geometry.dispose() and child.material.dispose(): 2 meshes × 2 = 4.", "Antes de remove, llama a child.geometry.dispose() y child.material.dispose(): 2 mallas × 2 = 4.", "remove の前に child.geometry.dispose() と child.material.dispose() を呼ぼう。2個 × 2 = 4。"),
     },
   ],
+  notes: disposeNotes,
 };
+
+const bossNotes: NoteDef[] = [
+  note("recap-time", L("Recap: time and steps", "Repaso: tiempo y pasos", "復習：時間とステップ"),
+    p(
+      "THREE.Timer: call update(time) once per frame with the timestamp in milliseconds, then getDelta() gives the seconds since the last update. Move things by speed × dt so every screen covers the same distance per second, and clamp dt after a hidden tab.",
+      "THREE.Timer: llama a update(time) una vez por frame con la marca de tiempo en milisegundos, y getDelta() da los segundos desde el último update. Mueve las cosas velocidad × dt para que toda pantalla recorra la misma distancia por segundo, y limita dt tras una pestaña oculta.",
+      "THREE.Timer：毎フレーム1回、ミリ秒の時刻で update(time) を呼ぶと、getDelta() が前回からの秒数を返す。速さ × dt で動かせば、どの画面でも1秒の移動量が同じ。タブが隠れたあとは dt をおさえよう。",
+    ),
+    p(
+      "Physics often uses a fixed step instead. Add each frame's dt to an accumulator, then, while the accumulator holds at least one STEP, run one physics step of exactly STEP and subtract it. The leftover waits for the next frame. The simulation then behaves the same at any frame rate.",
+      "La física suele usar un paso fijo. Suma el dt de cada frame a un acumulador y, mientras el acumulador tenga al menos un STEP, ejecuta un paso de física de exactamente STEP y réstalo. Lo que sobra espera al siguiente frame. Así la simulación se comporta igual a cualquier frame rate.",
+      "物理ではよく固定ステップを使う。毎フレームの dt を蓄積に足し、STEP 1回分以上たまっている間、ちょうど STEP ぶんの物理を1回進めて引く。残りは次のフレームへ持ちこす。これでどの fps でも同じ動きになる。",
+    ),
+    ex("let acc = 0.07, steps = 0;\nconst STEP = 0.02;\nwhile (acc >= STEP) { acc -= STEP; steps++; }\nconsole.log(steps, acc.toFixed(3));", "3 0.010",
+      L("Three whole steps fit; 0.010 s carries over", "Caben tres pasos completos; sobran 0.010 s", "3ステップ入り、0.010 秒が持ちこし")),
+  ),
+  note("recap-rays", L("Recap: rays and hits", "Repaso: rayos e impactos", "復習：光線と当たり"),
+    p(
+      "Hits come sorted nearest first. hit.distance is measured from the ray's origin to the hit point, and hit.point is that point in world space. near and far limit the ray: anything beyond far is ignored, even if the ray points right at it.",
+      "Los impactos llegan ordenados del más cercano al más lejano. hit.distance se mide desde el origen del rayo hasta el punto de impacto, y hit.point es ese punto en el mundo. near y far limitan el rayo: todo lo que está más allá de far se ignora, aunque el rayo apunte justo hacia ello.",
+      "当たりは近い順に並ぶ。hit.distance は光線の原点から当たった点までの距離、hit.point はワールドでのその点。near と far は光線の範囲で、far より遠い物は、光線がまっすぐ向いていても無視される。",
+    ),
+    p(
+      "To predict a distance, find the face the ray meets first. A box of size s centered at the origin has its faces at ±s/2 on each axis.",
+      "Para predecir una distancia, busca la cara que el rayo toca primero. Una caja de tamaño s centrada en el origen tiene sus caras en ±s/2 en cada eje.",
+      "距離を予想するには、光線が最初にふれる面を探そう。原点を中心にした大きさ s の箱は、各軸の ±s/2 に面がある。",
+    ),
+    ex(code("const crate = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), new THREE.MeshBasicMaterial());", "crate.updateMatrixWorld();", "const from = new THREE.Vector3(0.3, 0.2, 6), dir = new THREE.Vector3(0, 0, -1);", "const hit = new THREE.Raycaster(from, dir).intersectObject(crate)[0];", "const short = new THREE.Raycaster(from, dir, 0, 4).intersectObject(crate);", "console.log(hit.distance, hit.point.z, short.length);"), "5 1 0",
+      L("The face is at z = 1, 5 away; a ray with far = 4 stops short", "La cara está en z = 1, a 5; un rayo con far = 4 no llega", "面は z = 1 で距離5。far = 4 の光線は届かない")),
+  ),
+  note("recap-render", L("Recap: shadows, types, color", "Repaso: sombras, tipos, color", "復習：影・型・色"),
+    p(
+      "Shadows need four switches: renderer.shadowMap.enabled, castShadow on the light, castShadow on each mesh that throws a shadow and receiveShadow on each surface that shows one. The renderer's switch lives inside shadowMap; the renderer has no castShadow.",
+      "Las sombras piden cuatro interruptores: renderer.shadowMap.enabled, castShadow en la luz, castShadow en cada malla que proyecta sombra y receiveShadow en cada superficie que la muestra. El interruptor del renderer vive dentro de shadowMap; el renderer no tiene castShadow.",
+      "影にはスイッチが4つ必要：renderer.shadowMap.enabled、ライトの castShadow、影を落とすメッシュの castShadow、影を映す面の receiveShadow。レンダラーのスイッチは shadowMap の中にあり、レンダラーに castShadow はない。",
+    ),
+    p(
+      "children is typed as Object3D[], so TypeScript can't know that a child is a Mesh. Narrow it with instanceof THREE.Mesh before using mesh-only fields like geometry or material.",
+      "children tiene tipo Object3D[], así que TypeScript no puede saber que un hijo es una Mesh. Acótalo con instanceof THREE.Mesh antes de usar campos que solo tiene una malla, como geometry o material.",
+      "children の型は Object3D[] なので、子が Mesh かどうか TypeScript にはわからない。geometry や material のようなメッシュ専用の項目を使う前に、instanceof THREE.Mesh で絞りこもう。",
+    ),
+    ex(code("const crate = new THREE.Group();", "crate.add(new THREE.Mesh(new THREE.BoxGeometry()));", "const first = crate.children[0];", "if (first instanceof THREE.Mesh) console.log(first.geometry.type);"), "BoxGeometry",
+      L("After instanceof, tsc knows first is a Mesh", "Tras instanceof, tsc sabe que first es una Mesh", "instanceof のあと、tsc は first を Mesh とわかる")),
+    p(
+      "Textures: color pictures use SRGBColorSpace, data maps (normal, roughness and so on) stay in NoColorSpace. A color picture left untagged looks washed out.",
+      "Texturas: las imágenes de color usan SRGBColorSpace y los mapas de datos (normal, roughness, etc.) se quedan en NoColorSpace. Una imagen de color sin marcar se ve deslavada.",
+      "テクスチャ：色の画像は SRGBColorSpace、データのマップ（法線・roughness など）は NoColorSpace のまま。色の画像を指定し忘れると白っぽくなる。",
+    ),
+  ),
+  note("recap-memory", L("Recap: memory and instancing", "Repaso: memoria e instancias", "復習：メモリとインスタンス"),
+    p(
+      "InstancedMesh draws count copies of one geometry and material in a single draw call. Its instanceMatrix holds count × 16 numbers, one 4×4 matrix per instance. Write them with setMatrixAt and then set needsUpdate = true.",
+      "InstancedMesh dibuja count copias de una geometría y un material en un solo draw call. Su instanceMatrix guarda count × 16 números, una matriz 4×4 por instancia. Escríbelas con setMatrixAt y luego pon needsUpdate = true.",
+      "InstancedMesh は1つの形と素材のコピーを count 個、1回のドローコールで描く。instanceMatrix には count × 16 個の数（インスタンスごとに4×4行列1つ）が入る。setMatrixAt で書いたら needsUpdate = true にしよう。",
+    ),
+    ex(code("const grass = new THREE.InstancedMesh(new THREE.PlaneGeometry(), new THREE.MeshBasicMaterial(), 25);", "console.log(grass.instanceMatrix.array.length);"), "400"),
+    p(
+      "remove() and clear() only detach objects from the tree. GPU memory is released only by dispose() on geometries, materials and textures. When leaving a 3D page or level, traverse the scene and dispose everything, then check renderer.info.memory.",
+      "remove() y clear() solo desconectan objetos del árbol. La memoria de la GPU solo se libera con dispose() en geometrías, materiales y texturas. Al salir de una página o nivel 3D, recorre la escena, libera todo y luego revisa renderer.info.memory.",
+      "remove() と clear() は木から外すだけ。GPU のメモリは、ジオメトリ・マテリアル・テクスチャの dispose() でしか解放されない。3D のページやレベルを出るときは、シーンを回って全部 dispose し、renderer.info.memory を確認しよう。",
+    ),
+  ),
+];
 
 // ─── 3.5 Boss: Frame Dragon ────────────────────────────────────────────────
 const boss: LessonDef = {
@@ -640,22 +1048,23 @@ const boss: LessonDef = {
       "SOY EL DRAGÓN DE FRAMES. Como frames, dejo fugas de memoria y me escondo tras los planos. ¿Tu bucle sobrevivirá?",
       "我はフレームドラゴン。フレームを喰らい、メモリを漏らし、板の裏に隠れる。お前のループは耐えられるか？",
     )),
-    { kind: "predict", time: 15, prompt: PRINT, code: code("const t = new THREE.Timer();", "t.update(0);", "t.update(50);", "console.log(t.getDelta());"), options: ["0.05", "50", "0.5"], answer: 0, output: "0.05", check: { compiles: true, stdout: "0.05" }, explain: L("50 ms between updates is 0.05 seconds.", "50 ms entre updates son 0.05 segundos.", "update の間が 50ms なら 0.05 秒。") },
-    { kind: "pick", time: 12, prompt: L("Frame-rate independent move", "Movimiento independiente de fps", "fps に左右されない動き"), code: "declare const dt: number;\nlet x = 0;\nconst speed = 3;\nx += ___;", options: ["speed * dt", "speed"], answer: 0, check: { compiles: true }, explain: L("Scale by dt so every screen covers the same distance per second.", "Escala por dt para que toda pantalla recorra lo mismo por segundo.", "dt を掛ければ、どの画面でも1秒の移動量が同じ。") },
-    { kind: "predict", time: 15, prompt: L("How many steps of 1/60 s fit?", "¿Cuántos pasos de 1/60 s caben?", "1/60秒の刻みは何回入る？"), code: "let acc = 0.04, steps = 0;\nconst STEP = 1 / 60;\nwhile (acc >= STEP) { acc -= STEP; steps++; }\nconsole.log(steps);", options: ["2", "3", "1"], answer: 0, output: "2", check: { compiles: true, stdout: "2" }, explain: L("A fixed-step accumulator: 0.04 s holds two 1/60 s physics steps; the rest waits.", "Un acumulador de paso fijo: 0.04 s contiene dos pasos de 1/60 s; el resto espera.", "固定ステップの蓄積：0.04秒に1/60秒は2回。残りは次へ持ちこす。") },
-    { kind: "predict", time: 18, prompt: L("A ray too short to reach?", "¿Un rayo demasiado corto?", "届かない短い光線？"), code: code("const box = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());", "box.updateMatrixWorld();", "const from = new THREE.Vector3(0.2, 0.1, 10), dir = new THREE.Vector3(0, 0, -1);", "const long = new THREE.Raycaster(from, dir);", "const short = new THREE.Raycaster(from, dir, 0, 5);", "console.log(long.intersectObject(box).length, short.intersectObject(box).length);"), options: ["1 0", "1 1", "0 0"], answer: 0, output: "1 0", check: { compiles: true, stdout: "1 0" }, explain: L("The box face is 9.5 away; far = 5 stops the short ray before it.", "La cara de la caja está a 9.5; far = 5 frena el rayo corto antes.", "箱の面は 9.5 先。far = 5 の光線は手前で止まる。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: code("const box = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());", "box.updateMatrixWorld();", "const rc = new THREE.Raycaster(new THREE.Vector3(0.2, 0.1, 10), new THREE.Vector3(0, 0, -1));", "const hit = rc.intersectObject(box)[0];", "console.log(hit.distance.toFixed(1), hit.point.z);"), options: ["9.5 0.5", "10 0", "9.5 -0.5"], answer: 0, output: "9.5 0.5", check: { compiles: true, stdout: "9.5 0.5" }, explain: L("The ray meets the front face at z = 0.5, which is 9.5 from its origin at z = 10.", "El rayo toca la cara frontal en z = 0.5, a 9.5 de su origen en z = 10.", "光線は z = 0.5 の前面に当たる。原点 z = 10 から 9.5 の距離。") },
-    { kind: "pick", time: 15, prompt: L("Flags on, still no shadows. Missing:", "Banderas listas, sin sombras. Falta:", "フラグは全部オン、でも影なし。足りないのは？"), code: code("declare const renderer: THREE.WebGLRenderer;", "// light.castShadow, mesh.castShadow, floor.receiveShadow: true", "renderer.___ = true;"), options: ["shadowMap.enabled", "castShadow"], answer: 0, check: { compiles: true, wrongFail: true }, explain: L("The renderer must enable its shadow map too; it has no castShadow.", "El renderer también debe activar su shadowMap; no tiene castShadow.", "レンダラーも shadowMap を有効に。castShadow はレンダラーにはない。") },
-    { kind: "predict", time: 15, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: code("const group = new THREE.Group();", "const first: THREE.Mesh = group.children[0];"), options: [YES, L("No: children are Object3D", "No: children son Object3D", "いいえ：子は Object3D")], answer: 1, check: { compiles: false }, explain: L("TS2739: children are typed Object3D. Narrow with instanceof THREE.Mesh first.", "TS2739: children son Object3D. Primero acota con instanceof THREE.Mesh.", "TS2739：children は Object3D 型。まず instanceof THREE.Mesh で絞ろう。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: code("const im = new THREE.InstancedMesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial(), 100);", "console.log(im.instanceMatrix.array.length);"), options: ["1600", "100", "400"], answer: 0, output: "1600", check: { compiles: true, stdout: "1600" }, explain: L("100 instances × 16 numbers per 4×4 matrix.", "100 instancias × 16 números por matriz 4×4.", "100個 × 4×4行列の16個。") },
-    { kind: "pick", time: 15, prompt: L("A route change leaks GPU memory. Fix:", "Un cambio de ruta fuga memoria. Arreglo:", "画面遷移でメモリリーク。直し方は？"), code: "// leaving the 3D page: ___", options: [L("dispose geometries, materials, textures", "dispose de geometrías, materiales y texturas", "形・素材・テクスチャを dispose"), L("only scene.clear()", "solo scene.clear()", "scene.clear() だけ")], answer: 0, explain: L("clear() just detaches children; GPU resources die only with dispose().", "clear() solo desconecta a los hijos; los recursos de GPU mueren solo con dispose().", "clear() は子を外すだけ。GPU 資源は dispose() でしか消えない。") },
-    { kind: "type", time: 15, prompt: L("Tag the photo texture as sRGB", "Marca la textura de foto como sRGB", "写真テクスチャを sRGB に"), code: code("const photo = new THREE.Texture();", "photo.colorSpace = THREE.___;", "console.log(photo.colorSpace);"), answer: "SRGBColorSpace", check: { compiles: true, stdout: "srgb" }, explain: L("Colour maps are sRGB; untagged they look washed out.", "Los mapas de color son sRGB; sin marcar se ven deslavados.", "色テクスチャは sRGB。指定しないと白っぽくなる。") },
+    { hint: L("update() takes milliseconds; getDelta() gives seconds. How long was the gap?", "update() recibe milisegundos; getDelta() da segundos. ¿Cuánto duró el intervalo?", "update() はミリ秒、getDelta() は秒。間隔はどれだけ？"), note: "recap-time", kind: "predict", time: 15, prompt: PRINT, code: code("const t = new THREE.Timer();", "t.update(0);", "t.update(50);", "console.log(t.getDelta());"), options: ["0.05", "50", "0.5"], answer: 0, output: "0.05", check: { compiles: true, stdout: "0.05" }, explain: L("50 ms between updates is 0.05 seconds.", "50 ms entre updates son 0.05 segundos.", "update の間が 50ms なら 0.05 秒。") },
+    { hint: L("Which option gives the same distance per second at any frame rate?", "¿Qué opción da la misma distancia por segundo a cualquier frame rate?", "どの fps でも1秒の移動量が同じになるのはどっち？"), note: "recap-time", kind: "pick", time: 12, prompt: L("Frame-rate independent move", "Movimiento independiente de fps", "fps に左右されない動き"), code: "declare const dt: number;\nlet x = 0;\nconst speed = 3;\nx += ___;", options: ["speed * dt", "speed"], answer: 0, check: { compiles: true }, explain: L("Scale by dt so every screen covers the same distance per second.", "Escala por dt para que toda pantalla recorra lo mismo por segundo.", "dt を掛ければ、どの画面でも1秒の移動量が同じ。") },
+    { hint: L("Subtract 1/60 (about 0.0167) from 0.04 while it still fits. Count the subtractions.", "Resta 1/60 (unos 0.0167) a 0.04 mientras quepa. Cuenta las restas.", "0.04 から 1/60（約0.0167）を引けるだけ引こう。何回引けた？"), note: "recap-time", kind: "predict", time: 15, prompt: L("How many steps of 1/60 s fit?", "¿Cuántos pasos de 1/60 s caben?", "1/60秒の刻みは何回入る？"), code: "let acc = 0.04, steps = 0;\nconst STEP = 1 / 60;\nwhile (acc >= STEP) { acc -= STEP; steps++; }\nconsole.log(steps);", options: ["2", "3", "1"], answer: 0, output: "2", check: { compiles: true, stdout: "2" }, explain: L("A fixed-step accumulator: 0.04 s holds two 1/60 s physics steps; the rest waits.", "Un acumulador de paso fijo: 0.04 s contiene dos pasos de 1/60 s; el resto espera.", "固定ステップの蓄積：0.04秒に1/60秒は2回。残りは次へ持ちこす。") },
+    { hint: L("How far is the box face from the ray's origin, and where does the short ray stop?", "¿A qué distancia del origen del rayo está la cara de la caja y dónde se detiene el rayo corto?", "箱の面は光線の原点からどれだけ先？短い光線はどこで止まる？"), note: "recap-rays", kind: "predict", time: 18, prompt: L("A ray too short to reach?", "¿Un rayo demasiado corto?", "届かない短い光線？"), code: code("const box = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());", "box.updateMatrixWorld();", "const from = new THREE.Vector3(0.2, 0.1, 10), dir = new THREE.Vector3(0, 0, -1);", "const long = new THREE.Raycaster(from, dir);", "const short = new THREE.Raycaster(from, dir, 0, 5);", "console.log(long.intersectObject(box).length, short.intersectObject(box).length);"), options: ["1 0", "1 1", "0 0"], answer: 0, output: "1 0", check: { compiles: true, stdout: "1 0" }, explain: L("The box face is 9.5 away; far = 5 stops the short ray before it.", "La cara de la caja está a 9.5; far = 5 frena el rayo corto antes.", "箱の面は 9.5 先。far = 5 の光線は手前で止まる。") },
+    { hint: L("Where is the front face of a size-1 box at the origin? Distance counts from the ray's origin.", "¿Dónde está la cara frontal de una caja de tamaño 1 en el origen? La distancia cuenta desde el origen del rayo.", "原点にある大きさ1の箱の前面はどこ？距離は光線の原点から測る。"), note: "recap-rays", kind: "predict", time: 15, prompt: PRINT, code: code("const box = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());", "box.updateMatrixWorld();", "const rc = new THREE.Raycaster(new THREE.Vector3(0.2, 0.1, 10), new THREE.Vector3(0, 0, -1));", "const hit = rc.intersectObject(box)[0];", "console.log(hit.distance.toFixed(1), hit.point.z);"), options: ["9.5 0.5", "10 0", "9.5 -0.5"], answer: 0, output: "9.5 0.5", check: { compiles: true, stdout: "9.5 0.5" }, explain: L("The ray meets the front face at z = 0.5, which is 9.5 from its origin at z = 10.", "El rayo toca la cara frontal en z = 0.5, a 9.5 de su origen en z = 10.", "光線は z = 0.5 の前面に当たる。原点 z = 10 から 9.5 の距離。") },
+    { hint: L("The light and meshes are ready. The renderer has its own switch, inside a sub-object.", "La luz y las mallas están listas. El renderer tiene su propio interruptor, dentro de un subobjeto.", "ライトとメッシュは準備完了。レンダラーにも専用のスイッチがある。"), note: "recap-render", kind: "pick", time: 15, prompt: L("Flags on, still no shadows. Missing:", "Banderas listas, sin sombras. Falta:", "フラグは全部オン、でも影なし。足りないのは？"), code: code("declare const renderer: THREE.WebGLRenderer;", "// light.castShadow, mesh.castShadow, floor.receiveShadow: true", "renderer.___ = true;"), options: ["shadowMap.enabled", "castShadow"], answer: 0, check: { compiles: true, wrongFail: true }, explain: L("The renderer must enable its shadow map too; it has no castShadow.", "El renderer también debe activar su shadowMap; no tiene castShadow.", "レンダラーも shadowMap を有効に。castShadow はレンダラーにはない。") },
+    { hint: L("What type does tsc give the items in children? Is every Object3D a Mesh?", "¿Qué tipo da tsc a los elementos de children? ¿Todo Object3D es una Mesh?", "tsc は children の中身をどんな型と見る？Object3D はみな Mesh？"), note: "recap-render", kind: "predict", time: 15, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: code("const group = new THREE.Group();", "const first: THREE.Mesh = group.children[0];"), options: [YES, L("No: children are Object3D", "No: children son Object3D", "いいえ：子は Object3D")], answer: 1, check: { compiles: false }, explain: L("TS2739: children are typed Object3D. Narrow with instanceof THREE.Mesh first.", "TS2739: children son Object3D. Primero acota con instanceof THREE.Mesh.", "TS2739：children は Object3D 型。まず instanceof THREE.Mesh で絞ろう。") },
+    { hint: L("Each instance has a 4×4 matrix. Multiply by the number of instances.", "Cada instancia tiene una matriz 4×4. Multiplica por la cantidad de instancias.", "各インスタンスは4×4行列を持つ。インスタンス数を掛けよう。"), note: "recap-memory", kind: "predict", time: 12, prompt: PRINT, code: code("const im = new THREE.InstancedMesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial(), 100);", "console.log(im.instanceMatrix.array.length);"), options: ["1600", "100", "400"], answer: 0, output: "1600", check: { compiles: true, stdout: "1600" }, explain: L("100 instances × 16 numbers per 4×4 matrix.", "100 instancias × 16 números por matriz 4×4.", "100個 × 4×4行列の16個。") },
+    { hint: L("clear() detaches. What actually releases GPU resources?", "clear() desconecta. ¿Qué libera de verdad los recursos de la GPU?", "clear() は外すだけ。GPU 資源を本当に解放するのは？"), note: "recap-memory", kind: "pick", time: 15, prompt: L("A route change leaks GPU memory. Fix:", "Un cambio de ruta fuga memoria. Arreglo:", "画面遷移でメモリリーク。直し方は？"), code: "// leaving the 3D page: ___", options: [L("dispose geometries, materials, textures", "dispose de geometrías, materiales y texturas", "形・素材・テクスチャを dispose"), L("only scene.clear()", "solo scene.clear()", "scene.clear() だけ")], answer: 0, explain: L("clear() just detaches children; GPU resources die only with dispose().", "clear() solo desconecta a los hijos; los recursos de GPU mueren solo con dispose().", "clear() は子を外すだけ。GPU 資源は dispose() でしか消えない。") },
+    { hint: L("Photos are color images. Which color space constant marks a color image?", "Las fotos son imágenes de color. ¿Qué constante de espacio de color marca una imagen de color?", "写真は色の画像。色の画像を表す色空間の定数は？"), note: "recap-render", kind: "type", time: 15, prompt: L("Tag the photo texture as sRGB", "Marca la textura de foto como sRGB", "写真テクスチャを sRGB に"), code: code("const photo = new THREE.Texture();", "photo.colorSpace = THREE.___;", "console.log(photo.colorSpace);"), answer: "SRGBColorSpace", check: { compiles: true, stdout: "srgb" }, explain: L("Colour maps are sRGB; untagged they look washed out.", "Los mapas de color son sRGB; sin marcar se ven deslavados.", "色テクスチャは sRGB。指定しないと白っぽくなる。") },
     enemySays(L(
       "My frames... steady at last. Your loop is clean, your memory swept. The scene is yours, director.",
       "Mis frames... por fin estables. Tu bucle está limpio y tu memoria barrida. La escena es tuya.",
       "我がフレームが…ついに安定した。ループは清く、メモリも片づいた。このシーンはお前のものだ、監督よ。",
     )),
   ],
+  notes: bossNotes,
 };
 
 export const loopTower: RegionDef = {

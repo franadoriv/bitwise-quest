@@ -1,4 +1,4 @@
-import type { LessonDef, RegionDef } from "../../../lib/content/types.ts";
+import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L, say, enemySays } from "../../rust/helpers.ts";
 
 // REGION 2 · FOLD FOREST  (recursion, higher-order functions, currying and composition, folds)
@@ -9,6 +9,106 @@ const YES = L("Yes", "Sí", "はい");
 const NO_GHC = L("No: GHC stops it", "No: GHC lo detiene", "いいえ：GHC が止める");
 const NO_COMPILE = L("Compile error", "Error de compilación", "コンパイルエラー");
 
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example; the validator checks `output` against the real compiler. */
+const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code, output, caption });
+/** An example that must NOT compile (verified too). */
+const bad = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: false } });
+/** Code shown but never run (for example, a recursion that would never stop). */
+const shown = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption });
+
+const recursionNotes: NoteDef[] = [
+  note("base-and-step", L("Recursion: base case and step", "Recursión: caso base y paso", "再帰：基底ケースとステップ"),
+    p(
+      "Haskell has no for or while loops. To repeat work, a function calls itself on a smaller input. Every recursive function needs two parts: a base case that answers directly for the smallest input (often [] or 0), and a step that does a little work and asks itself about the rest.",
+      "Haskell no tiene bucles for ni while. Para repetir trabajo, una función se llama a sí misma con una entrada más pequeña. Toda función recursiva necesita dos partes: un caso base que responde directo para la entrada más pequeña (a menudo [] o 0) y un paso que hace un poco de trabajo y se pregunta por el resto.",
+      "Haskell には for も while もない。くり返すには、関数が小さくした入力で自分自身を呼ぶ。再帰関数には2つの部品が必要：いちばん小さい入力（よく [] や 0）に直接答える「基底ケース」と、少し仕事をして残りを自分に聞く「ステップ」じゃ。",
+    ),
+    ex("total :: [Int] -> Int\ntotal [] = 0\ntotal (x:rest) = x + total rest\n\nmain = print (total [4,5,6])", "15",
+      L("Base case for [], step for (x:rest)", "Caso base para [], paso para (x:rest)", "[] が基底ケース、(x:rest) がステップ")),
+    p(
+      "To follow a call, expand it by hand: total [4,5,6] = 4 + total [5,6] = 4 + (5 + total [6]) = 4 + (5 + (6 + total [])) = 4 + (5 + (6 + 0)) = 15. Each call waits for the one below it, and the base case is where the waiting ends.",
+      "Para seguir una llamada, desarróllala a mano: total [4,5,6] = 4 + total [5,6] = 4 + (5 + total [6]) = 4 + (5 + (6 + total [])) = 4 + (5 + (6 + 0)) = 15. Cada llamada espera a la de abajo, y el caso base es donde termina la espera.",
+      "呼び出しを追うには手で展開しよう：total [4,5,6] = 4 + total [5,6] = 4 + (5 + total [6]) = 4 + (5 + (6 + total [])) = 4 + (5 + (6 + 0)) = 15。各呼び出しは下の呼び出しを待ち、基底ケースで待ちが終わる。",
+    ),
+    p(
+      "The step can build lists too: put something at the front with : and recurse on the rest. A function can also have two base cases, or a base case that isn't empty, like a one-item list [x], when the empty case has no sensible answer (the biggest item of nothing).",
+      "El paso también puede armar listas: pon algo al frente con : y recurre sobre el resto. Una función también puede tener dos casos base, o un caso base que no es vacío, como una lista de un objeto [x], cuando el caso vacío no tiene respuesta sensata (el mayor de nada).",
+      "ステップでリストも作れる。: で先頭に何かを置き、残りで再帰する。基底ケースが2つある関数もあるし、空リストに意味のある答えがないとき（何もない中の最大値など）は、[x] のような1個のリストを基底ケースにすることもある。",
+    ),
+    ex("doubleAll :: [Int] -> [Int]\ndoubleAll [] = []\ndoubleAll (x:rest) = x * 2 : doubleAll rest\n\nmain = print (doubleAll [1,5,7])", "[2,10,14]",
+      L("Each step puts one result at the front", "Cada paso pone un resultado al frente", "ステップごとに結果をひとつ先頭へ")),
+    p(
+      "Rule: write the base case first, then make sure every step moves closer to it (a shorter list, a smaller number). Common mistake: forgetting to use the item you removed. A step like f (_:xs) = f xs walks the whole list but never counts anything, so it always returns the base value.",
+      "Regla: escribe primero el caso base y asegúrate de que cada paso se acerque a él (una lista más corta, un número menor). Error común: olvidar usar el objeto que quitaste. Un paso como f (_:xs) = f xs recorre toda la lista pero nunca cuenta nada, así que siempre devuelve el valor base.",
+      "ルール：まず基底ケースを書き、どのステップも必ずそこへ近づく（リストが短く、数が小さくなる）ようにする。よくあるミス：取り出した要素を使い忘れること。f (_:xs) = f xs はリストを最後まで歩くが何も数えないので、いつも基底の値を返す。",
+    ),
+  ),
+  note("no-base-case", L("No base case, no end", "Sin caso base, no hay fin", "基底ケースなしは終わらない"),
+    p(
+      "If there is no base case, or the steps never reach it, the function calls itself forever. It still compiles: GHC can't tell in general whether a recursion ends. When it runs, it eats time and memory until it crashes with a stack overflow or the sandbox kills it.",
+      "Si no hay caso base, o los pasos nunca llegan a él, la función se llama a sí misma para siempre. Igual compila: en general GHC no puede saber si una recursión termina. Al ejecutarse, consume tiempo y memoria hasta caer por desbordamiento de pila o hasta que el sandbox la mata.",
+      "基底ケースがないか、ステップがそこへ届かないと、関数は永遠に自分を呼び続ける。それでもコンパイルは通る。再帰が終わるかどうかは、一般に GHC には判断できないからじゃ。実行すると時間とメモリを食いつぶし、スタックオーバーフローかサンドボックスに止められる。",
+    ),
+    shown("forever :: Int -> Int\nforever n = forever (n + 1)",
+      L("Never stops: no equation answers directly", "Nunca para: ninguna ecuación responde directo", "止まらない：直接答える式がない")),
+    p(
+      "There are two ways to get stuck. One is no base case at all. The other is a base case the steps skip over: counting down by 2 from an odd number never lands exactly on 0, and calling a countdown with a negative number moves away from 0 instead of toward it.",
+      "Hay dos formas de atascarse. Una es no tener caso base. La otra es un caso base que los pasos se saltan: contar hacia abajo de 2 en 2 desde un impar nunca cae justo en 0, y llamar una cuenta regresiva con un número negativo se aleja de 0 en vez de acercarse.",
+      "ハマり方は2つ。ひとつは基底ケースがまったくないこと。もうひとつは、ステップが基底ケースを飛びこしてしまうこと。奇数から 2 ずつ減らしても 0 にぴったり止まらないし、負の数でカウントダウンを呼ぶと 0 から遠ざかっていく。",
+    ),
+    p(
+      "Rule: before running, check two things: is there an equation that answers without calling itself, and does every step get closer to it for every input you will pass? A guard like | n <= 0 makes the base case catch everything at or below the bottom.",
+      "Regla: antes de ejecutar, revisa dos cosas: ¿hay una ecuación que responde sin llamarse a sí misma? ¿Y cada paso se acerca a ella para toda entrada que vayas a pasar? Una guarda como | n <= 0 hace que el caso base atrape todo lo que esté en el fondo o por debajo.",
+      "ルール：実行前に2つ確かめよう。自分を呼ばずに答える式はあるか。渡すどの入力でも、ステップがそこへ近づくか。| n <= 0 のようなガードにすれば、底以下の値を全部基底ケースが受け止める。",
+    ),
+    ex("countDown :: Int -> [Int]\ncountDown n\n  | n <= 0 = []\n  | otherwise = n : countDown (n - 2)\n\nmain = print (countDown 5)", "[5,3,1]",
+      L("<= 0 stops it even when 0 is skipped", "<= 0 lo detiene aunque se salte el 0", "0 を飛びこしても <= 0 で止まる")),
+  ),
+  note("accumulator", L("Accumulators with go", "Acumuladores con go", "go とアキュムレータ"),
+    p(
+      "Another style carries the answer along. A helper, usually called go, takes an extra argument, the accumulator, that holds the result so far. Each step updates it, and when the base case is reached, the accumulator already holds the answer and is simply returned.",
+      "Otro estilo lleva la respuesta consigo. Un ayudante, normalmente llamado go, recibe un argumento extra, el acumulador, que guarda el resultado hasta ahora. Cada paso lo actualiza, y al llegar al caso base el acumulador ya tiene la respuesta y simplemente se devuelve.",
+      "答えを運びながら進むやり方もある。ふつう go と呼ぶ補助関数が、ここまでの結果を持つ「アキュムレータ」という引数を余分に受け取る。ステップごとに更新し、基底ケースに着いたらアキュムレータがもう答えなので、それを返すだけ。",
+    ),
+    ex("sumSquares :: Int -> Int\nsumSquares n = go 0 n\n  where\n    go acc 0 = acc\n    go acc k = go (acc + k * k) (k - 1)\n\nmain = print (sumSquares 3)", "14",
+      L("acc collects 9, then 4, then 1", "acc junta 9, luego 4, luego 1", "acc に 9、4、1 がたまる")),
+    p(
+      "Trace it: go 0 3 → go 9 2 → go 13 1 → go 14 0 → 14. go lives in a where block, so only sumSquares can see it, and sumSquares picks the starting value. That start matters: 0 for sums, 1 for products, [] for building lists.",
+      "Síguelo: go 0 3 → go 9 2 → go 13 1 → go 14 0 → 14. go vive en un bloque where, así que solo sumSquares lo ve, y sumSquares elige el valor inicial. Ese inicio importa: 0 para sumas, 1 para productos, [] para armar listas.",
+      "追ってみよう：go 0 3 → go 9 2 → go 13 1 → go 14 0 → 14。go は where の中にあるので sumSquares からしか見えず、初期値も sumSquares が決める。初期値は大事：和なら 0、積なら 1、リストを作るなら []。",
+    ),
+    p(
+      "Common mistake: the wrong starting value. A product that starts at 0 gives 0 every time, because anything times 0 is 0. Also make sure the counter in the step really moves toward the base case, or the helper never stops.",
+      "Error común: el valor inicial equivocado. Un producto que empieza en 0 da 0 siempre, porque cualquier cosa por 0 es 0. Asegúrate también de que el contador del paso avance de verdad hacia el caso base, o el ayudante nunca para.",
+      "よくあるミス：初期値のまちがい。積を 0 から始めると、何に 0 をかけても 0 なので、いつも 0 になる。また、ステップのカウンターが本当に基底ケースへ近づいているかも確かめよう。でないと go は止まらない。",
+    ),
+  ),
+  note("int-overflow", L("Int overflows silently", "Int se desborda en silencio", "Int は黙ってあふれる"),
+    p(
+      "Recursive answers grow fast: factorials, powers, Fibonacci numbers. An Int holds whole numbers up to about 9.2 × 10^18, 19 digits. Past that it doesn't stop or warn: it wraps around and gives a wrong number, sometimes even a negative one.",
+      "Las respuestas recursivas crecen rápido: factoriales, potencias, números de Fibonacci. Un Int guarda enteros hasta unos 9.2 × 10^18, 19 dígitos. Más allá no se detiene ni avisa: da la vuelta y entrega un número erróneo, a veces incluso negativo.",
+      "再帰の答えはすぐ大きくなる：階乗、べき乗、フィボナッチ数。Int に入るのは約 9.2 × 10^18（19 桁）まで。それをこえても止まらず警告もなく、値が回りこんでまちがった数、ときには負の数になる。",
+    ),
+    ex("powInt :: Int -> Int\npowInt 0 = 1\npowInt n = 10 * powInt (n - 1)\n\nmain = do\n  print (powInt 18)\n  print (powInt 19)", "1000000000000000000\n-8446744073709551616",
+      L("10^19 doesn't fit in an Int", "10^19 no cabe en un Int", "10^19 は Int に入らない")),
+    p(
+      "Integer has no limit, so the same function with Integer in the signature gives the exact answer. Nothing else changes: same equations, same calls.",
+      "Integer no tiene límite, así que la misma función con Integer en la firma da la respuesta exacta. Nada más cambia: mismas ecuaciones, mismas llamadas.",
+      "Integer には上限がないので、シグネチャを Integer にするだけで同じ関数が正確な答えを出す。ほかは何も変えない。式も呼び出しも同じ。",
+    ),
+    ex("powBig :: Integer -> Integer\npowBig 0 = 1\npowBig n = 10 * powBig (n - 1)\n\nmain = print (powBig 19)", "10000000000000000000"),
+    p(
+      "Rule: Int for counting and positions; Integer when the result can grow without bound. A wrong number with no error message is the sign of an overflow, so when big results look strange, check the signature first.",
+      "Regla: Int para contar y posiciones; Integer cuando el resultado puede crecer sin límite. Un número erróneo sin mensaje de error es la señal de un desbordamiento; si un resultado grande se ve raro, revisa primero la firma.",
+      "ルール：数えるだけ・位置なら Int、結果がどこまでも大きくなるなら Integer。エラーなしでおかしな数が出たらオーバーフローのしるし。大きな結果が変なら、まずシグネチャを確かめよう。",
+    ),
+  ),
+];
+
 // ─── 2.1 The owl that asks itself ──────────────────────────────────────────
 const recursion: LessonDef = {
   slug: "recursion",
@@ -18,6 +118,7 @@ const recursion: LessonDef = {
   xp: 65,
   enemy: "ghost",
   enemyName: L("ECHO GHOST", "FANTASMA ECO", "こだまゴースト"),
+  notes: recursionNotes,
   beats: [
     say(L(
       "Haskell has no loops. Instead, a function calls ITSELF on a smaller input, until a BASE CASE answers directly.",
@@ -36,6 +137,8 @@ const recursion: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Expand it by hand: each step adds 1 and asks about the rest, until the empty list answers.", "Desarróllalo a mano: cada paso suma 1 y pregunta por el resto, hasta que responde la lista vacía.", "手で展開しよう。1 足して残りを聞き、空リストが答えるまで続く。"),
+      note: "base-and-step",
       code: "len :: [a] -> Int\nlen [] = 0\nlen (_:xs) = 1 + len xs\n\nmain = print (len \"owl\")",
       options: ["3", "0", "1"],
       answer: 0,
@@ -47,6 +150,8 @@ const recursion: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Multiply n by the answer for n - 1, all the way down to the base case.", "Multiplica n por la respuesta de n - 1, hasta llegar al caso base.", "n に n - 1 の答えをかける。基底ケースまで続けよう。"),
+      note: "base-and-step",
       code: "fact :: Integer -> Integer\nfact 0 = 1\nfact n = n * fact (n - 1)\n\nmain = print (fact 5)",
       options: ["120", "15", "24"],
       answer: 0,
@@ -63,6 +168,8 @@ const recursion: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("The true answer has 26 digits. How many fit in an Int, and what happens past that?", "La respuesta real tiene 26 dígitos. ¿Cuántos caben en un Int y qué pasa más allá?", "本当の答えは 26 桁。Int には何桁入る？こえたらどうなる？"),
+      note: "int-overflow",
       code: "factInt :: Int -> Int\nfactInt 0 = 1\nfactInt n = n * factInt (n - 1)\n\nmain = print (factInt 25)",
       options: ["7034535277573963776", "15511210043330985984000000", L("An overflow error", "Un error de desbordamiento", "オーバーフローのエラー")],
       answer: 0,
@@ -74,6 +181,8 @@ const recursion: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Each step puts n at the front of the rest; then the base case adds its own list at the end.", "Cada paso pone n al frente del resto; luego el caso base agrega su propia lista al final.", "毎回 n を残りの先頭に置き、最後に基底ケースが自分のリストを足す。"),
+      note: "base-and-step",
       code: "countdown :: Int -> [Int]\ncountdown 0 = [0]\ncountdown n = n : countdown (n - 1)\n\nmain = print (countdown 3)",
       options: ["[3,2,1,0]", "[0,1,2,3]", "[3,2,1]"],
       answer: 0,
@@ -90,6 +199,8 @@ const recursion: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("go adds k to the running total and counts down. What does acc hold when k reaches 0?", "go suma k al total parcial y cuenta hacia abajo. ¿Qué tiene acc cuando k llega a 0?", "go は k を合計に足して数を減らす。k が 0 のとき acc は？"),
+      note: "accumulator",
       code: "sumTo :: Int -> Int\nsumTo n = go 0 n\n  where\n    go acc 0 = acc\n    go acc k = go (acc + k) (k - 1)\n\nmain = print (sumTo 100)",
       options: ["5050", "100", "0"],
       answer: 0,
@@ -101,6 +212,8 @@ const recursion: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("The one-item list is the base case. Each step keeps the larger of x and the best of the rest.", "La lista de un objeto es el caso base. Cada paso se queda con el mayor entre x y lo mejor del resto.", "1個のリストが基底ケース。毎回 x と残りの最大のうち大きいほうを残す。"),
+      note: "base-and-step",
       code: "myMax :: [Int] -> Int\nmyMax [x] = x\nmyMax (x:xs) = max x (myMax xs)\n\nmain = print (myMax [3,9,2])",
       options: ["9", "3", "2"],
       answer: 0,
@@ -112,6 +225,8 @@ const recursion: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Write the sequence from the two base cases: each number is the sum of the two before it.", "Escribe la secuencia desde los dos casos base: cada número es la suma de los dos anteriores.", "2つの基底ケースから数列を書こう。各数は前の2つの和。"),
+      note: "base-and-step",
       code: "fib :: Int -> Int\nfib 0 = 0\nfib 1 = 1\nfib n = fib (n - 1) + fib (n - 2)\n\nmain = print (fib 10)",
       options: ["55", "89", "10"],
       answer: 0,
@@ -123,6 +238,8 @@ const recursion: LessonDef = {
     {
       kind: "pick",
       prompt: L("No base case. What happens on fact 3?", "Sin caso base. ¿Qué pasa con fact 3?", "基底ケースなし。fact 3 はどうなる？"),
+      hint: L("Is there an equation that stops the calls? And does GHC check whether a recursion ends?", "¿Hay alguna ecuación que detenga las llamadas? ¿Y GHC revisa si una recursión termina?", "呼び出しを止める式はある？GHC は再帰が終わるか確かめる？"),
+      note: "no-base-case",
       code: "fact :: Integer -> Integer\nfact n = n * fact (n - 1)\n-- fact 3 = 3 * fact 2 = ... ___",
       options: [
         L("never stops: runs out of time or memory", "nunca para: se queda sin tiempo o memoria", "止まらない：時間かメモリが尽きる"),
@@ -136,6 +253,8 @@ const recursion: LessonDef = {
     {
       kind: "order",
       prompt: L("Put len in order", "Ordena len", "len を正しい順に"),
+      hint: L("Signature first, then the case that answers directly, then the step that recurses.", "Primero la firma, luego el caso que responde directo y después el paso que se llama a sí mismo.", "シグネチャ、直接答える式、自分を呼ぶ式の順。"),
+      note: "base-and-step",
       lines: ["len :: [a] -> Int", "len [] = 0", "len (_:xs) = 1 + len xs"],
       check: { compiles: true, stdout: "4", program: "len :: [a] -> Int\nlen [] = 0\nlen (_:xs) = 1 + len xs\n\nmain = print (len \"owls\")\n" },
       explain: L("Signature, then the base case, then the step that recurses on the rest.", "La firma, luego el caso base y después el paso que se llama con el resto.", "シグネチャ、基底ケース、残りで自分を呼ぶ式の順。"),
@@ -143,6 +262,8 @@ const recursion: LessonDef = {
     {
       kind: "run",
       prompt: L("Fix the count: it must print length: 4", "Arregla la cuenta: debe imprimir length: 4", "数え方を直して length: 4 と表示"),
+      hint: L("The step removes one item but never counts it. Where should that missing 1 go?", "El paso quita un objeto pero nunca lo cuenta. ¿Dónde debería ir ese 1 que falta?", "ステップは1個取り除くのに数えていない。足りない 1 はどこに？"),
+      note: "base-and-step",
       starter: "myLength :: [a] -> Int\nmyLength [] = 0\nmyLength (_:xs) = myLength xs\n\nmain :: IO ()\nmain = putStrLn (\"length: \" ++ show (myLength \"owls\"))\n",
       solution: "myLength :: [a] -> Int\nmyLength [] = 0\nmyLength (_:xs) = 1 + myLength xs\n\nmain :: IO ()\nmain = putStrLn (\"length: \" ++ show (myLength \"owls\"))\n",
       expect: "length: 4",
@@ -151,6 +272,88 @@ const recursion: LessonDef = {
     },
   ],
 };
+
+const higherOrderNotes: NoteDef[] = [
+  note("map-lambda", L("map and lambdas", "map y lambdas", "map とラムダ"),
+    p(
+      "Functions are values: you can hand one to another function, just like a number or a list. map f xs applies f to every item of xs and collects the results in a new list of the same length. The original list is not changed.",
+      "Las funciones son valores: puedes pasarle una a otra función, igual que un número o una lista. map f xs aplica f a cada objeto de xs y junta los resultados en una lista nueva del mismo largo. La lista original no cambia.",
+      "関数も値なので、数やリストと同じように別の関数に渡せる。map f xs は xs の全要素に f を当てはめ、結果を同じ長さの新しいリストに集める。元のリストは変わらない。",
+    ),
+    ex("print (map negate [1,2,3])\nprint (map length [\"hi\", \"owl\"])", "[-1,-2,-3]\n[2,3]",
+      L("Any one-argument function can ride on map", "Cualquier función de un argumento sirve con map", "1引数の関数なら何でも map に渡せる")),
+    p(
+      "A lambda is a function with no name, written right where you need it: \\n -> n + 1 reads \"takes n, gives n + 1\". The backslash stands for the Greek letter λ. Lambdas save you from defining a named function for a one-time job. Wrap them in parentheses when you pass them.",
+      "Una lambda es una función sin nombre, escrita justo donde la necesitas: \\n -> n + 1 se lee \"recibe n, da n + 1\". La barra invertida representa la letra griega λ. Las lambdas te ahorran definir una función con nombre para un uso único. Ponlas entre paréntesis al pasarlas.",
+      "ラムダは名前のない関数で、使う場所にその場で書く：\\n -> n + 1 は「n を受け取り n + 1 を返す」。バックスラッシュはギリシャ文字 λ のかわり。一度しか使わない関数に名前をつけずにすむ。渡すときはかっこで包もう。",
+    ),
+    ex("print (map (\\n -> n * n + 1) [1,2,3])", "[2,5,10]"),
+    p(
+      "A lambda's argument can be a pattern, just like in equations: \\(name, age) -> age takes a pair apart. That's handy for lists of pairs. Use _ for the parts you don't need.",
+      "El argumento de una lambda puede ser un patrón, igual que en las ecuaciones: \\(name, age) -> age separa un par. Es práctico con listas de pares. Usa _ para las partes que no necesitas.",
+      "ラムダの引数も、式と同じようにパターンにできる：\\(name, age) -> age はペアを分ける。ペアのリストに便利。いらない部分は _ にしよう。",
+    ),
+    ex("print (map (\\(_, age) -> age + 1) [(\"ana\", 30), (\"bo\", 7)])", "[31,8]",
+      L("The pattern splits each pair", "El patrón separa cada par", "パターンで各ペアを分ける")),
+    p(
+      "Rule: map keeps the length and transforms every item; the lambda says how. To predict a map, apply the function to the first item, then the second, and so on, and write the results in the same order.",
+      "Regla: map conserva el largo y transforma cada objeto; la lambda dice cómo. Para predecir un map, aplica la función al primer objeto, luego al segundo, y así, y escribe los resultados en el mismo orden.",
+      "ルール：map は長さを保ったまま全要素を変換し、変換のしかたはラムダが決める。map を予想するには、1つ目、2つ目…と順に関数を当てはめ、同じ順で結果を書こう。",
+    ),
+  ),
+  note("filter-family", L("filter, takeWhile, any and all", "filter, takeWhile, any y all", "filter・takeWhile・any・all"),
+    p(
+      "filter test xs keeps only the items for which test gives True, in their original order. The test is any function that returns a Bool: even, odd, a comparison like (> 3), or a lambda.",
+      "filter prueba xs deja solo los objetos para los que la prueba da True, en su orden original. La prueba es cualquier función que devuelva un Bool: even, odd, una comparación como (> 3) o una lambda.",
+      "filter 条件 xs は、条件が True を返す要素だけを元の順番で残す。条件は Bool を返す関数なら何でもいい：even、odd、(> 3) のような比較、ラムダなど。",
+    ),
+    ex("print (filter (\\w -> length w > 2) [\"a\", \"owl\", \"be\", \"tree\"])", "[\"owl\",\"tree\"]"),
+    p(
+      "takeWhile keeps items from the front WHILE the test holds and stops at the first failure, even if later items would pass. dropWhile drops that same front part and keeps everything from the first failure on. filter, instead, looks at every item.",
+      "takeWhile toma objetos desde el frente MIENTRAS la prueba se cumple y para en el primer fallo, aunque objetos posteriores pasaran. dropWhile quita esa misma parte del frente y deja todo desde el primer fallo. filter, en cambio, mira todos los objetos.",
+      "takeWhile は条件が成り立つ間だけ先頭から取り、最初に外れたところで止まる。後ろに条件を満たす要素があっても見ない。dropWhile はその先頭部分を捨て、最初に外れた要素から後ろを全部残す。filter は全要素を調べる。",
+    ),
+    ex("let xs = [2,4,7,8]\nprint (takeWhile even xs, dropWhile even xs, filter even xs)", "([2,4],[7,8],[2,4,8])",
+      L("7 stops takeWhile; filter keeps going", "7 detiene a takeWhile; filter sigue", "7 で takeWhile は止まり、filter は続ける")),
+    p(
+      "any test xs asks \"does at least one item pass?\" and all test xs asks \"do all the items pass?\". Both answer with a single Bool instead of a list.",
+      "any prueba xs pregunta \"¿pasa al menos un objeto?\" y all prueba xs pregunta \"¿pasan todos los objetos?\". Ambas responden con un solo Bool en vez de una lista.",
+      "any 条件 xs は「少なくとも1つ通る？」、all 条件 xs は「全部通る？」と聞く。どちらもリストではなく Bool ひとつで答える。",
+    ),
+    ex("print (any (> 8) [3,9], all (> 8) [3,9])", "(True,False)"),
+    p(
+      "Rule: filter keeps every passing item; takeWhile keeps only the passing run at the front; dropWhile keeps what comes after that run; any and all give a yes/no answer about the whole list.",
+      "Regla: filter deja todo objeto que pasa; takeWhile deja solo la racha que pasa al frente; dropWhile deja lo que viene después de esa racha; any y all dan un sí o no sobre toda la lista.",
+      "ルール：filter は通る要素を全部残す。takeWhile は先頭から続く通る部分だけ、dropWhile はその後ろを残す。any と all はリスト全体について はい／いいえ で答える。",
+    ),
+  ),
+  note("functions-as-args", L("Functions that take functions", "Funciones que reciben funciones", "関数を受け取る関数"),
+    p(
+      "zipWith f xs ys walks two lists side by side and combines each pair with f: the first items together, then the second items, and so on. It stops when the shorter list ends. An operator in parentheses, like (+) or (*), is an ordinary two-argument function you can pass.",
+      "zipWith f xs ys recorre dos listas a la par y combina cada pareja con f: los primeros objetos juntos, luego los segundos, y así. Se detiene cuando termina la lista más corta. Un operador entre paréntesis, como (+) o (*), es una función normal de dos argumentos que puedes pasar.",
+      "zipWith f xs ys は2つのリストを並んで歩き、同じ位置のペアを f でまとめる。1つ目同士、2つ目同士…と進み、短いほうが終わると止まる。(+) や (*) のようにかっこで包んだ演算子は、渡せるふつうの2引数関数じゃ。",
+    ),
+    ex("print (zipWith max [1,8,3] [5,2,9])", "[5,8,9]",
+      L("max of each pair, position by position", "El max de cada pareja, posición a posición", "位置ごとにペアの max")),
+    p(
+      "You can write your own functions that take functions. In a signature, a function argument is written in parentheses: (a -> b) means \"a function from a to b\". Then you call it inside the body like any other function.",
+      "Puedes escribir tus propias funciones que reciben funciones. En una firma, un argumento función se escribe entre paréntesis: (a -> b) significa \"una función de a a b\". Luego la llamas dentro del cuerpo como cualquier otra función.",
+      "関数を受け取る関数は自分でも書ける。シグネチャでは関数の引数をかっこで書く：(a -> b) は「a から b への関数」。本体の中ではふつうの関数と同じように呼べばいい。",
+    ),
+    ex("onBoth :: (a -> b) -> (a, a) -> (b, b)\nonBoth f (x, y) = (f x, f y)\n\nmain = print (onBoth (* 10) (2, 3))", "(20,30)",
+      L("f is used once on each half", "f se usa una vez en cada mitad", "f を左右に1回ずつ")),
+    p(
+      "Reading map's type: (a -> b) -> [a] -> [b]. The first argument is a function from a to b, the second is a list of a, and the result is a list of b. a and b are type variables: they can be any types, as long as they line up.",
+      "Leer el tipo de map: (a -> b) -> [a] -> [b]. El primer argumento es una función de a a b, el segundo una lista de a, y el resultado una lista de b. a y b son variables de tipo: pueden ser cualquier tipo, siempre que encajen.",
+      "map の型を読もう：(a -> b) -> [a] -> [b]。1つ目の引数は a から b への関数、2つ目は a のリスト、結果は b のリスト。a と b は型変数で、つじつまが合えばどんな型でもいい。",
+    ),
+    p(
+      "Common mistake: dropping the parentheses in a signature. a -> a -> a means two separate value arguments, while (a -> a) -> a -> a means one function argument followed by one value. The parentheses mark where a function argument begins and ends.",
+      "Error común: quitar los paréntesis de una firma. a -> a -> a significa dos argumentos de valor separados, mientras que (a -> a) -> a -> a significa un argumento función seguido de un valor. Los paréntesis marcan dónde empieza y termina un argumento función.",
+      "よくあるミス：シグネチャのかっこを落とすこと。a -> a -> a は値の引数が2つ。(a -> a) -> a -> a は関数の引数が1つと値が1つ。かっこは関数の引数の始まりと終わりを示すのじゃ。",
+    ),
+  ),
+];
 
 // ─── 2.2 Allies on the conveyor ────────────────────────────────────────────
 const higherOrder: LessonDef = {
@@ -161,6 +364,7 @@ const higherOrder: LessonDef = {
   xp: 65,
   enemy: "slime",
   enemyName: L("CONVEYOR SLIME", "SLIME DE CINTA", "コンベアスライム"),
+  notes: higherOrderNotes,
   beats: [
     say(L(
       "Functions are values too: you can hand one to another function. map applies a function to EVERY item of a list.",
@@ -185,6 +389,8 @@ const higherOrder: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("map gives each item to the lambda and collects what comes back, in order.", "map le da cada objeto a la lambda y junta lo que devuelve, en orden.", "map は各要素をラムダに渡し、返ってきた値を順に集める。"),
+      note: "map-lambda",
       code: "print (map (\\x -> x * 2) [1,2,3])",
       options: ["[2,4,6]", "[1,2,3,1,2,3]", "12"],
       answer: 0,
@@ -196,6 +402,8 @@ const higherOrder: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("filter keeps only the items for which the test says True.", "filter deja solo los objetos para los que la prueba dice True.", "filter は条件が True の要素だけ残す。"),
+      note: "filter-family",
       code: "print (filter even [1..10])",
       options: ["[2,4,6,8,10]", "[1,3,5,7,9]", "5"],
       answer: 0,
@@ -207,6 +415,8 @@ const higherOrder: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Pair the first items, then the second, then the third, combining each pair.", "Junta los primeros objetos, luego los segundos, luego los terceros, combinando cada pareja.", "1つ目同士、2つ目同士、3つ目同士をペアにしてまとめよう。"),
+      note: "functions-as-args",
       code: "print (zipWith (+) [1,2,3] [10,20,30])",
       options: ["[11,22,33]", "[1,2,3,10,20,30]", "66"],
       answer: 0,
@@ -223,6 +433,8 @@ const higherOrder: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Walk from the front and stop at the first item that fails. Later items are never tested.", "Recorre desde el frente y detente en el primer objeto que falla. Los siguientes nunca se prueban.", "先頭から歩き、最初に外れた要素で止まる。その後ろは調べない。"),
+      note: "filter-family",
       code: "print (takeWhile (\\x -> x < 5) [1,3,5,2])\nprint (dropWhile (\\x -> x < 5) [1,3,5,2])",
       options: ["[1,3]\n[5,2]", "[1,3,2]\n[5]", "[1,3]\n[5]"],
       answer: 0,
@@ -234,6 +446,8 @@ const higherOrder: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("any: does at least one item pass? all: do all of them pass?", "any: ¿pasa al menos un objeto? all: ¿pasan todos?", "any は1つでも通る？all は全部通る？"),
+      note: "filter-family",
       code: "print (any even [1,3,5], all odd [1,3,5])",
       options: ["(False,True)", "(True,True)", "(False,False)"],
       answer: 0,
@@ -250,6 +464,8 @@ const higherOrder: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("f is applied two times in a row. What does doing each of these twice give?", "f se aplica dos veces seguidas. ¿Qué da hacer cada una de estas dos veces?", "f を2回続けて当てはめる。それぞれ2回やると？"),
+      note: "functions-as-args",
       code: "applyTwice :: (a -> a) -> a -> a\napplyTwice f x = f (f x)\n\nmain = print (applyTwice (\\x -> x + 3) 10, applyTwice reverse \"abc\")",
       options: ["(16,\"abc\")", "(13,\"cba\")", "(16,\"cba\")"],
       answer: 0,
@@ -261,6 +477,8 @@ const higherOrder: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("The lambda takes each pair apart. Which pairs pass the test on v?", "La lambda separa cada par. ¿Qué pares pasan la prueba sobre v?", "ラムダが各ペアを分ける。v の条件を通るペアは？"),
+      note: "map-lambda",
       code: "print (filter (\\(k, v) -> v > 1) [('a',1),('b',2)])",
       options: ["[('b',2)]", "[('a',1)]", "\"b\""],
       answer: 0,
@@ -272,6 +490,8 @@ const higherOrder: LessonDef = {
     {
       kind: "pick",
       prompt: L("Which type fits map?", "¿Qué tipo le va a map?", "map に合う型は？"),
+      hint: L("Think about map's arguments in order: what does it receive, and what kind of list comes out?", "Piensa en los argumentos de map en orden: ¿qué recibe y qué tipo de lista sale?", "map の引数を順に考えよう。何を受け取り、どんなリストを返す？"),
+      note: "functions-as-args",
       code: "myMap :: ___\nmyMap = map\n\nmain = print (myMap (+1) [1,2])",
       options: ["(a -> b) -> [a] -> [b]", "a -> b -> [a]", "[a] -> (a -> b) -> b"],
       answer: 0,
@@ -282,6 +502,8 @@ const higherOrder: LessonDef = {
     {
       kind: "type",
       prompt: L("Keep the odd ones: [1,3]", "Deja los impares: [1,3]", "奇数だけ残す：[1,3]"),
+      hint: L("You need the function that keeps only the items passing a test.", "Necesitas la función que deja solo los objetos que pasan una prueba.", "条件を通る要素だけを残す関数が必要。"),
+      note: "filter-family",
       code: "print (___ odd [1,2,3])",
       answer: "filter",
       check: { compiles: true, stdout: "[1,3]" },
@@ -291,6 +513,8 @@ const higherOrder: LessonDef = {
     {
       kind: "run",
       prompt: L("Double every score: it must print [6,14,20]", "Duplica cada puntaje: debe imprimir [6,14,20]", "全部の点を2倍に：[6,14,20] と表示"),
+      hint: L("The lambda currently adds. Change its operation so each score doubles.", "La lambda ahora suma. Cambia su operación para que cada puntaje se duplique.", "今のラムダは足し算。各点が2倍になるよう演算を変えよう。"),
+      note: "map-lambda",
       starter: "main :: IO ()\nmain = print (map (\\s -> s + 2) [3, 7, 10])\n",
       solution: "main :: IO ()\nmain = print (map (\\s -> s * 2) [3, 7, 10])\n",
       expect: "[6,14,20]",
@@ -299,6 +523,95 @@ const higherOrder: LessonDef = {
     },
   ],
 };
+
+const curryingNotes: NoteDef[] = [
+  note("currying", L("Every function takes one argument", "Toda función recibe un argumento", "関数の引数はひとつ"),
+    p(
+      "Int -> Int -> Int really means Int -> (Int -> Int): a function that takes one Int and returns a NEW function waiting for the second Int. Calling it with both arguments just does both steps at once. Calling it with only the first gives you that waiting function: that's partial application.",
+      "Int -> Int -> Int en realidad significa Int -> (Int -> Int): una función que recibe un Int y devuelve una función NUEVA que espera el segundo Int. Llamarla con ambos argumentos hace los dos pasos de una vez. Llamarla solo con el primero te da esa función en espera: eso es aplicación parcial.",
+      "Int -> Int -> Int の本当の意味は Int -> (Int -> Int)。Int をひとつ受け取り、2つ目の Int を待つ新しい関数を返す関数じゃ。引数を2つ渡せば2段階を一度にこなす。1つ目だけ渡すと、待っている関数が手に入る。これが部分適用。",
+    ),
+    ex("mul :: Int -> Int -> Int\nmul a b = a * b\n\nmain = do\n  let triple = mul 3\n  print (triple 7, map (mul 10) [1,2])", "(21,[10,20])",
+      L("mul 3 and mul 10 are half-cast functions", "mul 3 y mul 10 son funciones a medias", "mul 3 も mul 10 も半分だけの関数")),
+    p(
+      "Partial application is everywhere: map (mul 10) xs passes a half-applied function straight to map, with no lambda needed. A name like triple = mul 3 is just a value that happens to be a function.",
+      "La aplicación parcial está en todas partes: map (mul 10) xs le pasa a map una función a medias, sin necesidad de lambda. Un nombre como triple = mul 3 es solo un valor que resulta ser una función.",
+      "部分適用はあちこちで使う。map (mul 10) xs は、ラムダなしで半分だけの関数を map に直接渡している。triple = mul 3 のような名前も、たまたま関数である値にすぎない。",
+    ),
+    p(
+      "Function application grabs arguments from left to right, greedily. print length [1,2,3] gives print TWO arguments, length and the list, but print takes only one, so GHC refuses. Group with parentheses: print (length [1,2,3]).",
+      "La aplicación de funciones toma argumentos de izquierda a derecha, con avidez. print length [1,2,3] le da a print DOS argumentos, length y la lista, pero print solo recibe uno, así que GHC lo rechaza. Agrupa con paréntesis: print (length [1,2,3]).",
+      "関数適用は左から右へ、引数を欲ばって取る。print length [1,2,3] だと print に length とリストの2つが渡るが、print は1つしか取らないので GHC が拒否する。print (length [1,2,3]) とかっこでまとめよう。",
+    ),
+    bad("print max 3 4",
+      L("Does not compile: print gets three arguments", "No compila: print recibe tres argumentos", "コンパイル不可：print に引数が3つ")),
+  ),
+  note("sections", L("Operator sections", "Secciones de operadores", "演算子のセクション"),
+    p(
+      "An operator can be half-applied too: put it in parentheses with one side filled. That's a section. (`div` 2) fills the RIGHT side, so it divides its argument by 2. (100 `div`) fills the LEFT side, so it divides 100 by its argument. For + and * the side doesn't matter; for -, /, ^ and div it changes the result.",
+      "Un operador también puede aplicarse a medias: ponlo entre paréntesis con un lado lleno. Eso es una sección. (`div` 2) llena el lado DERECHO, así que divide su argumento entre 2. (100 `div`) llena el IZQUIERDO, así que divide 100 entre su argumento. Para + y * el lado no importa; para -, /, ^ y div cambia el resultado.",
+      "演算子も半分だけ適用できる。片側を埋めてかっこで包むと「セクション」になる。(`div` 2) は右側を埋めるので、引数を 2 で割る。(100 `div`) は左側を埋めるので、100 を引数で割る。+ や * ならどちら側でも同じだが、-、/、^、div では結果が変わる。",
+    ),
+    ex("print (map (`div` 2) [10,20])\nprint (map (100 `div`) [10,20])", "[5,10]\n[10,5]",
+      L("Same operator, different side filled", "Mismo operador, distinto lado lleno", "同じ演算子でも埋める側がちがう")),
+    p(
+      "To evaluate a section, put the argument into the empty side: (`div` 2) 10 is 10 `div` 2, and (100 `div`) 10 is 100 `div` 10. Comparison sections make handy tests: (> 3) asks \"is it bigger than 3?\".",
+      "Para evaluar una sección, pon el argumento en el lado vacío: (`div` 2) 10 es 10 `div` 2, y (100 `div`) 10 es 100 `div` 10. Las secciones de comparación son pruebas prácticas: (> 3) pregunta \"¿es mayor que 3?\".",
+      "セクションを計算するには、空いている側に引数を入れる：(`div` 2) 10 は 10 `div` 2、(100 `div`) 10 は 100 `div` 10。比較のセクションは便利な条件になる：(> 3) は「3 より大きい？」と聞く。",
+    ),
+    ex("print (filter (> 3) [1,5,2,8])", "[5,8]"),
+    p(
+      "The minus trap: (-1) is NOT a section. A minus right before a number means a negative number, so (-1) is just the number minus one, and map (-1) xs fails because a number is not a function. Use subtract, which is a function: subtract 3 x is x - 3.",
+      "La trampa del menos: (-1) NO es una sección. Un menos justo antes de un número significa un número negativo, así que (-1) es solo el número menos uno, y map (-1) xs falla porque un número no es una función. Usa subtract, que sí es una función: subtract 3 x es x - 3.",
+      "マイナスのわな：(-1) はセクションではない。数の直前のマイナスは負の数を表すので、(-1) はただの数 -1。数は関数じゃないから map (-1) xs は失敗する。関数である subtract を使おう：subtract 3 x は x - 3。",
+    ),
+    ex("print (map (subtract 3) [10,20])", "[7,17]",
+      L("subtract takes the amount to remove first", "subtract recibe primero la cantidad a quitar", "subtract は引く量を先に受け取る")),
+  ),
+  note("composition", L("Composition with .", "Composición con .", ". で関数をつなぐ"),
+    p(
+      "f . g makes a new function that runs g FIRST and then gives its result to f: (f . g) x = f (g x). Read compositions from right to left. Longer chains work the same way: (f . g . h) x = f (g (h x)).",
+      "f . g crea una función nueva que corre g PRIMERO y luego le pasa el resultado a f: (f . g) x = f (g x). Lee las composiciones de derecha a izquierda. Las cadenas más largas funcionan igual: (f . g . h) x = f (g (h x)).",
+      "f . g は、まず g を動かし、その結果を f に渡す新しい関数を作る：(f . g) x = f (g x)。合成は右から左へ読む。長くつないでも同じ：(f . g . h) x = f (g (h x))。",
+    ),
+    ex("print ((length . words) \"big red fox\", ((* 2) . (+ 1)) 4)", "(3,10)",
+      L("words runs before length; (+ 1) before (* 2)", "words corre antes que length; (+ 1) antes que (* 2)", "length より words、(* 2) より (+ 1) が先")),
+    p(
+      "Order matters: (+ 1) . (* 2) doubles and then adds, while (* 2) . (+ 1) adds and then doubles. For list pipelines, filtering before or after mapping can change the result completely, because the filter sees different values.",
+      "El orden importa: (+ 1) . (* 2) duplica y luego suma, mientras que (* 2) . (+ 1) suma y luego duplica. En cadenas de listas, filtrar antes o después de mapear puede cambiar el resultado por completo, porque el filtro ve valores distintos.",
+      "順番が大事。(+ 1) . (* 2) は2倍してから足し、(* 2) . (+ 1) は足してから2倍する。リストの処理では、map の前に filter するか後にするかで結果がまるで変わる。filter が見る値がちがうからじゃ。",
+    ),
+    ex("print ((map (+ 1) . filter (> 2)) [1,2,3])\nprint ((filter (> 2) . map (+ 1)) [1,2,3])", "[4]\n[3,4]",
+      L("Same two steps, opposite order", "Los mismos dos pasos, en orden opuesto", "同じ2つの処理を逆の順で")),
+    p(
+      "Rule: in f . g, the function on the right runs first. When you want \"first do A, then do B\", write B . A. To predict a pipeline, start at the rightmost function, apply it to the input, and move left one step at a time.",
+      "Regla: en f . g, la función de la derecha corre primero. Si quieres \"primero A, luego B\", escribe B . A. Para predecir una cadena, empieza por la función de más a la derecha, aplícala a la entrada y avanza a la izquierda paso a paso.",
+      "ルール：f . g では右の関数が先。「まず A、次に B」をしたいなら B . A と書く。合成の結果を予想するには、いちばん右の関数を入力に当てはめ、一歩ずつ左へ進もう。",
+    ),
+  ),
+  note("dollar", L("$: everything on the right first", "$: primero todo lo de la derecha", "$：右側を全部先に"),
+    p(
+      "f $ x means f x, but $ has the lowest priority of all operators, so everything on its right is computed first. It replaces a pair of parentheses that would close at the end of the line: print (sum (map abs xs)) can be written print $ sum $ map abs xs.",
+      "f $ x significa f x, pero $ tiene la prioridad más baja de todos los operadores, así que todo lo de su derecha se calcula primero. Reemplaza un par de paréntesis que cerrarían al final de la línea: print (sum (map abs xs)) puede escribirse print $ sum $ map abs xs.",
+      "f $ x の意味は f x だが、$ は全演算子の中で優先順位がいちばん低いので、右側が全部先に計算される。行末で閉じるかっこの代わりになる：print (sum (map abs xs)) は print $ sum $ map abs xs と書ける。",
+    ),
+    ex("print $ length $ filter odd [1,3,4]", "2",
+      L("Read from the right: filter, length, print", "Lee desde la derecha: filter, length, print", "右から：filter、length、print")),
+    p(
+      ". glues functions together; $ applies a function to a value. f . g $ x means (f . g) x. Normal application binds tighter than both, so in f . g xs, the part g xs runs first and is already a value, not a function, and . can't glue a value. Put $ before the argument instead.",
+      ". pega funciones; $ aplica una función a un valor. f . g $ x significa (f . g) x. La aplicación normal se une más fuerte que ambos, así que en f . g xs, la parte g xs corre primero y ya es un valor, no una función, y . no puede pegar un valor. Pon $ antes del argumento.",
+      ". は関数同士をつなぎ、$ は関数を値に適用する。f . g $ x は (f . g) x のこと。ふつうの関数適用はどちらよりも強く結びつくので、f . g xs では g xs が先に計算されて関数ではなく値になり、. ではつなげない。引数の前に $ を置こう。",
+    ),
+    ex("print (maximum . map abs $ [-7, 2, 5])", "7"),
+    bad("print (maximum . map abs [-7, 2, 5])",
+      L("Does not compile: map abs [...] is already a list", "No compila: map abs [...] ya es una lista", "コンパイル不可：map abs [...] はもうリスト")),
+    p(
+      "Rule: read a chain of $ from right to left. Use . to build a function out of steps, and one $ (or parentheses) to give that function its argument.",
+      "Regla: lee una cadena de $ de derecha a izquierda. Usa . para armar una función con pasos, y un $ (o paréntesis) para darle a esa función su argumento.",
+      "ルール：$ のつながりは右から左へ読む。. で処理をつないで関数を作り、$ ひとつ（かかっこ）でその関数に引数を渡す。",
+    ),
+  ),
+];
 
 // ─── 2.3 Half-cast spells ───────────────────────────────────────────────────
 const currying: LessonDef = {
@@ -309,6 +622,7 @@ const currying: LessonDef = {
   xp: 70,
   enemy: "golem",
   enemyName: L("GLUE GOLEM", "GÓLEM PEGAMENTO", "のりゴーレム"),
+  notes: curryingNotes,
   beats: [
     say(L(
       "A secret: every Haskell function takes ONE argument. add 5 is a new function, waiting for the next number.",
@@ -336,6 +650,8 @@ const currying: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("add 5 is a function still waiting for one number. What happens when it gets it?", "add 5 es una función que aún espera un número. ¿Qué pasa cuando lo recibe?", "add 5 は数をひとつ待つ関数。それを受け取ったら？"),
+      note: "currying",
       code: "add :: Int -> Int -> Int\nadd x y = x + y\n\nmain = do\n  let add5 = add 5\n  print (add5 10)",
       options: ["15", "5", NO_COMPILE],
       answer: 0,
@@ -352,6 +668,8 @@ const currying: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("In each section, the 2 fills one side of ^. Which side, in each line?", "En cada sección, el 2 llena un lado de ^. ¿Qué lado, en cada línea?", "各セクションで 2 は ^ の片側を埋める。それぞれどちら側？"),
+      note: "sections",
       code: "print (map (2^) [1,2,3])\nprint (map (^2) [1,2,3])",
       options: ["[2,4,8]\n[1,4,9]", "[1,4,9]\n[2,4,8]", "[2,4,8]\n[2,4,8]"],
       answer: 0,
@@ -363,6 +681,8 @@ const currying: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Put 10 into the empty side of each section, then divide.", "Pon 10 en el lado vacío de cada sección y luego divide.", "各セクションの空いた側に 10 を入れてから割ろう。"),
+      note: "sections",
       code: "print ((/ 2) 10, (2 /) 10)",
       options: ["(5.0,0.2)", "(0.2,5.0)", "(5.0,5.0)"],
       answer: 0,
@@ -374,6 +694,8 @@ const currying: LessonDef = {
     {
       kind: "predict",
       prompt: COMPILES,
+      hint: L("Is (-1) a function waiting for a number, or already a number?", "¿(-1) es una función que espera un número, o ya es un número?", "(-1) は数を待つ関数？それとももう数？"),
+      note: "sections",
       code: "print (map (-1) [1,2,3])",
       options: [YES, NO_GHC],
       answer: 1,
@@ -389,6 +711,8 @@ const currying: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Composition runs right to left: apply the right-hand function first.", "La composición corre de derecha a izquierda: aplica primero la función de la derecha.", "合成は右から左。右の関数を先に当てはめよう。"),
+      note: "composition",
       code: "print ((negate . abs) (-5), (show . (+1)) 41)",
       options: ["(-5,\"42\")", "(5,\"42\")", "(-5,42)"],
       answer: 0,
@@ -400,6 +724,8 @@ const currying: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Everything right of $ is computed first. Start from the right end of the line.", "Todo lo que está a la derecha de $ se calcula primero. Empieza por el final derecho de la línea.", "$ の右側が全部先。行の右端から始めよう。"),
+      note: "dollar",
       code: "print $ sum $ map (*2) [1,2,3]",
       options: ["12", "6", "[2,4,6]"],
       answer: 0,
@@ -411,6 +737,8 @@ const currying: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Right to left: what does each pipeline do first, and what is left for the second step?", "De derecha a izquierda: ¿qué hace primero cada cadena y qué le queda al segundo paso?", "右から左へ。それぞれ最初に何をして、2段目には何が残る？"),
+      note: "composition",
       code: "processBad = filter odd . map (*2)\nprocessGood = map (*2) . filter odd\n\nmain = print (processBad [1..5], processGood [1..5])",
       options: ["([],[2,6,10])", "([2,6,10],[2,6,10])", "([2,6,10],[])"],
       answer: 0,
@@ -422,6 +750,8 @@ const currying: LessonDef = {
     {
       kind: "predict",
       prompt: COMPILES,
+      hint: L("Plain application binds tighter than the dot. Is filter even [1..10] a function or a list?", "La aplicación normal se une más fuerte que el punto. ¿filter even [1..10] es una función o una lista?", "ふつうの適用は . より強い。filter even [1..10] は関数？リスト？"),
+      note: "dollar",
       code: "print (length . filter even [1..10])",
       options: [YES, NO_GHC],
       answer: 1,
@@ -432,6 +762,8 @@ const currying: LessonDef = {
     {
       kind: "type",
       prompt: L("Save the parentheses: it prints 6", "Ahorra paréntesis: imprime 6", "かっこを省いて 6 と表示"),
+      hint: L("You want sum [1,2,3] computed before print gets it, without parentheses.", "Quieres que sum [1,2,3] se calcule antes de que print lo reciba, sin paréntesis.", "かっこなしで、print に渡す前に sum [1,2,3] を計算したい。"),
+      note: "dollar",
       code: "print ___ sum [1,2,3]",
       answer: "$",
       check: { compiles: true, stdout: "6" },
@@ -441,6 +773,8 @@ const currying: LessonDef = {
     {
       kind: "run",
       prompt: L("Keep the odd ones, THEN double: [2,6,10]", "Deja los impares y LUEGO duplica: [2,6,10]", "奇数を残してから2倍：[2,6,10]"),
+      hint: L("Composition runs right to left. Which step must run first, and on which side does it go?", "La composición corre de derecha a izquierda. ¿Qué paso debe ir primero y de qué lado va?", "合成は右から左。先に動かす処理はどれで、どちら側に置く？"),
+      note: "composition",
       starter: "process :: [Int] -> [Int]\nprocess = filter odd . map (*2)\n\nmain :: IO ()\nmain = print (process [1, 2, 3, 4, 5])\n",
       solution: "process :: [Int] -> [Int]\nprocess = map (*2) . filter odd\n\nmain :: IO ()\nmain = print (process [1, 2, 3, 4, 5])\n",
       expect: "[2,6,10]",
@@ -449,6 +783,105 @@ const currying: LessonDef = {
     },
   ],
 };
+
+const foldNotes: NoteDef[] = [
+  note("foldr", L("foldr: replace : and []", "foldr: reemplaza : y []", "foldr：: と [] を置きかえる"),
+    p(
+      "A fold melts a whole list into one value. foldr f z xs replaces every : in the list with f and the final [] with z. Since [2,3,4] is really 2 : 3 : 4 : [], foldr (*) 1 turns it into 2 * (3 * (4 * 1)) = 24.",
+      "Un fold funde una lista entera en un solo valor. foldr f z xs reemplaza cada : de la lista por f y el [] final por z. Como [2,3,4] en realidad es 2 : 3 : 4 : [], foldr (*) 1 lo convierte en 2 * (3 * (4 * 1)) = 24.",
+      "fold はリスト全体をひとつの値に溶かす。foldr f z xs は、リストの各 : を f に、最後の [] を z に置きかえる。[2,3,4] の正体は 2 : 3 : 4 : [] なので、foldr (*) 1 は 2 * (3 * (4 * 1)) = 24 になる。",
+    ),
+    ex("print (foldr (*) 1 [2,3,4])", "24"),
+    p(
+      "The function gets two arguments: the current item, and the result of folding everything to its right (often called acc). So the brackets nest to the right: the last item meets z first, and the first item is combined last, on the outside.",
+      "La función recibe dos argumentos: el objeto actual y el resultado de fundir todo lo que está a su derecha (suele llamarse acc). Así, los paréntesis se anidan a la derecha: el último objeto se encuentra primero con z, y el primero se combina al final, por fuera.",
+      "関数は2つの引数を受け取る：今の要素と、その右側を全部畳んだ結果（よく acc と呼ぶ）。だからかっこは右に入れ子になる。最後の要素が最初に z と出会い、最初の要素はいちばん外側で最後に組み合わされる。",
+    ),
+    ex("print (foldr (\\x acc -> x : x : acc) [] \"ab\")", "\"aabb\"",
+      L("Each item is placed in front of the folded rest", "Cada objeto va delante del resto ya fundido", "各要素を、畳み終えた残りの前に置く")),
+    p(
+      "Many Prelude functions are folds in disguise: sum is a fold with + and 0, and length is a fold that adds 1 per item and ignores the item itself. Rule: to evaluate foldr f z, write the list with : and [], then swap in f and z.",
+      "Muchas funciones del Prelude son folds disfrazados: sum es un fold con + y 0, y length es un fold que suma 1 por objeto e ignora el objeto mismo. Regla: para evaluar foldr f z, escribe la lista con : y [], y luego pon f y z en su lugar.",
+      "Prelude の多くの関数は fold の変装じゃ。sum は + と 0 の fold、length は要素そのものを無視して1個ごとに 1 足す fold。ルール：foldr f z を計算するには、リストを : と [] で書き、そこに f と z を入れかえよう。",
+    ),
+    ex("print (foldr (\\_ acc -> acc + 1) 0 \"fold\")", "4",
+      L("length written as a fold", "length escrito como un fold", "fold で書いた length")),
+  ),
+  note("left-vs-right", L("foldl vs foldr", "foldl vs foldr", "foldl と foldr"),
+    p(
+      "foldl f z xs starts on the LEFT: it combines z with the first item, then that result with the second item, and so on: foldl f z [a,b,c] = f (f (f z a) b) c. foldr groups from the right instead: f a (f b (f c z)).",
+      "foldl f z xs empieza por la IZQUIERDA: combina z con el primer objeto, luego ese resultado con el segundo, y así: foldl f z [a,b,c] = f (f (f z a) b) c. foldr agrupa desde la derecha: f a (f b (f c z)).",
+      "foldl f z xs は左から始める。z と1つ目を組み合わせ、その結果と2つ目を組み合わせ…と進む：foldl f z [a,b,c] = f (f (f z a) b) c。foldr は右からまとめる：f a (f b (f c z))。",
+    ),
+    p(
+      "With + or * the grouping doesn't change the answer. With - or /, or when building lists or numbers digit by digit, it does. Watch the argument order too: foldl's function takes (acc, item), while foldr's takes (item, acc).",
+      "Con + o * la agrupación no cambia la respuesta. Con - o /, o al armar listas o números dígito a dígito, sí la cambia. Fíjate también en el orden de los argumentos: la función de foldl recibe (acc, objeto), y la de foldr recibe (objeto, acc).",
+      "+ や * なら、まとめ方が変わっても答えは同じ。でも - や /、リストや数を1桁ずつ組み立てるときは変わる。引数の順番にも注意：foldl の関数は (acc, 要素)、foldr の関数は (要素, acc) の順に受け取る。",
+    ),
+    ex("print (foldl (/) 64 [2,4])\nprint (foldr (/) 64 [2,4])", "8.0\n32.0",
+      L("(64/2)/4 versus 2/(4/64)", "(64/2)/4 frente a 2/(4/64)", "(64/2)/4 と 2/(4/64)")),
+    ex("print (foldl (\\acc x -> \"(\" ++ acc ++ \"-\" ++ show x ++ \")\") \"z\" [1,2])", "\"((z-1)-2)\"",
+      L("foldl nests to the left", "foldl anida a la izquierda", "foldl は左に入れ子")),
+    p(
+      "foldl meets the items from first to last, so anything it puts at the FRONT of its accumulator ends up in reverse order. foldr meets the first item last, on the outside, so putting items at the front keeps the original order.",
+      "foldl ve los objetos del primero al último, así que todo lo que pone al FRENTE de su acumulador queda en orden inverso. foldr se encuentra con el primer objeto al final, por fuera, así que poner objetos al frente conserva el orden original.",
+      "foldl は要素を最初から最後へ順に見るので、アキュムレータの先頭に置いたものは逆順になる。foldr は最初の要素をいちばん外側で最後に扱うので、先頭に置いていけば元の順番が保たれる。",
+    ),
+    p(
+      "Rule: when the order of combining matters, ask which end the fold starts from. Common mistake: switching between foldr and foldl without swapping the lambda's arguments; the accumulator is the left argument for foldl and the right one for foldr.",
+      "Regla: cuando el orden de combinar importa, pregúntate por qué extremo empieza el fold. Error común: cambiar entre foldr y foldl sin intercambiar los argumentos de la lambda; el acumulador es el argumento izquierdo en foldl y el derecho en foldr.",
+      "ルール：組み合わせる順番が大事なときは、fold がどちらの端から始まるかを考える。よくあるミス：foldr と foldl を入れかえるのに、ラムダの引数を入れかえないこと。アキュムレータは foldl では左、foldr では右の引数じゃ。",
+    ),
+  ),
+  note("strict-foldl", L("foldl' and the thunk pile", "foldl' y la pila de thunks", "foldl' とサンクの山"),
+    p(
+      "Haskell is lazy: it doesn't compute a value until something needs it. Plain foldl uses this badly: instead of adding as it goes, it builds a chain of postponed steps, (((0+1)+2)+3)..., each one a sealed box called a thunk, and only opens them at the very end. With millions of items, that pile can eat all the memory.",
+      "Haskell es perezoso: no calcula un valor hasta que algo lo necesita. foldl normal lo aprovecha mal: en vez de sumar sobre la marcha, arma una cadena de pasos aplazados, (((0+1)+2)+3)..., cada uno una caja sellada llamada thunk, y solo las abre al final. Con millones de objetos, esa pila puede agotar la memoria.",
+      "Haskell は怠惰で、必要になるまで値を計算しない。ふつうの foldl はこれが裏目に出る。足しながら進むかわりに (((0+1)+2)+3)... という後回しの計算の鎖を作り、各段は「サンク」という封をした箱になる。開けるのは最後だけ。何百万個もあると、その山がメモリを食いつくす。",
+    ),
+    p(
+      "foldl' (with an apostrophe, read \"foldl prime\") is the strict version: it computes the accumulator at every step, so it stays one small number. Same arguments, same result, no pile. For sums and counts over big lists, foldl' is the right default.",
+      "foldl' (con apóstrofo, se lee \"foldl prima\") es la versión estricta: calcula el acumulador en cada paso, así que se queda como un número pequeño. Mismos argumentos, mismo resultado, sin pila. Para sumas y conteos sobre listas grandes, foldl' es la opción por defecto correcta.",
+      "foldl'（アポストロフィつき、「フォールドエル・プライム」と読む）は正格版で、毎ステップでアキュムレータを計算するので小さな数ひとつのまま。引数も結果も同じで、山はできない。大きなリストの合計や個数には foldl' を使うのが基本じゃ。",
+    ),
+    ex("import Data.List (foldl')\n\nmain = print (foldl' (+) 0 [1..200000])", "20000100000",
+      L("The running total is computed at every step", "El total parcial se calcula en cada paso", "途中の合計を毎回計算する")),
+    p(
+      "In GHC 9.8, foldl' is not in the Prelude. It lives in the module Data.List, so the file needs import Data.List (foldl') at the very top, before main and any other definition. The list in parentheses imports just that one name. Without the import, GHC says Variable not in scope: foldl'.",
+      "En GHC 9.8, foldl' no está en el Prelude. Vive en el módulo Data.List, así que el archivo necesita import Data.List (foldl') al principio de todo, antes de main y de cualquier otra definición. La lista entre paréntesis importa solo ese nombre. Sin el import, GHC dice Variable not in scope: foldl'.",
+      "GHC 9.8 では foldl' は Prelude にない。Data.List というモジュールにあるので、ファイルのいちばん上、main やほかの定義より前に import Data.List (foldl') が必要。かっこの中の名前だけが読みこまれる。import がないと GHC は Variable not in scope: foldl' と言う。",
+    ),
+    ex("import Data.List (foldl')\n\nmain = print (foldl' max 0 [3, 17, 8])", "17"),
+    p(
+      "Why the apostrophe? Haskell names may contain ' and, by convention, a trailing ' marks a stricter or slightly different variant of a function. Common mistakes: writing include or using, which come from other languages, or forgetting the import entirely.",
+      "¿Por qué el apóstrofo? Los nombres en Haskell pueden contener ' y, por convención, un ' al final marca una variante más estricta o algo distinta de una función. Errores comunes: escribir include o using, que vienen de otros lenguajes, u olvidar el import por completo.",
+      "なぜアポストロフィ？Haskell の名前には ' を入れられ、末尾の ' は、より正格な版や少しちがう版の目印という習慣がある。よくあるミス：他の言語の include や using を書くこと、import をまるごと忘れること。",
+    ),
+  ),
+  note("scanl-empty", L("scanl and folding nothing", "scanl y fundir nada", "scanl と空の fold"),
+    p(
+      "scanl works like foldl but keeps every intermediate result in a list, starting with the initial value: scanl f z [a,b] = [z, f z a, f (f z a) b]. So the result has one more item than the input, and its last item is exactly what foldl would give.",
+      "scanl funciona como foldl pero guarda cada resultado intermedio en una lista, empezando por el valor inicial: scanl f z [a,b] = [z, f z a, f (f z a) b]. Así que el resultado tiene un objeto más que la entrada, y su último objeto es justo lo que daría foldl.",
+      "scanl は foldl と同じように動くが、初期値から始めて途中の結果を全部リストに残す：scanl f z [a,b] = [z, f z a, f (f z a) b]。だから結果は入力より1個多く、最後の要素は foldl の答えとちょうど同じ。",
+    ),
+    ex("print (scanl (*) 1 [2,3,4])", "[1,2,6,24]",
+      L("Every running product is kept", "Se guarda cada producto parcial", "途中の積を全部残す")),
+    ex("print (scanl (+) 100 [-30, 50])", "[100,70,120]",
+      L("A running balance", "Un saldo parcial", "残高の移り変わり")),
+    p(
+      "Folding an empty list just returns the starting value, because there is nothing to combine: foldr f z [] = z, and foldl f z [] = z too. That's how functions like sum and product answer for []: they give back the start value of their fold.",
+      "Fundir una lista vacía solo devuelve el valor inicial, porque no hay nada que combinar: foldr f z [] = z, y foldl f z [] = z también. Así responden funciones como sum y product ante []: devuelven el valor inicial de su fold.",
+      "空リストを畳むと、組み合わせるものがないので初期値がそのまま返る：foldr f z [] = z、foldl f z [] = z も同じ。sum や product が [] に答えるのもこのしくみで、自分の fold の初期値を返すのじゃ。",
+    ),
+    ex("print (foldr (+) 7 [], foldl (-) 3 [])", "(7,3)",
+      L("No items: the start value comes straight back", "Sin objetos: vuelve el valor inicial", "要素なし：初期値がそのまま返る")),
+    p(
+      "Which start value does each fold use? The one that changes nothing when combined: x + 0 is x, so sums start at 0; x * 1 is x, so products start at 1. To guess the empty answer for a Bool operator, ask which Bool b makes x op b equal to x.",
+      "¿Qué valor inicial usa cada fold? El que no cambia nada al combinarse: x + 0 es x, así que las sumas empiezan en 0; x * 1 es x, así que los productos empiezan en 1. Para adivinar la respuesta vacía de un operador Bool, pregunta qué Bool b hace que x op b sea igual a x.",
+      "各 fold の初期値は？組み合わせても何も変えない値じゃ。x + 0 は x なので和は 0 から、x * 1 は x なので積は 1 から。Bool の演算子の空の答えを考えるには、x op b が x と等しくなる Bool b はどちらかを考えよう。",
+    ),
+  ),
+];
 
 // ─── 2.4 Melting the row into one gem ──────────────────────────────────────
 const folds: LessonDef = {
@@ -459,6 +892,7 @@ const folds: LessonDef = {
   xp: 75,
   enemy: "dragon",
   enemyName: L("FURNACE DRAGON", "DRAGÓN HORNO", "るつぼドラゴン"),
+  notes: foldNotes,
   beats: [
     say(L(
       "A FOLD melts a whole list into one value. foldr f z swaps each : for f and the empty end [] for z.",
@@ -486,6 +920,8 @@ const folds: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Replace each : with + and the final [] with 0, then add.", "Cambia cada : por + y el [] final por 0, y luego suma.", "各 : を + に、最後の [] を 0 にして足そう。"),
+      note: "foldr",
       code: "print (foldr (+) 0 [1,2,3])",
       options: ["6", "0", "123"],
       answer: 0,
@@ -502,6 +938,8 @@ const folds: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Write out both groupings: foldr nests to the right, foldl starts from 0 on the left.", "Escribe ambas agrupaciones: foldr anida a la derecha, foldl empieza con 0 a la izquierda.", "両方のまとめ方を書こう。foldr は右に入れ子、foldl は左の 0 から。"),
+      note: "left-vs-right",
       code: "print (foldr (-) 0 [1,2,3], foldl (-) 0 [1,2,3])",
       options: ["(2,-6)", "(-6,2)", "(-6,-6)"],
       answer: 0,
@@ -513,6 +951,8 @@ const folds: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("foldr's function gets an item and the already-folded rest. Which item ends up outermost?", "La función de foldr recibe un objeto y el resto ya fundido. ¿Qué objeto queda más afuera?", "foldr の関数は要素と畳み済みの残りを受け取る。いちばん外側に来る要素は？"),
+      note: "foldr",
       code: "print (foldr (\\x acc -> \"(\" ++ show x ++ \"+\" ++ acc ++ \")\") \"0\" [1,2,3])",
       options: ["\"(1+(2+(3+0)))\"", "\"(((0+1)+2)+3)\"", "\"(3+(2+(1+0)))\""],
       answer: 0,
@@ -524,6 +964,8 @@ const folds: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("foldl meets the first letter first and puts each new letter at the front. What about foldr?", "foldl ve la primera letra primero y pone cada letra nueva al frente. ¿Y foldr?", "foldl は最初の文字から順に先頭へ積む。では foldr は？"),
+      note: "left-vs-right",
       code: "print (foldl (\\acc x -> x : acc) [] \"abc\")\nprint (foldr (\\x acc -> x : acc) [] \"abc\")",
       options: ["\"cba\"\n\"abc\"", "\"abc\"\n\"cba\"", "\"abc\"\n\"abc\""],
       answer: 0,
@@ -540,6 +982,8 @@ const folds: LessonDef = {
     {
       kind: "predict",
       prompt: COMPILES,
+      hint: L("Check where foldl' lives in GHC 9.8, and whether this snippet imports it.", "Revisa dónde vive foldl' en GHC 9.8 y si este fragmento lo importa.", "GHC 9.8 で foldl' はどこにある？このコードは import している？"),
+      note: "strict-foldl",
       code: "print (foldl' (+) 0 [1..10])",
       options: [YES, L("No: foldl' is not in scope", "No: foldl' no está en alcance", "いいえ：foldl' が見つからない")],
       answer: 1,
@@ -550,6 +994,8 @@ const folds: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("The import is there. Just add the numbers from 1 to a million: n * (n + 1) / 2.", "El import está. Solo suma los números del 1 al millón: n * (n + 1) / 2.", "import はある。1 から百万までの和：n * (n + 1) / 2。"),
+      note: "strict-foldl",
       code: "import Data.List (foldl')\n\nmain = print (foldl' (+) 0 [1..1000000])",
       options: ["500000500000", "1000000", NO_COMPILE],
       answer: 0,
@@ -566,6 +1012,8 @@ const folds: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("scanl keeps the start value and every running total along the way.", "scanl conserva el valor inicial y cada total parcial del camino.", "scanl は初期値と途中の合計を全部残す。"),
+      note: "scanl-empty",
       code: "print (scanl (+) 0 [1,2,3])",
       options: ["[0,1,3,6]", "[1,3,6]", "6"],
       answer: 0,
@@ -577,6 +1025,8 @@ const folds: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Each of these is a fold. On an empty list, a fold returns its starting value.", "Cada uno es un fold. Con una lista vacía, un fold devuelve su valor inicial.", "どれも fold。空リストなら fold は初期値を返す。"),
+      note: "scanl-empty",
       code: "print (sum [], product [], and [], or [])",
       options: ["(0,1,True,False)", "(0,0,False,False)", "(0,1,False,True)"],
       answer: 0,
@@ -588,6 +1038,8 @@ const folds: LessonDef = {
     {
       kind: "pick",
       prompt: L("foldl (+) on 10 million numbers blows memory. Fix?", "foldl (+) con 10 millones agota la memoria. ¿Solución?", "1千万個の foldl (+) でメモリ不足。対策は？"),
+      hint: L("You need the fold that computes the running total at every step instead of postponing it.", "Necesitas el fold que calcula el total parcial en cada paso en vez de aplazarlo.", "途中の合計を後回しにせず、毎回計算する fold が必要。"),
+      note: "strict-foldl",
       code: "import Data.List (foldl')\n\nmain = print (___ (+) 0 [1..10])",
       options: ["foldl'", "foldr1", "foldl"],
       answer: 0,
@@ -598,6 +1050,8 @@ const folds: LessonDef = {
     {
       kind: "type",
       prompt: L("Import the strict fold", "Importa el fold estricto", "正格な fold を import"),
+      hint: L("Which name does main use that the Prelude doesn't provide in GHC 9.8?", "¿Qué nombre usa main que el Prelude de GHC 9.8 no trae?", "main が使う名前のうち、GHC 9.8 の Prelude にないものは？"),
+      note: "strict-foldl",
       code: "import Data.List (___)\n\nmain = print (foldl' (+) 0 [1,2,3])",
       answer: "foldl'",
       check: { compiles: true, stdout: "6" },
@@ -607,6 +1061,8 @@ const folds: LessonDef = {
     {
       kind: "run",
       prompt: L("Build the number 427 from [4, 2, 7]", "Arma el número 427 a partir de [4, 2, 7]", "[4, 2, 7] から 427 を作ろう"),
+      hint: L("foldr combines from the right end. Switch to the fold that starts on the left, with acc first.", "foldr combina desde el extremo derecho. Cambia al fold que empieza por la izquierda, con acc primero.", "foldr は右端から組み合わせる。左から始まる fold にして、acc を先に。"),
+      note: "left-vs-right",
       starter: "main :: IO ()\nmain = putStrLn (\"number: \" ++ show (foldr (\\d acc -> acc * 10 + d) 0 [4, 2, 7]))\n",
       solution: "main :: IO ()\nmain = putStrLn (\"number: \" ++ show (foldl (\\acc d -> acc * 10 + d) 0 [4, 2, 7]))\n",
       expect: "number: 427",
@@ -615,6 +1071,68 @@ const folds: LessonDef = {
     },
   ],
 };
+
+const forestBossNotes: NoteDef[] = [
+  note("recap-recursion", L("Recap: recursion and go", "Repaso: recursión y go", "復習：再帰と go"),
+    p(
+      "A recursive function has a base case that answers directly and a step that calls itself on something smaller. The go-with-accumulator style carries the result so far: each step updates acc, and the base case simply returns it.",
+      "Una función recursiva tiene un caso base que responde directo y un paso que se llama a sí misma con algo más pequeño. El estilo go con acumulador lleva el resultado hasta ahora: cada paso actualiza acc y el caso base simplemente lo devuelve.",
+      "再帰関数には、直接答える基底ケースと、小さくしたもので自分を呼ぶステップがある。go とアキュムレータの書き方では、ここまでの結果を運ぶ。ステップごとに acc を更新し、基底ケースはそれを返すだけ。",
+    ),
+    ex("countChar :: Char -> String -> Int\ncountChar c s = go 0 s\n  where\n    go acc [] = acc\n    go acc (x:xs) = go (if x == c then acc + 1 else acc) xs\n\nmain = print (countChar 'o' \"foo boo\")", "4",
+      L("acc grows by 1 for each matching letter", "acc crece en 1 por cada letra que coincide", "合う文字ごとに acc が 1 増える")),
+    p(
+      "Big results need Integer: Int wraps silently past about 9.2 × 10^18, while Integer keeps every digit. Start values matter: 0 for sums, 1 for products.",
+      "Los resultados grandes necesitan Integer: Int da la vuelta en silencio pasados unos 9.2 × 10^18, mientras que Integer conserva todos los dígitos. Los valores iniciales importan: 0 para sumas, 1 para productos.",
+      "大きな結果には Integer。Int は約 9.2 × 10^18 をこえると黙って回りこむが、Integer は全部の桁を保つ。初期値も大事：和は 0、積は 1。",
+    ),
+  ),
+  note("recap-higher-order", L("Recap: functions as arguments", "Repaso: funciones como argumentos", "復習：関数を引数に"),
+    p(
+      "map applies a function to every item, filter keeps the items that pass a test, and zipWith combines two lists position by position with a two-argument function. An operator in parentheses, like (-) or (*), is such a function.",
+      "map aplica una función a cada objeto, filter deja los objetos que pasan una prueba, y zipWith combina dos listas posición a posición con una función de dos argumentos. Un operador entre paréntesis, como (-) o (*), es una función así.",
+      "map は全要素に関数を当てはめ、filter は条件を通る要素を残し、zipWith は2引数の関数で2つのリストを位置ごとにまとめる。(-) や (*) のようにかっこで包んだ演算子も、そういう関数じゃ。",
+    ),
+    ex("print (zipWith (-) [10,20,30] [1,2,3])", "[9,18,27]",
+      L("First minus first, second minus second...", "Primero menos primero, segundo menos segundo...", "1つ目ひく1つ目、2つ目ひく2つ目…")),
+    p(
+      "Written in front, an operator in parentheses works like any function: (-) 10 1 is 10 - 1. The list stops at the shorter one when the two lengths differ.",
+      "Escrito delante, un operador entre paréntesis funciona como cualquier función: (-) 10 1 es 10 - 1. Si los largos difieren, la lista se detiene en la más corta.",
+      "前に書いたかっこつきの演算子は、ふつうの関数と同じ：(-) 10 1 は 10 - 1。長さがちがうときは、短いほうで止まる。",
+    ),
+  ),
+  note("recap-composition", L("Recap: sections, . and $", "Repaso: secciones, . y $", "復習：セクション・.・$"),
+    p(
+      "A section half-applies an operator: (/ 4) fills the right side, (4 /) the left. (-1) is not a section but the number negative one, so use subtract when you need \"minus n\" as a function.",
+      "Una sección aplica a medias un operador: (/ 4) llena el lado derecho, (4 /) el izquierdo. (-1) no es una sección sino el número menos uno, así que usa subtract cuando necesites \"menos n\" como función.",
+      "セクションは演算子を半分だけ適用する：(/ 4) は右側、(4 /) は左側を埋める。(-1) はセクションではなく数の -1 なので、「n を引く」関数が欲しいときは subtract を使おう。",
+    ),
+    ex("print ((/ 4) 2, (4 /) 2)\nprint (map (subtract 5) [9,6])", "(0.5,2.0)\n[4,1]"),
+    p(
+      "f . g runs g first, then f: read compositions from right to left. $ applies a function to everything on its right, so f . g $ x means (f . g) x. Without the $, g x would run first and . would get a value instead of a function.",
+      "f . g corre g primero y luego f: lee las composiciones de derecha a izquierda. $ aplica una función a todo lo de su derecha, así que f . g $ x significa (f . g) x. Sin el $, g x correría primero y . recibiría un valor en vez de una función.",
+      "f . g は g が先で次に f。合成は右から左へ読む。$ は右側全体に関数を適用するので、f . g $ x は (f . g) x のこと。$ がないと g x が先に計算され、. には関数ではなく値が渡ってしまう。",
+    ),
+    ex("print (sum . map (^ 2) $ [1,2])\nprint ((subtract 1 . (* 3)) 4)", "5\n11",
+      L("Right to left: square then sum; triple then minus 1", "De derecha a izquierda: cuadrado y suma; triple y menos 1", "右から：2乗して合計、3倍して 1 引く")),
+  ),
+  note("recap-folds", L("Recap: folds and scanl", "Repaso: folds y scanl", "復習：fold と scanl"),
+    p(
+      "foldl starts from the left, ((z op a) op b) op c, and its lambda takes acc first. foldr groups from the right, a op (b op (c op z)), and its lambda takes the item first. With - the two give different answers.",
+      "foldl empieza por la izquierda, ((z op a) op b) op c, y su lambda recibe acc primero. foldr agrupa desde la derecha, a op (b op (c op z)), y su lambda recibe el objeto primero. Con - los dos dan respuestas distintas.",
+      "foldl は左から ((z op a) op b) op c とまとめ、ラムダは acc を先に受け取る。foldr は右から a op (b op (c op z)) とまとめ、ラムダは要素を先に受け取る。- を使うと2つの答えはちがう。",
+    ),
+    ex("print (foldl (-) 20 [5,1], foldr (-) 20 [5,1])", "(14,24)",
+      L("(20-5)-1 versus 5-(1-20)", "(20-5)-1 frente a 5-(1-20)", "(20-5)-1 と 5-(1-20)")),
+    p(
+      "scanl keeps every running result, starting with the initial value. foldl' computes the accumulator at each step so no thunk pile forms; in GHC 9.8 it needs import Data.List (foldl') at the top of the file.",
+      "scanl guarda cada resultado parcial, empezando por el valor inicial. foldl' calcula el acumulador en cada paso para que no se forme una pila de thunks; en GHC 9.8 necesita import Data.List (foldl') al inicio del archivo.",
+      "scanl は初期値から始めて途中の結果を全部残す。foldl' は毎ステップでアキュムレータを計算するのでサンクの山ができない。GHC 9.8 ではファイルの先頭に import Data.List (foldl') が必要。",
+    ),
+    ex("print (scanl min 9 [7,8,2])", "[9,7,7,2]",
+      L("The smallest value seen so far", "El menor valor visto hasta ahora", "その時点までの最小値")),
+  ),
+];
 
 // ─── BOSS · The Thunk Pile ──────────────────────────────────────────────────
 const boss: LessonDef = {
@@ -625,6 +1143,7 @@ const boss: LessonDef = {
   xp: 180,
   enemy: "haskell/thunk-pile",
   enemyName: L("THUNK PILE", "PILA DE THUNKS", "サンクパイル"),
+  notes: forestBossNotes,
   beats: [
     enemySays(L(
       "Rumble... I am the THUNK PILE, every step you put off for later. Fold me wrong and I grow until the forest bursts!",
@@ -633,6 +1152,8 @@ const boss: LessonDef = {
     )),
     {
       kind: "predict", time: 20, prompt: PRINT,
+      hint: L("foldr's lambda meets the first item last; foldl's meets it first. Expand each by hand.", "La lambda de foldr ve el primer objeto al final; la de foldl, primero. Desarrolla cada una a mano.", "foldr のラムダは最初の要素を最後に、foldl は最初に扱う。手で展開しよう。"),
+      note: "recap-folds",
       code: "print (foldr (\\x acc -> x + 10 * acc) 0 [1,2,3])\nprint (foldl (\\acc x -> acc * 10 + x) 0 [1,2,3])",
       options: ["321\n123", "123\n321", "123\n123"],
       answer: 0,
@@ -643,6 +1164,8 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 15, prompt: PRINT,
+      hint: L("foldl starts from 10 on the left and subtracts each item in turn.", "foldl empieza con 10 a la izquierda y resta cada objeto por turno.", "foldl は左の 10 から、要素を順に引いていく。"),
+      note: "recap-folds",
       code: "print (foldl (-) 10 [1,2,3])",
       options: ["4", "-4", "2"],
       answer: 0,
@@ -653,6 +1176,8 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 15, prompt: PRINT,
+      hint: L("scanl writes down the running result: the biggest value seen so far, starting from 0.", "scanl anota el resultado parcial: el mayor valor visto hasta ahora, empezando en 0.", "scanl は途中結果を書き残す：0 から始めて、それまでの最大値。"),
+      note: "recap-folds",
       code: "print (scanl max 0 [3,1,4,1,5])",
       options: ["[0,3,3,4,4,5]", "[3,1,4,1,5]", "[0,3,1,4,1,5]"],
       answer: 0,
@@ -663,6 +1188,8 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 15, prompt: PRINT,
+      hint: L("Combine the items at the same position in both lists with the operator.", "Combina con el operador los objetos que están en la misma posición en ambas listas.", "両方のリストの同じ位置の要素を、演算子でまとめよう。"),
+      note: "recap-higher-order",
       code: "print (zipWith (*) [1,2,3] [4,5,6])",
       options: ["[4,10,18]", "32", "[5,7,9]"],
       answer: 0,
@@ -673,6 +1200,8 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 15, prompt: PRINT,
+      hint: L("(+) is a normal function written in front. In a composition, the right function runs first.", "(+) es una función normal escrita delante. En una composición, la función de la derecha corre primero.", "(+) は前に書いたふつうの関数。合成では右の関数が先。"),
+      note: "recap-composition",
       code: "print ((+) 2 3, ((+1) . (*2)) 5)",
       options: ["(5,11)", "(5,12)", "(6,11)"],
       answer: 0,
@@ -683,6 +1212,8 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 15, prompt: PRINT,
+      hint: L("Right to left: what does the filter keep, and what does map then do to it?", "De derecha a izquierda: ¿qué deja el filtro y qué le hace map después?", "右から左へ。filter は何を残し、map はそれをどうする？"),
+      note: "recap-composition",
       code: "print ((map (+1) . filter even) [1..6])",
       options: ["[3,5,7]", "[2,4,6]", "[2,3,4,5,6,7]"],
       answer: 0,
@@ -693,6 +1224,8 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 15, prompt: COMPILES,
+      hint: L("Is (-2) a section waiting for a number, or just a number?", "¿(-2) es una sección que espera un número, o solo un número?", "(-2) は数を待つセクション？それともただの数？"),
+      note: "recap-composition",
       code: "print (map (-2) [5,6])",
       options: [YES, NO_GHC],
       answer: 1,
@@ -702,6 +1235,8 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 15, prompt: PRINT,
+      hint: L("$ hands the whole list to the composed function. Count what passes the filter.", "$ le pasa la lista entera a la función compuesta. Cuenta lo que pasa el filtro.", "$ がリスト全体を合成関数に渡す。filter を通る数を数えよう。"),
+      note: "recap-composition",
       code: "print (length . filter even $ [1..10])",
       options: ["5", "10", NO_COMPILE],
       answer: 0,
@@ -712,6 +1247,8 @@ const boss: LessonDef = {
     },
     {
       kind: "predict", time: 20, prompt: PRINT,
+      hint: L("go multiplies acc by each item from 1 to 20, and Integer keeps every digit.", "go multiplica acc por cada objeto del 1 al 20, e Integer conserva todos los dígitos.", "go は 1 から 20 までを acc にかけていく。Integer は全部の桁を保つ。"),
+      note: "recap-recursion",
       code: "productOf :: [Integer] -> Integer\nproductOf xs = go 1 xs\n  where\n    go acc [] = acc\n    go acc (y:ys) = go (acc * y) ys\n\nmain = print (productOf [1..20])",
       options: ["2432902008176640000", "210", "20"],
       answer: 0,
@@ -723,6 +1260,8 @@ const boss: LessonDef = {
     {
       kind: "pick", time: 15,
       prompt: L("Bring foldl' in to crush the pile", "Trae foldl' para aplastar la pila", "foldl' を呼んで山をつぶせ"),
+      hint: L("Which keyword brings a module's names into a Haskell file?", "¿Qué palabra clave trae los nombres de un módulo a un archivo Haskell?", "モジュールの名前を Haskell のファイルに読みこむキーワードは？"),
+      note: "recap-folds",
       code: "___ Data.List (foldl')\n\nmain = print (foldl' (+) 0 [1..100])",
       options: ["import", "include", "using"],
       answer: 0,
@@ -733,6 +1272,8 @@ const boss: LessonDef = {
     {
       kind: "type", time: 15,
       prompt: L("Take one from each: [4,5]", "Resta uno a cada uno: [4,5]", "ひとつずつ減らす：[4,5]"),
+      hint: L("(-1) would be a number. You need a Prelude function that takes the amount to remove first.", "(-1) sería un número. Necesitas una función del Prelude que reciba primero la cantidad a quitar.", "(-1) はただの数。引く量を先に受け取る Prelude の関数が必要。"),
+      note: "recap-composition",
       code: "print (map (___ 1) [5,6])",
       answer: "subtract",
       check: { compiles: true, stdout: "[4,5]" },

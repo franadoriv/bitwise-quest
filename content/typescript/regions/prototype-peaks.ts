@@ -1,4 +1,4 @@
-import type { LessonDef, RegionDef } from "../../../lib/content/types.ts";
+import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
 import { enemySays, say } from "../../rust/helpers.ts";
 
@@ -9,6 +9,92 @@ const OUT = L("What does it print?", "¿Qué imprime?", "何が表示される�
 const YES = L("Yes", "Sí", "はい");
 const NO = L("No", "No", "いいえ");
 
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example; the validator type-checks it and checks `output` against the runner. */
+const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code, output, caption });
+/** An example that must NOT type-check (verified too). */
+const bad = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: false } });
+/** An example that type-checks, then crashes at runtime with a message containing `throws`. */
+const crash = (code: string, throws: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: true, throws } });
+
+const objectsNotes: NoteDef[] = [
+  note("destructuring", L("Unpacking with destructuring", "Desempacar con desestructuración", "分割代入で取り出す"),
+    p(
+      "An object is a bag of named values: { kind: \"owl\", age: 3 } has two keys, kind and age. You can read one key with a dot, like pet.age. Destructuring is a shortcut to read several keys at once and store each one in its own variable.",
+      "Un objeto es una bolsa de valores con nombre: { kind: \"owl\", age: 3 } tiene dos claves, kind y age. Puedes leer una clave con un punto, como pet.age. La desestructuración es un atajo para leer varias claves a la vez y guardar cada una en su propia variable.",
+      "オブジェクトは名前つきの値の袋。{ kind: \"owl\", age: 3 } には kind と age の2つのキーがある。pet.age のようにドットで1つずつ読める。分割代入は、複数のキーを一度に読んで、それぞれ別の変数に入れる近道だよ。",
+    ),
+    ex(c('const pet = { kind: "owl", age: 3 };', "const { kind, age } = pet;", "console.log(kind, age);"), "owl 3",
+      L("Each key goes into a variable with the same name", "Cada clave va a una variable con el mismo nombre", "各キーが同じ名前の変数に入る")),
+    p(
+      "With objects, the match is by NAME: const { age } = pet looks for a key called age, wherever it is in the bag. A name that is not a key gives undefined. To use a different variable name, write key: newName, like const { kind: species } = pet.",
+      "Con objetos, la coincidencia es por NOMBRE: const { age } = pet busca una clave llamada age, esté donde esté en la bolsa. Un nombre que no es clave da undefined. Para usar otro nombre de variable, escribe clave: nuevoNombre, como const { kind: species } = pet.",
+      "オブジェクトは名前で対応する。const { age } = pet は袋のどこにあっても age というキーを探す。キーにない名前は undefined。別の変数名にしたいときは const { kind: species } = pet のように キー: 新しい名前 と書くよ。",
+    ),
+    p(
+      "With arrays, the match is by POSITION: const [x, y] = list takes the first and second items. Leave an empty slot between commas to skip an item. The same idea swaps two variables: the right side builds a new array from the old values, then the left side unpacks it.",
+      "Con arrays, la coincidencia es por POSICIÓN: const [x, y] = list toma el primer y el segundo ítem. Deja un hueco vacío entre comas para saltarte un ítem. La misma idea intercambia dos variables: la derecha arma un array nuevo con los valores viejos y la izquierda lo desempaca.",
+      "配列は位置で対応する。const [x, y] = list は1番目と2番目を取る。カンマの間を空けるとその要素を飛ばせる。同じしくみで2つの変数を入れ替えられる。右側で古い値から新しい配列を作り、左側で取り出すんだ。",
+    ),
+    ex(c("const [x, , z] = [10, 20, 30];", 'let left = "L", right = "R";', "[left, right] = [right, left];", "console.log(x, z, left, right);"), "10 30 R L",
+      L("Skip a slot with an empty comma; swap with a pair", "Salta un hueco con una coma vacía; intercambia con un par", "空のカンマで飛ばし、ペアで入れ替える")),
+    p(
+      "Common mistake: mixing the two rules. Curly braces { } unpack by name, square brackets [ ] unpack by position. Reading a name that the object does not have is not an error in plain JavaScript, it just quietly gives undefined.",
+      "Error común: mezclar las dos reglas. Las llaves { } desempacan por nombre y los corchetes [ ] por posición. Leer un nombre que el objeto no tiene no es un error en JavaScript puro: simplemente da undefined en silencio.",
+      "よくあるミス：2つのルールを混ぜること。波かっこ { } は名前で、角かっこ [ ] は位置で取り出す。オブジェクトにない名前を読んでも素の JavaScript ではエラーにならず、こっそり undefined になるよ。",
+    ),
+  ),
+  note("spread-merge", L("Spread: copy and merge objects", "Spread: copiar y combinar objetos", "スプレッドで合体"),
+    p(
+      "The spread syntax ...obj pours every key of obj into a NEW object literal. { ...theme } is a fresh bag with the same keys and values as theme. You can add more keys around it in the same literal, which is how objects are merged or updated without touching the original.",
+      "La sintaxis spread ...obj vierte cada clave de obj en un literal de objeto NUEVO. { ...theme } es una bolsa nueva con las mismas claves y valores que theme. Puedes añadir más claves alrededor en el mismo literal: así se combinan o actualizan objetos sin tocar el original.",
+      "スプレッド構文 ...obj は obj の全キーを新しいオブジェクトリテラルに注ぐ。{ ...theme } は theme と同じキーと値をもつ新しい袋。同じリテラルの中にキーを足せば、元を変えずに合体や更新ができるよ。",
+    ),
+    p(
+      "The rule to remember: keys are written from left to right, and when the same key appears twice, the one written LATER wins. So the order of the pieces decides which value survives. Keys that appear only once are always kept.",
+      "La regla para recordar: las claves se escriben de izquierda a derecha y, cuando la misma clave aparece dos veces, gana la escrita DESPUÉS. Así que el orden de las piezas decide qué valor sobrevive. Las claves que aparecen una sola vez siempre se conservan.",
+      "覚えるルール：キーは左から右へ書かれ、同じキーが2回出たら後に書いたほうが勝つ。だから並べる順番で、どの値が残るかが決まる。1回しか出ないキーはいつも残るよ。",
+    ),
+    ex(c('const theme = { color: "blue", size: 12 };', "const big = { size: 16 };", "const first = { ...theme, ...big };", "const last = { ...big, ...theme };", "console.log(first.size, last.size, theme.size);"), "16 12 12",
+      L("Same pieces, different order, different winner", "Mismas piezas, otro orden, otro ganador", "同じ部品でも順番で勝者が変わる")),
+    p(
+      "A typical use is settings: spread the defaults first, then the user's choices on top, so every choice the user made covers the default and anything they left out falls back to it. Spreading them in the opposite order silently throws the user's choices away.",
+      "Un uso típico son los ajustes: esparce primero los valores por defecto y encima las elecciones del usuario, así cada elección tapa al default y lo que no eligió queda con el default. Esparcirlos en el orden opuesto descarta en silencio lo que eligió el usuario.",
+      "よくある使い方は設定。先に既定値を広げ、その上にユーザーの選択を重ねる。選んだものは既定値を上書きし、選ばなかったものは既定値のまま。逆の順にすると、ユーザーの選択が黙って消えてしまうよ。",
+    ),
+  ),
+  note("missing-values", L("undefined, defaults and ?.", "undefined, defaults y ?.", "undefined・既定値・?."),
+    p(
+      "JavaScript has two \"nothing\" values. undefined means \"no value was given\": a missing key, a variable never set. null is a value someone wrote on purpose to say \"empty\". They look similar, but many features treat them differently.",
+      "JavaScript tiene dos valores de \"nada\". undefined significa \"no se dio ningún valor\": una clave que falta, una variable nunca asignada. null es un valor que alguien escribió a propósito para decir \"vacío\". Se parecen, pero muchas funciones los tratan distinto.",
+      "JavaScript には「何もない」値が2つある。undefined は「値が与えられていない」：ないキーや、まだ入れていない変数。null は「空です」とわざと書いた値。似ているけど、扱いが違う機能が多いよ。",
+    ),
+    p(
+      "A default in destructuring, like const { size = 10 } = obj, is used ONLY when the value is undefined. Any other value, even null, 0 or an empty string, is a real value and is kept as it is.",
+      "Un valor por defecto en la desestructuración, como const { size = 10 } = obj, se usa SOLO cuando el valor es undefined. Cualquier otro valor, incluso null, 0 o un string vacío, es un valor real y se conserva tal cual.",
+      "分割代入の既定値 const { size = 10 } = obj が使われるのは、値が undefined のときだけ。null や 0、空文字列でも、それは本物の値なのでそのまま残るよ。",
+    ),
+    ex(c('const { size = 10, label = "?" } = { size: 0, label: undefined };', "console.log(size, label);"), "0 ?",
+      L("0 is a real value; only undefined gets the default", "0 es un valor real; solo undefined recibe el default", "0 は本物の値。既定値になるのは undefined だけ")),
+    p(
+      "Reading a key of undefined or null crashes with a TypeError. Optional chaining ?. asks politely: if the left side is null or undefined, the whole chain stops and gives undefined instead of crashing. Pair it with ?? to supply a fallback.",
+      "Leer una clave de undefined o null revienta con un TypeError. El encadenamiento opcional ?. pregunta con cuidado: si la izquierda es null o undefined, toda la cadena se detiene y da undefined en vez de reventar. Combínalo con ?? para dar un valor de respaldo.",
+      "undefined や null のキーを読むと TypeError でクラッシュする。オプショナルチェーン ?. なら、左が null か undefined のとき、そこで止まってクラッシュせずに undefined を返す。?? と組み合わせると代わりの値を出せるよ。",
+    ),
+    ex(c("const order: { buyer?: { city: string } } = {};", "console.log(order.buyer?.city);", 'console.log(order.buyer?.city ?? "unknown");'), "undefined\nunknown"),
+    p(
+      "TypeScript helps here: when a key is marked optional with ?, it refuses a plain dot read of something that may be missing, and asks you to use ?. or to check first. That turns a crash at runtime into an error you see before running.",
+      "TypeScript ayuda aquí: cuando una clave está marcada como opcional con ?, rechaza leer con un punto simple algo que puede faltar, y te pide usar ?. o comprobar antes. Así un fallo en ejecución se convierte en un error que ves antes de ejecutar.",
+      "TypeScript も助けてくれる。? で省略可能にしたキーは、ないかもしれないので普通のドットで読むのを拒み、?. を使うか先に確かめるよう求める。実行時のクラッシュが、実行前に見えるエラーに変わるんだ。",
+    ),
+    bad(c("const order: { buyer?: { city: string } } = {};", "console.log(order.buyer.city);"),
+      L("Does not type-check: buyer is possibly undefined", "No pasa el chequeo: buyer puede ser undefined", "型エラー：buyer は undefined かも")),
+  ),
+];
+
 const objectsLesson: LessonDef = {
   slug: "objects-and-destructuring",
   title: L("Packing the bag", "Armando la mochila", "バッグに詰めよう"),
@@ -17,6 +103,7 @@ const objectsLesson: LessonDef = {
   xp: 65,
   enemy: "typescript/undefined-ghost",
   enemyName: L("HOLLOW GHOST", "FANTASMA HUECO", "からっぽゴースト"),
+  notes: objectsNotes,
   beats: [
     say(L(
       "Welcome to Prototype Peaks! Climbers pack OBJECTS here: bags of named values, like { name: \"Ada\", hp: 10 }.",
@@ -41,6 +128,8 @@ const objectsLesson: LessonDef = {
       answer: 0,
       output: "Ada 10",
       check: { compiles: true, stdout: "Ada 10" },
+      hint: L("Curly braces on the left look up keys by NAME in the object on the right. Find each key in hero.", "Las llaves a la izquierda buscan claves por NOMBRE en el objeto de la derecha. Busca cada clave en hero.", "左の波かっこは右のオブジェクトからキーを名前で探す。hero の中で各キーを探そう。"),
+      note: "destructuring",
       explain: L(
         "{ name, hp } = hero copies each key into a variable with the same name.",
         "{ name, hp } = hero copia cada clave en una variable con el mismo nombre.",
@@ -57,6 +146,8 @@ const objectsLesson: LessonDef = {
       answer: 0,
       output: "ac",
       check: { compiles: true, stdout: "ac" },
+      hint: L("Square brackets unpack by position. What does the empty spot between two commas do?", "Los corchetes desempacan por posición. ¿Qué hace el hueco vacío entre dos comas?", "角かっこは位置で取り出す。カンマとカンマの間の空きは何をする？"),
+      note: "destructuring",
       explain: L(
         "Arrays unpack by POSITION. The empty slot between commas skips \"b\".",
         "Los arrays se desempacan por POSICIÓN. El hueco entre comas se salta \"b\".",
@@ -78,6 +169,8 @@ const objectsLesson: LessonDef = {
       answer: 0,
       output: "20 5",
       check: { compiles: true, stdout: "20 5" },
+      hint: L("Read the new object from left to right. When a key appears twice, which one is kept?", "Lee el objeto nuevo de izquierda a derecha. Cuando una clave aparece dos veces, ¿cuál se queda?", "新しいオブジェクトを左から右へ読もう。同じキーが2回出たら、どちらが残る？"),
+      note: "spread-merge",
       explain: L(
         "base's keys land first; hp: 20 comes later and covers hp: 10. mp is kept.",
         "Las claves de base llegan primero; hp: 20 viene después y tapa hp: 10. mp se conserva.",
@@ -94,6 +187,8 @@ const objectsLesson: LessonDef = {
       answer: 0,
       output: "1 null",
       check: { compiles: true, stdout: "1 null" },
+      hint: L("A default is used only when the value is undefined. Check what each key really holds.", "Un valor por defecto solo se usa cuando el valor es undefined. Mira qué guarda realmente cada clave.", "既定値が使われるのは値が undefined のときだけ。各キーに本当は何が入っている？"),
+      note: "missing-values",
       explain: L(
         "A default only fills in for undefined. null is a real value, so mp stays null.",
         "Un valor por defecto solo reemplaza a undefined. null es un valor real, así que mp queda null.",
@@ -118,6 +213,8 @@ const objectsLesson: LessonDef = {
       answer: 0,
       output: "undefined",
       check: { compiles: true, stdout: "undefined" },
+      hint: L("user is empty, so profile is missing. What does ?. do when its left side is missing?", "user está vacío, así que falta profile. ¿Qué hace ?. cuando falta lo que tiene a la izquierda?", "user は空なので profile がない。左側がないとき ?. はどうする？"),
+      note: "missing-values",
       explain: L(
         "profile is undefined, so ?. stops there and the whole expression is undefined. No crash.",
         "profile es undefined, así que ?. se detiene ahí y toda la expresión vale undefined. Sin error.",
@@ -132,6 +229,8 @@ const objectsLesson: LessonDef = {
       code: c("const user: { profile?: { name: string } } = {};", "console.log(user.profile___name);"),
       answer: "?.",
       check: { compiles: true, stdout: "undefined" },
+      hint: L("You need the two-character operator that stops safely when the left side is null or undefined.", "Necesitas el operador de dos caracteres que se detiene sin riesgo si la izquierda es null o undefined.", "左が null か undefined なら安全に止まる、2文字の演算子が必要だよ。"),
+      note: "missing-values",
       explain: L(
         "?. returns undefined instead of throwing when profile is missing.",
         "?. devuelve undefined en vez de lanzar un error cuando falta profile.",
@@ -147,6 +246,8 @@ const objectsLesson: LessonDef = {
       answer: 0,
       output: "2 1",
       check: { compiles: true, stdout: "2 1" },
+      hint: L("Evaluate the whole right side first with the current values, then unpack it into the left.", "Evalúa primero todo el lado derecho con los valores actuales y luego desempácalo en la izquierda.", "まず右側を今の値で全部計算し、それから左側に取り出そう。"),
+      note: "destructuring",
       explain: L(
         "The right side builds [2, 1] first, then destructuring assigns it: a classic swap.",
         "La derecha arma [2, 1] primero y luego la desestructuración lo asigna: el clásico intercambio.",
@@ -177,6 +278,8 @@ const objectsLesson: LessonDef = {
         String.raw`\{\s*\.\.\.defaults\s*,\s*\.\.\.saved\s*\}`,
         String.raw`Object\.assign\s*\(\s*\{\s*\}\s*,\s*defaults\s*,\s*saved\s*\)`,
       ],
+      hint: L("When keys collide, the later spread wins. Which object must come last so the saved 9 survives?", "Cuando las claves chocan, gana el spread posterior. ¿Qué objeto debe ir al final para que sobreviva el 9?", "キーがぶつかると後のスプレッドが勝つ。保存した 9 を残すには、どちらを最後に？"),
+      note: "spread-merge",
       explain: L(
         "Later keys win: spread the defaults FIRST, then the saved values on top.",
         "Ganan las claves posteriores: esparce los defaults PRIMERO y encima los valores guardados.",
@@ -186,6 +289,77 @@ const objectsLesson: LessonDef = {
   ],
 };
 
+const copiesNotes: NoteDef[] = [
+  note("values-vs-references", L("Copied values, shared objects", "Valores copiados, objetos compartidos", "コピーされる値と共有される物"),
+    p(
+      "Numbers, strings and booleans are PRIMITIVES. When you write let b = a with a primitive, b gets its own copy of the value. Changing b later never affects a: they are two separate boxes that happened to hold the same thing for a moment.",
+      "Los números, strings y booleanos son PRIMITIVOS. Cuando escribes let b = a con un primitivo, b recibe su propia copia del valor. Cambiar b después nunca afecta a a: son dos cajas separadas que por un momento guardaron lo mismo.",
+      "数値・文字列・真偽値はプリミティブ。プリミティブで let b = a と書くと、b は自分用のコピーを受け取る。あとで b を変えても a には影響しない。たまたま同じ物が入っていただけの別々の箱なんだ。",
+    ),
+    ex(c("let score = 40;", "let backup = score;", "backup = 0;", "console.log(score, backup);"), "40 0",
+      L("A primitive is copied: two independent boxes", "Un primitivo se copia: dos cajas independientes", "プリミティブはコピー：別々の箱")),
+    p(
+      "Objects and arrays work differently. The variable does not hold the bag itself, it holds a REFERENCE: an arrow pointing at the bag. const b = a copies the arrow, not the bag, so both names now point at the very same object, and a change made through one is seen through the other.",
+      "Los objetos y arrays funcionan distinto. La variable no guarda la bolsa, guarda una REFERENCIA: una flecha que apunta a la bolsa. const b = a copia la flecha, no la bolsa, así que ambos nombres apuntan al mismo objeto, y un cambio hecho por uno se ve desde el otro.",
+      "オブジェクトと配列は違う。変数は袋そのものではなく、袋を指す矢印（参照）を持つ。const b = a がコピーするのは矢印で袋じゃない。だから両方の名前が同じオブジェクトを指し、片方からの変更がもう片方からも見えるよ。",
+    ),
+    ex(c('const box = { label: "old" };', "const alias = box;", 'alias.label = "new";', "console.log(box.label);"), "new",
+      L("Two names, one object", "Dos nombres, un objeto", "名前は2つ、物は1つ")),
+    p(
+      "This is also why === on objects compares IDENTITY, not contents: it asks \"are these the same bag?\". Two arrays built separately are two bags, even with the same items inside, so === says false. Comparing a variable with itself, or with an alias of it, says true.",
+      "Por eso también === con objetos compara IDENTIDAD, no contenido: pregunta \"¿es la misma bolsa?\". Dos arrays creados por separado son dos bolsas, aunque tengan los mismos ítems, así que === da false. Comparar una variable consigo misma, o con un alias suyo, da true.",
+      "だからオブジェクトの === は中身ではなく「同じ袋か」を比べる。別々に作った配列は、中身が同じでも別の袋なので false。自分自身や、同じ物を指す別名と比べると true だよ。",
+    ),
+    ex(c("const p1 = { x: 1 };", "const p2 = { x: 1 };", "const p3 = p1;", "console.log(p1 === p2, p1 === p3);"), "false true"),
+  ),
+  note("shallow-vs-deep", L("Shallow and deep copies", "Copias superficiales y profundas", "浅いコピーと深いコピー"),
+    p(
+      "To get a real copy of an object, you build a new one. The spread { ...obj } (or Object.assign({}, obj)) creates a NEW outer bag and copies each key into it. Changing a top-level key of the copy does not touch the original.",
+      "Para obtener una copia real de un objeto, hay que crear uno nuevo. El spread { ...obj } (u Object.assign({}, obj)) crea una bolsa externa NUEVA y copia cada clave en ella. Cambiar una clave de primer nivel de la copia no toca el original.",
+      "本当のコピーを得るには新しいオブジェクトを作る。スプレッド { ...obj }（や Object.assign({}, obj)）は新しい外側の袋を作り、各キーをコピーする。コピーの1段目のキーを変えても元は変わらないよ。",
+    ),
+    p(
+      "But spread is SHALLOW: it copies only one level. If a key holds another object, what gets copied is the reference to that inner object. The original and the copy then share the inner bag, and changing something inside it shows up in both.",
+      "Pero el spread es SUPERFICIAL: copia un solo nivel. Si una clave guarda otro objeto, lo que se copia es la referencia a ese objeto interno. El original y la copia comparten entonces la bolsa interna, y cambiar algo dentro se ve en ambos.",
+      "でもスプレッドは浅い。コピーするのは1段だけ。キーの中に別のオブジェクトがあると、コピーされるのはその参照。元とコピーが中の袋を共有するので、中を変えると両方に表れるよ。",
+    ),
+    ex(c('const shop = { owner: "Kim", stock: { apples: 3 } };', "const copy = { ...shop };", 'copy.owner = "Lee";', "copy.stock.apples = 0;", "console.log(shop.owner, shop.stock.apples);"), "Kim 0",
+      L("Top level is copied; the inner stock is shared", "El primer nivel se copia; el stock interno se comparte", "1段目はコピー、中の stock は共有")),
+    p(
+      "structuredClone(obj) makes a DEEP copy: it walks every level and builds new inner objects too, so nothing is shared afterwards. Another fix is to spread each level you plan to change: { ...shop, stock: { ...shop.stock } }.",
+      "structuredClone(obj) hace una copia PROFUNDA: recorre todos los niveles y crea también objetos internos nuevos, así que después no se comparte nada. Otra solución es esparcir cada nivel que vas a cambiar: { ...shop, stock: { ...shop.stock } }.",
+      "structuredClone(obj) は深いコピー。全部の段をたどって中のオブジェクトも新しく作るので、何も共有しなくなる。変える段ごとにスプレッドする方法もある：{ ...shop, stock: { ...shop.stock } }。",
+    ),
+    ex(c('const shop = { owner: "Kim", stock: { apples: 3 } };', "const copy = structuredClone(shop);", "copy.stock.apples = 0;", "console.log(shop.stock.apples);"), "3"),
+    p(
+      "Common mistake: thinking Object.freeze or Object.create copy anything. freeze returns the SAME object, now locked. create makes an empty object whose prototype is the one you pass. Neither gives you an independent copy.",
+      "Error común: pensar que Object.freeze u Object.create copian algo. freeze devuelve el MISMO objeto, ahora bloqueado. create crea un objeto vacío cuyo prototipo es el que le pasas. Ninguno te da una copia independiente.",
+      "よくある誤解：Object.freeze や Object.create がコピーすると思うこと。freeze は同じオブジェクトを固めて返すだけ。create は渡した物をプロトタイプにした空のオブジェクトを作る。どちらも独立したコピーにはならないよ。",
+    ),
+  ),
+  note("references-in-functions", L("Passing objects to functions", "Pasar objetos a funciones", "関数にオブジェクトを渡す"),
+    p(
+      "When you call a function with an object, the parameter receives a copy of the REFERENCE. Inside the function, the parameter and the caller's variable point at the same bag. So if the function changes a key, like param.count = 5, the caller sees that change afterwards.",
+      "Cuando llamas a una función con un objeto, el parámetro recibe una copia de la REFERENCIA. Dentro de la función, el parámetro y la variable de quien llama apuntan a la misma bolsa. Así que si la función cambia una clave, como param.count = 5, quien llama ve ese cambio después.",
+      "関数にオブジェクトを渡すと、引数は参照のコピーを受け取る。関数の中の引数と、呼んだ側の変数は同じ袋を指す。だから関数が param.count = 5 のようにキーを変えると、呼んだ側にもその変更が見えるよ。",
+    ),
+    ex(c("function fill(cup: { ml: number }) {", "  cup.ml = 250;", "}", "const mug = { ml: 0 };", "fill(mug);", "console.log(mug.ml);"), "250",
+      L("Changing a key through the parameter", "Cambiar una clave a través del parámetro", "引数を通してキーを変える")),
+    p(
+      "Reassigning the parameter is different. param = { ... } does not change the bag; it only moves the function's local label to point at a new bag. The caller's variable still points at the old one, so nothing changes outside.",
+      "Reasignar el parámetro es distinto. param = { ... } no cambia la bolsa; solo mueve la etiqueta local de la función para que apunte a una bolsa nueva. La variable de quien llama sigue apuntando a la vieja, así que afuera no cambia nada.",
+      "引数への再代入は別物。param = { ... } は袋を変えず、関数のローカルなラベルを新しい袋に付け替えるだけ。呼んだ側の変数は古い袋を指したままなので、外は何も変わらないよ。",
+    ),
+    ex(c("function swapCup(cup: { ml: number }) {", "  cup = { ml: 999 };", "}", "const glass = { ml: 80 };", "swapCup(glass);", "console.log(glass.ml);"), "80",
+      L("Reassigning only moves the local label", "Reasignar solo mueve la etiqueta local", "再代入はローカルのラベルを動かすだけ")),
+    p(
+      "Rule to remember: param.key = value changes the shared object; param = newValue only changes the function's own label. If you want a function to give back a new object, return it and let the caller store it.",
+      "Regla para recordar: param.clave = valor cambia el objeto compartido; param = nuevoValor solo cambia la etiqueta propia de la función. Si quieres que una función entregue un objeto nuevo, devuélvelo con return y deja que quien llama lo guarde.",
+      "覚えるルール：param.key = 値 は共有の物を変える。param = 新しい値 は関数自身のラベルを変えるだけ。新しいオブジェクトを渡したいなら return で返し、呼んだ側でしまおう。",
+    ),
+  ),
+];
+
 const copiesLesson: LessonDef = {
   slug: "references-and-copies",
   title: L("Shared treasure", "Tesoro compartido", "共有された宝"),
@@ -194,6 +368,7 @@ const copiesLesson: LessonDef = {
   xp: 70,
   enemy: "ghost",
   enemyName: L("MIRROR GHOST", "FANTASMA ESPEJO", "カガミゴースト"),
+  notes: copiesNotes,
   beats: [
     say(L(
       "Numbers and strings are COPIED. Objects are SHARED: two labels can point at the very same bag.",
@@ -218,6 +393,8 @@ const copiesLesson: LessonDef = {
       answer: 0,
       output: "5",
       check: { compiles: true, stdout: "5" },
+      hint: L("a holds a number, a primitive. Does b = a link the two names, or copy the value?", "a guarda un número, un primitivo. ¿b = a enlaza los dos nombres o copia el valor?", "a に入っているのは数値（プリミティブ）。b = a は名前をつなぐ？値をコピーする？"),
+      note: "values-vs-references",
       explain: L(
         "A number is copied into b. Changing b never touches a.",
         "El número se copia en b. Cambiar b nunca toca a.",
@@ -234,6 +411,8 @@ const copiesLesson: LessonDef = {
       answer: 0,
       output: "9",
       check: { compiles: true, stdout: "9" },
+      hint: L("a holds an object. After b = a, how many objects exist: one or two?", "a guarda un objeto. Después de b = a, ¿cuántos objetos existen: uno o dos?", "a に入っているのはオブジェクト。b = a のあと、オブジェクトは1つ？2つ？"),
+      note: "values-vs-references",
       explain: L(
         "b = a copies the REFERENCE, not the bag. Both labels reach the same object.",
         "b = a copia la REFERENCIA, no la bolsa. Ambas etiquetas llegan al mismo objeto.",
@@ -255,6 +434,8 @@ const copiesLesson: LessonDef = {
       answer: 0,
       output: "5",
       check: { compiles: true, stdout: "5" },
+      hint: L("Spread builds a new outer object. hp is a top-level number: is it shared or copied?", "El spread crea un objeto externo nuevo. hp es un número del primer nivel: ¿se comparte o se copia?", "スプレッドは外側の新しいオブジェクトを作る。1段目の数値 hp は共有？コピー？"),
+      note: "shallow-vs-deep",
       explain: L(
         "b is a new bag with its own hp. a keeps 5.",
         "b es una bolsa nueva con su propio hp. a conserva 5.",
@@ -271,6 +452,8 @@ const copiesLesson: LessonDef = {
       answer: 0,
       output: "9",
       check: { compiles: true, stdout: "9" },
+      hint: L("Spread copies only one level. stats is an object inside: what gets copied for it?", "El spread copia un solo nivel. stats es un objeto interno: ¿qué se copia de él?", "スプレッドのコピーは1段だけ。中のオブジェクト stats は、何がコピーされる？"),
+      note: "shallow-vs-deep",
       explain: L(
         "The outer bag is new, but stats is the SAME inner object in both. Shallow copy.",
         "La bolsa externa es nueva, pero stats es el MISMO objeto interno en ambas. Copia superficial.",
@@ -291,6 +474,8 @@ const copiesLesson: LessonDef = {
       options: ["structuredClone", "Object.freeze", "Object.create"],
       answer: 0,
       check: { compiles: true, stdout: "5" },
+      hint: L("You need a built-in that copies every level, not just the top. Which option builds new inner objects?", "Necesitas una función incorporada que copie todos los niveles, no solo el primero. ¿Cuál crea objetos internos nuevos?", "1段目だけでなく全段をコピーする組み込み関数が必要。中の物まで新しく作るのは？"),
+      note: "shallow-vs-deep",
       explain: L(
         "Only structuredClone copies the inner stats. freeze returns the same object; create links a prototype.",
         "Solo structuredClone copia el stats interno. freeze devuelve el mismo objeto; create enlaza un prototipo.",
@@ -307,6 +492,8 @@ const copiesLesson: LessonDef = {
       answer: 0,
       output: "false true",
       check: { compiles: true, stdout: "false true" },
+      hint: L("For objects, === asks whether both sides are the very same object, not whether they look alike.", "Con objetos, === pregunta si ambos lados son el mismo objeto, no si se parecen.", "オブジェクトの === は、似ているかではなく、まったく同じ物かを聞いている。"),
+      note: "values-vs-references",
       explain: L(
         "=== on objects compares IDENTITY: same contents in two arrays is still two different arrays.",
         "=== con objetos compara IDENTIDAD: el mismo contenido en dos arrays sigue siendo dos arrays distintos.",
@@ -321,6 +508,8 @@ const copiesLesson: LessonDef = {
       answer: 0,
       output: "10",
       check: { compiles: true, stdout: "10" },
+      hint: L("The function changes a KEY of its parameter. Does the parameter point at the caller's object?", "La función cambia una CLAVE de su parámetro. ¿El parámetro apunta al objeto de quien llama?", "関数は引数のキーを変えている。その引数は呼んだ側のオブジェクトを指している？"),
+      note: "references-in-functions",
       explain: L(
         "The function receives a reference to the same bag, so its change is visible outside.",
         "La función recibe una referencia a la misma bolsa, así que su cambio se ve afuera.",
@@ -337,6 +526,8 @@ const copiesLesson: LessonDef = {
       answer: 0,
       output: "7",
       check: { compiles: true, stdout: "7" },
+      hint: L("The function assigns to the parameter itself, not to one of its keys. Does that reach the caller?", "La función asigna al parámetro mismo, no a una de sus claves. ¿Eso llega a quien llama?", "関数はキーではなく引数そのものに代入している。それは呼んだ側に届く？"),
+      note: "references-in-functions",
       explain: L(
         "h = {...} only re-points the local label h to a new bag. The caller's hero is untouched.",
         "h = {...} solo apunta la etiqueta local h a otra bolsa. El hero de afuera no cambia.",
@@ -366,6 +557,8 @@ const copiesLesson: LessonDef = {
         String.raw`stats\s*:\s*\{\s*\.\.\.\s*original\s*\.\s*stats\s*\}`,
         String.raw`JSON\.parse\s*\(\s*JSON\.stringify\s*\(\s*original\s*\)\s*\)`,
       ],
+      hint: L("Spread copied only the top level, so stats is still shared. Make a copy that goes deeper.", "El spread copió solo el primer nivel, así que stats sigue compartido. Haz una copia más profunda.", "スプレッドは1段目だけのコピーで stats は共有のまま。もっと深くコピーしよう。"),
+      note: "shallow-vs-deep",
       explain: L(
         "Spread is shallow, so stats was shared. Use structuredClone, or also spread stats.",
         "El spread es superficial y stats se compartía. Usa structuredClone o esparce también stats.",
@@ -375,6 +568,76 @@ const copiesLesson: LessonDef = {
   ],
 };
 
+const arraysNotes: NoteDef[] = [
+  note("map-filter-find", L("map, filter, find and forEach", "map, filter, find y forEach", "map・filter・find・forEach"),
+    p(
+      "Many array methods take a FUNCTION and call it once per item. Writing n => n + 1 creates a small function on the spot: n is the item, and the expression after => is what it returns. The method decides what to do with each answer.",
+      "Muchos métodos de array reciben una FUNCIÓN y la llaman una vez por ítem. Escribir n => n + 1 crea una función pequeña en el momento: n es el ítem y la expresión tras => es lo que devuelve. El método decide qué hacer con cada respuesta.",
+      "配列のメソッドの多くは関数を受け取り、要素ごとに1回呼ぶ。n => n + 1 はその場で作る小さな関数で、n が要素、=> のあとの式が戻り値。各答えをどう使うかはメソッドが決めるよ。",
+    ),
+    p(
+      "map returns a NEW array with each answer in place of the item, same length. filter returns a new array with only the items whose answer is truthy. find returns the FIRST item whose answer is truthy, a single item, or undefined if none matches. None of them change the original array.",
+      "map devuelve un array NUEVO con cada respuesta en lugar del ítem, del mismo largo. filter devuelve un array nuevo solo con los ítems cuya respuesta es verdadera. find devuelve el PRIMER ítem con respuesta verdadera, un solo ítem, o undefined si ninguno cumple. Ninguno cambia el array original.",
+      "map は各要素を答えに置き換えた同じ長さの新しい配列を返す。filter は答えが真の要素だけの新しい配列。find は答えが真になった最初の1つだけを返し、なければ undefined。どれも元の配列は変えないよ。",
+    ),
+    ex(c("const temps = [18, 25, 31, 22];", "console.log(temps.map(t => t + 1).join(\",\"));", "console.log(temps.filter(t => t > 20).join(\",\"));", "console.log(temps.find(t => t > 20));"), "19,26,32,23\n25,31,22\n25",
+      L("map reshapes, filter keeps, find stops at the first", "map transforma, filter conserva, find para en el primero", "map は変形、filter は選別、find は最初で止まる")),
+    p(
+      "forEach just calls the function for each item and throws the answers away: it always returns undefined. Use it for side effects such as printing. If you want a new array back, use map.",
+      "forEach solo llama a la función con cada ítem y descarta las respuestas: siempre devuelve undefined. Úsalo para efectos como imprimir. Si quieres recibir un array nuevo, usa map.",
+      "forEach は要素ごとに関数を呼ぶだけで、答えは捨てる。戻り値はいつも undefined。表示のような副作用に使おう。新しい配列が欲しいなら map だよ。",
+    ),
+    ex(c("const words = [\"hi\", \"yo\"];", "const result = words.forEach(w => console.log(w));", "console.log(result);"), "hi\nyo\nundefined"),
+    p(
+      "Common mistake inside a filter: writing = instead of ===. = ASSIGNS a value, and an assignment of a non-empty string counts as truthy, so every item passes and is even changed. Comparisons always use ===.",
+      "Error común dentro de un filter: escribir = en vez de ===. = ASIGNA un valor, y asignar un string no vacío cuenta como verdadero, así que todos los ítems pasan y además se modifican. Las comparaciones siempre usan ===.",
+      "filter の中のよくあるミス：=== の代わりに = と書くこと。= は代入で、空でない文字列の代入は真とみなされるので、全要素が通り、しかも書き換わる。比較にはいつも === を使おう。",
+    ),
+  ),
+  note("reduce-and-chains", L("reduce and method chains", "reduce y cadenas de métodos", "reduce とメソッドチェーン"),
+    p(
+      "reduce folds a whole array into ONE value. You give it a function (acc, item) => newAcc and a starting value. acc, the accumulator, starts at that value; for each item, the function's answer becomes the new acc. After the last item, reduce returns acc.",
+      "reduce junta todo un array en UN solo valor. Le das una función (acc, item) => nuevoAcc y un valor inicial. acc, el acumulador, empieza en ese valor; con cada ítem, la respuesta de la función pasa a ser el nuevo acc. Tras el último ítem, reduce devuelve acc.",
+      "reduce は配列全体を1つの値にまとめる。関数 (acc, item) => 新しいacc と初期値を渡す。アキュムレータ acc は初期値から始まり、要素ごとに関数の答えが新しい acc になる。最後の要素のあと acc を返すよ。",
+    ),
+    ex(c("const coins = [4, 1, 5];", "const most = coins.reduce((acc, n) => (n > acc ? n : acc), 0);", "const product = coins.reduce((acc, n) => acc * n, 1);", "console.log(most, product);"), "5 20",
+      L("The same tool finds a maximum or multiplies", "La misma herramienta halla un máximo o multiplica", "同じ道具で最大値も積も出せる")),
+    p(
+      "Trace it by hand when unsure: write acc and the item for each step. With [4, 1, 5] and acc * n starting at 1: 1*4 = 4, 4*1 = 4, 4*5 = 20. Always pass the starting value: without it, an empty array makes reduce throw an error.",
+      "Síguelo a mano si dudas: escribe acc y el ítem en cada paso. Con [4, 1, 5] y acc * n empezando en 1: 1*4 = 4, 4*1 = 4, 4*5 = 20. Pasa siempre el valor inicial: sin él, un array vacío hace que reduce lance un error.",
+      "迷ったら手で追おう。各ステップの acc と要素を書く。[4, 1, 5] で acc * n、初期値 1 なら 1*4 = 4、4*1 = 4、4*5 = 20。初期値はいつも渡そう。ないと空の配列で reduce がエラーを投げるよ。",
+    ),
+    p(
+      "Because map and filter return arrays, you can CHAIN calls: list.filter(...).map(...).reduce(...). Read a chain top to bottom like a pipeline: first choose the items, then turn them into the values you need, and only at the end fold them into one result.",
+      "Como map y filter devuelven arrays, puedes ENCADENAR llamadas: list.filter(...).map(...).reduce(...). Lee una cadena de arriba abajo como una tubería: primero eliges los ítems, luego los conviertes en los valores que necesitas y solo al final los juntas en un resultado.",
+      "map と filter は配列を返すので、list.filter(...).map(...).reduce(...) とつなげられる。チェーンは上から下へパイプラインとして読もう。まず要素を選び、次に必要な値に変え、最後に1つの結果にまとめる。",
+    ),
+    ex(c("const runs = [{ km: 3, done: true }, { km: 8, done: false }, { km: 2, done: true }];", "const doneKm = runs", "  .filter(r => r.done)", "  .map(r => r.km)", "  .reduce((a, b) => a + b, 0);", "console.log(doneKm);"), "5"),
+  ),
+  note("sorting", L("Sorting arrays safely", "Ordenar arrays con cuidado", "配列を安全に並べ替える"),
+    p(
+      "sort() with no argument converts every item to TEXT and orders them like words in a dictionary, character by character. That works for words but surprises with numbers: as text, \"100\" starts with \"1\", so it comes before \"9\".",
+      "sort() sin argumento convierte cada ítem en TEXTO y los ordena como palabras de diccionario, carácter por carácter. Funciona con palabras pero sorprende con números: como texto, \"100\" empieza con \"1\", así que va antes que \"9\".",
+      "引数なしの sort() は全要素を文字列にして、辞書のように1文字ずつ比べて並べる。単語ならいいけど数値では驚く。文字列の \"100\" は \"1\" で始まるので \"9\" より前に来るんだ。",
+    ),
+    ex(c("console.log([15, 3, 200].sort().join(\" \"));"), "15 200 3",
+      L("Default sort compares text, not numbers", "El sort por defecto compara texto, no números", "既定の sort は数値でなく文字列で比べる")),
+    p(
+      "To sort numbers, pass a comparator: a function (a, b) that returns a NUMBER. Negative means a goes first, positive means b goes first, zero keeps them. a - b gives smallest first; b - a gives largest first. A comparator that returns true or false does not follow this contract.",
+      "Para ordenar números, pasa un comparador: una función (a, b) que devuelve un NÚMERO. Negativo significa que a va primero, positivo que b va primero, cero los deja igual. a - b da de menor a mayor; b - a de mayor a menor. Un comparador que devuelve true o false no cumple este contrato.",
+      "数値を並べるには比較関数 (a, b) を渡す。数値を返すのが約束で、負なら a が先、正なら b が先、0 ならそのまま。a - b は小さい順、b - a は大きい順。true / false を返す比較関数はこの約束を守っていないよ。",
+    ),
+    ex(c("console.log([15, 3, 200].sort((a, b) => b - a).join(\" \"));"), "200 15 3",
+      L("b - a sorts from largest to smallest", "b - a ordena de mayor a menor", "b - a で大きい順")),
+    p(
+      "sort also works IN PLACE: it reorders the original array and returns that same array, not a copy. If you need to keep the original order, sort a copy: [...list].sort(...), or use toSorted(), which returns a new array.",
+      "sort además trabaja EN EL LUGAR: reordena el array original y devuelve ese mismo array, no una copia. Si necesitas conservar el orden original, ordena una copia: [...list].sort(...), o usa toSorted(), que devuelve un array nuevo.",
+      "sort はその場で並べ替える。元の配列を並べ替え、コピーではなく同じ配列を返す。元の順番を残したいならコピーを並べよう：[...list].sort(...)。新しい配列を返す toSorted() も使えるよ。",
+    ),
+    ex(c("const ranks = [\"b\", \"c\", \"a\"];", "const sorted = [...ranks].sort();", "console.log(ranks.join(\"\"), sorted.join(\"\"), ranks === sorted);"), "bca abc false"),
+  ),
+];
+
 const arraysLesson: LessonDef = {
   slug: "array-methods",
   title: L("The array caravan", "La caravana de arrays", "配列キャラバン"),
@@ -383,6 +646,7 @@ const arraysLesson: LessonDef = {
   xp: 70,
   enemy: "typescript/nan-gremlin",
   enemyName: L("SORT GREMLIN", "GREMLIN DESORDEN", "ソートグレムリン"),
+  notes: arraysNotes,
   beats: [
     say(L(
       "Arrays carry spells that take a FUNCTION: map reshapes each item, filter keeps some, reduce piles them into one.",
@@ -408,6 +672,8 @@ const arraysLesson: LessonDef = {
       answer: 0,
       output: "2,4,6",
       check: { compiles: true, stdout: "2,4,6" },
+      hint: L("map replaces each item with what the arrow function returns. Apply it to each number in turn.", "map cambia cada ítem por lo que devuelve la función flecha. Aplícala a cada número por turno.", "map は各要素をアロー関数の戻り値に置き換える。数値に1つずつ当てはめよう。"),
+      note: "map-filter-find",
       explain: L(
         "map returns a NEW array with the function applied to every item.",
         "map devuelve un array NUEVO con la función aplicada a cada ítem.",
@@ -423,6 +689,8 @@ const arraysLesson: LessonDef = {
       answer: 0,
       output: "6",
       check: { compiles: true, stdout: "6" },
+      hint: L("acc starts at the second argument of reduce. Then add each item to it, one step at a time.", "acc empieza en el segundo argumento de reduce. Luego súmale cada ítem, paso a paso.", "acc は reduce の第2引数から始まる。そこに要素を1つずつ足していこう。"),
+      note: "reduce-and-chains",
       explain: L(
         "reduce starts acc at 0, then adds each n: 0+1+2+3 = 6.",
         "reduce empieza acc en 0 y suma cada n: 0+1+2+3 = 6.",
@@ -438,6 +706,8 @@ const arraysLesson: LessonDef = {
       answer: 0,
       output: "12",
       check: { compiles: true, stdout: "12" },
+      hint: L("find stops at the first item that passes the test. How many items can it give back?", "find se detiene en el primer ítem que pasa la prueba. ¿Cuántos ítems puede devolver?", "find は条件に合った最初の要素で止まる。返せる要素はいくつ？"),
+      note: "map-filter-find",
       explain: L(
         "find returns the FIRST item that passes, not all of them (that would be filter).",
         "find devuelve el PRIMER ítem que pasa, no todos (eso sería filter).",
@@ -457,6 +727,8 @@ const arraysLesson: LessonDef = {
       answer: 0,
       output: "1,10,2",
       check: { compiles: true, stdout: "1,10,2" },
+      hint: L("sort() with no function compares items as text, character by character, like a dictionary.", "sort() sin función compara los ítems como texto, carácter por carácter, como un diccionario.", "関数なしの sort() は要素を文字列として、辞書のように1文字ずつ比べる。"),
+      note: "sorting",
       explain: L(
         "As text, \"10\" comes before \"2\" because \"1\" < \"2\". Like words in a dictionary.",
         "Como texto, \"10\" va antes que \"2\" porque \"1\" < \"2\". Como palabras en un diccionario.",
@@ -471,6 +743,8 @@ const arraysLesson: LessonDef = {
       options: ["(a, b) => a - b", "(a, b) => a > b", "Number"],
       answer: 0,
       check: { compiles: true, stdout: "1,2,10" },
+      hint: L("A comparator must return a number: negative, zero or positive. Which option returns one?", "Un comparador debe devolver un número: negativo, cero o positivo. ¿Qué opción devuelve uno?", "比較関数は負・0・正の数値を返す約束。数値を返す選択肢はどれ？"),
+      note: "sorting",
       explain: L(
         "The comparator must return a number: negative keeps a first. a > b returns a boolean.",
         "El comparador debe devolver un número: negativo deja a primero. a > b devuelve un booleano.",
@@ -486,6 +760,8 @@ const arraysLesson: LessonDef = {
       answer: 0,
       output: "true 123",
       check: { compiles: true, stdout: "true 123" },
+      hint: L("Does sort change the array it is called on? And does it return a copy or that same array?", "¿sort cambia el array sobre el que se llama? ¿Y devuelve una copia o ese mismo array?", "sort は呼ばれた配列そのものを変える？返すのはコピー？同じ配列？"),
+      note: "sorting",
       explain: L(
         "sort sorts IN PLACE and returns the same array, so a changed and a === b.",
         "sort ordena EN EL LUGAR y devuelve el mismo array: a cambió y a === b.",
@@ -500,6 +776,8 @@ const arraysLesson: LessonDef = {
       answer: 0,
       output: "undefined",
       check: { compiles: true, stdout: "undefined" },
+      hint: L("What does forEach itself return? Compare it with map, which builds a new array.", "¿Qué devuelve forEach en sí? Compáralo con map, que crea un array nuevo.", "forEach 自体は何を返す？新しい配列を作る map と比べてみよう。"),
+      note: "map-filter-find",
       explain: L(
         "forEach only runs the function; it always returns undefined. Use map to get a new array.",
         "forEach solo ejecuta la función; siempre devuelve undefined. Usa map para obtener un array nuevo.",
@@ -515,6 +793,8 @@ const arraysLesson: LessonDef = {
         compiles: true,
         stdout: "12",
       },
+      hint: L("Start from items. Choose the ones to keep, turn them into numbers, and fold into one total last.", "Empieza por items. Elige los que se quedan, conviértelos en números y júntalos en un total al final.", "items から始めよう。残す物を選び、数値に変え、最後に1つの合計にまとめる。"),
+      note: "reduce-and-chains",
       explain: L(
         "Keep the items, turn them into prices, then fold the prices into one total.",
         "Filtra los ítems, conviértelos en precios y luego junta los precios en un total.",
@@ -542,6 +822,8 @@ const arraysLesson: LessonDef = {
         String.raw`i\s*\.\s*kind\s*===?\s*["']gem["']`,
         String.raw`["']gem["']\s*===?\s*i\s*\.\s*kind`,
       ],
+      hint: L("Look closely at the filter test. Is it comparing kind with \"gem\", or setting it?", "Mira bien la prueba del filter. ¿Compara kind con \"gem\" o se lo asigna?", "filter の条件をよく見よう。kind と \"gem\" を比べている？それとも代入している？"),
+      note: "map-filter-find",
       explain: L(
         "= ASSIGNS \"gem\" to every item (and is truthy), so all pass. Compare with === instead.",
         "= ASIGNA \"gem\" a cada ítem (y es verdadero), así que todos pasan. Compara con ===.",
@@ -551,6 +833,71 @@ const arraysLesson: LessonDef = {
   ],
 };
 
+const classesNotes: NoteDef[] = [
+  note("prototype-chain", L("The prototype chain", "La cadena de prototipos", "プロトタイプチェーン"),
+    p(
+      "Every object has a hidden link to another object: its PROTOTYPE. When you read a key, JavaScript first looks in the object's own keys. If it is not there, it climbs to the prototype and looks there, then to the prototype's prototype, and so on. If no one has it, the result is undefined.",
+      "Todo objeto tiene un enlace oculto a otro objeto: su PROTOTIPO. Al leer una clave, JavaScript busca primero en las claves propias del objeto. Si no está, sube al prototipo y busca ahí, luego al prototipo del prototipo, y así. Si nadie la tiene, el resultado es undefined.",
+      "どのオブジェクトにも別のオブジェクトへの隠れたリンク、プロトタイプがある。キーを読むと、まず自分のキーを探し、なければプロトタイプへ、さらにその上へと登っていく。誰も持っていなければ undefined だよ。",
+    ),
+    ex(c("const vehicle = { wheels: 4 };", "const bike = Object.create(vehicle);", "bike.wheels = 2;", "console.log(bike.wheels, vehicle.wheels);", "delete bike.wheels;", "console.log(bike.wheels);"), "2 4\n4",
+      L("An own key shadows the parent's; delete reveals it", "Una clave propia tapa la del padre; delete la revela", "自分のキーが親のを隠し、delete で見える")),
+    p(
+      "Object.create(parent) makes a new, empty object whose prototype is parent. Writing a key on the child creates an OWN key that hides, or shadows, the parent's key with the same name. The parent is not changed. Deleting the child's own key uncovers the parent's value again.",
+      "Object.create(padre) crea un objeto nuevo y vacío cuyo prototipo es padre. Escribir una clave en el hijo crea una clave PROPIA que oculta, o tapa, la clave del padre con el mismo nombre. El padre no cambia. Borrar la clave propia del hijo vuelve a mostrar el valor del padre.",
+      "Object.create(parent) は parent をプロトタイプにした空の新しいオブジェクトを作る。子にキーを書くと自分のキーができ、親の同じ名前のキーを隠す。親は変わらない。子のキーを消すと、親の値がまた見えるよ。",
+    ),
+    p(
+      "class does not replace this system, it is a tidier way to write it. A class is really a function, so typeof says \"function\". Each instance made with new gets ClassName.prototype as its prototype, and the class's methods live there, shared by every instance.",
+      "class no reemplaza este sistema, es una forma más ordenada de escribirlo. Una clase es en realidad una función, así que typeof dice \"function\". Cada instancia creada con new recibe NombreClase.prototype como prototipo, y los métodos de la clase viven ahí, compartidos por todas las instancias.",
+      "class はこのしくみを置き換えるのではなく、すっきり書く方法。クラスの正体は関数なので typeof は \"function\"。new で作ったインスタンスのプロトタイプは クラス名.prototype で、メソッドはそこにあり全インスタンスで共有されるよ。",
+    ),
+    ex(c("class Lamp { on() { return \"light\"; } }", "const a = new Lamp();", "const b = new Lamp();", "console.log(a.on === b.on, Object.getPrototypeOf(a) === Lamp.prototype);"), "true true",
+      L("Both instances share one method on the prototype", "Ambas instancias comparten un método en el prototipo", "2つのインスタンスがプロトタイプのメソッドを共有")),
+  ),
+  note("extends-and-super", L("extends, overriding and super", "extends, sobrescribir y super", "extends・上書き・super"),
+    p(
+      "class Child extends Parent makes the parent's prototype the next link in the child's chain. A child instance can use every parent method, and instanceof Parent is true for it, because Parent.prototype is somewhere in its chain.",
+      "class Hijo extends Padre hace que el prototipo del padre sea el siguiente eslabón en la cadena del hijo. Una instancia del hijo puede usar todos los métodos del padre, e instanceof Padre da true, porque Padre.prototype está en algún punto de su cadena.",
+      "class Child extends Parent で、親のプロトタイプが子のチェーンの次の輪になる。子のインスタンスは親のメソッドを全部使え、チェーンのどこかに Parent.prototype があるので instanceof Parent は true だよ。",
+    ),
+    p(
+      "If the child defines a method with the same name, it OVERRIDES the parent's: the lookup finds the child's version first and stops. Inside the child, super.method() calls the parent's version on purpose. Calling this.method() there would find the child's own method again and call itself forever.",
+      "Si el hijo define un método con el mismo nombre, SOBRESCRIBE el del padre: la búsqueda encuentra primero la versión del hijo y se detiene. Dentro del hijo, super.metodo() llama a propósito a la versión del padre. Llamar ahí a this.metodo() encontraría otra vez el método del hijo y se llamaría sin fin.",
+      "子が同じ名前のメソッドを定義すると親のを上書きする。探索は先に子の版を見つけて止まる。子の中で super.method() と書くと、わざと親の版を呼べる。そこで this.method() と書くと子自身のメソッドを見つけ、永遠に自分を呼んでしまうよ。",
+    ),
+    ex(c("class Bell { ring() { return \"ding\"; } }", "class LoudBell extends Bell {", "  ring() { return super.ring().toUpperCase(); }", "}", "const b = new LoudBell();", "console.log(b.ring(), b instanceof Bell);"), "DING true",
+      L("Override ring, and reuse the parent's with super", "Sobrescribe ring y reutiliza el del padre con super", "ring を上書きし、super で親のを再利用")),
+    p(
+      "A child class with its own constructor must call super(...) before it uses this. The parent part of the object is built first, and only then does this exist. TypeScript reports a missing super() call; plain JavaScript would throw a ReferenceError when new runs.",
+      "Una clase hija con su propio constructor debe llamar a super(...) antes de usar this. La parte del padre se construye primero y solo entonces existe this. TypeScript avisa si falta la llamada a super(); en JavaScript puro, new lanzaría un ReferenceError.",
+      "自分の constructor をもつ子クラスは、this を使う前に super(...) を呼ぶ必要がある。先に親の部分が作られ、そのあとで this ができる。super() がないと TypeScript が知らせ、素の JavaScript なら new で ReferenceError になるよ。",
+    ),
+    ex(c("class Tool {", "  owner: string;", "  constructor(owner: string) { this.owner = owner; }", "}", "class Saw extends Tool {", "  teeth: number;", "  constructor(owner: string) {", "    super(owner);", "    this.teeth = 24;", "  }", "}", "const s = new Saw(\"Rin\");", "console.log(s.owner, s.teeth);"), "Rin 24"),
+  ),
+  note("class-members", L("Private fields, getters, static", "Campos privados, getters, static", "private・ゲッター・static"),
+    p(
+      "A field whose name starts with #, like #pin, is truly PRIVATE: only code written inside the class body can read or write it. It is not a normal key, so outside code cannot see it at all, not even with the in operator or by listing the keys.",
+      "Un campo cuyo nombre empieza con #, como #pin, es PRIVADO de verdad: solo el código escrito dentro del cuerpo de la clase puede leerlo o escribirlo. No es una clave normal, así que el código de afuera no puede verlo en absoluto, ni con el operador in ni listando las claves.",
+      "#pin のように # で始まるフィールドは本当のプライベート。クラスの中に書いたコードだけが読み書きできる。普通のキーではないので、外からは in 演算子でもキーの一覧でもまったく見えないよ。",
+    ),
+    ex(c("class Safe {", "  #pin = 1234;", "  check(n: number) { return n === this.#pin; }", "}", "const s = new Safe();", "console.log(s.check(1234), Object.keys(s).length);"), "true 0"),
+    p(
+      "A getter, written get name() { ... }, is a method that is READ like a property: you write obj.name, with no parentheses, and the method runs behind the scenes. It is useful for values computed from other fields.",
+      "Un getter, escrito get nombre() { ... }, es un método que se LEE como una propiedad: escribes obj.nombre, sin paréntesis, y el método se ejecuta por detrás. Es útil para valores calculados a partir de otros campos.",
+      "ゲッター get name() { ... } は、プロパティのように読むメソッド。obj.name と () なしで書くと、裏でメソッドが動く。ほかのフィールドから計算する値に便利だよ。",
+    ),
+    ex(c("class Box {", "  w = 2;", "  h = 5;", "  get size() { return this.w * this.h; }", "}", "console.log(new Box().size);"), "10",
+      L("No () needed: size is read like a field", "Sin (): size se lee como un campo", "() 不要：size はフィールドのように読む")),
+    p(
+      "A static member belongs to the class itself, not to each instance. There is only one copy, read as ClassName.member, and every instance shares it. That makes it a good place for counters or shared settings.",
+      "Un miembro static pertenece a la clase misma, no a cada instancia. Hay una sola copia, que se lee como NombreClase.miembro, y todas las instancias la comparten. Por eso es un buen lugar para contadores o ajustes compartidos.",
+      "static のメンバーは各インスタンスではなくクラス自身のもの。コピーは1つだけで クラス名.member と読み、全インスタンスで共有する。カウンターや共通の設定にぴったりだよ。",
+    ),
+    ex(c("class Ticket {", "  static sold = 0;", "  constructor() { Ticket.sold += 10; }", "}", "new Ticket();", "console.log(Ticket.sold);"), "10"),
+  ),
+];
+
 const classesLesson: LessonDef = {
   slug: "prototypes-and-classes",
   title: L("Bloodlines", "Linajes", "血筋をたどれ"),
@@ -559,6 +906,7 @@ const classesLesson: LessonDef = {
   xp: 75,
   enemy: "golem",
   enemyName: L("ANCESTOR GOLEM", "GÓLEM ANCESTRO", "ご先祖ゴーレム"),
+  notes: classesNotes,
   beats: [
     say(L(
       "Every object has a hidden parent: its PROTOTYPE. If a key isn't in its own bag, the lookup climbs to the parent.",
@@ -583,6 +931,8 @@ const classesLesson: LessonDef = {
       answer: 0,
       output: "Tom 4 undefined",
       check: { compiles: true, stdout: "Tom 4 undefined" },
+      hint: L("For each key, look in cat first, then in its prototype. What if neither one has it?", "Para cada clave, busca primero en cat y luego en su prototipo. ¿Y si ninguno la tiene?", "各キーをまず cat で、次にプロトタイプで探そう。どちらにもなければ？"),
+      note: "prototype-chain",
       explain: L(
         "name is cat's own key, legs comes from the prototype, and wings is nowhere: undefined.",
         "name es propia de cat, legs viene del prototipo y wings no está en ninguno: undefined.",
@@ -597,6 +947,8 @@ const classesLesson: LessonDef = {
       answer: 0,
       output: "4",
       check: { compiles: true, stdout: "4" },
+      hint: L("Writing legs on d added an own key; the parent was not changed. What is left after delete?", "Escribir legs en d creó una clave propia; el padre no cambió. ¿Qué queda después del delete?", "d に legs を書くと自分のキーができ、親は変わらない。delete のあと何が残る？"),
+      note: "prototype-chain",
       explain: L(
         "d.legs = 3 SHADOWS the parent's key. Deleting it reveals the parent's 4 again.",
         "d.legs = 3 TAPA la clave del padre. Al borrarla vuelve a verse el 4 del padre.",
@@ -618,6 +970,8 @@ const classesLesson: LessonDef = {
       answer: 0,
       output: "true function",
       check: { compiles: true, stdout: "true function" },
+      hint: L("class is a tidier syntax over prototypes. What kind of value is a class really?", "class es una sintaxis más ordenada sobre los prototipos. ¿Qué tipo de valor es en realidad una clase?", "class はプロトタイプをすっきり書く構文。クラスの正体はどんな値？"),
+      note: "prototype-chain",
       explain: L(
         "A class is a function underneath, and its instances get Cat.prototype as their parent.",
         "Una clase es una función por dentro, y sus instancias tienen Cat.prototype como padre.",
@@ -636,6 +990,8 @@ const classesLesson: LessonDef = {
       answer: 0,
       output: "meow true",
       check: { compiles: true, stdout: "meow true" },
+      hint: L("The lookup stops at the first speak it finds, starting from Cat. Is Animal in Cat's chain?", "La búsqueda para en el primer speak que encuentra, empezando por Cat. ¿Está Animal en la cadena de Cat?", "探索は Cat から始めて最初に見つけた speak で止まる。Animal は Cat のチェーンにいる？"),
+      note: "extends-and-super",
       explain: L(
         "Cat's own speak is found first (override). Animal is still in its chain, so instanceof is true.",
         "Primero se encuentra el speak de Cat (override). Animal sigue en su cadena: instanceof da true.",
@@ -655,6 +1011,8 @@ const classesLesson: LessonDef = {
       options: ["super", "this", "Animal"],
       answer: 0,
       check: { compiles: true, stdout: "...!" },
+      hint: L("You need the keyword that reaches the parent's version of a method from inside a child class.", "Necesitas la palabra clave que llega a la versión del padre de un método desde una clase hija.", "子クラスの中から、親の版のメソッドに届くキーワードが必要だよ。"),
+      note: "extends-and-super",
       explain: L(
         "super.speak() runs the parent's method. this.speak() would call itself forever.",
         "super.speak() ejecuta el método del padre. this.speak() se llamaría a sí mismo sin fin.",
@@ -674,6 +1032,8 @@ const classesLesson: LessonDef = {
       options: [YES, L("No: super() is missing", "No: falta super()", "いいえ：super() がない")],
       answer: 1,
       check: { compiles: false },
+      hint: L("B extends A and has its own constructor. What must such a constructor call before using this?", "B extiende A y tiene su propio constructor. ¿Qué debe llamar ese constructor antes de usar this?", "B は A を extends し、自分の constructor を持つ。this を使う前に何を呼ぶ？"),
+      note: "extends-and-super",
       explain: L(
         "TypeScript catches it (TS2377). Plain JS would throw a ReferenceError when you call new B().",
         "TypeScript lo detecta (TS2377). En JS puro, new B() lanzaría un ReferenceError.",
@@ -689,6 +1049,8 @@ const classesLesson: LessonDef = {
       answer: 0,
       output: "42 false",
       check: { compiles: true, stdout: "42 false" },
+      hint: L("#code is a private field. Is it an ordinary key that the in operator can see from outside?", "#code es un campo privado. ¿Es una clave normal que el operador in puede ver desde afuera?", "#code はプライベートフィールド。外から in 演算子で見える普通のキー？"),
+      note: "class-members",
       explain: L(
         "#code is truly private: only code inside the class can read it, and it isn't a normal key.",
         "#code es privado de verdad: solo el código de la clase puede leerlo, y no es una clave normal.",
@@ -703,6 +1065,8 @@ const classesLesson: LessonDef = {
       code: c("class Plot {", "  ___ area() { return 6; }", "}", "console.log(new Plot().area);"),
       answer: "get",
       check: { compiles: true, stdout: "6" },
+      hint: L("area is read without (). Which keyword makes a method be read like a property?", "area se lee sin (). ¿Qué palabra clave hace que un método se lea como una propiedad?", "area は () なしで読まれている。メソッドをプロパティのように読ませるキーワードは？"),
+      note: "class-members",
       explain: L(
         "A get method is read like a property: no () needed.",
         "Un método get se lee como una propiedad: sin ().",
@@ -718,6 +1082,8 @@ const classesLesson: LessonDef = {
       answer: 0,
       output: "2",
       check: { compiles: true, stdout: "2" },
+      hint: L("count belongs to the class, not to each instance. Count how many times the constructor runs.", "count pertenece a la clase, no a cada instancia. Cuenta cuántas veces se ejecuta el constructor.", "count は各インスタンスでなくクラスのもの。constructor が何回動くか数えよう。"),
+      note: "class-members",
       explain: L(
         "static lives on the class itself, shared by everyone. Each new Mob() adds 1.",
         "static vive en la clase misma, compartido por todos. Cada new Mob() suma 1.",
@@ -760,6 +1126,8 @@ const classesLesson: LessonDef = {
       ),
       expect: "Ada 5",
       fallback: [String.raw`super\s*\(\s*name\s*\)`],
+      hint: L("Knight's constructor never runs Hero's constructor, so name is never set. What call is missing?", "El constructor de Knight nunca ejecuta el de Hero, así que name nunca se asigna. ¿Qué llamada falta?", "Knight の constructor は Hero の constructor を動かさず、name が入らない。足りない呼び出しは？"),
+      note: "extends-and-super",
       explain: L(
         "Call super(name) first: it runs Hero's constructor, which sets name. Then this is ready.",
         "Llama primero a super(name): ejecuta el constructor de Hero, que pone name. Luego this está listo.",
@@ -769,6 +1137,50 @@ const classesLesson: LessonDef = {
   ],
 };
 
+const hydraNotes: NoteDef[] = [
+  note("recap-copies", L("Recap: references and copies", "Repaso: referencias y copias", "復習：参照とコピー"),
+    p(
+      "Objects and arrays are shared by reference: assigning them, or passing them to a function, copies the arrow, not the bag. Changing a key through any arrow changes the one object. Reassigning a parameter only moves the local arrow.",
+      "Los objetos y arrays se comparten por referencia: asignarlos o pasarlos a una función copia la flecha, no la bolsa. Cambiar una clave por cualquier flecha cambia el único objeto. Reasignar un parámetro solo mueve la flecha local.",
+      "オブジェクトと配列は参照で共有される。代入や関数への受け渡しでコピーされるのは矢印で袋じゃない。どの矢印からキーを変えても同じ1つの物が変わる。引数への再代入はローカルの矢印を動かすだけ。",
+    ),
+    p(
+      "Spread [...arr], { ...obj } and Object.assign build a new OUTER container but copy only one level: inner objects are still shared. structuredClone copies every level. A sort on a spread copy leaves the original array in its old order.",
+      "Spread [...arr], { ...obj } y Object.assign crean un contenedor EXTERNO nuevo pero copian un solo nivel: los objetos internos se siguen compartiendo. structuredClone copia todos los niveles. Un sort sobre una copia con spread deja el array original en su orden.",
+      "スプレッド [...arr]、{ ...obj }、Object.assign は外側だけ新しく作り、コピーは1段だけで中の物は共有のまま。structuredClone は全段をコピーする。スプレッドしたコピーを sort しても元の配列の順番は変わらないよ。",
+    ),
+    ex(c("const team = { lead: { name: \"Mo\" } };", "const flat = { ...team };", "const deep = structuredClone(team);", "flat.lead.name = \"Zed\";", "console.log(team.lead.name, deep.lead.name);"), "Zed Mo",
+      L("The shallow copy shares lead; the deep one does not", "La copia superficial comparte lead; la profunda no", "浅いコピーは lead を共有、深いコピーはしない")),
+  ),
+  note("recap-arrays", L("Recap: array method traps", "Repaso: trampas de arrays", "復習：配列メソッドの罠"),
+    p(
+      "map calls your function with three arguments: the item, its index and the whole array. A function that accepts a second parameter with another meaning, like parseInt's radix, will receive the index there. Wrap it to pass only what you mean: arr.map(s => parseInt(s)).",
+      "map llama a tu función con tres argumentos: el ítem, su índice y el array entero. Una función que acepta un segundo parámetro con otro significado, como la base de parseInt, recibirá ahí el índice. Envuélvela para pasar solo lo que quieres: arr.map(s => parseInt(s)).",
+      "map は関数を3つの引数で呼ぶ：要素、添字、配列全体。parseInt の基数のように2番目の引数に別の意味がある関数には、そこに添字が入ってしまう。arr.map(s => parseInt(s)) と包んで、渡したいものだけ渡そう。",
+    ),
+    ex(c("const codes = [\"7\", \"8\", \"9\"];", "console.log(codes.map(s => parseInt(s)).join(\",\"));"), "7,8,9",
+      L("Wrapping parseInt passes only the item", "Envolver parseInt pasa solo el ítem", "parseInt を包めば要素だけが渡る")),
+    p(
+      "reduce with no starting value uses the first item as acc, so an empty array has nothing to start from and throws. includes finds NaN, while indexOf compares with === and NaN is never === to anything, itself included. flat() opens nested arrays by one level.",
+      "reduce sin valor inicial usa el primer ítem como acc, así que un array vacío no tiene con qué empezar y lanza un error. includes encuentra NaN, mientras que indexOf compara con === y NaN nunca es === a nada, ni a sí mismo. flat() abre los arrays anidados un nivel.",
+      "初期値なしの reduce は最初の要素を acc にするので、空の配列では始められずエラーになる。includes は NaN を見つけるが、indexOf は === で比べ、NaN は自分自身とも === にならない。flat() は入れ子の配列を1段ほどくよ。",
+    ),
+    crash(c("const none: number[] = [];", "console.log(none.reduce((a, b) => a * b));"), "Reduce of empty array",
+      L("No items and no start value: reduce throws", "Sin ítems ni valor inicial: reduce lanza un error", "要素も初期値もないと reduce はエラー")),
+    ex(c("console.log([[\"x\"], [\"y\", \"z\"]].flat().join(\"\"), [0, NaN].indexOf(NaN));"), "xyz -1"),
+  ),
+  note("recap-objects-classes", L("Recap: defaults and classes", "Repaso: defaults y clases", "復習：既定値とクラス"),
+    p(
+      "Destructuring defaults fill in only for undefined; null, 0 and \"\" are real values and stay. In classes, a child's method overrides the parent's, super.method() reaches the parent's version, and instanceof checks whether the parent's prototype is anywhere in the chain.",
+      "Los defaults de la desestructuración solo rellenan undefined; null, 0 y \"\" son valores reales y se quedan. En las clases, el método del hijo sobrescribe el del padre, super.metodo() llega a la versión del padre e instanceof comprueba si el prototipo del padre está en algún punto de la cadena.",
+      "分割代入の既定値が入るのは undefined のときだけ。null・0・\"\" は本物の値なので残る。クラスでは子のメソッドが親のを上書きし、super.method() で親の版に届く。instanceof は親のプロトタイプがチェーンのどこかにあるかを調べるよ。",
+    ),
+    ex(c("const { mode = \"easy\", lives = 3 } = { mode: undefined, lives: 0 };", "console.log(mode, lives);"), "easy 0"),
+    ex(c("class Note { text() { return \"do\"; } }", "class Chord extends Note { text() { return super.text() + \"-mi\"; } }", "console.log(new Chord().text(), new Chord() instanceof Note);"), "do-mi true",
+      L("super reaches the parent's method", "super llega al método del padre", "super で親のメソッドに届く")),
+  ),
+];
+
 const hydra: LessonDef = {
   slug: "prototype-hydra",
   title: L("BOSS: Prototype Hydra", "JEFE: Hidra Prototipo", "ボス：プロトタイプヒドラ"),
@@ -777,6 +1189,7 @@ const hydra: LessonDef = {
   xp: 180,
   enemy: "dragon",
   enemyName: L("PROTOTYPE HYDRA", "HIDRA PROTOTIPO", "プロトヒドラ"),
+  notes: hydraNotes,
   beats: [
     enemySays(L(
       "Cut one head and its copy bites back! Do you know which heads are SHARED and which are new?",
@@ -788,6 +1201,8 @@ const hydra: LessonDef = {
       code: 'console.log(["1", "2", "3"].map(parseInt).join(","));',
       options: ["1,NaN,NaN", "1,2,3", "NaN,NaN,NaN"], answer: 0, output: "1,NaN,NaN",
       check: { compiles: true, stdout: "1,NaN,NaN" },
+      hint: L("map passes (item, index, array), and parseInt's 2nd parameter is the radix. What radix does each item get?", "map pasa (ítem, índice, array) y el 2.º parámetro de parseInt es la base. ¿Qué base recibe cada ítem?", "map は (要素, 添字, 配列) を渡し、parseInt の第2引数は基数。各要素の基数は？"),
+      note: "recap-arrays",
       explain: L("map also passes the index, which parseInt reads as the radix: base 1 and base 2 fail.", "map también pasa el índice, que parseInt toma como base: base 1 y base 2 fallan.", "map は index も渡し、parseInt はそれを基数と読む。基数 1 と 2 で失敗するよ。"),
     },
     {
@@ -795,6 +1210,8 @@ const hydra: LessonDef = {
       code: c("const a = { stats: { hp: 5 } };", "const b = { ...a };", "b.stats.hp = 9;", "console.log(a.stats.hp);"),
       options: ["9", "5"], answer: 0, output: "9",
       check: { compiles: true, stdout: "9" },
+      hint: L("Spread copies one level. Is stats a new object in b, or the very same one?", "El spread copia un nivel. ¿stats es un objeto nuevo en b o el mismo de antes?", "スプレッドのコピーは1段。b の stats は新しい物？同じ物？"),
+      note: "recap-copies",
       explain: L("Spread is shallow: stats is shared.", "El spread es superficial: stats se comparte.", "スプレッドは浅い。stats は共有だよ。"),
     },
     {
@@ -802,6 +1219,8 @@ const hydra: LessonDef = {
       code: c("const a = [3, 1, 2];", "const b = [...a].sort();", 'console.log(a === b, a.join(""));'),
       options: ["false 312", "true 123", "false 123"], answer: 0, output: "false 312",
       check: { compiles: true, stdout: "false 312" },
+      hint: L("[...a] builds a new array before sort runs. Which array actually gets sorted?", "[...a] crea un array nuevo antes de que corra sort. ¿Qué array se ordena realmente?", "sort の前に [...a] で新しい配列ができる。実際に並べ替わるのはどっち？"),
+      note: "recap-copies",
       explain: L("[...a] is a new array, so sort changes the copy and a stays 312.", "[...a] es un array nuevo: sort cambia la copia y a sigue en 312.", "[...a] は新しい配列。sort はコピーを変え、a は 312 のまま。"),
     },
     {
@@ -809,6 +1228,8 @@ const hydra: LessonDef = {
       code: c("const empty: number[] = [];", "console.log(empty.reduce((a, b) => a + b));"),
       options: ["0", "undefined", "TypeError"], answer: 2,
       check: { compiles: true, throws: "Reduce of empty array" },
+      hint: L("With no starting value, reduce needs a first item to begin with. Is there one here?", "Sin valor inicial, reduce necesita un primer ítem para empezar. ¿Hay alguno aquí?", "初期値がないと reduce は最初の要素から始める。ここに要素はある？"),
+      note: "recap-arrays",
       explain: L("No items and no starting value: reduce throws. Pass 0 as the second argument.", "Sin ítems y sin valor inicial, reduce lanza un error. Pasa 0 como segundo argumento.", "要素も初期値もないと reduce はエラー。第2引数に 0 を渡そう。"),
     },
     {
@@ -816,6 +1237,8 @@ const hydra: LessonDef = {
       code: "console.log([1, 2, 3].includes(2), [NaN].includes(NaN), [NaN].indexOf(NaN));",
       options: ["true true -1", "true false -1", "true true 0"], answer: 0, output: "true true -1",
       check: { compiles: true, stdout: "true true -1" },
+      hint: L("indexOf compares with ===. Is NaN === NaN? includes uses a different equality check.", "indexOf compara con ===. ¿NaN === NaN? includes usa otra forma de comparar.", "indexOf は === で比べる。NaN === NaN は？includes は別の比べ方をする。"),
+      note: "recap-arrays",
       explain: L("includes can find NaN; indexOf uses === and NaN !== NaN, so -1.", "includes sí encuentra NaN; indexOf usa === y NaN !== NaN, así que -1.", "includes は NaN を見つけられる。indexOf は === を使い NaN !== NaN なので -1。"),
     },
     {
@@ -823,6 +1246,8 @@ const hydra: LessonDef = {
       code: c("function reset(h: { hp: number }) {", "  h = { hp: 0 };", "}", "const hero = { hp: 7 };", "reset(hero);", "console.log(hero.hp);"),
       options: ["7", "0"], answer: 0, output: "7",
       check: { compiles: true, stdout: "7" },
+      hint: L("The function reassigns its parameter instead of changing a key. Does the caller notice?", "La función reasigna su parámetro en vez de cambiar una clave. ¿Lo nota quien llama?", "関数はキーを変えず、引数に再代入している。呼んだ側は気づく？"),
+      note: "recap-copies",
       explain: L("Reassigning the parameter only moves the local label.", "Reasignar el parámetro solo mueve la etiqueta local.", "引数への再代入はローカルのラベルを動かすだけ。"),
     },
     {
@@ -830,6 +1255,8 @@ const hydra: LessonDef = {
       code: c("const obj = { inner: { hp: 5 } };", "const copy = ___;", "copy.inner.hp = 9;", "console.log(obj.inner.hp);"),
       options: ["structuredClone(obj)", "{ ...obj }", "Object.assign({}, obj)"], answer: 0,
       check: { compiles: true, stdout: "5" },
+      hint: L("Two of the options copy only one level. Which one also copies the inner object?", "Dos de las opciones copian un solo nivel. ¿Cuál copia también el objeto interno?", "2つの選択肢は1段だけのコピー。中のオブジェクトまでコピーするのは？"),
+      note: "recap-copies",
       explain: L("Spread and Object.assign are shallow; structuredClone copies inner too.", "Spread y Object.assign son superficiales; structuredClone copia también inner.", "スプレッドと Object.assign は浅い。structuredClone は inner もコピーするよ。"),
     },
     {
@@ -837,6 +1264,8 @@ const hydra: LessonDef = {
       code: "console.log([[1, 2], [3]].flat().length);",
       options: ["3", "2", "1"], answer: 0, output: "3",
       check: { compiles: true, stdout: "3" },
+      hint: L("flat() opens nested arrays by one level. Count the items after opening them.", "flat() abre los arrays anidados un nivel. Cuenta los ítems después de abrirlos.", "flat() は入れ子の配列を1段ほどく。ほどいたあとの要素を数えよう。"),
+      note: "recap-arrays",
       explain: L("flat opens one level: [1, 2, 3].", "flat abre un nivel: [1, 2, 3].", "flat は1段ほどいて [1, 2, 3] になるよ。"),
     },
     {
@@ -844,6 +1273,8 @@ const hydra: LessonDef = {
       code: c("const { hp = 1, mp = 2 } = { hp: undefined, mp: null };", "console.log(hp, mp);"),
       options: ["1 null", "1 2", "undefined null"], answer: 0, output: "1 null",
       check: { compiles: true, stdout: "1 null" },
+      hint: L("Defaults fill in only for one missing value. What does each key really hold?", "Los defaults solo rellenan un valor ausente concreto. ¿Qué guarda realmente cada clave?", "既定値が入るのは特定の「ない」値だけ。各キーに本当は何が入っている？"),
+      note: "recap-objects-classes",
       explain: L("Defaults replace undefined only, never null.", "Los defaults solo reemplazan undefined, nunca null.", "デフォルトは undefined のときだけ。null には効かないよ。"),
     },
     {
@@ -856,6 +1287,8 @@ const hydra: LessonDef = {
       ),
       options: ["...! true", "! true", "...! false"], answer: 0, output: "...! true",
       check: { compiles: true, stdout: "...! true" },
+      hint: L("super.speak() runs Animal's version. Then check whether Animal is in c's chain.", "super.speak() ejecuta la versión de Animal. Luego comprueba si Animal está en la cadena de c.", "super.speak() は Animal の版を動かす。次に Animal が c のチェーンにいるか確かめよう。"),
+      note: "recap-objects-classes",
       explain: L("super.speak() gives \"...\", plus \"!\". Animal is in the chain.", "super.speak() da \"...\", más \"!\". Animal está en la cadena.", "super.speak() で \"...\"、そこに \"!\"。Animal はチェーンにいるよ。"),
     },
     enemySays(L(

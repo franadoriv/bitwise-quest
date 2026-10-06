@@ -1,4 +1,4 @@
-import type { LessonDef, RegionDef } from "../../../lib/content/types.ts";
+import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L, say, enemySays } from "../../rust/helpers.ts";
 
 // REGION 3 · LINQ PEAKS  (collections and generics, delegates and closures, LINQ basics, deferred execution)
@@ -11,6 +11,442 @@ const HAPPENS = L("What happens?", "¿Qué pasa?", "どうなる？");
 const COMPILES = L("Does it compile?", "¿Compila?", "コンパイルできる？");
 const YES = L("Yes", "Sí", "はい");
 const NO = L("No: compile error", "No: error de compilación", "いいえ：コンパイルエラー");
+
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example; the validator checks `output` against the real compiler. */
+const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code, output, caption });
+/** An example that must NOT compile (verified too). */
+const bad = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: false } });
+
+const collectionsNotes: NoteDef[] = [
+  note("arrays-and-lists", L("Arrays and lists", "Arrays y listas", "配列とリスト"),
+    p(
+      "An array is a fixed row of slots: new int[4] makes 4 slots, and that size never changes. Every new slot starts at its type's default value: 0 for int, false for bool, null for string. Slots are numbered from 0, so the last one is Length - 1, and a.Length tells you how many slots there are.",
+      "Un array es una fila fija de casillas: new int[4] crea 4 casillas y ese tamaño nunca cambia. Cada casilla nueva empieza con el valor por defecto de su tipo: 0 para int, false para bool, null para string. Se numeran desde 0, así que la última es Length - 1, y a.Length dice cuántas hay.",
+      "配列は固定のスロットの列。new int[4] で4つでき、大きさは変わらない。新しいスロットは型の既定値で始まる：int は 0、bool は false、string は null。番号は 0 からなので最後は Length - 1。a.Length はスロットの数じゃ。",
+    ),
+    ex('bool[] doors = new bool[2];\nstring[] names = new string[2];\nConsole.WriteLine(doors[0] + " " + (names[1] == null) + " " + doors.Length);', "False True 2",
+      L("Fresh slots hold the default value of their type", "Las casillas nuevas tienen el valor por defecto de su tipo", "新しいスロットには型の既定値が入る")),
+    p(
+      "A List<T> is a row that grows. Add(x) appends at the end, Insert(i, x) puts x at position i and shifts the rest right, and Remove(x) takes out the first match. Count (not Length) tells how many items are inside. The <T> says what it holds: a List<string> only accepts strings.",
+      "Un List<T> es una fila que crece. Add(x) agrega al final, Insert(i, x) pone x en la posición i y corre el resto a la derecha, y Remove(x) quita la primera coincidencia. Count (no Length) dice cuántos items hay. El <T> dice qué guarda: un List<string> solo acepta strings.",
+      "List<T> は伸びる列。Add(x) は末尾に足し、Insert(i, x) は i の位置に入れて残りを右へずらし、Remove(x) は最初に一致した物を消す。個数は Length ではなく Count。<T> は中身の型で、List<string> は文字列だけを受け取る。",
+    ),
+    ex('var path = new List<string> { "cave" };\npath.Add("lake");\npath.Insert(1, "bridge");\nConsole.WriteLine(string.Join(">", path) + " " + path.Count);', "cave>bridge>lake 3"),
+    p(
+      "Reading past the end is caught at runtime, not by the compiler: an array throws IndexOutOfRangeException and a List throws ArgumentOutOfRangeException. With n items, the valid indexes are 0 to n - 1. Common mistake: using Count or Length itself as an index.",
+      "Leer más allá del final se detecta al ejecutar, no al compilar: un array lanza IndexOutOfRangeException y un List lanza ArgumentOutOfRangeException. Con n items, los índices válidos van de 0 a n - 1. Error común: usar Count o Length como índice.",
+      "端より先を読むと、コンパイル時ではなく実行時に止まる。配列は IndexOutOfRangeException、List は ArgumentOutOfRangeException。要素が n 個なら有効な番号は 0 から n - 1。Count や Length をそのまま番号に使うのはよくあるミスじゃ。",
+    ),
+    p(
+      "Never change a list while foreach is walking it. The list notices it was modified and the next step throws InvalidOperationException (\"Collection was modified\"). To remove items by a rule, use RemoveAll(x => ...), or loop over a copy made with ToList() and remove from the original.",
+      "Nunca cambies una lista mientras foreach la recorre. La lista nota que fue modificada y el siguiente paso lanza InvalidOperationException (\"Collection was modified\"). Para quitar items según una regla, usa RemoveAll(x => ...), o recorre una copia hecha con ToList() y quita del original.",
+      "foreach で回っている途中のリストは変えてはいけない。リストが変更に気づき、次の一歩で InvalidOperationException（\"Collection was modified\"）になる。条件で消すなら RemoveAll(x => ...) を使うか、ToList() のコピーを回して元から消そう。",
+    ),
+    ex('var hp = new List<int> { 0, 4, 0, 9 };\nforeach (var h in hp.ToList())\n    if (h == 0) hp.Remove(h);\nConsole.WriteLine(string.Join(",", hp));', "4,9",
+      L("Loop over a copy, change the original", "Recorre una copia y cambia el original", "コピーを回して元を変える")),
+  ),
+  note("dictionaries-and-sets", L("Dictionaries and sets", "Diccionarios y conjuntos", "辞書とセット"),
+    p(
+      "A Dictionary<TKey, TValue> stores pairs: each key leads to one value, like labelled chests. d[key] = value creates the key if it's new, or overwrites it if it exists. d[key] += 5 reads the current value, adds 5 and stores it back. Count is the number of keys.",
+      "Un Dictionary<TKey, TValue> guarda pares: cada clave lleva a un valor, como cofres con etiqueta. d[clave] = valor crea la clave si es nueva o la reemplaza si existe. d[clave] += 5 lee el valor actual, le suma 5 y lo guarda. Count es la cantidad de claves.",
+      "Dictionary<TKey, TValue> はペアを持つ。キー1つに値1つ、ラベル付きの宝箱のようなもの。d[key] = value はキーが新しければ作り、あれば上書き。d[key] += 5 は今の値を読んで 5 足して戻す。Count はキーの数じゃ。",
+    ),
+    ex('var ammo = new Dictionary<string, int>();\nammo["arrow"] = 10;\nammo["arrow"] -= 4;\nammo["bolt"] = 2;\nConsole.WriteLine(ammo["arrow"] + " " + ammo.Count);', "6 2"),
+    p(
+      "Reading is stricter than writing. d[key] on a missing key throws KeyNotFoundException, and d.Add(key, value) throws ArgumentException if the key already exists. Add means \"this key must be new\"; the indexer d[key] = value means \"set it, whatever was there\".",
+      "Leer es más estricto que escribir. d[clave] con una clave que falta lanza KeyNotFoundException, y d.Add(clave, valor) lanza ArgumentException si la clave ya existe. Add significa \"esta clave debe ser nueva\"; el indexador d[clave] = valor significa \"ponlo, haya lo que haya\".",
+      "読むほうが書くより厳しい。無いキーを d[key] で読むと KeyNotFoundException。d.Add(key, value) はキーが既にあると ArgumentException。Add は「新しいキーのはず」、d[key] = value は「何があっても設定」という意味じゃ。",
+    ),
+    p(
+      "Safe reads: TryGetValue(key, out var v) returns true and fills v when the key exists, or returns false. GetValueOrDefault(key) returns the value or the type's default (0 for int), and you can pass your own default as a second argument. ContainsKey only answers yes or no; it doesn't give you the value.",
+      "Lecturas seguras: TryGetValue(clave, out var v) devuelve true y llena v si la clave existe, o devuelve false. GetValueOrDefault(clave) devuelve el valor o el default del tipo (0 para int), y puedes pasar tu propio default como segundo argumento. ContainsKey solo responde sí o no; no te da el valor.",
+      "安全な読み方：TryGetValue(key, out var v) はキーがあれば true を返して v に入れ、無ければ false。GetValueOrDefault(key) は値か型の既定値（int なら 0）を返し、2つ目の引数で既定値も選べる。ContainsKey は はい/いいえ だけで値はくれない。",
+    ),
+    ex('var keys = new Dictionary<string, int> { ["red"] = 1 };\nConsole.WriteLine(keys.TryGetValue("blue", out var k) + " " + k);\nConsole.WriteLine(keys.GetValueOrDefault("blue", -1));', "False 0\n-1",
+      L("Missing key, no crash: false, then a chosen default", "Clave ausente, sin reventar: false y luego un default elegido", "無いキーでもクラッシュしない：false と、選んだ既定値")),
+    p(
+      "A HashSet<T> holds each item at most once. Add returns true when the item was new and false when it was already there (and then nothing changes). Neither Dictionary nor HashSet promises any order, so never rely on the order you see when you loop over them.",
+      "Un HashSet<T> guarda cada item como mucho una vez. Add devuelve true si el item era nuevo y false si ya estaba (y entonces nada cambia). Ni Dictionary ni HashSet prometen un orden, así que nunca dependas del orden que ves al recorrerlos.",
+      "HashSet<T> は同じ物を1つまでしか持たない。Add は新しければ true、既にあれば false を返す（その時は何も変わらない）。Dictionary も HashSet も順番を約束しないので、回した時の順番に頼ってはダメじゃ。",
+    ),
+    ex('var seen = new HashSet<int> { 7 };\nConsole.WriteLine(seen.Add(8) + " " + seen.Add(7) + " " + seen.Count);', "True False 2"),
+  ),
+  note("generic-methods", L("Generic types and methods", "Tipos y métodos genéricos", "ジェネリック型とメソッド"),
+    p(
+      "Generic means \"written once, for many types\". List<T> is one class, and T is a placeholder filled in when you use it: List<int>, List<string>. You can write generic methods too: the <T> after the method name declares the placeholder, and C# usually works out T from the arguments you pass.",
+      "Genérico significa \"escrito una vez, para muchos tipos\". List<T> es una sola clase, y T es un hueco que se llena al usarla: List<int>, List<string>. También puedes escribir métodos genéricos: el <T> tras el nombre declara el hueco, y C# suele deducir T de los argumentos que pasas.",
+      "ジェネリックとは「1回書いて多くの型で使う」こと。List<T> は1つのクラスで、T は使う時に決まる穴：List<int>、List<string>。メソッドも書ける。名前の後の <T> で穴を宣言し、C# はたいてい渡した引数から T を決めてくれる。",
+    ),
+    ex('Console.WriteLine(Twice(4) + " " + Twice("ha"));\n\nstatic string Twice<T>(T x) => $"{x}{x}";', "44 haha",
+      L("One method; T is int, then string", "Un método; T es int y luego string", "1つのメソッド。T は int、次に string")),
+    p(
+      "Inside a generic method, C# only lets you do what works for EVERY possible T. Not every type has + or >, so using them on two T values fails with CS0019. A constraint, written with where, promises more: where T : IComparable<T> means \"T knows CompareTo\", so you may call a.CompareTo(b).",
+      "Dentro de un método genérico, C# solo te deja hacer lo que sirve para TODO T posible. No todo tipo tiene + o >, así que usarlos con dos valores T falla con CS0019. Una restricción, escrita con where, promete más: where T : IComparable<T> significa \"T sabe CompareTo\", y puedes llamar a.CompareTo(b).",
+      "ジェネリックメソッドの中では、どんな T でも使える操作しか許されない。+ や > が無い型もあるので、T 同士に使うと CS0019。where で書く制約がもっと約束する：where T : IComparable<T> は「T は CompareTo できる」なので a.CompareTo(b) が呼べる。",
+    ),
+    bad("static T Bigger<T>(T a, T b) => a > b ? a : b;",
+      L("Does not compile: not every T has >", "No compila: no todo T tiene >", "コンパイル不可：> が無い T もある")),
+    p(
+      "CompareTo returns a negative number when a comes before b, 0 when they are equal, and a positive number when a comes after b. Numbers compare by size; strings compare alphabetically, letter by letter, so \"ant\" comes before \"bee\" no matter how long each word is.",
+      "CompareTo devuelve un número negativo si a va antes que b, 0 si son iguales y uno positivo si a va después. Los números se comparan por tamaño; los strings, alfabéticamente, letra por letra, así que \"ant\" va antes que \"bee\" sin importar el largo de cada palabra.",
+      "CompareTo は a が b より前なら負の数、同じなら 0、後なら正の数を返す。数は大きさで、文字列は1文字ずつ辞書順で比べる。だから長さに関係なく \"ant\" は \"bee\" より前じゃ。",
+    ),
+    ex('Console.WriteLine(Smaller(8, 5) + " " + Smaller("kiwi", "fig"));\n\nstatic T Smaller<T>(T a, T b) where T : IComparable<T>\n    => a.CompareTo(b) <= 0 ? a : b;', "5 fig"),
+    p(
+      "Common mistake: thinking a List<string> is a List<object> because every string is an object. It isn't: if it were, you could Add an int to a list of strings through the object view. C# refuses that assignment at compile time.",
+      "Error común: pensar que un List<string> es un List<object> porque todo string es un object. No lo es: si lo fuera, podrías meter un int en una lista de strings a través de la vista object. C# rechaza esa asignación al compilar.",
+      "よくあるミス：string は object だから List<string> も List<object> だと思うこと。違う。もしそうなら object として int を文字列のリストに Add できてしまう。C# はその代入をコンパイル時に拒否する。",
+    ),
+  ),
+];
+
+const delegatesNotes: NoteDef[] = [
+  note("func-and-action", L("Lambdas, Func and Action", "Lambdas, Func y Action", "ラムダ・Func・Action"),
+    p(
+      "A lambda is a small unnamed function: x => x + 1 reads \"given x, give back x + 1\". With two inputs, put them in parentheses: (a, b) => a * b. With none: () => 42. To keep a lambda in a variable you need a delegate type: the type of \"something you can call\".",
+      "Una lambda es una función pequeña sin nombre: x => x + 1 se lee \"dado x, devuelve x + 1\". Con dos entradas van entre paréntesis: (a, b) => a * b. Sin ninguna: () => 42. Para guardar una lambda en una variable necesitas un tipo delegado: el tipo de \"algo que se puede llamar\".",
+      "ラムダは名前の無い小さな関数。x => x + 1 は「x をもらって x + 1 を返す」と読む。入力が2つならかっこで (a, b) => a * b、無ければ () => 42。ラムダを変数にしまうにはデリゲート型（呼び出せる物の型）が必要じゃ。",
+    ),
+    p(
+      "Func<...> is for lambdas that return a value, and the LAST type in the brackets is the return type. Func<int> takes nothing and returns an int; Func<int, string> takes an int and returns a string; Func<int, int, bool> takes two ints and returns a bool.",
+      "Func<...> es para lambdas que devuelven un valor, y el ÚLTIMO tipo entre los signos <> es el de retorno. Func<int> no recibe nada y devuelve un int; Func<int, string> recibe un int y devuelve un string; Func<int, int, bool> recibe dos int y devuelve un bool.",
+      "Func<...> は値を返すラムダ用で、<> の最後の型が戻り値。Func<int> は何も受けず int を返す。Func<int, string> は int を受けて string を返す。Func<int, int, bool> は int 2つを受けて bool を返す。",
+    ),
+    ex('Func<int, int, bool> same = (a, b) => a == b;\nFunc<string, int> len = s => s.Length;\nConsole.WriteLine(same(2, 2) + " " + len("tower"));', "True 5"),
+    p(
+      "Action<...> is for lambdas that return nothing (void), like ones that only print. All its types are inputs: Action<string> takes a string, and plain Action takes nothing. Predicate<T> is an older name for a test on a T; it must return a bool.",
+      "Action<...> es para lambdas que no devuelven nada (void), como las que solo imprimen. Todos sus tipos son entradas: Action<string> recibe un string y Action a secas no recibe nada. Predicate<T> es un nombre antiguo para una prueba sobre un T; debe devolver un bool.",
+      "Action<...> は何も返さない（void）ラムダ用。表示するだけのラムダなどじゃ。型はすべて入力で、Action<string> は string を受け、ただの Action は何も受けない。Predicate<T> は T を調べる古い名前で、bool を返す必要がある。",
+    ),
+    ex('Action<string> greet = name => Console.WriteLine("hi " + name);\nAction beep = () => Console.WriteLine("beep");\ngreet("Mia");\nbeep();', "hi Mia\nbeep"),
+    p(
+      "To choose, ask two questions. Does the lambda return something? Then it's a Func, and the last type is the result. Does it return nothing? Then it's an Action. The other types are what it takes. Also remember that a bool prints as True or False, with a capital letter.",
+      "Para elegir, hazte dos preguntas. ¿La lambda devuelve algo? Entonces es un Func, y el último tipo es el resultado. ¿No devuelve nada? Entonces es un Action. Los demás tipos son lo que recibe. Recuerda también que un bool se imprime como True o False, con mayúscula.",
+      "選ぶ時は2つ考えよう。ラムダは何か返す？なら Func で、最後の型が結果。何も返さない？なら Action。ほかの型は受け取る物じゃ。bool は大文字で True / False と表示されることも覚えておこう。",
+    ),
+  ),
+  note("closures", L("Closures capture variables", "Los closures capturan variables", "クロージャは変数をつかむ"),
+    p(
+      "A lambda can use variables declared around it. That's a closure: the lambda captures the VARIABLE itself, not a copy of its value at that moment. When the lambda runs later, it reads the variable as it is then, and it can even change it.",
+      "Una lambda puede usar variables declaradas a su alrededor. Eso es un closure: la lambda captura la VARIABLE misma, no una copia de su valor en ese momento. Cuando la lambda corre después, lee la variable como esté entonces, e incluso puede cambiarla.",
+      "ラムダは周りで宣言された変数を使える。これがクロージャ。その時の値のコピーではなく、変数そのものをつかむ。後でラムダが動くと、その時点の変数を読み、変えることさえできる。",
+    ),
+    ex('int mana = 1;\nAction refill = () => mana += 5;\nrefill();\nmana *= 2;\nConsole.WriteLine(mana);', "12",
+      L("The lambda and the code around it share one mana", "La lambda y el código de alrededor comparten un solo mana", "ラムダと周りのコードは同じ mana を共有")),
+    p(
+      "Captured variables live as long as the lambda needs them. A method can return a lambda that remembers one of its parameters even after the method has finished. That's how \"function factories\" work: each call makes a new lambda with its own remembered value.",
+      "Las variables capturadas viven mientras la lambda las necesite. Un método puede devolver una lambda que recuerda uno de sus parámetros aunque el método ya haya terminado. Así funcionan las \"fábricas de funciones\": cada llamada crea una lambda nueva con su propio valor recordado.",
+      "つかまれた変数はラムダが必要とする間ずっと生きる。メソッドが終わった後でも、引数をおぼえたラムダを返せる。これが「関数の工場」。呼ぶたびに、自分の値をおぼえた新しいラムダができる。",
+    ),
+    ex('var greet = Prefixer("Sir ");\nConsole.WriteLine(greet("Hashi"));\n\nstatic Func<string, string> Prefixer(string pre) => name => pre + name;', "Sir Hashi"),
+    p(
+      "The loop trap: a for loop has ONE variable i for the whole loop. Every lambda created inside captures that same i, and if they run after the loop, they all see its final value, the one that made the condition false. foreach is different: each lap gets a fresh variable, so each lambda keeps its own item.",
+      "La trampa del bucle: un for tiene UNA sola variable i para todo el bucle. Cada lambda creada adentro captura ese mismo i, y si corren después del bucle, todas ven su valor final, el que hizo falsa la condición. foreach es distinto: cada vuelta tiene una variable nueva, así que cada lambda guarda su item.",
+      "ループのワナ：for の i はループ全体で1つだけ。中で作ったラムダはみな同じ i をつかみ、ループ後に動くと全員が最後の値（条件を false にした値）を見る。foreach は違い、1周ごとに新しい変数なので各ラムダが自分の要素を持つ。",
+    ),
+    p(
+      "The fix for a for loop: declare a new local inside the body, copy i into it, and let the lambda capture that local. A variable declared inside the loop body is created anew on every lap, so each lambda gets its own.",
+      "El arreglo para un for: declara una variable local nueva dentro del cuerpo, copia i en ella y deja que la lambda capture esa variable. Una variable declarada dentro del cuerpo del bucle se crea de nuevo en cada vuelta, así que cada lambda tiene la suya.",
+      "for の直し方：本体の中で新しい変数を宣言して i をコピーし、ラムダにはその変数をつかませる。ループ本体の中で宣言した変数は1周ごとに新しく作られるので、各ラムダが自分の物を持てる。",
+    ),
+    ex('var shows = new List<Func<int>>();\nfor (int k = 1; k <= 3; k++)\n{\n    int mine = k;\n    shows.Add(() => mine * 100);\n}\nConsole.WriteLine(shows[0]() + " " + shows[2]());', "100 300",
+      L("Each lap has its own mine", "Cada vuelta tiene su propio mine", "1周ごとに別の mine")),
+  ),
+  note("multicast-and-events", L("Multicast delegates and events", "Delegados multicast y eventos", "マルチキャストとイベント"),
+    p(
+      "A delegate variable can hold several methods at once. d += f adds f to its list and d -= f removes it. Calling d() runs every method in the order they were added. This is called a multicast delegate.",
+      "Una variable delegado puede guardar varios métodos a la vez. d += f agrega f a su lista y d -= f lo quita. Llamar a d() corre todos los métodos en el orden en que se agregaron. Esto se llama delegado multicast.",
+      "デリゲートの変数は複数のメソッドを同時に持てる。d += f で f をリストに足し、d -= f で外す。d() を呼ぶと、足した順に全部が動く。これをマルチキャストデリゲートという。",
+    ),
+    ex('Action ring = () => Console.Write("ding ");\nring += () => Console.Write("dong");\nring();', "ding dong"),
+    p(
+      "With an Action nothing comes back, so running them all is the whole story. With a Func, every method still runs, but the call returns only the LAST method's result; the earlier results are thrown away. That's why multicast is almost always used with Action.",
+      "Con un Action no vuelve nada, así que correrlos todos es toda la historia. Con un Func, todos los métodos corren igual, pero la llamada devuelve solo el resultado del ÚLTIMO; los anteriores se descartan. Por eso multicast casi siempre se usa con Action.",
+      "Action は何も返さないので、全部動けばそれでおしまい。Func でも全部動くが、呼び出しが返すのは最後のメソッドの結果だけで、前の結果は捨てられる。だからマルチキャストはほぼ Action で使う。",
+    ),
+    ex('Func<string> pick = () => { Console.Write("one "); return "A"; };\npick += () => { Console.Write("two "); return "B"; };\nConsole.WriteLine(pick());', "one two B",
+      L("Both run; only the last result comes back", "Corren los dos; solo vuelve el último resultado", "両方動き、最後の結果だけが返る")),
+    p(
+      "An event is a delegate field with a lock on it. Code outside the class may only subscribe (+=) or unsubscribe (-=). Only the class that declares the event can raise it, usually with Name?.Invoke(args). The ?. skips the call when nobody has subscribed, because then the event is null.",
+      "Un event es un campo delegado con candado. El código fuera de la clase solo puede suscribirse (+=) o desuscribirse (-=). Solo la clase que declara el event puede dispararlo, normalmente con Nombre?.Invoke(args). El ?. salta la llamada si nadie se suscribió, porque entonces el event es null.",
+      "イベントは鍵のかかったデリゲートのフィールド。クラスの外からは登録（+=）と解除（-=）しかできない。発火できるのは宣言したクラスだけで、ふつうは Name?.Invoke(args)。だれも登録していなければ null なので、?. が呼び出しを飛ばす。",
+    ),
+    ex('var bell = new Bell();\nbell.Rang += () => Console.Write("heard");\nbell.Ring();\n\nclass Bell\n{\n    public event Action? Rang;\n    public void Ring() => Rang?.Invoke();\n}', "heard"),
+    p(
+      "Common mistake: raising an event from outside its class, like bell.Rang?.Invoke(). The event keyword exists precisely so that only its owner decides when it fires; listeners just sign up. That's what separates an event from a plain public delegate field.",
+      "Error común: disparar un event desde fuera de su clase, como bell.Rang?.Invoke(). La palabra event existe justamente para que solo su dueño decida cuándo se dispara; los oyentes solo se suscriben. Eso es lo que distingue un event de un campo delegado público común.",
+      "よくあるミス：bell.Rang?.Invoke() のように、クラスの外からイベントを発火すること。event というキーワードは、いつ発火するかを持ち主だけが決めるためにある。聞き手は登録するだけ。これがふつうの公開デリゲートとの違いじゃ。",
+    ),
+  ),
+];
+
+const linqNotes: NoteDef[] = [
+  note("where-select-orderby", L("Where, Select and OrderBy", "Where, Select y OrderBy", "Where・Select・OrderBy"),
+    p(
+      "LINQ (the System.Linq namespace) adds query methods to every collection. Where(x => condition) keeps only the items for which the lambda returns true. Select(x => newValue) turns each item into something new. Both keep the original order and return a new sequence; the source is never changed.",
+      "LINQ (el namespace System.Linq) agrega métodos de consulta a toda colección. Where(x => condición) deja solo los items para los que la lambda devuelve true. Select(x => nuevoValor) convierte cada item en algo nuevo. Los dos mantienen el orden y devuelven una secuencia nueva; la fuente nunca cambia.",
+      "LINQ（名前空間 System.Linq）はすべてのコレクションに問い合わせのメソッドを足す。Where(x => 条件) はラムダが true を返す要素だけを残し、Select(x => 新しい値) は各要素を別の物に変える。どちらも順番を保ち、新しいシーケンスを返す。元は変わらない。",
+    ),
+    ex('var words = new List<string> { "sky", "a", "rock", "be" };\nvar q = words.Where(w => w.Length > 1).Select(w => w.ToUpper());\nConsole.WriteLine(string.Join(" ", q));', "SKY ROCK BE"),
+    p(
+      "Calls chain from left to right: the output of one step is the input of the next. Read nums.Where(...).Select(...) as \"keep these, then change each of them\". Swapping the steps can change the result, because Where would then test the changed values instead of the originals.",
+      "Las llamadas se encadenan de izquierda a derecha: la salida de un paso es la entrada del siguiente. Lee nums.Where(...).Select(...) como \"deja estos y luego cambia cada uno\". Cambiar el orden de los pasos puede cambiar el resultado, porque Where probaría los valores ya cambiados y no los originales.",
+      "呼び出しは左から右へつながり、前の段階の出力が次の入力になる。nums.Where(...).Select(...) は「これを残し、次にそれぞれを変える」と読む。順番を入れかえると、Where が元の値ではなく変えた値を調べるので結果が変わることがある。",
+    ),
+    p(
+      "OrderBy(x => key) sorts from the smallest key to the largest; OrderByDescending sorts the largest first. The lambda chooses what to sort by: the item itself (x => x) or a part of it (w => w.Length). Duplicates are kept, and items with equal keys stay in their original order.",
+      "OrderBy(x => clave) ordena de la clave más chica a la más grande; OrderByDescending pone primero la más grande. La lambda elige por qué ordenar: el item mismo (x => x) o una parte de él (w => w.Length). Los repetidos se mantienen, y los items con claves iguales conservan su orden original.",
+      "OrderBy(x => キー) はキーの小さい順、OrderByDescending は大きい順に並べる。何で並べるかはラムダが決める：要素そのもの（x => x）か一部（w => w.Length）。重複は残り、キーが同じ要素は元の順番のまま。",
+    ),
+    ex('var trees = new[] { "fern", "oak", "birch" };\nConsole.WriteLine(string.Join(",", trees.OrderBy(t => t.Length)));\nConsole.WriteLine(string.Join(",", trees.OrderByDescending(t => t.Length)));', "oak,fern,birch\nbirch,fern,oak",
+      L("Sorted by word length, both directions", "Ordenadas por largo, en las dos direcciones", "単語の長さで、両方の向きに並べる")),
+    p(
+      "Common mistake: assuming OrderBy sorts big to small. It is always ascending, small first, so after OrderBy the first item is the smallest. The descending direction has its own method; you don't change the lambda to get it.",
+      "Error común: suponer que OrderBy ordena de mayor a menor. Siempre es ascendente, el menor primero, así que tras OrderBy el primer item es el más chico. La dirección descendente tiene su propio método; no se cambia la lambda para conseguirla.",
+      "よくあるミス：OrderBy は大きい順だと思うこと。いつも小さい順なので、OrderBy の後の最初の要素は一番小さい。大きい順には専用のメソッドがあり、ラムダを変えるわけではない。",
+    ),
+  ),
+  note("counting-and-testing", L("Count, Sum, Max, Any and All", "Count, Sum, Max, Any y All", "Count・Sum・Max・Any・All"),
+    p(
+      "Some LINQ methods boil a whole sequence down to one value. Count() counts the items, and Count(x => test) counts only the matches. Sum() adds them up, Max() and Min() find the largest and smallest. Distinct() returns the items without repeats, so Distinct().Count() counts the different values.",
+      "Algunos métodos LINQ reducen toda una secuencia a un solo valor. Count() cuenta los items y Count(x => prueba) cuenta solo los que coinciden. Sum() los suma, Max() y Min() buscan el mayor y el menor. Distinct() devuelve los items sin repetidos, así que Distinct().Count() cuenta los valores distintos.",
+      "シーケンス全体を1つの値にまとめるメソッドがある。Count() は個数、Count(x => 条件) は一致する物の数。Sum() は合計、Max() と Min() は最大と最小。Distinct() は重複を除くので、Distinct().Count() は異なる値の数じゃ。",
+    ),
+    ex('var rolls = new[] { 6, 2, 6, 6, 4 };\nConsole.WriteLine(rolls.Count(r => r == 6) + " " + rolls.Sum() + " " + rolls.Min() + " " + rolls.Distinct().Count());', "3 24 2 3",
+      L("Three 6s, total 24, smallest 2, three different values", "Tres 6, total 24, menor 2, tres valores distintos", "6 が3つ、合計 24、最小 2、異なる値は3つ")),
+    p(
+      "Any(x => test) asks \"is there at least one match?\" and stops at the first one it finds. All(x => test) asks \"does every item match?\" and stops at the first failure. Both return a bool, printed as True or False.",
+      "Any(x => prueba) pregunta \"¿hay al menos una coincidencia?\" y se detiene en la primera que encuentra. All(x => prueba) pregunta \"¿todos coinciden?\" y se detiene en el primer fallo. Los dos devuelven un bool, que se imprime como True o False.",
+      "Any(x => 条件) は「1つでも一致する？」と聞き、見つけたらすぐ止まる。All(x => 条件) は「全部一致する？」と聞き、1つ外れたら止まる。どちらも bool を返し、True / False と表示される。",
+    ),
+    ex('var temps = new[] { 12, 18, 25 };\nConsole.WriteLine(temps.Any(t => t > 20) + " " + temps.All(t => t >= 12));', "True True"),
+    p(
+      "Common mistake: an off-by-one in the condition. > means strictly greater, so 12 > 12 is false, while >= includes the equal case. When you predict Any or All, check the items at the edge one by one against the exact operator.",
+      "Error común: equivocarse por uno en la condición. > significa estrictamente mayor, así que 12 > 12 es false, mientras que >= incluye el caso igual. Al predecir Any o All, revisa uno por uno los items del borde con el operador exacto.",
+      "よくあるミス：条件の境目を1つ間違えること。> は「より大きい」なので 12 > 12 は false、>= は等しい場合も含む。Any や All を予想する時は、境目の要素を正確な演算子で1つずつ確かめよう。",
+    ),
+  ),
+  note("first-and-single", L("First, FirstOrDefault and Single", "First, FirstOrDefault y Single", "First と Single の使い分け"),
+    p(
+      "First() returns the first item, and First(x => test) the first item that matches. Last() returns the final item. If nothing qualifies, First throws InvalidOperationException: \"Sequence contains no matching element\", or \"no elements\" when the sequence is empty.",
+      "First() devuelve el primer item, y First(x => prueba) el primero que coincide. Last() devuelve el último. Si ninguno califica, First lanza InvalidOperationException: \"Sequence contains no matching element\", o \"no elements\" si la secuencia está vacía.",
+      "First() は最初の要素、First(x => 条件) は条件に合う最初の要素、Last() は最後の要素を返す。当てはまる物が無いと First は InvalidOperationException（\"Sequence contains no matching element\"、空なら \"no elements\"）。",
+    ),
+    ex('var depths = new List<int> { 4, 11, 7, 15 };\nConsole.WriteLine(depths.First(d => d > 10) + " " + depths.Last());', "11 15"),
+    p(
+      "FirstOrDefault returns the type's default instead of throwing: 0 for int, false for bool, null for strings and other classes. Use it when \"nothing found\" is a normal outcome, and check the result afterwards.",
+      "FirstOrDefault devuelve el default del tipo en vez de lanzar: 0 para int, false para bool, null para strings y otras clases. Úsalo cuando \"no encontrar nada\" es un resultado normal, y revisa el resultado después.",
+      "FirstOrDefault は例外の代わりに型の既定値を返す：int は 0、bool は false、string などのクラスは null。「見つからない」がふつうにありえる時に使い、後で結果を確かめよう。",
+    ),
+    ex('var names = new[] { "Ivy", "Rook" };\nvar found = names.FirstOrDefault(n => n.StartsWith("Z"));\nConsole.WriteLine(found == null ? "nobody" : found);', "nobody",
+      L("For strings the default is null", "Para strings el default es null", "string の既定値は null")),
+    p(
+      "Single(x => test) demands EXACTLY one match. Zero matches throws, and so do two or more (\"Sequence contains more than one matching element\"). Use it when more than one would mean a bug, such as looking up a unique id. SingleOrDefault forgives zero matches but still throws on two.",
+      "Single(x => prueba) exige EXACTAMENTE una coincidencia. Cero coincidencias lanza, y dos o más también (\"Sequence contains more than one matching element\"). Úsalo cuando más de una sería un error, como buscar un id único. SingleOrDefault perdona cero coincidencias pero igual lanza con dos.",
+      "Single(x => 条件) はちょうど1つの一致を要求する。0個でも2個以上でも例外（\"Sequence contains more than one matching element\"）。一意な id を探す時など、2つあればバグという場面で使う。SingleOrDefault は0個なら許すが、2個なら例外じゃ。",
+    ),
+    p(
+      "Rule to remember: First means \"the first one, and it must exist\"; FirstOrDefault means \"the first one, or a default\"; Single means \"the only one\". Before predicting, count how many items really match the test.",
+      "Regla para recordar: First significa \"el primero, y debe existir\"; FirstOrDefault, \"el primero o un default\"; Single, \"el único\". Antes de predecir, cuenta cuántos items coinciden de verdad con la prueba.",
+      "覚え方：First は「最初の1つ、必ずある」、FirstOrDefault は「最初の1つか既定値」、Single は「ただ1つ」。予想する前に、条件に本当に合う要素がいくつあるか数えよう。",
+    ),
+  ),
+  note("groupby-and-query", L("GroupBy and query syntax", "GroupBy y sintaxis de consulta", "GroupBy とクエリ構文"),
+    p(
+      "GroupBy(x => key) sorts items into groups that share a key. Each group has a Key property and is itself a sequence of its items, so you can Count() it or string.Join it. Groups come out in the order their key was first seen, and every item with that key joins the same group, even if it appears much later.",
+      "GroupBy(x => clave) reparte los items en grupos que comparten una clave. Cada grupo tiene una propiedad Key y es a su vez una secuencia de sus items, así que puedes hacerle Count() o string.Join. Los grupos salen en el orden en que se vio su clave por primera vez, y todo item con esa clave va al mismo grupo, aunque aparezca mucho después.",
+      "GroupBy(x => キー) は同じキーの要素をグループにまとめる。各グループは Key を持ち、それ自体が要素のシーケンスなので Count() や string.Join ができる。グループはキーが最初に出た順に並び、後から出た要素も同じキーなら同じグループに入る。",
+    ),
+    ex('var pets = new[] { "hen", "ox", "hog", "eel" };\nforeach (var g in pets.GroupBy(p => p.Length))\n    Console.Write(g.Key + "=" + string.Join("/", g) + " ");', "3=hen/hog/eel 2=ox",
+      L("Grouped by length; eel still joins the first group", "Agrupadas por largo; eel igual se une al primer grupo", "長さでまとめる。eel も最初のグループへ")),
+    p(
+      "Query syntax is another way to write the same LINQ calls, closer to SQL: from x in source where condition select result. The compiler turns it into source.Where(x => condition).Select(x => result), so both forms behave exactly the same.",
+      "La sintaxis de consulta es otra forma de escribir las mismas llamadas LINQ, más parecida a SQL: from x in fuente where condición select resultado. El compilador la convierte en fuente.Where(x => condición).Select(x => resultado), así que las dos formas se comportan igual.",
+      "クエリ構文は同じ LINQ を SQL のように書く方法：from x in 元 where 条件 select 結果。コンパイラはこれを 元.Where(x => 条件).Select(x => 結果) に変えるので、動きはまったく同じじゃ。",
+    ),
+    ex('var nums = new[] { 9, 14, 3, 20 };\nvar q = from n in nums\n        where n > 5\n        select n * 2;\nConsole.WriteLine(string.Join(",", q));', "18,28,40"),
+    p(
+      "Common mistakes: expecting GroupBy to merge only neighbours, or to sort the groups by key. It does neither: it gathers matching keys from the whole sequence and keeps first-seen order. And watch integer division: dividing two ints drops the remainder, so 7 / 2 is 3.",
+      "Errores comunes: esperar que GroupBy junte solo vecinos, o que ordene los grupos por clave. No hace ninguna de las dos: reúne las claves iguales de toda la secuencia y mantiene el orden de aparición. Y ojo con la división entera: dividir dos int descarta el resto, así que 7 / 2 es 3.",
+      "よくあるミス：GroupBy が隣どうしだけをまとめる、またはキー順に並べると思うこと。どちらも違い、全体から同じキーを集め、最初に出た順を保つ。int の割り算にも注意：余りは捨てられるので 7 / 2 は 3 じゃ。",
+    ),
+  ),
+  note("extension-methods", L("Extension methods", "Métodos de extensión", "拡張メソッド"),
+    p(
+      "An extension method adds a method to an existing type without changing that type. Write a static method inside a static class, and put this before its first parameter: public static int Half(this int n). Then you can call 21.Half() as if int had that method all along.",
+      "Un método de extensión agrega un método a un tipo existente sin cambiar ese tipo. Escribe un método static dentro de una clase static y pon this antes de su primer parámetro: public static int Half(this int n). Así puedes llamar 21.Half() como si int siempre hubiera tenido ese método.",
+      "拡張メソッドは、既存の型を変えずにメソッドを足す仕組み。static クラスの中に static メソッドを書き、最初の引数の前に this をつける：public static int Half(this int n)。すると int に元からあったように 21.Half() と呼べる。",
+    ),
+    ex('Console.WriteLine("stone".Initial() + " " + 21.Half());\n\nstatic class Tools\n{\n    public static char Initial(this string s) => char.ToUpper(s[0]);\n    public static int Half(this int n) => n / 2;\n}', "S 10"),
+    p(
+      "This is exactly how LINQ works. Where, Select, Sum and friends are extension methods on IEnumerable<T>, defined in the System.Linq namespace. A List or an array doesn't really have a Sum method; the extension only makes it look that way.",
+      "Así funciona exactamente LINQ. Where, Select, Sum y compañía son métodos de extensión sobre IEnumerable<T>, definidos en el namespace System.Linq. Un List o un array no tiene de verdad un método Sum; la extensión solo hace que lo parezca.",
+      "LINQ はまさにこの仕組み。Where、Select、Sum などは System.Linq 名前空間で定義された IEnumerable<T> の拡張メソッド。List や配列に本当に Sum があるわけではなく、拡張メソッドがそう見せているだけじゃ。",
+    ),
+    p(
+      "Extension methods are only visible when their namespace is imported with using at the top of the file. Without it, the compiler reports CS1061: the type has no such method, and it doesn't know where else to look. Many project templates import System.Linq for you, which is why it's easy to forget.",
+      "Los métodos de extensión solo se ven cuando su namespace se importa con using al inicio del archivo. Sin eso, el compilador da CS1061: el tipo no tiene ese método y no sabe dónde más buscar. Muchas plantillas de proyecto importan System.Linq por ti, por eso es fácil olvidarlo.",
+      "拡張メソッドは、ファイルの先頭で using を使って名前空間を取りこんだ時だけ見える。無いとコンパイラは CS1061（その型にそのメソッドは無い）を出し、ほかを探さない。多くのテンプレートは System.Linq を自動で入れるので忘れやすいのじゃ。",
+    ),
+    p(
+      "Common mistake: forgetting the this keyword or the static class. Without this, Half is just an ordinary static method, and you must call it as Tools.Half(21) instead of 21.Half().",
+      "Error común: olvidar la palabra this o la clase static. Sin this, Half es solo un método static común, y debes llamarlo como Tools.Half(21) en vez de 21.Half().",
+      "よくあるミス：this や static クラスを忘れること。this が無いと Half はふつうの static メソッドで、21.Half() ではなく Tools.Half(21) と呼ぶしかない。",
+    ),
+  ),
+];
+
+const deferredNotes: NoteDef[] = [
+  note("deferred-recipe", L("Queries run when pulled", "Las consultas corren al tirar", "クエリは引いた時に動く"),
+    p(
+      "Most LINQ methods don't do the work when you call them. Where, Select, OrderBy and friends return a query: a recipe that remembers the source and the lambdas. Nothing is filtered or computed yet. This is called deferred execution.",
+      "La mayoría de los métodos LINQ no hacen el trabajo cuando los llamas. Where, Select, OrderBy y compañía devuelven una consulta: una receta que recuerda la fuente y las lambdas. Todavía no se filtra ni se calcula nada. Esto se llama ejecución diferida.",
+      "LINQ のメソッドの多くは、呼んだ時には仕事をしない。Where、Select、OrderBy などが返すのはクエリ。元とラムダをおぼえたレシピで、まだ何も選んでも計算してもいない。これを遅延実行という。",
+    ),
+    p(
+      "The recipe runs when something pulls items out of it: a foreach, or a method that needs the results, like Count(), Sum(), First(), ToList() or string.Join. It reads the source as it is at THAT moment, so items added or changed before the pull are included.",
+      "La receta corre cuando algo tira de sus items: un foreach, o un método que necesita los resultados, como Count(), Sum(), First(), ToList() o string.Join. Lee la fuente como está en ESE momento, así que los items agregados o cambiados antes del tirón se incluyen.",
+      "レシピが動くのは、だれかが要素を引いた時：foreach や、結果が必要な Count()、Sum()、First()、ToList()、string.Join など。その瞬間の元を読むので、引く前に足したり変えたりした要素も入る。",
+    ),
+    ex('var bag = new List<string> { "map" };\nvar q = bag.Select(s => s.ToUpper());\nbag.Add("rope");\nConsole.WriteLine(string.Join(" ", q));', "MAP ROPE",
+      L("rope was added after the query, before the pull", "rope se agregó después de la consulta, antes del tirón", "rope はクエリの後、引く前に足された")),
+    p(
+      "The same goes for variables captured by the lambdas: they are read at pull time, not when the query was written. And errors are deferred too: if a lambda would throw (say, dividing by zero), the exception appears at the pull, not at the line that built the query.",
+      "Lo mismo pasa con las variables capturadas por las lambdas: se leen al tirar, no cuando se escribió la consulta. Y los errores también se difieren: si una lambda lanzaría (por ejemplo, al dividir por cero), la excepción aparece en el tirón, no en la línea que armó la consulta.",
+      "ラムダがつかんだ変数も同じで、クエリを書いた時ではなく引いた時に読まれる。エラーも遅れてくる。ラムダが例外を出すなら（0 で割るなど）、クエリを作った行ではなく引いた時に出るのじゃ。",
+    ),
+    ex('var q = new[] { 2, 4 }.Select(n => { Console.Write("[" + n + "]"); return n; });\nConsole.Write("built ");\nConsole.WriteLine(q.Sum());', "built [2][4]6",
+      L("The lambdas run inside Sum, not on the first line", "Las lambdas corren dentro de Sum, no en la primera línea", "ラムダは1行目ではなく Sum の中で動く")),
+    p(
+      "Common mistake: reading a query line as if it had already run. When you predict the output, find the line that pulls, and evaluate the recipe there, with the current state of everything it uses.",
+      "Error común: leer la línea de una consulta como si ya hubiera corrido. Al predecir la salida, busca la línea que tira y evalúa la receta ahí, con el estado actual de todo lo que usa.",
+      "よくあるミス：クエリの行をもう実行済みのように読むこと。出力を予想する時は引く行を探し、そこで、使う物すべての今の状態でレシピを計算しよう。",
+    ),
+  ),
+  note("one-item-at-a-time", L("One item at a time", "De a un item por vez", "1つずつ流れる"),
+    p(
+      "When a chain is pulled, items don't move stage by stage as whole lists. Each item travels through the whole pipeline before the next one starts: item 1 goes through Where and, if it passes, through Select; then item 2, and so on. This is called streaming.",
+      "Cuando se tira de una cadena, los items no avanzan etapa por etapa como listas completas. Cada item recorre toda la cadena antes de que empiece el siguiente: el item 1 pasa por Where y, si lo pasa, por Select; luego el item 2, y así. Esto se llama streaming.",
+      "チェーンが引かれても、リスト丸ごと段階ごとに進むわけではない。1つの要素がチェーン全体を通ってから次が始まる。要素1が Where を通り、合格なら Select へ。次に要素2、と続く。これをストリーミングという。",
+    ),
+    ex('new[] { 5, 6, 7 }\n    .Where(n => { Console.Write("W" + n + " "); return n != 6; })\n    .Select(n => { Console.Write("S" + n + " "); return n; })\n    .ToList();', "W5 S5 W6 W7 S7",
+      L("6 stops at Where; the others go straight on to Select", "El 6 se queda en Where; los demás siguen directo a Select", "6 は Where で止まり、ほかはすぐ Select へ")),
+    p(
+      "Streaming means the work stops as soon as the puller has enough. First() needs one item, so the moment one item comes out of the end of the chain, nothing else is processed. Any() works the same way, while Count(), Sum() and ToList() need every item.",
+      "Streaming significa que el trabajo se detiene en cuanto quien tira tiene suficiente. First() necesita un item, así que apenas sale uno por el final de la cadena, no se procesa nada más. Any() funciona igual, mientras que Count(), Sum() y ToList() necesitan todos los items.",
+      "ストリーミングなので、引く側が足りた時点で仕事は止まる。First() は1つでいいので、チェーンの端から1つ出た瞬間にほかは処理されない。Any() も同じ。Count()、Sum()、ToList() は全部の要素が必要じゃ。",
+    ),
+    ex('var x = new[] { 8, 9, 10 }.Where(n => { Console.Write("w" + n + " "); return n > 8; }).Any();\nConsole.WriteLine(x);', "w8 w9 True",
+      L("Any stops at the first match: 10 is never tested", "Any se detiene en la primera coincidencia: el 10 nunca se prueba", "Any は最初の一致で止まり、10 は調べない")),
+    p(
+      "Common mistake: printing all the Where messages first and all the Select messages after. That's what would happen if each step built a complete list before the next one started, which is not how LINQ queries run.",
+      "Error común: imprimir primero todos los mensajes de Where y después todos los de Select. Eso pasaría si cada paso armara una lista completa antes de que empezara el siguiente, y no es así como corren las consultas LINQ.",
+      "よくあるミス：Where のメッセージを全部先に、Select のメッセージを全部後に書くこと。それは各段階がリストを完成させてから次へ進む場合で、LINQ のクエリはそう動かない。",
+    ),
+  ),
+  note("tolist-snapshot", L("ToList takes a snapshot", "ToList toma una foto", "ToList はスナップショット"),
+    p(
+      "ToList() and ToArray() pull the query immediately and copy the results into a brand new collection. From then on, the copy is independent: changing, adding to or clearing the source does not change the snapshot.",
+      "ToList() y ToArray() tiran de la consulta de inmediato y copian los resultados en una colección nueva. Desde ahí la copia es independiente: cambiar, agregar o vaciar la fuente no cambia la foto.",
+      "ToList() と ToArray() はすぐにクエリを引き、結果を新しいコレクションにコピーする。それ以降コピーは独立していて、元を変えても、足しても、空にしてもスナップショットは変わらない。",
+    ),
+    ex('var crew = new List<string> { "Ada", "Bo" };\nvar saved = crew.Select(c => c + "!").ToList();\ncrew.Add("Cy");\nConsole.WriteLine(saved.Count + " " + crew.Count);', "2 3",
+      L("The snapshot keeps 2 items; the source grew to 3", "La foto conserva 2 items; la fuente creció a 3", "スナップショットは2つのまま、元は3つに増えた")),
+    p(
+      "A query, on the other hand, runs again from scratch every time it is pulled. Two foreach loops over the same query run every lambda twice. That's wasted work, and it can surprise you when the lambdas have side effects, like printing or counting.",
+      "Una consulta, en cambio, corre de nuevo desde cero cada vez que se tira de ella. Dos foreach sobre la misma consulta corren cada lambda dos veces. Es trabajo desperdiciado, y puede sorprenderte cuando las lambdas tienen efectos, como imprimir o contar.",
+      "一方クエリは、引かれるたびに最初からやり直す。同じクエリに foreach を2回回せば、ラムダも全部2回動く。むだな仕事であり、表示や数えるなどの副作用があるラムダだと驚くことになる。",
+    ),
+    ex('int runs = 0;\nvar list = new[] { 1, 2, 3, 4 }.Where(n => { runs++; return true; }).ToList();\nConsole.WriteLine(list.Count + list.Count + " " + runs);', "8 4",
+      L("Read twice, but the lambda ran only once per item", "Se lee dos veces, pero la lambda corrió una vez por item", "2回読んでも、ラムダは要素ごとに1回だけ")),
+    p(
+      "Rule of thumb: keep a query when you want live results that follow the source; call ToList() when you want to freeze the results at that point, or when you will read them several times. Where you put it matters: the snapshot only holds what the source had when ToList ran.",
+      "Regla práctica: conserva la consulta si quieres resultados vivos que sigan a la fuente; llama a ToList() si quieres congelar los resultados en ese punto o si los vas a leer varias veces. Dónde lo pones importa: la foto solo tiene lo que la fuente tenía cuando corrió ToList.",
+      "目安：元に合わせて変わる結果が欲しいならクエリのまま。その時点で結果を固めたい時や何度も読む時は ToList()。置く場所が大事で、スナップショットには ToList が動いた時の元の中身しか入らない。",
+    ),
+  ),
+  note("yield-return", L("Lazy sequences with yield", "Secuencias perezosas con yield", "yield で遅延シーケンス"),
+    p(
+      "A method that returns IEnumerable<T> and uses yield return is an iterator. Calling it runs NONE of its body; it just hands back a sequence object. The body starts only when someone pulls the first item.",
+      "Un método que devuelve IEnumerable<T> y usa yield return es un iterador. Llamarlo no corre NADA de su cuerpo; solo entrega un objeto secuencia. El cuerpo empieza cuando alguien tira del primer item.",
+      "IEnumerable<T> を返し yield return を使うメソッドはイテレータ。呼んでも本体は何も動かず、シーケンスのオブジェクトを返すだけ。本体は、だれかが最初の要素を引いた時に始まる。",
+    ),
+    p(
+      "Each yield return hands out one item and pauses the method right there, remembering where it was. When the next item is pulled, the method continues from that point until the next yield return, or until it ends. If nobody asks for more, the rest never runs.",
+      "Cada yield return entrega un item y pausa el método justo ahí, recordando dónde estaba. Cuando se tira del siguiente item, el método sigue desde ese punto hasta el próximo yield return, o hasta terminar. Si nadie pide más, el resto nunca corre.",
+      "yield return は要素を1つ渡し、その場所をおぼえてメソッドを一時停止する。次の要素が引かれると、そこから次の yield return か終わりまで続く。だれも次を求めなければ、残りは動かない。",
+    ),
+    ex('foreach (var s in Steps())\n    Console.Write(s + " ");\n\nstatic IEnumerable<string> Steps()\n{\n    Console.Write("start ");\n    yield return "a";\n    yield return "b";\n    Console.Write("end");\n}', "start a b end",
+      L("foreach pulls until the method ends", "foreach tira hasta que el método termina", "foreach はメソッドが終わるまで引く")),
+    p(
+      "LINQ's own methods are built the same way, which is why queries are lazy. Combined with First() or Take(n), an iterator can even describe an endless sequence safely, because only the items you ask for are ever produced.",
+      "Los propios métodos de LINQ están hechos así, por eso las consultas son perezosas. Junto con First() o Take(n), un iterador puede describir incluso una secuencia infinita sin peligro, porque solo se producen los items que pides.",
+      "LINQ のメソッドも同じ作りなので、クエリは遅延する。First() や Take(n) と組み合わせれば、終わりの無いシーケンスでも安全。求めた分しか作られないからじゃ。",
+    ),
+    ex('Console.WriteLine(string.Join(",", Evens().Take(3)));\n\nstatic IEnumerable<int> Evens()\n{\n    for (int n = 0; ; n += 2) yield return n;\n}', "0,2,4",
+      L("An endless loop, but only three items are made", "Un bucle infinito, pero solo se hacen tres items", "終わらないループでも作られるのは3つだけ")),
+  ),
+];
+
+// The boss recaps the whole region: one short note per idea it tests.
+const bossNotes: NoteDef[] = [
+  note("recap-collections", L("Recap: collections", "Repaso: colecciones", "復習：コレクション"),
+    p(
+      "Dictionary: d[key] reads and throws KeyNotFoundException when the key is missing; TryGetValue and GetValueOrDefault read safely. HashSet: Add returns false when the item is already there. List: never Remove inside a foreach over the same list; loop over a copy or use RemoveAll.",
+      "Dictionary: d[clave] lee y lanza KeyNotFoundException si la clave falta; TryGetValue y GetValueOrDefault leen sin riesgo. HashSet: Add devuelve false si el item ya está. List: nunca uses Remove dentro de un foreach sobre la misma lista; recorre una copia o usa RemoveAll.",
+      "Dictionary：d[key] は無いキーで KeyNotFoundException。TryGetValue と GetValueOrDefault なら安全。HashSet：既にある物の Add は false。List：同じリストの foreach の中で Remove しない。コピーを回すか RemoveAll を使う。",
+    ),
+    ex('var lamps = new HashSet<string> { "red" };\nvar fuel = new Dictionary<string, int> { ["red"] = 3 };\nConsole.WriteLine(lamps.Add("red") + " " + fuel.GetValueOrDefault("blue"));', "False 0"),
+    p(
+      "Generics: a List<string> is not a List<object>. If it were, you could add any object to a list that promised to hold only strings, so the compiler rejects the assignment.",
+      "Genéricos: un List<string> no es un List<object>. Si lo fuera, podrías agregar cualquier objeto a una lista que prometió guardar solo strings, así que el compilador rechaza la asignación.",
+      "ジェネリック：List<string> は List<object> ではない。もしそうなら、文字列だけを持つと約束したリストに何でも足せてしまう。だからコンパイラはその代入を拒否する。",
+    ),
+  ),
+  note("recap-delegates", L("Recap: delegates and closures", "Repaso: delegados y closures", "復習：デリゲートとクロージャ"),
+    p(
+      "A multicast delegate runs every method it holds, in order. For a Func, the call returns only the last method's result. A lambda captures variables, not values: it reads them when it runs.",
+      "Un delegado multicast corre todos los métodos que guarda, en orden. En un Func, la llamada devuelve solo el resultado del último. Una lambda captura variables, no valores: las lee cuando corre.",
+      "マルチキャストデリゲートは持っているメソッドを順に全部動かす。Func なら返るのは最後の結果だけ。ラムダは値ではなく変数をつかみ、動く時に読む。",
+    ),
+    ex('Func<int, string> f = n => "a" + n;\nf += n => "b" + n;\nConsole.WriteLine(f(1));', "b1"),
+    p(
+      "In a for loop there is one shared i. Lambdas that run after the loop all see its final value. foreach, or a copy declared inside the loop body, gives each lambda its own variable.",
+      "En un for hay un solo i compartido. Las lambdas que corren después del bucle ven todas su valor final. foreach, o una copia declarada dentro del cuerpo, le da a cada lambda su propia variable.",
+      "for の i は共有の1つだけ。ループの後に動くラムダはみな最後の値を見る。foreach か、本体の中で宣言したコピーなら、各ラムダが自分の変数を持てる。",
+    ),
+  ),
+  note("recap-linq", L("Recap: LINQ methods", "Repaso: métodos LINQ", "復習：LINQ のメソッド"),
+    p(
+      "First and Single throw when nothing matches, and Single also throws when more than one matches. FirstOrDefault returns the default instead (0 for int, null for strings).",
+      "First y Single lanzan si nada coincide, y Single también lanza si coincide más de uno. FirstOrDefault devuelve el default en su lugar (0 para int, null para strings).",
+      "First と Single は一致が無いと例外。Single は2つ以上でも例外。FirstOrDefault は代わりに既定値を返す（int は 0、string は null）。",
+    ),
+    ex('var xs = new[] { 3, 8 };\nConsole.WriteLine(xs.FirstOrDefault(x => x > 9) + " " + xs.First(x => x > 5));', "0 8"),
+    p(
+      "GroupBy collects every item with the same key into one group, wherever it appears, and lists the groups in the order their keys were first seen.",
+      "GroupBy junta todo item con la misma clave en un grupo, aparezca donde aparezca, y lista los grupos en el orden en que se vio cada clave por primera vez.",
+      "GroupBy は同じキーの要素をどこにあっても1つのグループに集め、キーが最初に出た順にグループを並べる。",
+    ),
+  ),
+  note("recap-deferred", L("Recap: deferred execution", "Repaso: ejecución diferida", "復習：遅延実行"),
+    p(
+      "A query is a recipe: it runs only when pulled (foreach, Count, First, ToList...) and sees the source and captured variables as they are at that moment. ToList freezes a snapshot.",
+      "Una consulta es una receta: solo corre al tirar de ella (foreach, Count, First, ToList...) y ve la fuente y las variables capturadas como están en ese momento. ToList congela una foto.",
+      "クエリはレシピ。引かれた時（foreach、Count、First、ToList など）だけ動き、その瞬間の元と変数を見る。ToList はスナップショットを固める。",
+    ),
+    ex('var src = new List<int> { 1 };\nvar q = src.Select(n => n + 100);\nsrc[0] = 7;\nConsole.WriteLine(q.Single());', "107"),
+    p(
+      "Items stream through the chain one at a time, so stages take turns per item, and First stops as soon as one item reaches the end. Later items are never touched.",
+      "Los items fluyen por la cadena de a uno, así que las etapas se turnan por item, y First se detiene apenas un item llega al final. Los items siguientes nunca se tocan.",
+      "要素は1つずつチェーンを流れるので、段階は要素ごとに交代で動く。First は1つが端に届いた時点で止まり、後の要素には触れない。",
+    ),
+  ),
+];
 
 // ─── 3.1 The adventurer's packs: collections and generics ──────────────────
 const collections: LessonDef = {
@@ -54,6 +490,8 @@ const collections: LessonDef = {
       output: "0 3",
       check: { compiles: true, stdout: "0 3" },
       explain: L("New int slots start at 0 (the default for int). Length counts slots: 3.", "Las casillas int nuevas valen 0 (el default de int). Length cuenta casillas: 3.", "新しい int のスロットは 0（int の既定値）。Length は数で 3。"),
+      hint: L("What value does a fresh int slot hold before you set it? And Length counts slots, not the last index.", "¿Qué valor tiene una casilla int nueva antes de asignarla? Length cuenta casillas, no el último índice.", "まだ何も入れていない int のスロットの値は？Length はスロットの数だよ。"),
+      note: "arrays-and-lists",
       win: [{ t: "print", text: "0 3" }],
     },
     say(L(
@@ -70,6 +508,8 @@ const collections: LessonDef = {
       output: "gem,sword,shield 3",
       check: { compiles: true, stdout: "gem,sword,shield 3" },
       explain: L("Add puts at the end, Insert(0, ...) at the front. Count is how many items: 3.", "Add agrega al final, Insert(0, ...) al inicio. Count es cuántos items hay: 3.", "Add は末尾、Insert(0, ...) は先頭に入れる。Count は個数で 3。"),
+      hint: L("Add goes to one end, Insert(0, ...) to the other. Trace the list after each line, then count.", "Add va a un extremo e Insert(0, ...) al otro. Sigue la lista línea a línea y luego cuenta.", "Add と Insert(0, ...) は入る端が違う。1行ごとにリストを追って数えよう。"),
+      note: "arrays-and-lists",
       setup: [{ t: "item", kind: "sword", holder: "hero" }],
       win: [{ t: "item", kind: "gem", holder: "hero" }, { t: "item", kind: "shield", holder: "hero" }, { t: "print", text: "gem,sword,shield 3" }],
     },
@@ -81,6 +521,8 @@ const collections: LessonDef = {
       answer: 0,
       check: { compiles: true, stdout: "1", wrongFail: true },
       explain: L("List uses Add. Push belongs to Stack, and Insert also needs a position.", "List usa Add. Push es de Stack, e Insert también necesita una posición.", "List は Add を使う。Push は Stack 用、Insert は位置も必要。"),
+      hint: L("Which method does a List use to put one item at the end? One option belongs to a different collection.", "¿Qué método usa un List para poner un item al final? Una opción es de otra colección.", "List の末尾に1つ足すメソッドは？別のコレクション用の選択肢もある。"),
+      note: "arrays-and-lists",
       win: [{ t: "item", kind: "potion", holder: "hero" }, { t: "print", text: "1" }],
     },
     {
@@ -91,6 +533,8 @@ const collections: LessonDef = {
       answer: 0,
       check: { compiles: true, throws: "ArgumentOutOfRangeException" },
       explain: L("Two items live at 0 and 1. A List throws ArgumentOutOfRangeException; an array would throw IndexOutOfRangeException.", "Dos items viven en 0 y 1. Un List lanza ArgumentOutOfRangeException; un array lanzaría IndexOutOfRangeException.", "要素は 0 と 1。List は ArgumentOutOfRangeException、配列なら IndexOutOfRangeException。"),
+      hint: L("Two items sit at indexes 0 and 1. What does a List do when you read outside that range?", "Dos items están en los índices 0 y 1. ¿Qué hace un List si lees fuera de ese rango?", "2つの要素は 0 と 1 にある。範囲の外を読むと List はどうする？"),
+      note: "arrays-and-lists",
       win: [{ t: "shake" }],
     },
     say(L(
@@ -126,6 +570,8 @@ const collections: LessonDef = {
       output: "15 2",
       check: { compiles: true, stdout: "15 2" },
       explain: L("+= updates the gold chest to 15; setting \"gems\" adds a second key.", "+= sube el cofre gold a 15; asignar \"gems\" agrega una segunda clave.", "+= で gold は 15。\"gems\" への代入で2つ目のキーが増える。"),
+      hint: L("+= updates an existing key; assigning a new key adds an entry. How many keys exist at the end?", "+= actualiza una clave existente; asignar una clave nueva agrega una entrada. ¿Cuántas claves hay al final?", "+= は既存のキーを更新、新しいキーへの代入は追加。最後にキーはいくつ？"),
+      note: "dictionaries-and-sets",
       win: [{ t: "print", text: "15 2" }],
     },
     {
@@ -136,6 +582,8 @@ const collections: LessonDef = {
       answer: 0,
       check: { compiles: true, throws: "An item with the same key has already been added" },
       explain: L("Add refuses a key that already exists and throws ArgumentException. d[\"a\"] = 2 would overwrite instead.", "Add rechaza una clave que ya existe y lanza ArgumentException. d[\"a\"] = 2 la reemplazaría.", "Add は既存のキーを拒んで ArgumentException。d[\"a\"] = 2 なら上書き。"),
+      hint: L("Add and the d[key] = v indexer treat an existing key differently. Which one insists the key is new?", "Add y el indexador d[clave] = v tratan distinto una clave existente. ¿Cuál exige que sea nueva?", "Add と d[key] = v は既存のキーの扱いが違う。新しいキーを要求するのは？"),
+      note: "dictionaries-and-sets",
       win: [{ t: "shake" }],
     },
     say(L(
@@ -151,6 +599,8 @@ const collections: LessonDef = {
       answer: 0,
       check: { compiles: true, stdout: "have 3", wrongFail: true },
       explain: L("Only TryGetValue has an out parameter: it returns true and fills n with 3.", "Solo TryGetValue tiene un parámetro out: devuelve true y llena n con 3.", "out 引数を持つのは TryGetValue だけ。true を返し n に 3 を入れる。"),
+      hint: L("The blank is followed by an out parameter and sits in an if condition. Which method fits both?", "Tras el hueco viene un parámetro out y todo va en un if. ¿Qué método encaja con ambos?", "空欄の後に out 引数があり、if の条件になっている。両方に合うのは？"),
+      note: "dictionaries-and-sets",
       win: [{ t: "print", text: "have 3" }],
     },
     {
@@ -162,6 +612,8 @@ const collections: LessonDef = {
       output: "False True 3",
       check: { compiles: true, stdout: "False True 3" },
       explain: L("A HashSet keeps each item once. Add returns false for the duplicate \"a\" and true for the new \"c\".", "Un HashSet guarda cada item una vez. Add devuelve false con el \"a\" repetido y true con el nuevo \"c\".", "HashSet は同じ物を1つだけ持つ。重複の \"a\" は false、新しい \"c\" は true。"),
+      hint: L("A set keeps each item once. Add returns whether the item was actually added.", "Un set guarda cada item una vez. Add devuelve si el item se agregó de verdad.", "セットは同じ物を1つだけ持つ。Add は本当に追加できたかを返す。"),
+      note: "dictionaries-and-sets",
       win: [{ t: "say", actor: "hero", text: L("Already have it!", "¡Ya lo tengo!", "もう持ってる！") }, { t: "print", text: "False True 3" }],
     },
     say(L(
@@ -178,6 +630,8 @@ const collections: LessonDef = {
       output: "9 pear",
       check: { compiles: true, stdout: "9 pear" },
       explain: L("One method, two types: T becomes int, then string. Strings compare alphabetically, so pear wins.", "Un método, dos tipos: T es int y luego string. Los strings se comparan por orden alfabético: gana pear.", "1つのメソッドで2つの型。T は int、次に string。文字列は辞書順なので pear。"),
+      hint: L("T is int in one call and string in the other. How does CompareTo order strings?", "T es int en una llamada y string en la otra. ¿Cómo ordena CompareTo los strings?", "T は1回目が int、2回目が string。CompareTo は文字列をどう比べる？"),
+      note: "generic-methods",
       win: [{ t: "print", text: "9 pear" }],
     },
     {
@@ -188,6 +642,8 @@ const collections: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("Error CS0019: T could be any type, and not every type has +. A constraint must promise what you use.", "Error CS0019: T puede ser cualquier tipo, y no todos tienen +. Una restricción debe prometer lo que usas.", "エラー CS0019：T は何の型でもよく、+ が無い型もある。使う機能は制約で約束しよう。"),
+      hint: L("In a generic method you may only use what works for every possible T. Does every type have +?", "En un método genérico solo puedes usar lo que sirve para todo T posible. ¿Todo tipo tiene +?", "ジェネリックではどんな T でも使える操作だけ。どの型にも + がある？"),
+      note: "generic-methods",
       win: [{ t: "shake" }, { t: "banner", text: L("CS0019", "CS0019", "CS0019") }],
     },
     {
@@ -198,6 +654,8 @@ const collections: LessonDef = {
       answer: 0,
       check: { compiles: true, throws: "Collection was modified" },
       explain: L("Never change a list while foreach walks it: the next step throws \"Collection was modified\".", "Nunca cambies una lista mientras foreach la recorre: el siguiente paso lanza \"Collection was modified\".", "foreach の途中でリストを変えないで。次の一歩で \"Collection was modified\" になる。"),
+      hint: L("The list is changed while foreach is still walking it. How does a List react to that?", "La lista cambia mientras foreach todavía la recorre. ¿Cómo reacciona un List?", "foreach の途中でリストが変わる。List はそれにどう反応する？"),
+      note: "arrays-and-lists",
       win: [{ t: "shake" }],
     },
     {
@@ -208,8 +666,11 @@ const collections: LessonDef = {
       expect: "ether: 0",
       fallback: [String.raw`GetValueOrDefault\(\s*"ether"`, String.raw`TryGetValue\(\s*"ether"`],
       explain: L("stock[\"ether\"] throws KeyNotFoundException. GetValueOrDefault(\"ether\") returns 0 instead.", "stock[\"ether\"] lanza KeyNotFoundException. GetValueOrDefault(\"ether\") devuelve 0.", "stock[\"ether\"] は KeyNotFoundException。GetValueOrDefault(\"ether\") なら 0。"),
+      hint: L("Reading a missing key with [ ] throws. Swap that one read for one of the safe reads you saw earlier.", "Leer una clave que falta con [ ] lanza. Cambia esa lectura por una de las lecturas seguras que viste.", "[ ] で無いキーを読むと例外。そこを前に習った安全な読み方に変えよう。"),
+      note: "dictionaries-and-sets",
     },
   ],
+  notes: collectionsNotes,
 };
 
 // ─── 3.2 Spells in a bottle: delegates and closures ────────────────────────
@@ -245,6 +706,8 @@ const delegates: LessonDef = {
       output: "10",
       check: { compiles: true, stdout: "10" },
       explain: L("Func<int, int, int> takes two ints and returns an int. add(2, 3) is 5, times 2 is 10.", "Func<int, int, int> recibe dos int y devuelve un int. add(2, 3) es 5, por 2 da 10.", "Func<int, int, int> は int 2つを受け int を返す。add(2, 3) は 5、×2 で 10。"),
+      hint: L("add takes two ints and returns their sum. Work out the call first, then the multiplication.", "add recibe dos int y devuelve su suma. Resuelve la llamada primero y luego la multiplicación.", "add は int 2つの和を返す。先に呼び出し、次に掛け算。"),
+      note: "func-and-action",
       win: [{ t: "print", text: "10" }],
     },
     say(L(
@@ -259,6 +722,8 @@ const delegates: LessonDef = {
       answer: "Func",
       check: { compiles: true, stdout: "True" },
       explain: L("Func<int, bool>: takes an int, returns a bool. bool prints as True or False.", "Func<int, bool>: recibe un int y devuelve un bool. Un bool se imprime como True o False.", "Func<int, bool> は int を受けて bool を返す。bool は True / False と表示。"),
+      hint: L("The lambda returns a value (a bool). Which delegate family is for lambdas that return something?", "La lambda devuelve un valor (un bool). ¿Qué familia de delegados es para lambdas que devuelven algo?", "このラムダは値（bool）を返す。値を返すラムダ用のデリゲートは？"),
+      note: "func-and-action",
       win: [{ t: "print", text: "True" }],
     },
     {
@@ -269,6 +734,8 @@ const delegates: LessonDef = {
       answer: 0,
       check: { compiles: true, stdout: "hi!", wrongFail: true },
       explain: L("Console.WriteLine returns void, so the bottle is an Action<string>. Func<string> would take no input at all.", "Console.WriteLine devuelve void, así que la botella es Action<string>. Func<string> no recibiría ninguna entrada.", "Console.WriteLine は void なので Action<string>。Func<string> は引数を受け取らない。"),
+      hint: L("What does Console.WriteLine give back? Pick the delegate whose lambdas return no value.", "¿Qué devuelve Console.WriteLine? Elige el delegado cuyas lambdas no devuelven valor.", "Console.WriteLine は何を返す？値を返さないラムダ用のデリゲートを選ぼう。"),
+      note: "func-and-action",
       win: [{ t: "print", text: "hi!" }],
     },
     say(L(
@@ -285,6 +752,8 @@ const delegates: LessonDef = {
       output: "hiHI",
       check: { compiles: true, stdout: "hiHI" },
       explain: L("Both spells are in the bottle, and they run in the order they were added.", "Los dos hechizos están en la botella y corren en el orden en que se agregaron.", "ビンには呪文が2つ。足した順に実行されるよ。"),
+      hint: L("+= adds a second lambda to the same delegate. When it's called, which of them run, and in what order?", "+= agrega una segunda lambda al mismo delegado. Al llamarlo, ¿cuáles corren y en qué orden?", "+= で同じデリゲートに2つ目のラムダ。呼ぶとどれが、どの順で動く？"),
+      note: "multicast-and-events",
       win: [{ t: "print", text: "hiHI" }],
     },
     {
@@ -296,6 +765,8 @@ const delegates: LessonDef = {
       output: "2",
       check: { compiles: true, stdout: "2" },
       explain: L("Both run, but a multicast Func hands back only the last result: 2.", "Corren los dos, pero un Func multicast devuelve solo el último resultado: 2.", "両方動くけど、マルチキャストの Func は最後の結果 2 だけを返す。"),
+      hint: L("Every lambda in a multicast Func runs, but the call can only hand back one value. Which one?", "En un Func multicast corren todas las lambdas, pero la llamada devuelve un solo valor. ¿Cuál?", "マルチキャストの Func は全部動くが、返せる値は1つ。どれ？"),
+      note: "multicast-and-events",
     },
     say(L(
       "A lambda can use variables around it: a CLOSURE. It captures the VARIABLE itself, not a copy of its value.",
@@ -321,6 +792,8 @@ const delegates: LessonDef = {
       output: "99",
       check: { compiles: true, stdout: "99" },
       explain: L("read captured the variable hp, not the value 10. When cast, it reads hp as it is now: 99.", "read capturó la variable hp, no el valor 10. Al lanzarse, lee hp como está ahora: 99.", "read がつかんだのは変数 hp で、10 という値ではない。唱えた時の hp は 99。"),
+      hint: L("Does the lambda remember hp's value when it was made, or the variable itself? Check hp when read() runs.", "¿La lambda recuerda el valor de hp al crearse o la variable misma? Mira hp cuando corre read().", "ラムダがおぼえるのは作った時の値？変数そのもの？read() の時の hp を見よう。"),
+      note: "closures",
       setup: [{ t: "tag", actor: "hero", text: "hp", value: "10" }],
       win: [{ t: "value", actor: "hero", text: "99" }, { t: "print", text: "99" }],
     },
@@ -333,6 +806,8 @@ const delegates: LessonDef = {
       output: "15",
       check: { compiles: true, stdout: "15" },
       explain: L("MakeAdder returns a lambda that remembers k = 10, even after MakeAdder has finished.", "MakeAdder devuelve una lambda que recuerda k = 10, aunque MakeAdder ya terminó.", "MakeAdder は k = 10 をおぼえたラムダを返す。MakeAdder が終わった後もね。"),
+      hint: L("The returned lambda still knows the k it was made with. Plug in x and k.", "La lambda devuelta todavía conoce el k con que se creó. Sustituye x y k.", "返されたラムダは作られた時の k を知っている。x と k を当てはめよう。"),
+      note: "closures",
       win: [{ t: "print", text: "15" }],
     },
     say(L(
@@ -349,6 +824,8 @@ const delegates: LessonDef = {
       output: "333",
       check: { compiles: true, stdout: "333" },
       explain: L("All three lambdas share the same i. The loop ends with i == 3, and only then do they run.", "Las tres lambdas comparten el mismo i. El for termina con i == 3, y recién ahí corren.", "3つのラムダは同じ i を共有。ループ終了時 i は 3、その後に実行される。"),
+      hint: L("How many i variables does a for loop have? And what is i when the loop ends, before the lambdas run?", "¿Cuántas variables i tiene un for? ¿Y cuánto vale i al terminar, antes de que corran las lambdas?", "for の i はいくつある？ラムダが動く前、ループ終了時の i は？"),
+      note: "closures",
       win: [{ t: "shake" }, { t: "print", text: "333" }],
     },
     {
@@ -360,6 +837,8 @@ const delegates: LessonDef = {
       output: "012",
       check: { compiles: true, stdout: "012" },
       explain: L("foreach gives each lap its own i, so each lambda keeps its own value.", "foreach le da a cada vuelta su propio i, así que cada lambda guarda su valor.", "foreach は1周ごとに別の i。だから各ラムダが自分の値を持つ。"),
+      hint: L("foreach differs from for here: does each lap get its own variable?", "Aquí foreach es distinto de for: ¿cada vuelta tiene su propia variable?", "ここで foreach は for と違う。1周ごとに別の変数ができる？"),
+      note: "closures",
       win: [{ t: "print", text: "012" }],
     },
     say(L(
@@ -376,6 +855,8 @@ const delegates: LessonDef = {
       output: "A7 B7",
       check: { compiles: true, stdout: "A7 B7" },
       explain: L("An event is a multicast delegate: both listeners run, in order, with 7.", "Un event es un delegado multicast: corren los dos oyentes, en orden, con 7.", "イベントはマルチキャストのデリゲート。2つの聞き手が順に 7 を受け取る。"),
+      hint: L("An event is a multicast delegate. How many listeners signed up, and what value does Open pass?", "Un event es un delegado multicast. ¿Cuántos oyentes se suscribieron y qué valor pasa Open?", "イベントはマルチキャスト。聞き手は何人？Open が渡す値は？"),
+      note: "multicast-and-events",
       win: [{ t: "print", text: "A7 B7" }],
     },
     {
@@ -386,6 +867,8 @@ const delegates: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("Error CS0070: outside Door, an event can only appear with += or -=. Only its owner may raise it.", "Error CS0070: fuera de Door, un event solo admite += o -=. Solo su dueño puede dispararlo.", "エラー CS0070：Door の外では += か -= しかできない。発火できるのは持ち主だけ。"),
+      hint: L("Outside its class, what are the only two things you may do with an event?", "Fuera de su clase, ¿cuáles son las dos únicas cosas que puedes hacer con un event?", "クラスの外でイベントにできる操作は2つだけ。何と何？"),
+      note: "multicast-and-events",
       win: [{ t: "shake" }, { t: "banner", text: L("CS0070", "CS0070", "CS0070") }],
     },
     {
@@ -396,8 +879,11 @@ const delegates: LessonDef = {
       expect: "012",
       fallback: [String.raw`(int|var)\s+(\w+)\s*=\s*i\s*;[\s\S]*Write\(\s*\2\s*\)`, String.raw`foreach\s*\(\s*(var|int)\s+i\s+in`],
       explain: L("Copy i into a new local inside the loop body: each lap gets its own copy, so each lambda remembers 0, 1, 2.", "Copia i en una variable local dentro del for: cada vuelta tiene su copia y cada lambda recuerda 0, 1, 2.", "ループの中で i を新しい変数にコピー。1周ごとに別の変数なので 0, 1, 2 をおぼえる。"),
+      hint: L("All lambdas share the loop's single i. Give each lap its own variable for the lambda to capture.", "Todas las lambdas comparten el único i del for. Dale a cada vuelta su propia variable para capturar.", "全ラムダが for の i 1つを共有。1周ごとにつかむ専用の変数を用意しよう。"),
+      note: "closures",
     },
   ],
+  notes: delegatesNotes,
 };
 
 // ─── 3.3 The caravan of helpers: LINQ basics ───────────────────────────────
@@ -434,6 +920,8 @@ const linq: LessonDef = {
       output: "6,4,2",
       check: { compiles: true, stdout: "6,4,2" },
       explain: L("Where keeps the odd ones (5, 3, 1), then Select adds 1 to each. Order is kept.", "Where deja los impares (5, 3, 1) y luego Select le suma 1 a cada uno. El orden se mantiene.", "Where で奇数（5, 3, 1）を残し、Select で 1 足す。順番はそのまま。"),
+      hint: L("Go in order: first decide which numbers Where keeps, then apply Select to each survivor.", "Sigue el orden: primero qué números deja Where, luego aplica Select a cada sobreviviente.", "順番に：まず Where が残す数を決め、残った数に Select をかける。"),
+      note: "where-select-orderby",
       win: [{ t: "print", text: "6,4,2" }],
     },
     {
@@ -445,6 +933,8 @@ const linq: LessonDef = {
       output: "1,3,5,8,8",
       check: { compiles: true, stdout: "1,3,5,8,8" },
       explain: L("OrderBy sorts from small to big by the key you give (here, the number itself). Duplicates stay.", "OrderBy ordena de menor a mayor según la clave que das (aquí, el número). Los repetidos se quedan.", "OrderBy は渡したキー（ここでは数）で小さい順に並べる。重複も残る。"),
+      hint: L("OrderBy sorts by the key the lambda gives. Which direction is it, and does it drop repeats?", "OrderBy ordena por la clave que da la lambda. ¿En qué dirección, y quita repetidos?", "OrderBy はラムダのキーで並べる。どちら向き？重複は消える？"),
+      note: "where-select-orderby",
     },
     {
       kind: "pick",
@@ -454,6 +944,8 @@ const linq: LessonDef = {
       answer: 0,
       check: { compiles: true, stdout: "8,5,3" },
       explain: L("OrderByDescending sorts big to small: 8,5,3. OrderBy would give 3,5,8.", "OrderByDescending ordena de mayor a menor: 8,5,3. OrderBy daría 3,5,8.", "OrderByDescending は大きい順で 8,5,3。OrderBy なら 3,5,8。"),
+      hint: L("The expected output starts with the biggest number. Which method sorts in that direction?", "La salida esperada empieza por el número más grande. ¿Qué método ordena en esa dirección?", "期待される出力は一番大きい数から。その向きに並べるメソッドは？"),
+      note: "where-select-orderby",
       win: [{ t: "print", text: "8,5,3" }],
     },
     say(L(
@@ -470,6 +962,8 @@ const linq: LessonDef = {
       output: "2 25 8 4",
       check: { compiles: true, stdout: "2 25 8 4" },
       explain: L("Two 8s; 5+3+8+1+8 = 25; the max is 8; without repeats there are 4 numbers.", "Dos 8; 5+3+8+1+8 = 25; el máximo es 8; sin repetidos quedan 4 números.", "8 は2つ。合計 25。最大 8。重複なしで4つ。"),
+      hint: L("Do each part separately: count the 8s, add everything, find the largest, count the different values.", "Haz cada parte por separado: cuenta los 8, suma todo, busca el mayor, cuenta los valores distintos.", "1つずつ：8 の数、合計、最大、異なる値の数。"),
+      note: "counting-and-testing",
       win: [{ t: "print", text: "2 25 8 4" }],
     },
     {
@@ -481,6 +975,8 @@ const linq: LessonDef = {
       output: "True False",
       check: { compiles: true, stdout: "True False" },
       explain: L("Any: an 8 is over 7, so True. All: 1 is not over 1, so False.", "Any: un 8 es mayor que 7, así que True. All: 1 no es mayor que 1, así que False.", "Any：8 は 7 より大きいので True。All：1 は 1 より大きくないので False。"),
+      hint: L("Any needs one match, All needs every item. Watch the edge: > is strict and doesn't include equal.", "Any necesita una coincidencia; All, todas. Ojo con el borde: > es estricto, no incluye el igual.", "Any は1つでも、All は全部。境目に注意：> は等しい場合を含まない。"),
+      note: "counting-and-testing",
     },
     say(L(
       "First takes the first item and crashes if there is none. FirstOrDefault gives the default (0 for int). Single demands EXACTLY one.",
@@ -496,6 +992,8 @@ const linq: LessonDef = {
       output: "5 8 8",
       check: { compiles: true, stdout: "5 8 8" },
       explain: L("First() is 5, the first item over 5 is 8, and Last() is the final 8.", "First() es 5, el primero mayor que 5 es 8 y Last() es el 8 final.", "First() は 5、5 より大きい最初は 8、Last() は最後の 8。"),
+      hint: L("First() is the first item, First(test) the first that passes the test, Last() the final item.", "First() es el primer item, First(prueba) el primero que la pasa, Last() el último.", "First() は最初、First(条件) は条件に合う最初、Last() は最後。"),
+      note: "first-and-single",
     },
     {
       kind: "predict",
@@ -505,6 +1003,8 @@ const linq: LessonDef = {
       answer: 0,
       check: { compiles: true, throws: "Sequence contains no matching element" },
       explain: L("No item is over 100, so First throws \"Sequence contains no matching element\".", "Ningún item es mayor que 100, así que First lanza \"Sequence contains no matching element\".", "100 より大きい物が無いので First は例外 \"Sequence contains no matching element\"。"),
+      hint: L("Is any number over 100? Think about what First does when nothing matches.", "¿Hay algún número mayor que 100? Piensa qué hace First si nada coincide.", "100 より大きい数はある？一致が無い時 First はどうする？"),
+      note: "first-and-single",
       win: [{ t: "shake" }],
     },
     {
@@ -516,6 +1016,8 @@ const linq: LessonDef = {
       output: "0",
       check: { compiles: true, stdout: "0" },
       explain: L("Nothing matches, so FirstOrDefault returns default(int), which is 0. No crash.", "Nada coincide, así que FirstOrDefault devuelve default(int), que es 0. Sin reventar.", "一致しないので default(int) の 0 を返す。クラッシュしない。"),
+      hint: L("Nothing matches. The OrDefault version doesn't throw: what is the default of an int?", "Nada coincide. La versión OrDefault no lanza: ¿cuál es el default de un int?", "一致なし。OrDefault 版は例外を出さない。int の既定値は？"),
+      note: "first-and-single",
       win: [{ t: "value", actor: "hero", text: "0" }, { t: "print", text: "0" }],
     },
     {
@@ -526,6 +1028,8 @@ const linq: LessonDef = {
       answer: 0,
       check: { compiles: true, throws: "Sequence contains more than one matching element" },
       explain: L("Single wants exactly one match. There are two 8s, so it throws.", "Single quiere exactamente una coincidencia. Hay dos 8, así que lanza una excepción.", "Single はちょうど1つを要求。8 が2つあるので例外。"),
+      hint: L("How many 8s are in the list? Single has a strict rule about how many matches it accepts.", "¿Cuántos 8 hay en la lista? Single tiene una regla estricta sobre cuántas coincidencias acepta.", "8 はいくつある？Single は受け入れる一致の数に厳しい。"),
+      note: "first-and-single",
       win: [{ t: "shake" }],
     },
     say(L(
@@ -542,6 +1046,8 @@ const linq: LessonDef = {
       output: "a:apple+avocado b:banana",
       check: { compiles: true, stdout: "a:apple+avocado b:banana" },
       explain: L("Each group has a Key (the first letter) and holds its items. Groups come in first-seen order.", "Cada grupo tiene una Key (la primera letra) y guarda sus items. Los grupos salen en el orden en que aparecen.", "各グループは Key（頭文字）と中身を持つ。グループは最初に出た順。"),
+      hint: L("The key is the first letter. Which words share one, and what does each group print?", "La clave es la primera letra. ¿Qué palabras la comparten y qué imprime cada grupo?", "キーは頭文字。同じ頭文字の単語は？各グループは何を表示する？"),
+      note: "groupby-and-query",
     },
     {
       kind: "predict",
@@ -552,6 +1058,8 @@ const linq: LessonDef = {
       output: "4,4",
       check: { compiles: true, stdout: "4,4" },
       explain: L("Same as nums.Where(n => n % 2 == 0).Select(n => n / 2): the evens 8 and 8, halved.", "Igual que nums.Where(n => n % 2 == 0).Select(n => n / 2): los pares 8 y 8, a la mitad.", "nums.Where(...).Select(n => n / 2) と同じ。偶数の 8 と 8 を半分に。"),
+      hint: L("Translate it: where is a Where, select is a Select. Remember int division drops the remainder.", "Tradúcelo: where es un Where y select un Select. La división entera descarta el resto.", "where は Where、select は Select と読みかえよう。int の割り算は余りを捨てる。"),
+      note: "groupby-and-query",
     },
     say(L(
       "How does a List get Where? EXTENSION methods: a static method in a static class whose first parameter has this.",
@@ -567,6 +1075,8 @@ const linq: LessonDef = {
       output: "HELLO!",
       check: { compiles: true, stdout: "HELLO!" },
       explain: L("this string s lets you call Shout as if it were a method of string. LINQ is built the same way.", "this string s permite llamar a Shout como si fuera un método de string. LINQ está hecho igual.", "this string s で string のメソッドのように呼べる。LINQ も同じ仕組み。"),
+      hint: L("this string s makes Shout callable on any string. Read the method body to see what it returns.", "this string s permite llamar a Shout sobre cualquier string. Lee el cuerpo para ver qué devuelve.", "this string s で文字列から Shout を呼べる。本体を読んで何を返すか見よう。"),
+      note: "extension-methods",
       win: [{ t: "print", text: "HELLO!" }],
     },
     {
@@ -577,6 +1087,8 @@ const linq: LessonDef = {
       answer: 1,
       check: { compiles: false, program: "using System;\n\nint[] a = { 1, 2, 3 };\nConsole.WriteLine(a.Sum());\n" },
       explain: L("Error CS1061: without using System.Linq, the Sum extension method isn't visible on int[].", "Error CS1061: sin using System.Linq, el método de extensión Sum no se ve en int[].", "エラー CS1061：using System.Linq が無いと拡張メソッド Sum は見えない。"),
+      hint: L("Sum is an extension method. Look at the usings: is its namespace imported?", "Sum es un método de extensión. Mira los using: ¿está importado su namespace?", "Sum は拡張メソッド。using を見よう：その名前空間はある？"),
+      note: "extension-methods",
       win: [{ t: "shake" }, { t: "banner", text: L("CS1061", "CS1061", "CS1061") }],
     },
     {
@@ -587,8 +1099,11 @@ const linq: LessonDef = {
       expect: "top: 90",
       fallback: [String.raw`OrderByDescending\(`, String.raw`scores\.Max\(\)`, String.raw`OrderBy\([^)]*\)\s*\.\s*Last\(\)`],
       explain: L("OrderBy puts the smallest first. Use OrderByDescending, or simply scores.Max().", "OrderBy pone primero al menor. Usa OrderByDescending, o simplemente scores.Max().", "OrderBy は小さい順。OrderByDescending か、scores.Max() を使おう。"),
+      hint: L("OrderBy sorts smallest first, so First() takes the lowest score. You want the opposite end.", "OrderBy pone el menor primero, así que First() toma el puntaje más bajo. Quieres el otro extremo.", "OrderBy は小さい順なので First() は最低点。欲しいのは反対の端。"),
+      note: "where-select-orderby",
     },
   ],
+  notes: linqNotes,
 };
 
 // ─── 3.4 Nothing moves until you pull: deferred execution ──────────────────
@@ -625,6 +1140,8 @@ const deferred: LessonDef = {
       output: "3",
       check: { compiles: true, stdout: "3" },
       explain: L("The Where runs at Count(), after 4 was added: 2, 3 and 4 pass.", "El Where corre en Count(), después de agregar el 4: pasan 2, 3 y 4.", "Where が動くのは Count() の時。4 を足した後なので 2, 3, 4 が通る。"),
+      hint: L("When does the Where really run: at the line that builds it, or at Count()? What's in src by then?", "¿Cuándo corre de verdad el Where: en la línea que lo arma o en Count()? ¿Qué hay en src entonces?", "Where が本当に動くのは作った行？Count() の時？その時 src には何がある？"),
+      note: "deferred-recipe",
       win: [{ t: "print", text: "3" }],
     },
     say(L(
@@ -641,6 +1158,8 @@ const deferred: LessonDef = {
       output: "2",
       check: { compiles: true, stdout: "2" },
       explain: L("ToList ran the Where before 4 existed: the snapshot holds 2 and 3.", "ToList corrió el Where antes de que existiera el 4: la foto tiene 2 y 3.", "ToList は 4 を足す前に Where を実行。中身は 2 と 3。"),
+      hint: L("ToList runs the query right away and copies the results. Does adding to src later change that copy?", "ToList corre la consulta en el acto y copia los resultados. ¿Agregar a src después cambia esa copia?", "ToList はすぐ実行して結果をコピー。後で src に足すとコピーは変わる？"),
+      note: "tolist-snapshot",
       setup: [{ t: "item", kind: "gem", holder: "hero" }],
       win: [{ t: "clone", to: "ally" }, { t: "print", text: "2" }],
     },
@@ -653,6 +1172,8 @@ const deferred: LessonDef = {
       output: "before s1 s2 s3",
       check: { compiles: true, stdout: "before s1 s2 s3" },
       explain: L("Building the Select prints nothing. The lambda only runs when foreach pulls each item.", "Armar el Select no imprime nada. La lambda solo corre cuando foreach tira de cada item.", "Select を作っただけでは何も出ない。foreach が引く時にラムダが動く。"),
+      hint: L("Building a Select doesn't run its lambda. Which line actually pulls the items?", "Armar un Select no corre su lambda. ¿Qué línea tira de los items de verdad?", "Select を作ってもラムダは動かない。本当に要素を引くのはどの行？"),
+      note: "deferred-recipe",
     },
     say(L(
       "When pulled, ONE item walks the whole caravan before the next one starts. Watch Where (w) and Select (s) take turns.",
@@ -668,6 +1189,8 @@ const deferred: LessonDef = {
       output: "w1 w2 s2 w3 w4 s4",
       check: { compiles: true, stdout: "w1 w2 s2 w3 w4 s4" },
       explain: L("Item by item: 1 fails Where; 2 passes Where and goes straight into Select; then 3, then 4.", "Item por item: 1 no pasa el Where; 2 pasa el Where y va directo al Select; luego 3, luego 4.", "1つずつ：1 は Where で落ち、2 は Where を通ってすぐ Select へ。次に 3、4。"),
+      hint: L("Items travel through the chain one at a time. Follow 1, then 2, then 3, then 4 through both steps.", "Los items recorren la cadena de a uno. Sigue al 1, luego al 2, al 3 y al 4 por los dos pasos.", "要素は1つずつチェーンを通る。1、2、3、4 の順に両方の段階を追おう。"),
+      note: "one-item-at-a-time",
     },
     {
       kind: "predict",
@@ -678,6 +1201,8 @@ const deferred: LessonDef = {
       output: "s1 1",
       check: { compiles: true, stdout: "s1 1" },
       explain: L("First pulls just one item and stops. Only the work that is needed runs.", "First tira de un solo item y se detiene. Solo corre el trabajo necesario.", "First は1つだけ引いて止まる。必要な分しか動かない。"),
+      hint: L("How many items does First need before it can stop pulling?", "¿Cuántos items necesita First antes de dejar de tirar?", "First が引くのをやめるまでに必要な要素はいくつ？"),
+      note: "one-item-at-a-time",
     },
     {
       kind: "predict",
@@ -688,6 +1213,8 @@ const deferred: LessonDef = {
       output: "3",
       check: { compiles: true, stdout: "3" },
       explain: L("The lambda captured the variable limit (a closure). At Count() it is 0, so all three pass.", "La lambda capturó la variable limit (un closure). En Count() vale 0, así que pasan los tres.", "ラムダは変数 limit をつかんでいる。Count() の時は 0 なので3つとも通る。"),
+      hint: L("The lambda captured the variable limit. What is limit when Count() runs the query?", "La lambda capturó la variable limit. ¿Cuánto vale limit cuando Count() corre la consulta?", "ラムダは変数 limit をつかんでいる。Count() で実行する時の limit は？"),
+      note: "deferred-recipe",
     },
     {
       kind: "predict",
@@ -698,6 +1225,8 @@ const deferred: LessonDef = {
       output: "6",
       check: { compiles: true, stdout: "6" },
       explain: L("Each foreach runs the recipe again from scratch: 3 + 3 calls. Use ToList() to run it once.", "Cada foreach corre la receta de nuevo desde cero: 3 + 3 llamadas. Usa ToList() para correrla una vez.", "foreach のたびにレシピを最初から実行：3 + 3 回。1回にしたいなら ToList()。"),
+      hint: L("There is no ToList here. How many times is the query pulled, and how many items each time?", "Aquí no hay ToList. ¿Cuántas veces se tira de la consulta y cuántos items cada vez?", "ここに ToList は無い。クエリは何回引かれ、毎回いくつの要素？"),
+      note: "tolist-snapshot",
     },
     say(L(
       "Write your own lazy sequence with yield return: the method pauses at each yield until the next item is pulled.",
@@ -713,6 +1242,8 @@ const deferred: LessonDef = {
       output: "made g1 1",
       check: { compiles: true, stdout: "made g1 1" },
       explain: L("Calling Gen() runs none of its body. First() pulls one item: g1 prints, then it pauses forever.", "Llamar a Gen() no corre nada de su cuerpo. First() tira de un item: imprime g1 y se pausa para siempre.", "Gen() を呼んでも中身は動かない。First() が1つ引いて g1 が出て、そこで止まる。"),
+      hint: L("Calling an iterator method runs none of its body. What happens when First pulls one item?", "Llamar a un método iterador no corre nada de su cuerpo. ¿Qué pasa cuando First tira de un item?", "イテレータを呼んでも本体は動かない。First が1つ引くと何が起きる？"),
+      note: "yield-return",
     },
     {
       kind: "predict",
@@ -726,6 +1257,8 @@ const deferred: LessonDef = {
       answer: 0,
       check: { compiles: true, throws: "DivideByZeroException" },
       explain: L("The crash waits inside the recipe. It only explodes when Sum() pulls the 0, after ok.", "El error espera dentro de la receta. Solo explota cuando Sum() tira del 0, después de ok.", "エラーはレシピの中で待っている。Sum() が 0 を引いた時、ok の後に爆発。"),
+      hint: L("The division lives inside the recipe's lambda. Which runs first: the Write or the pull that divides?", "La división vive en la lambda de la receta. ¿Qué corre primero: el Write o el tirón que divide?", "割り算はレシピのラムダの中。先に動くのは Write？割り算する引き？"),
+      note: "deferred-recipe",
       win: [{ t: "shake" }],
     },
     {
@@ -739,6 +1272,8 @@ const deferred: LessonDef = {
       ],
       check: { compiles: true, stdout: "2" },
       explain: L("Take the ToList snapshot BEFORE adding 4, so it only holds 2 and 3.", "Toma la foto con ToList ANTES de agregar el 4, así solo tiene 2 y 3.", "4 を足す前に ToList でスナップショットを取れば、中身は 2 と 3 だけ。"),
+      hint: L("The snapshot must not include 4. Where must ToList happen relative to src.Add(4)?", "La foto no debe incluir el 4. ¿Dónde debe ir el ToList respecto a src.Add(4)?", "スナップショットに 4 を入れない。ToList は src.Add(4) の前？後？"),
+      note: "tolist-snapshot",
       win: [{ t: "print", text: "2" }],
     },
     {
@@ -749,8 +1284,11 @@ const deferred: LessonDef = {
       expect: "alive: 2",
       fallback: [String.raw`Where\([^;]*\)\s*\.\s*(ToList|ToArray)\(\)`, String.raw`hp\.Count\(\s*h\s*=>\s*h\s*>\s*0\s*\)\s*;[\s\S]*Clear`],
       explain: L("The Where runs at Count(), after Clear() emptied hp. Add .ToList() to snapshot the living before clearing.", "El Where corre en Count(), después de que Clear() vació hp. Agrega .ToList() para guardar a los vivos antes.", "Where は Clear() の後の Count() で動く。.ToList() で消す前に保存しよう。"),
+      hint: L("The query only runs at Count(), after Clear(). Freeze the results before the list is emptied.", "La consulta solo corre en Count(), después de Clear(). Congela los resultados antes de vaciar la lista.", "クエリが動くのは Clear() の後の Count()。空にする前に結果を固定しよう。"),
+      note: "tolist-snapshot",
     },
   ],
+  notes: deferredNotes,
 };
 
 // ─── 3.5 Boss: the LINQ Hydra ──────────────────────────────────────────────
@@ -775,6 +1313,8 @@ const boss: LessonDef = {
       answer: 0,
       check: { compiles: true, throws: "KeyNotFoundException" },
       explain: L("Reading a missing key with [ ] throws. Use TryGetValue or GetValueOrDefault.", "Leer una clave que falta con [ ] lanza. Usa TryGetValue o GetValueOrDefault.", "[ ] で無いキーを読むと例外。TryGetValue か GetValueOrDefault を。"),
+      hint: L("Is \"key\" in the dictionary? Recall what [ ] does with a missing key.", "¿Está \"key\" en el diccionario? Recuerda qué hace [ ] con una clave que falta.", "\"key\" は辞書にある？無いキーを [ ] で読むとどうなる？"),
+      note: "recap-collections",
       win: [{ t: "attack", from: "hero", to: "enemy" }],
     },
     {
@@ -785,6 +1325,8 @@ const boss: LessonDef = {
       output: "False True 3",
       check: { compiles: true, stdout: "False True 3" },
       explain: L("2 is already in the set (false); 3 is new (true). Three items.", "El 2 ya está (false); el 3 es nuevo (true). Tres items.", "2 はもうある（false）、3 は新しい（true）。全部で3つ。"),
+      hint: L("Add returns whether the item was new. Which of the two is already in the set?", "Add devuelve si el item era nuevo. ¿Cuál de los dos ya está en el set?", "Add は新しかったかを返す。2つのうち、もうセットにあるのは？"),
+      note: "recap-collections",
       win: [{ t: "attack", from: "hero", to: "enemy" }],
     },
     {
@@ -795,6 +1337,8 @@ const boss: LessonDef = {
       output: "40",
       check: { compiles: true, stdout: "40" },
       explain: L("Both lambdas run on 4, but a multicast Func returns only the last result: 4 * 10.", "Las dos lambdas corren con 4, pero un Func multicast devuelve solo el último resultado: 4 * 10.", "両方 4 で動くが、返るのは最後の結果 4 * 10 だけ。"),
+      hint: L("Both lambdas run on 4. Which result does a multicast Func return?", "Las dos lambdas corren con 4. ¿Qué resultado devuelve un Func multicast?", "両方のラムダが 4 で動く。マルチキャストの Func が返すのは？"),
+      note: "recap-delegates",
       win: [{ t: "attack", from: "hero", to: "enemy" }],
     },
     {
@@ -805,6 +1349,8 @@ const boss: LessonDef = {
       output: "60",
       check: { compiles: true, stdout: "60" },
       explain: L("One shared i, which is 3 when the loop ends: 30 + 30 = 60.", "Un solo i compartido, que vale 3 al terminar el for: 30 + 30 = 60.", "共有の i はループ後 3。30 + 30 = 60。"),
+      hint: L("The lambdas run after the loop. How many i variables are there, and what is i at the end?", "Las lambdas corren después del for. ¿Cuántas i hay y cuánto vale i al final?", "ラムダはループの後に動く。i はいくつあり、最後の値は？"),
+      note: "recap-delegates",
       win: [{ t: "attack", from: "hero", to: "enemy" }],
     },
     {
@@ -815,6 +1361,8 @@ const boss: LessonDef = {
       answer: 0,
       check: { compiles: true, stdout: "0" },
       explain: L("First and Single throw on no match; FirstOrDefault returns 0.", "First y Single lanzan si no hay coincidencia; FirstOrDefault devuelve 0.", "First と Single は一致なしで例外。FirstOrDefault は 0。"),
+      hint: L("No item is over 50. Two of these throw when nothing matches; one doesn't.", "Ningún item supera 50. Dos de estos lanzan si nada coincide; uno no.", "50 を超える要素は無い。一致なしで例外を出すのが2つ、出さないのが1つ。"),
+      note: "recap-linq",
       win: [{ t: "attack", from: "hero", to: "enemy" }],
     },
     {
@@ -825,6 +1373,8 @@ const boss: LessonDef = {
       output: "c3 d1",
       check: { compiles: true, stdout: "c3 d1" },
       explain: L("GroupBy gathers every c-word into one group, even cub after dog. First-seen key comes first.", "GroupBy junta toda palabra con c en un grupo, incluso cub después de dog. La primera clave vista va primero.", "GroupBy は c の単語を1つにまとめる（dog の後の cub も）。先に出たキーが先。"),
+      hint: L("GroupBy gathers every word with the same key, even late ones. Groups appear in first-seen order.", "GroupBy junta toda palabra con la misma clave, aunque llegue tarde. Los grupos salen en orden de aparición.", "GroupBy は同じキーの単語を後からでも集める。グループは最初に出た順。"),
+      note: "recap-linq",
       win: [{ t: "attack", from: "hero", to: "enemy" }],
     },
     {
@@ -835,6 +1385,8 @@ const boss: LessonDef = {
       output: "2",
       check: { compiles: true, stdout: "2" },
       explain: L("Deferred: Select runs at First(), after src[0] became 1.", "Diferido: el Select corre en First(), después de que src[0] pasó a 1.", "遅延実行：Select は First() の時に動く。src[0] はもう 1。"),
+      hint: L("When does the Select run? Check the value of src[0] at that moment.", "¿Cuándo corre el Select? Mira el valor de src[0] en ese momento.", "Select が動くのはいつ？その時の src[0] を確かめよう。"),
+      note: "recap-deferred",
       win: [{ t: "attack", from: "hero", to: "enemy" }],
     },
     {
@@ -845,6 +1397,8 @@ const boss: LessonDef = {
       output: "w3 w4 s4",
       check: { compiles: true, stdout: "w3 w4 s4" },
       explain: L("Items flow one at a time, and First stops at the first survivor: 4. The 5 is never touched.", "Los items fluyen de a uno, y First se detiene en el primer sobreviviente: 4. El 5 nunca se toca.", "1つずつ流れ、First は最初に残った 4 で止まる。5 には触れない。"),
+      hint: L("Items flow one by one, and First stops at the first item that makes it through.", "Los items fluyen de a uno, y First se detiene en el primero que llega al final.", "要素は1つずつ流れ、First は最後まで通った最初の要素で止まる。"),
+      note: "recap-deferred",
       win: [{ t: "attack", from: "hero", to: "enemy", dmg: 2 }],
     },
     {
@@ -854,6 +1408,8 @@ const boss: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("Error CS0029: a List<string> is not a List<object>, or you could Add an int to a string list.", "Error CS0029: un List<string> no es un List<object>; si no, podrías meter un int en una lista de strings.", "エラー CS0029：List<string> は List<object> ではない。でないと int を入れられてしまう。"),
+      hint: L("If this were allowed, what could you Add to the list through the object view?", "Si esto se permitiera, ¿qué podrías agregar a la lista a través de la vista object?", "もしこれが許されたら、object として何を Add できてしまう？"),
+      note: "recap-collections",
       win: [{ t: "attack", from: "hero", to: "enemy" }],
     },
     {
@@ -864,8 +1420,11 @@ const boss: LessonDef = {
       expect: "left: 1,3",
       fallback: [String.raw`RemoveAll\(`, String.raw`Where\([^;]*\)\s*\.\s*(ToList|ToArray)\(\)`, String.raw`foreach\s*\(\s*var\s+\w+\s+in\s+mobs\s*\.\s*(ToList|ToArray)\(\)`],
       explain: L("Removing inside foreach throws. RemoveAll(m => m % 2 == 0) removes every match in one safe step.", "Quitar dentro de un foreach lanza. RemoveAll(m => m % 2 == 0) quita todas las coincidencias en un paso seguro.", "foreach の中で消すと例外。RemoveAll(m => m % 2 == 0) なら一度に安全に消せる。"),
+      hint: L("Removing inside foreach throws. Remove the even items without changing the list mid-loop.", "Quitar dentro de un foreach lanza. Quita los pares sin cambiar la lista a mitad del recorrido.", "foreach の中で消すと例外。ループの途中で変えずに偶数を消そう。"),
+      note: "recap-collections",
     },
   ],
+  notes: bossNotes,
 };
 
 export const linqPeaks: RegionDef = {

@@ -51,6 +51,10 @@ The whole game, UI and every piece of content, is available in **English**, **Es
 | ![Low poly map](docs/screenshots/map.png) | ![Ownership lesson](docs/screenshots/lesson-act.png) |
 | **Mistakes teach** | **Real compiler** |
 | ![Error feedback](docs/screenshots/lesson-feedback.png) | ![Real code challenge](docs/screenshots/lesson-run.png) |
+| **Choose your timer** | **The guidebook: long explanations, any time** |
+| ![Timer modal](docs/screenshots/timer-modal.png) | ![Guidebook with verified examples](docs/screenshots/guidebook.png) |
+| **Hints strike out a wrong option** | |
+| ![Hint](docs/screenshots/hint.png) | |
 | **Loading with real progress** | **Planet Concurra (Go)** |
 | ![Loading screen downloading the Python interpreter](docs/screenshots/loading.png) | ![Galaxy: planet Concurra](docs/screenshots/galaxy-go.png) |
 | **Region boss** | **Entry exam** |
@@ -80,6 +84,8 @@ Each lesson is a series of challenges that take a few seconds each and follow th
 
 - **A galaxy of planets with moons:** each language is a low poly 3D planet (with rings and a starfield) that has its own guide, bugs and story, and each framework of that language is a moon orbiting it, with its own guide, lessons and progress. Swipe between planets on touch screens; framework moons are shaped after what they teach (React an atom, WebGL a triangle, three.js a cube, Rails a train wheel). Landing dives into the planet with a widening field of view, then reaches a map with one island per region (Three.js), plus animated 2D pixel art scenes driven by GSAP on SVG.
 - **Memory card with 15 save slots,** like a retro console: name your player, autosave as you play, and **export/import** any slot as a `.bwq` file to move it to another browser or keep a backup. Edited or damaged files are rejected.
+- **Help when it's hard:** every lesson has a **guidebook** of long explanations (897 notes with 1,900+ verified code examples, using different values than the questions) that you can open from any question and come back to where you were (the first read costs 25% of that question's points). Every question also has a **hint**, paid with hint tickets (earned with perfect lessons and daily play, or bought with coins), and on multiple choice a hint also strikes out a wrong option.
+- **Pick your pace:** before each lesson choose no timer, relaxed, normal or fast. Faster timers pay a bigger speed bonus, and the time per question grows with its code.
 - **No dead waits:** before a challenge starts, the game downloads what it needs (the game code, the Python interpreter, three.js) behind an arcade loading screen with real progress, where the guide walks toward the bug and tips rotate. Cached content starts instantly.
 - **Arcade juice:** combos, PERFECT and GREAT speed tiers, particles, screen shake, chiptune music and sound effects synthesized with WebAudio (no audio files).
 - **Persistent progress** in your save: XP, levels, gold, daily streak, stars, per-lesson mastery and play time, kept in the browser (no account, nothing stored on the server).

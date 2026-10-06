@@ -1,4 +1,4 @@
-import type { Beat, LessonDef, RegionDef, Text } from "../../../lib/content/types.ts";
+import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
 
 // REGION 2 · COLLECTION FOREST  (list/tuple/dict/set, shared references and copies, comprehensions, sorting)
@@ -9,6 +9,108 @@ const enemySays = (text: Text): Beat => ({ kind: "dialog", speaker: "enemy", tex
 const PRINT = L("What does it print?", "¿Qué imprime?", "何が表示される？");
 const HAPPENS = L("What happens?", "¿Qué pasa?", "どうなる？");
 
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example; the validator checks `output` against the real interpreter. */
+const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code, output, caption });
+/** An example that must raise the given exception at runtime (verified too). */
+const boom = (code: string, error: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: true, throws: error } });
+
+const listsNotes: NoteDef[] = [
+  note("lists", L("Lists: ordered and changeable", "Listas: ordenadas y cambiables", "リスト：順番つきで変更できる"),
+    p(
+      "A list holds several values in order, between square brackets: [\"axe\", \"rope\"]. Each item has an index starting at 0, and negative indexes count from the end, so items[-1] is always the last item. len(items) tells you how many items there are.",
+      "Una lista guarda varios valores en orden, entre corchetes: [\"axe\", \"rope\"]. Cada elemento tiene un índice que empieza en 0, y los índices negativos cuentan desde el final, así que items[-1] siempre es el último. len(items) te dice cuántos elementos hay.",
+      "リストは複数の値を順番に入れたもので、角かっこで書く：[\"axe\", \"rope\"]。要素にはそれぞれ 0 から始まるインデックスがあり、負のインデックスは後ろから数える。items[-1] はいつも最後の要素。len(items) で個数がわかるよ。",
+    ),
+    ex("tools = [\"axe\", \"rope\", \"lamp\"]\nprint(len(tools), tools[0], tools[-1])", "3 axe lamp"),
+    p(
+      "Lists can change. append(x) adds x at the end, pop() removes the last item and returns it, and items[i] = value replaces an item. The list is changed in place: it's the same list, now with different contents.",
+      "Las listas pueden cambiar. append(x) agrega x al final, pop() quita el último elemento y lo devuelve, e items[i] = valor reemplaza un elemento. La lista cambia en su lugar: es la misma lista, ahora con otro contenido.",
+      "リストは変更できる。append(x) は末尾に x を追加、pop() は最後の要素を取り出して返し、items[i] = 値 で要素を置きかえる。変更は「その場」で起きる。同じリストのまま中身が変わるんだ。",
+    ),
+    ex("tools = [\"axe\"]\ntools.append(\"map\")\ntools[0] = \"saw\"\nprint(tools.pop(), tools)", "map ['saw']", L("pop() hands back the item it removed", "pop() devuelve el elemento que quitó", "pop() は取り出した要素を返す")),
+    p(
+      "Reading an index that doesn't exist raises IndexError: list index out of range. With n items, the valid indexes are 0 to n - 1: the last index is n - 1, not n. That off-by-one is the most common list bug, and items[-1] avoids it. A slice past the end, though, never crashes: it just gives fewer items, or [].",
+      "Leer un índice que no existe lanza IndexError: list index out of range. Con n elementos, los índices válidos van de 0 a n - 1: el último índice es n - 1, no n. Ese error por uno es el fallo más común con listas, e items[-1] lo evita. En cambio, un corte fuera del final nunca falla: solo da menos elementos, o [].",
+      "存在しないインデックスを読むと IndexError: list index out of range。n 個なら使えるのは 0〜n - 1 で、最後は n ではなく n - 1。この「1つずれ」がリストでいちばん多いバグで、items[-1] なら防げる。ただしスライスは範囲外でもエラーにならず、少なくなるか [] になるだけだよ。",
+    ),
+    boom("tools = [\"axe\", \"rope\"]\nprint(tools[2])", "IndexError", L("Two items: the indexes are 0 and 1 only", "Dos elementos: solo existen los índices 0 y 1", "2個ならインデックスは 0 と 1 だけ")),
+    p(
+      "for item in items: runs the indented block once for each item, in order, with item set to the current one. The list must exist before the loop starts, and only the indented lines below the for belong to the loop.",
+      "for item in items: ejecuta el bloque indentado una vez por cada elemento, en orden, con item igual al elemento actual. La lista debe existir antes de que empiece el bucle, y solo las líneas indentadas debajo del for pertenecen al bucle.",
+      "for item in items: は要素ごとに1回ずつ、順番に字下げしたブロックを実行する。item には今の要素が入る。ループの前にリストができている必要があり、for の下で字下げした行だけがループの中身だよ。",
+    ),
+    ex("for color in [\"red\", \"blue\"]:\n    print(\"paint\", color)", "paint red\npaint blue"),
+  ),
+  note("list-slices", L("Slicing lists", "Cortar listas", "リストのスライス"),
+    p(
+      "Slices work on lists exactly like on strings: items[start:stop] gives a NEW list from start up to, but not including, stop. [:n] is the first n items, [n:] is everything from index n on, and a step skips items: [::2] takes every second one, starting at index 0.",
+      "Los cortes funcionan en listas igual que en strings: items[inicio:fin] da una lista NUEVA desde inicio hasta fin, sin incluir fin. [:n] son los primeros n elementos, [n:] todo desde el índice n, y un paso salta elementos: [::2] toma uno de cada dos, empezando en el índice 0.",
+      "リストのスライスは文字列と同じ。items[start:stop] は start から stop の手前までの「新しい」リストを返す。[:n] は最初の n 個、[n:] はインデックス n から最後まで。ステップは要素を飛ばし、[::2] はインデックス 0 から1つおきにとるよ。",
+    ),
+    ex("odds = [1, 3, 5, 7, 9, 11]\nprint(odds[2:4], odds[:3], odds[::3])", "[5, 7] [1, 3, 5] [1, 7]", L("Start included, stop excluded; a step of 3 skips two", "Inicio incluido, fin excluido; un paso de 3 salta dos", "start は含み stop は含まない。ステップ3は2つ飛ばし")),
+    p(
+      "Slices never crash. If start or stop go past the end, the slice just stops at the end, which can give an empty list []. Only a single index, like items[10], raises IndexError.",
+      "Los cortes nunca fallan. Si inicio o fin pasan del final, el corte simplemente se detiene en el final, lo que puede dar una lista vacía []. Solo un índice suelto, como items[10], lanza IndexError.",
+      "スライスはエラーにならない。start や stop が末尾を超えても末尾で止まり、空リスト [] になることもある。IndexError になるのは items[10] のような単独のインデックスだけだよ。",
+    ),
+    ex("odds = [1, 3, 5]\nprint(odds[1:100], odds[7:])", "[3, 5] []"),
+    p(
+      "Negative numbers work in slices too: items[-2:] is the last two items and items[::-1] is a reversed copy. Common mistake: forgetting that stop is excluded. With step 1, a slice has stop - start items when both are in range.",
+      "Los números negativos también sirven en cortes: items[-2:] son los dos últimos e items[::-1] es una copia invertida. Error común: olvidar que fin se excluye. Con paso 1, un corte tiene fin - inicio elementos cuando ambos están dentro del rango.",
+      "スライスでも負の数が使える。items[-2:] は最後の2つ、items[::-1] は逆順のコピー。よくあるミス：stop が含まれないのを忘れること。ステップ 1 で範囲内なら、要素数は stop - start だよ。",
+    ),
+  ),
+  note("tuples", L("Tuples, commas and unpacking", "Tuplas, comas y desempaque", "タプル・カンマ・アンパック"),
+    p(
+      "A tuple is like a list that can never change: (3, 4). You can read items by index, slice it and loop over it, but you can't assign, append or remove: pos[0] = 1 raises TypeError: 'tuple' object does not support item assignment.",
+      "Una tupla es como una lista que nunca puede cambiar: (3, 4). Puedes leer elementos por índice, cortarla y recorrerla, pero no puedes asignar, agregar ni quitar: pos[0] = 1 lanza TypeError: 'tuple' object does not support item assignment.",
+      "タプルは変更できないリストのようなもの：(3, 4)。インデックスで読む、スライスする、ループすることはできるが、代入・追加・削除はできない。pos[0] = 1 は TypeError: 'tuple' object does not support item assignment になるよ。",
+    ),
+    boom("pos = (3, 4)\npos[1] = 0", "TypeError", L("A tuple's slots can't be reassigned", "Los lugares de una tupla no se pueden reasignar", "タプルの要素は代入し直せない")),
+    p(
+      "Why use something that can't change? It's a promise: a position, a date or a color stays the same everywhere in the program. And because tuples can't change, they can be dict keys, which lists can't.",
+      "¿Por qué usar algo que no puede cambiar? Es una promesa: una posición, una fecha o un color sigue igual en todo el programa. Y como las tuplas no cambian, pueden ser claves de un dict, cosa que las listas no pueden.",
+      "変えられないものを使う理由は？それは約束なんだ。位置や日付や色が、プログラムのどこでも同じままだと保証できる。それに変わらないから、リストとちがって dict のキーにもなれるよ。",
+    ),
+    p(
+      "The comma makes the tuple, not the parentheses. Parentheses alone only group, like in math: (8) is just the number 8. A one-item tuple needs a trailing comma: (8,). Even without parentheses, 1, 2 is a tuple.",
+      "La coma hace la tupla, no los paréntesis. Los paréntesis solos solo agrupan, como en matemáticas: (8) es solo el número 8. Una tupla de un elemento necesita una coma final: (8,). Incluso sin paréntesis, 1, 2 es una tupla.",
+      "タプルを作るのはかっこではなくカンマ。かっこだけなら数学と同じでまとめるだけ。(8) はただの数 8。要素1つのタプルには末尾のカンマが必要で (8,) と書く。かっこがなくても 1, 2 はタプルだよ。",
+    ),
+    ex("a = (8)\nb = 8,\nprint(a, b)", "8 (8,)", L("The trailing comma is what makes a tuple", "La coma final es lo que hace una tupla", "末尾のカンマがタプルを作る")),
+    p(
+      "Unpacking assigns each item to a name: x, y = (3, 4). The number of names must match the number of items, unless one name has a star in front: that name collects all the leftover items into a list. The starred name can be at the start, in the middle or at the end.",
+      "Desempacar asigna cada elemento a un nombre: x, y = (3, 4). La cantidad de nombres debe coincidir con la de elementos, salvo que un nombre lleve una estrella delante: ese nombre junta todos los elementos sobrantes en una lista. El nombre con estrella puede ir al principio, en el medio o al final.",
+      "アンパックは要素を1つずつ名前に入れる：x, y = (3, 4)。名前と要素の数は同じでないといけないが、前に * をつけた名前があれば、その名前が残りの要素をすべてリストで受けとる。* の名前は先頭・真ん中・最後のどこにでも置けるよ。",
+    ),
+    ex("first, *middle, last = [5, 6, 7, 8]\nprint(first, middle, last)", "5 [6, 7] 8"),
+  ),
+  note("sorting", L("sort() versus sorted()", "sort() frente a sorted()", "sort() と sorted()"),
+    p(
+      "There are two ways to sort. list.sort() is a method that reorders the list itself, in place, and returns None. sorted(x) is a function that leaves x alone and returns a NEW sorted list. Both sort from smallest to largest by default.",
+      "Hay dos formas de ordenar. list.sort() es un método que reordena la propia lista, en su lugar, y devuelve None. sorted(x) es una función que deja x intacta y devuelve una lista NUEVA ordenada. Ambas ordenan de menor a mayor por defecto.",
+      "並べかえ方は2つ。list.sort() はリスト自体をその場で並べかえるメソッドで、None を返す。sorted(x) は x をそのままにして、並べた「新しい」リストを返す関数。どちらも標準では小さい順だよ。",
+    ),
+    ex("nums = [9, 4, 7]\nnew = sorted(nums)\nprint(new, nums)", "[4, 7, 9] [9, 4, 7]", L("sorted() leaves the original list alone", "sorted() deja intacta la lista original", "sorted() は元のリストを変えない")),
+    p(
+      "Methods that change a list in place, like sort(), append() and reverse(), return None. That's Python's way of reminding you that nothing new was made. So nums = nums.sort() is a classic bug: the list gets sorted, then the name nums is moved onto None.",
+      "Los métodos que cambian una lista en su lugar, como sort(), append() y reverse(), devuelven None. Es la forma de Python de recordarte que no se creó nada nuevo. Por eso nums = nums.sort() es un error clásico: la lista se ordena y luego el nombre nums pasa a None.",
+      "sort()、append()、reverse() のようにリストをその場で変えるメソッドは None を返す。「新しいものは作っていない」という Python からの合図だよ。だから nums = nums.sort() は定番のバグ。リストは並ぶけど、nums というラベルは None に移ってしまう。",
+    ),
+    ex("nums = [9, 4, 7]\nnums = nums.sort()\nprint(nums)", "None", L("The classic bug: the name ends up on None", "El error clásico: el nombre termina en None", "定番のバグ：名前が None に移る")),
+    p(
+      "Use sorted() when you also need the original order, or when sorting something that isn't a list, such as a string, a tuple or a set: sorted() always returns a list.",
+      "Usa sorted() cuando también necesites el orden original, o cuando ordenes algo que no es una lista, como un string, una tupla o un set: sorted() siempre devuelve una lista.",
+      "元の順番も残したいときや、文字列・タプル・set などリスト以外を並べるときは sorted() を使おう。sorted() はいつもリストを返すよ。",
+    ),
+    ex("print(sorted(\"cab\"), sorted((3, 1, 2)))", "['a', 'b', 'c'] [1, 2, 3]"),
+  ),
+];
+
 // ─── 2.1 The scroll and the stone tablet ───────────────────────────────────
 const lists: LessonDef = {
   slug: "lists-and-tuples",
@@ -18,6 +120,7 @@ const lists: LessonDef = {
   xp: 65,
   enemy: "slime",
   enemyName: L("SCROLL SLIME", "LIMO PERGAMINO", "巻物スライム"),
+  notes: listsNotes,
   beats: [
     say(L(
       "Welcome to Collection Forest! A LIST is a scroll of items in order: [\"sword\", \"potion\"]. You can add and remove lines.",
@@ -46,6 +149,8 @@ const lists: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("append adds at one end. Count the items after it, and remember -1 means the last one.", "append agrega en un extremo. Cuenta los elementos después y recuerda que -1 es el último.", "append は片方の端に追加。そのあとの個数を数え、-1 は最後だと思い出そう。"),
+      note: "lists",
       code: 'bag = ["sword", "potion"]\nbag.append("gem")\nprint(len(bag), bag[-1])',
       options: ["3 gem", "2 potion", "3 sword"],
       answer: 0,
@@ -63,6 +168,8 @@ const lists: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("A slice stops before its second number; [::2] takes every second item starting at index 0.", "Un corte para antes de su segundo número; [::2] toma uno de cada dos desde el índice 0.", "スライスは2つ目の数の手前で止まる。[::2] はインデックス 0 から1つおき。"),
+      note: "list-slices",
       code: "nums = [10, 20, 30, 40, 50]\nprint(nums[1:3], nums[:2], nums[::2])",
       options: ["[20, 30] [10, 20] [10, 30, 50]", "[20, 30, 40] [10, 20] [20, 40]", "[10, 20, 30] [10, 20] [10, 30, 50]"],
       answer: 0,
@@ -73,6 +180,8 @@ const lists: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("pop() takes out the last item and returns it. Does a slice past the end crash?", "pop() saca el último elemento y lo devuelve. ¿Un corte fuera del final falla?", "pop() は最後の要素を取り出して返す。範囲外のスライスはエラーになる？"),
+      note: "lists",
       code: "nums = [1, 2, 3]\nprint(nums.pop(), nums, nums[5:])",
       options: ["3 [1, 2] []", "1 [2, 3] []", "3 [1, 2] IndexError"],
       answer: 0,
@@ -88,6 +197,8 @@ const lists: LessonDef = {
     {
       kind: "order",
       prompt: L("Print each item of the bag", "Imprime cada cosa de la bolsa", "bag の中身を1つずつ表示しよう"),
+      hint: L("The list must exist before the loop, and only indented lines run once per item.", "La lista debe existir antes del bucle, y solo las líneas indentadas se repiten por elemento.", "ループの前にリストが必要。要素ごとに動くのは字下げした行だけ。"),
+      note: "lists",
       lines: ['bag = ["sword", "gem"]', "for item in bag:", "    print(item)"],
       check: { compiles: true, stdout: "sword\ngem" },
       explain: L("Make the list first, then loop over it. The print is indented, so it runs for every item.", "Primero crea la lista y luego recórrela. El print está indentado, así que corre por cada cosa.", "先にリストを作ってからループ。print は字下げされているので要素ごとに動くよ。"),
@@ -101,6 +212,8 @@ const lists: LessonDef = {
     {
       kind: "predict",
       prompt: HAPPENS,
+      hint: L("Tuples are stone tablets. Can you assign a new value to one of their slots?", "Las tuplas son tablillas de piedra. ¿Puedes asignar un valor nuevo a uno de sus lugares?", "タプルは石板。その要素に新しい値を代入できる？"),
+      note: "tuples",
       code: "t = (1, 2, 3)\nt[0] = 9\nprint(t)",
       options: ["TypeError", "(9, 2, 3)", "(1, 2, 3)"],
       answer: 0,
@@ -111,6 +224,8 @@ const lists: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Parentheses alone only group. What actually makes a tuple?", "Los paréntesis solos solo agrupan. ¿Qué es lo que realmente hace una tupla?", "かっこだけではまとめるだけ。タプルを作るのは本当は何？"),
+      note: "tuples",
       code: "t = (5)\nu = (5,)\nprint(type(t).__name__, type(u).__name__)",
       options: ["int tuple", "tuple tuple", "int int"],
       answer: 0,
@@ -121,6 +236,8 @@ const lists: LessonDef = {
     {
       kind: "type",
       prompt: L("Catch the rest in a list", "Atrapa el resto en una lista", "残りをリストで受けとろう"),
+      hint: L("Which symbol in front of a name means \"take all the rest\" when unpacking?", "¿Qué símbolo delante de un nombre significa \"toma todo lo demás\" al desempacar?", "アンパックで名前の前につけると「残り全部」を意味する記号は？"),
+      note: "tuples",
       code: "a, ___rest = [1, 2, 3, 4]\nprint(a, rest)",
       answer: "*",
       check: { compiles: true, stdout: "1 [2, 3, 4]" },
@@ -135,6 +252,8 @@ const lists: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Methods that change a list in place don't return the list. What does y get?", "Los métodos que cambian una lista en su lugar no devuelven la lista. ¿Qué recibe y?", "その場で変えるメソッドはリストを返さない。y には何が入る？"),
+      note: "sorting",
       code: "x = [3, 1, 2]\ny = x.sort()\nprint(y, x)",
       options: ["None [1, 2, 3]", "[1, 2, 3] [1, 2, 3]", "[1, 2, 3] [3, 1, 2]"],
       answer: 0,
@@ -147,6 +266,8 @@ const lists: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Does sorted() change x, or hand back something new?", "¿sorted() cambia x, o te devuelve algo nuevo?", "sorted() は x を変える？それとも新しいものを返す？"),
+      note: "sorting",
       code: "x = [3, 1, 2]\nprint(sorted(x), x)",
       options: ["[1, 2, 3] [3, 1, 2]", "[1, 2, 3] [1, 2, 3]", "None [1, 2, 3]"],
       answer: 0,
@@ -159,6 +280,8 @@ const lists: LessonDef = {
     {
       kind: "run",
       prompt: L("Fix it: it must print last: gem", "Arréglalo: debe imprimir last: gem", "直そう：last: gem と表示させて"),
+      hint: L("Count the valid indexes for 3 items. bag[3] asks for a fourth item.", "Cuenta los índices válidos para 3 elementos. bag[3] pide un cuarto elemento.", "3個のときに使えるインデックスは？bag[3] は4個目を求めている。"),
+      note: "lists",
       starter: 'bag = ["sword", "potion", "gem"]\nlast = bag[3]\nprint("last:", last)\n',
       solution: 'bag = ["sword", "potion", "gem"]\nlast = bag[-1]\nprint("last:", last)\n',
       expect: "last: gem",
@@ -167,6 +290,85 @@ const lists: LessonDef = {
     },
   ],
 };
+
+const dictsNotes: NoteDef[] = [
+  note("dicts", L("Dicts: keys and values", "Dicts: claves y valores", "dict：キーと値"),
+    p(
+      "A dict maps keys to values, like a pouch with labeled pockets: {\"atk\": 7, \"def\": 4}. You read a value with its key in square brackets, d[\"atk\"], and write one the same way: assigning to an existing key replaces its value, and a new key is simply added. len(d) counts the keys.",
+      "Un dict asocia claves con valores, como una bolsa con bolsillos rotulados: {\"atk\": 7, \"def\": 4}. Lees un valor con su clave entre corchetes, d[\"atk\"], y escribes igual: asignar a una clave existente reemplaza su valor, y una clave nueva simplemente se agrega. len(d) cuenta las claves.",
+      "dict はキーと値の組で、名前つきポケットのあるポーチのようなもの：{\"atk\": 7, \"def\": 4}。値は d[\"atk\"] のように角かっこにキーを入れて読み、書くときも同じ。あるキーに代入すれば値が置きかわり、新しいキーなら追加される。len(d) はキーの数だよ。",
+    ),
+    ex("stats = {\"atk\": 7, \"def\": 4}\nstats[\"def\"] += 1\nstats[\"spd\"] = 2\nprint(stats[\"def\"], len(stats))", "5 3", L("Update one key, add another, count the keys", "Actualiza una clave, agrega otra, cuenta las claves", "キーを更新・追加して数える")),
+    p(
+      "Reading a missing key with d[key] raises KeyError, with the key in the message. To read safely, use d.get(key): it returns None when the key is missing, or the default you pass as a second argument, and it never raises.",
+      "Leer una clave que falta con d[clave] lanza KeyError, con la clave en el mensaje. Para leer con seguridad, usa d.get(clave): devuelve None si la clave falta, o el valor por defecto que pases como segundo argumento, y nunca lanza error.",
+      "ないキーを d[キー] で読むと KeyError になり、メッセージにそのキーが出る。安全に読むなら d.get(キー)。キーがなければ None か、2つ目の引数に渡したデフォルト値を返し、エラーにはならないよ。",
+    ),
+    ex("stats = {\"atk\": 7}\nprint(stats.get(\"luck\"), stats.get(\"luck\", 1), stats.get(\"atk\", 1))", "None 1 7", L("The default is used only when the key is missing", "El valor por defecto solo se usa si falta la clave", "デフォルトはキーがないときだけ使われる")),
+    p(
+      "Dicts remember insertion order: looping over a dict, or list(d), gives the keys in the order they were first added, not alphabetically. Updating an existing key keeps it in its original place.",
+      "Los dicts recuerdan el orden de inserción: recorrer un dict, o list(d), da las claves en el orden en que se agregaron por primera vez, no en orden alfabético. Actualizar una clave existente la deja en su lugar original.",
+      "dict は追加した順番を覚えている。ループや list(d) では、キーはアルファベット順ではなく最初に追加された順で出てくる。あるキーを更新しても、その位置は変わらないよ。",
+    ),
+    ex("d = {\"z\": 1, \"m\": 2}\nd[\"a\"] = 3\nd[\"z\"] = 9\nprint(list(d))", "['z', 'm', 'a']"),
+    p(
+      "To loop over a dict: for k in d gives the keys; for k, v in d.items() gives each (key, value) pair, unpacked into two names; d.values() gives only the values.",
+      "Para recorrer un dict: for k in d da las claves; for k, v in d.items() da cada par (clave, valor), desempacado en dos nombres; d.values() da solo los valores.",
+      "dict のループ：for k in d はキー、for k, v in d.items() は (キー, 値) の組を2つの名前に分けて受けとる、d.values() は値だけだよ。",
+    ),
+    ex("for name, lvl in {\"mia\": 4, \"tom\": 2}.items():\n    print(name, lvl)", "mia 4\ntom 2"),
+    p(
+      "Common mistake when counting: d[k] += 1 fails the first time a key appears, because += must read d[k] before writing it, and that key isn't there yet. Give each new key a starting value first, for example with a default.",
+      "Error común al contar: d[k] += 1 falla la primera vez que aparece una clave, porque += debe leer d[k] antes de escribirlo, y esa clave todavía no existe. Dale primero un valor inicial a cada clave nueva, por ejemplo con un valor por defecto.",
+      "数えるときのよくあるミス：d[k] += 1 は、そのキーが初めて出たときに失敗する。+= は書く前に d[k] を読む必要があるのに、まだキーがないからだ。新しいキーには、たとえばデフォルト値で最初の値を用意しよう。",
+    ),
+  ),
+  note("sets", L("Sets: each value once", "Sets: cada valor una vez", "set：同じ値は1つだけ"),
+    p(
+      "A set holds each value at most once, between curly braces: {4, 4, 5} is {4, 5}. Adding a value that's already there does nothing. That makes sets perfect for removing duplicates and for fast \"is x in it?\" checks with in.",
+      "Un set guarda cada valor como máximo una vez, entre llaves: {4, 4, 5} es {4, 5}. Agregar un valor que ya está no hace nada. Eso hace a los sets perfectos para quitar repetidos y para comprobar rápido \"¿está x?\" con in.",
+      "set は同じ値を1つまでしか持たない。波かっこで書き、{4, 4, 5} は {4, 5} になる。すでにある値を追加しても何も起きない。だから重複を消したり、in で「x は入っている？」をすばやく調べたりするのにぴったりだよ。",
+    ),
+    ex("seen = {\"fox\", \"owl\", \"fox\"}\nseen.add(\"owl\")\nprint(len(seen), \"owl\" in seen)", "2 True", L("Duplicates bounce off", "Los repetidos rebotan", "重複ははじかれる")),
+    p(
+      "A set has no order you can rely on: you can't index it (s[0] fails), and printing it can show the items in any order. When you need a predictable order, use sorted(s), which returns a sorted list.",
+      "Un set no tiene un orden confiable: no puedes indexarlo (s[0] falla) y al imprimirlo los elementos pueden salir en cualquier orden. Cuando necesites un orden predecible, usa sorted(s), que devuelve una lista ordenada.",
+      "set には頼れる順番がない。インデックスは使えず（s[0] はエラー）、表示すると要素がどんな順で出るかわからない。順番を決めたいときは、並べたリストを返す sorted(s) を使おう。",
+    ),
+    ex("print(sorted({30, 10, 20}))", "[10, 20, 30]"),
+    p(
+      "Set operators compare two sets: a & b (intersection) is what's in both, a | b (union) is everything, once, a - b (difference) is what's in a but not in b, and a ^ b is what's in exactly one of them.",
+      "Los operadores de sets comparan dos sets: a & b (intersección) es lo que está en ambos, a | b (unión) es todo, una vez, a - b (diferencia) es lo que está en a pero no en b, y a ^ b es lo que está en exactamente uno.",
+      "set の演算子：a & b（積集合）は両方にあるもの、a | b（和集合）は全部を1つずつ、a - b（差集合）は a にあって b にないもの、a ^ b はどちらか片方だけにあるものだよ。",
+    ),
+    ex("x = {\"a\", \"b\", \"c\"}\ny = {\"c\", \"d\"}\nprint(sorted(x & y), sorted(x - y), sorted(x ^ y))", "['c'] ['a', 'b'] ['a', 'b', 'd']"),
+    p(
+      "Common mistake: writing {} for an empty set. Empty curly braces make an empty dict, because dicts used braces first. For an empty set, call set().",
+      "Error común: escribir {} para un set vacío. Las llaves vacías crean un dict vacío, porque los dicts usaron las llaves primero. Para un set vacío, llama a set().",
+      "よくあるミス：空の set のつもりで {} と書くこと。波かっこを先に使ったのは dict なので、空の {} は空の dict になる。空の set は set() と書こう。",
+    ),
+  ),
+  note("hashable", L("What can be a dict key?", "¿Qué puede ser clave de un dict?", "dict のキーになれるもの"),
+    p(
+      "Dict keys and set items must be hashable: Python computes a number from the key to find its pocket fast. That only works if the key can never change; otherwise its pocket would move. Immutable values are hashable: int, float, str, bool, None, and tuples made of them.",
+      "Las claves de un dict y los elementos de un set deben ser hashables: Python calcula un número a partir de la clave para encontrar rápido su bolsillo. Eso solo funciona si la clave nunca puede cambiar; si no, su bolsillo se movería. Los valores inmutables son hashables: int, float, str, bool, None y las tuplas hechas de ellos.",
+      "dict のキーと set の要素は「ハッシュ可能」でないといけない。Python はキーから数を計算してポケットをすばやく見つける。キーが変わるとポケットの場所がずれるので、変わらないものしか使えない。int、float、str、bool、None、それらでできたタプルは OK だよ。",
+    ),
+    p(
+      "Lists, dicts and sets can change, so they are unhashable. Using one as a key raises TypeError: unhashable type: 'list'. Only keys are restricted: a dict's values can be anything, including lists.",
+      "Las listas, los dicts y los sets pueden cambiar, así que no son hashables. Usar uno como clave lanza TypeError: unhashable type: 'list'. Solo las claves tienen esa restricción: los valores de un dict pueden ser cualquier cosa, incluidas listas.",
+      "リスト、dict、set は変更できるのでハッシュ不可。キーに使うと TypeError: unhashable type: 'list' になる。制限があるのはキーだけで、dict の値にはリストを含め何でも入れられるよ。",
+    ),
+    boom("d = {}\nd[[\"x\"]] = 1", "TypeError", L("A list can't be a key", "Una lista no puede ser clave", "リストはキーにできない")),
+    ex("inventory = {\"bag\": [1, 2]}\nprint(inventory[\"bag\"])", "[1, 2]", L("But a list is fine as a value", "Pero una lista sirve como valor", "でも値ならリストでも OK")),
+    p(
+      "When you need a list-like key, such as a position on a grid, use a tuple: (row, col). A tuple of immutable values never changes, so it works as a dict key and as a set item.",
+      "Cuando necesites una clave parecida a una lista, como una posición en una cuadrícula, usa una tupla: (fila, columna). Una tupla de valores inmutables nunca cambia, así que funciona como clave de dict y como elemento de set.",
+      "マス目の位置のように、リストっぽいキーがほしいときはタプル (行, 列) を使おう。変わらない値でできたタプルは決して変わらないので、dict のキーにも set の要素にもなれるよ。",
+    ),
+    ex("board = {(0, 0): \"rook\", (7, 4): \"king\"}\nprint(board[(7, 4)])", "king"),
+  ),
+];
 
 // ─── 2.2 Gem pouches and shields ───────────────────────────────────────────
 const dicts: LessonDef = {
@@ -177,6 +379,7 @@ const dicts: LessonDef = {
   xp: 70,
   enemy: "python/keyerror-key",
   enemyName: L("KEYERROR KEY", "LLAVE KEYERROR", "KeyError キー"),
+  notes: dictsNotes,
   beats: [
     say(L(
       "A DICT maps keys to values, like a pouch with labeled pockets: {\"name\": \"Ada\", \"hp\": 10}.",
@@ -205,6 +408,8 @@ const dicts: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("+= updates an existing key. len counts keys, not values.", "+= actualiza una clave existente. len cuenta claves, no valores.", "+= はあるキーを更新する。len が数えるのは値ではなくキー。"),
+      note: "dicts",
       code: 'hero = {"name": "Ada", "hp": 10}\nhero["hp"] += 5\nprint(hero["hp"], len(hero))',
       options: ["15 2", "15 3", "10 2"],
       answer: 0,
@@ -217,6 +422,8 @@ const dicts: LessonDef = {
     {
       kind: "predict",
       prompt: HAPPENS,
+      hint: L("Square brackets demand that the key exists. Is mp in the dict?", "Los corchetes exigen que la clave exista. ¿Está mp en el dict?", "角かっこはキーがあることが前提。mp は dict に入っている？"),
+      note: "dicts",
       code: 'hero = {"name": "Ada"}\nprint(hero["mp"])',
       options: ["KeyError", "None", "0"],
       answer: 0,
@@ -227,6 +434,8 @@ const dicts: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("get never raises. What does it give back for a missing key, with and without a default?", "get nunca lanza error. ¿Qué devuelve para una clave que falta, con y sin valor por defecto?", "get はエラーにならない。ないキーのとき、デフォルトあり・なしで何を返す？"),
+      note: "dicts",
       code: 'hero = {"name": "Ada"}\nprint(hero.get("mp"), hero.get("mp", 0))',
       options: ["None 0", "KeyError", "0 0"],
       answer: 0,
@@ -237,6 +446,8 @@ const dicts: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Dicts keep their keys in one particular order. Is it alphabetical, or something else?", "Los dicts guardan sus claves en un orden particular. ¿Es alfabético, o es otro?", "dict はキーをある順番で覚えている。ABC順？それとも別の順？"),
+      note: "dicts",
       code: 'd = {"b": 1, "a": 2}\nd["c"] = 3\nprint(list(d))',
       options: ["['b', 'a', 'c']", "['a', 'b', 'c']", "[1, 2, 3]"],
       answer: 0,
@@ -247,6 +458,8 @@ const dicts: LessonDef = {
     {
       kind: "order",
       prompt: L("Heal, then print every pocket", "Cura y luego imprime cada bolsillo", "回復してから全ポケットを表示"),
+      hint: L("Create the dict, update it, then loop. .items() gives each key together with its value.", "Crea el dict, actualízalo y luego recórrelo. .items() da cada clave junto con su valor.", "dict を作り、更新してからループ。.items() はキーと値を組で返す。"),
+      note: "dicts",
       lines: ['hero = {"hp": 10}', 'hero["hp"] += 5', "for k, v in hero.items():", "    print(k, v)"],
       check: { compiles: true, stdout: "hp 15" },
       explain: L(".items() gives (key, value) pairs, and for k, v unpacks each pair.", ".items() da pares (clave, valor), y for k, v desempaca cada par.", ".items() は (キー, 値) の組を返し、for k, v で1組ずつ分けて受けとるよ。"),
@@ -260,6 +473,8 @@ const dicts: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("A set keeps each value only once. Count the distinct values, then put them in order.", "Un set guarda cada valor una sola vez. Cuenta los valores distintos y luego ordénalos.", "set は同じ値を1つだけ持つ。ちがう値の数を数えて、順に並べよう。"),
+      note: "sets",
       code: "s = {3, 1, 2, 3, 1}\nprint(len(s), sorted(s))",
       options: ["3 [1, 2, 3]", "5 [1, 1, 2, 3, 3]", "3 [3, 1, 2]"],
       answer: 0,
@@ -272,6 +487,8 @@ const dicts: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("& means in both, | means in either, - means in the first but not in the second.", "& es en ambos, | es en cualquiera, - es en el primero pero no en el segundo.", "& は両方、| はどちらか、- は1つ目にあって2つ目にないもの。"),
+      note: "sets",
       code: "a = {1, 2, 3}\nb = {2, 3, 4}\nprint(sorted(a & b), sorted(a | b), sorted(a - b))",
       options: ["[2, 3] [1, 2, 3, 4] [1]", "[1, 2, 3, 4] [2, 3] [4]", "[2, 3] [1, 2, 3, 2, 3, 4] [1]"],
       answer: 0,
@@ -282,6 +499,8 @@ const dicts: LessonDef = {
     {
       kind: "pick",
       prompt: L("Make an EMPTY set", "Crea un set VACÍO", "空の set を作ろう"),
+      hint: L("Empty curly braces were claimed by another type first.", "Las llaves vacías ya las había tomado otro tipo.", "空の波かっこは、別の型が先に使っている。"),
+      note: "sets",
       code: "e = ___\nprint(type(e).__name__)",
       options: ["set()", "{}"],
       answer: 0,
@@ -296,6 +515,8 @@ const dicts: LessonDef = {
     {
       kind: "predict",
       prompt: HAPPENS,
+      hint: L("A dict key must never change. Can a list change?", "Una clave de dict nunca debe cambiar. ¿Una lista puede cambiar?", "dict のキーは変わってはいけない。リストは変わる？"),
+      note: "hashable",
       code: 'd = {[1, 2]: "x"}\nprint(d)',
       options: ["TypeError", "{[1, 2]: 'x'}", "KeyError"],
       answer: 0,
@@ -305,6 +526,8 @@ const dicts: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("A tuple of numbers can't change. Does that make it a valid key?", "Una tupla de números no puede cambiar. ¿Eso la hace una clave válida?", "数値のタプルは変わらない。ならキーにできる？"),
+      note: "hashable",
       code: 'd = {(1, 2): "x"}\nprint(d[(1, 2)])',
       options: ["x", "TypeError", "(1, 2)"],
       answer: 0,
@@ -315,6 +538,8 @@ const dicts: LessonDef = {
     {
       kind: "run",
       prompt: L("Count the loot: it must print {'gem': 2, 'key': 1}", "Cuenta el botín: debe imprimir {'gem': 2, 'key': 1}", "戦利品を数えて：{'gem': 2, 'key': 1}"),
+      hint: L("+= must read counts[w] first. What happens the first time a word shows up?", "+= debe leer primero counts[w]. ¿Qué pasa la primera vez que aparece una palabra?", "+= はまず counts[w] を読む。単語が初めて出たときどうなる？"),
+      note: "dicts",
       starter: 'counts = {}\nfor w in ["gem", "key", "gem"]:\n    counts[w] += 1\nprint(counts)\n',
       solution: 'counts = {}\nfor w in ["gem", "key", "gem"]:\n    counts[w] = counts.get(w, 0) + 1\nprint(counts)\n',
       expect: "{'gem': 2, 'key': 1}",
@@ -323,6 +548,97 @@ const dicts: LessonDef = {
     },
   ],
 };
+
+const sharedNotes: NoteDef[] = [
+  note("aliasing", L("Assignment never copies", "La asignación nunca copia", "代入はコピーしない"),
+    p(
+      "In Python, b = a never copies anything: it puts a second label on the same object. With numbers and strings you rarely notice, because they can't change. With a list it matters: change the list through either name and both names see it, because there is only one list.",
+      "En Python, b = a nunca copia nada: pone una segunda etiqueta en el mismo objeto. Con números y strings casi no se nota, porque no pueden cambiar. Con una lista sí importa: cambia la lista por cualquiera de los nombres y ambos lo ven, porque hay una sola lista.",
+      "Python の b = a は何もコピーしない。同じ物に2枚目のラベルを貼るだけ。数値や文字列は変更できないのでまず気づかないが、リストでは大事。どちらの名前から変えても両方に見える。リストは1つしかないからね。",
+    ),
+    ex("red = [\"hat\"]\nblue = red\nred.append(\"cape\")\nprint(blue, blue is red)", "['hat', 'cape'] True", L("Two names, one list", "Dos nombres, una lista", "名前は2つ、リストは1つ")),
+    p(
+      "To get an independent list, make a copy: items[:] (a slice of everything), list(items) or items.copy(). Each one builds a NEW list with the same items, so changing the copy doesn't touch the original.",
+      "Para tener una lista independiente, haz una copia: items[:] (un corte de todo), list(items) o items.copy(). Cada uno crea una lista NUEVA con los mismos elementos, así que cambiar la copia no toca la original.",
+      "別々のリストがほしいならコピーを作る。items[:]（全体のスライス）、list(items)、items.copy() のどれでも、同じ要素の「新しい」リストができる。だからコピーを変えても元のリストには影響しないよ。",
+    ),
+    ex("red = [\"hat\"]\nblue = red.copy()\nblue.append(\"cape\")\nprint(red, blue)", "['hat'] ['hat', 'cape']"),
+    p(
+      "How to tell what happens: anything that changes an object in place (append, pop, sort, item assignment) is seen through every label on that object. Assigning a name with = only moves that one label. Ask yourself: am I changing the object, or moving a label?",
+      "Cómo saber qué pasa: todo lo que cambia un objeto en su lugar (append, pop, sort, asignar un elemento) se ve por todas las etiquetas de ese objeto. Asignar un nombre con = solo mueve esa etiqueta. Pregúntate: ¿estoy cambiando el objeto o moviendo una etiqueta?",
+      "見分け方：append、pop、sort、要素への代入のように物をその場で変える操作は、その物に貼られたすべてのラベルから見える。= で名前に代入すると、動くのはそのラベル1枚だけ。「物を変えている？ラベルを動かしている？」と自分に聞こう。",
+    ),
+  ),
+  note("functions-share", L("Passing objects to functions", "Pasar objetos a funciones", "関数に物を渡す"),
+    p(
+      "When you call a function, its parameter becomes a new label on the object you passed in. Nothing is copied. So if the function changes that object in place, for example with append, the caller sees the change after the call.",
+      "Cuando llamas a una función, su parámetro se vuelve una etiqueta nueva en el objeto que pasaste. No se copia nada. Así que si la función cambia ese objeto en su lugar, por ejemplo con append, quien la llamó ve el cambio después de la llamada.",
+      "関数を呼ぶと、引数（パラメータ）は渡した物に貼られた新しいラベルになる。コピーはされない。だから関数が append などでその物をその場で変えると、呼び出した側にもその変化が見えるよ。",
+    ),
+    ex("def level_up(stats):\n    stats.append(\"+1\")\n\nmine = [\"base\"]\nlevel_up(mine)\nprint(mine)", "['base', '+1']", L("Mutating the parameter changes the caller's list", "Mutar el parámetro cambia la lista de quien llama", "引数の中身を変えると呼び出し側も変わる")),
+    p(
+      "But if the function does parameter = something, it only moves its own local label onto a new object. The caller's name still points to the original object, which is untouched. Assignment inside a function never reaches outside it.",
+      "Pero si la función hace parámetro = algo, solo mueve su propia etiqueta local a un objeto nuevo. El nombre de quien llamó sigue apuntando al objeto original, que queda intacto. La asignación dentro de una función nunca llega afuera.",
+      "でも関数の中で パラメータ = 何か と書くと、動くのは関数内のラベルだけで、新しい物に貼りかわる。呼び出し側の名前は元の物をさしたままで、何も変わらない。関数の中の代入は外には届かないよ。",
+    ),
+    ex("def wipe(notes):\n    notes = [\"blank\"]\n    return notes\n\nkept = [\"hi\"]\nnew = wipe(kept)\nprint(kept, new)", "['hi'] ['blank']", L("Rebinding the parameter stays local", "Reasignar el parámetro queda en lo local", "引数の貼りかえは関数の中だけ")),
+    p(
+      "The rule: mutate, and it's visible outside; rebind, and it's local only. If you want a function to produce a new value, return it and assign it where you call the function. If you really mean to empty the caller's list, use an in-place method such as clear().",
+      "La regla: si mutas, se ve afuera; si reasignas, queda local. Si quieres que una función produzca un valor nuevo, devuélvelo con return y asígnalo donde llamas a la función. Si de verdad quieres vaciar la lista de quien llama, usa un método en su lugar como clear().",
+      "ルール：中身を変えれば外に見える、貼りかえれば関数の中だけ。新しい値を作りたいなら return で返して、呼び出す場所で代入しよう。呼び出し側のリストを本当に空にしたいなら、clear() のようなその場で変えるメソッドを使うんだ。",
+    ),
+  ),
+  note("plus-equals", L("+= on mutable and immutable values", "+= en valores mutables e inmutables", "変更できる値・できない値の +="),
+    p(
+      "Some values can't change: int, float, str and tuple. For them, x += y has to build a new value and move the label x onto it. Any other label on the old value keeps the old value.",
+      "Algunos valores no pueden cambiar: int, float, str y tuple. Con ellos, x += y tiene que crear un valor nuevo y mover la etiqueta x hacia él. Cualquier otra etiqueta en el valor viejo conserva el valor viejo.",
+      "int、float、str、tuple は変更できない値。これらでは x += y は新しい値を作り、ラベル x をそちらに移すしかない。古い値に貼られたほかのラベルは古い値のままだよ。",
+    ),
+    ex("n = 5\nm = n\nn += 1\nprint(n, m)", "6 5", L("+= on an int makes a new value; m keeps the old one", "+= en un int crea un valor nuevo; m conserva el viejo", "int の += は新しい値。m は古い値のまま")),
+    p(
+      "Lists can change, and for them += is special: it extends the same list in place, like the extend method. Every label on that list sees the new items. That's different from x = x + [...], which builds a brand-new list and moves only the label x.",
+      "Las listas pueden cambiar, y con ellas += es especial: extiende la misma lista en su lugar, como el método extend. Todas las etiquetas de esa lista ven los elementos nuevos. Eso es distinto de x = x + [...], que crea una lista totalmente nueva y mueve solo la etiqueta x.",
+      "リストは変更できるので、+= は特別。extend メソッドのように同じリストをその場でのばす。そのリストに貼られたラベル全部から新しい要素が見える。x = x + [...] はちがい、まったく新しいリストを作ってラベル x だけを移すよ。",
+    ),
+    p(
+      "id(obj) gives an object's identity number, so you can watch it: after +=, a list keeps the same id; after x = x + [...], the name is on a new object with a different id.",
+      "id(obj) da el número de identidad de un objeto, así que puedes observarlo: después de +=, una lista conserva el mismo id; después de x = x + [...], el nombre está en un objeto nuevo con otro id.",
+      "id(obj) は物の識別番号を返すので、ようすを観察できる。+= のあとリストの id は同じまま。x = x + [...] のあとは、名前が別の id の新しい物に貼られているよ。",
+    ),
+    ex("party = [\"elf\"]\nold = id(party)\nparty += [\"orc\"]\nprint(id(party) == old)\nparty = party + [\"imp\"]\nprint(id(party) == old)", "True\nFalse", L("+= keeps the same list; + builds a new one", "+= conserva la misma lista; + crea una nueva", "+= は同じリスト、+ は新しいリスト")),
+    p(
+      "The rule to remember: on a list, x += [...] changes the object, and x = x + [...] makes a new one. On int, str and tuple, both forms make a new value, because those values can't change at all.",
+      "La regla para recordar: en una lista, x += [...] cambia el objeto y x = x + [...] crea uno nuevo. En int, str y tuple, ambas formas crean un valor nuevo, porque esos valores no pueden cambiar en absoluto.",
+      "覚えるルール：リストでは x += [...] は物を変え、x = x + [...] は新しい物を作る。int、str、tuple はそもそも変更できないので、どちらの書き方でも新しい値ができるよ。",
+    ),
+  ),
+  note("shallow-deep", L("Shallow and deep copies", "Copias superficiales y profundas", "浅いコピーと深いコピー"),
+    p(
+      "A list can hold other lists, like a grid of rows. A shallow copy (items[:], list(items), items.copy() or copy.copy(items)) makes a new outer list but puts the SAME inner lists in it. Change an inner list through the copy, and the original sees it too.",
+      "Una lista puede contener otras listas, como una cuadrícula de filas. Una copia superficial (items[:], list(items), items.copy() o copy.copy(items)) crea una lista externa nueva pero pone dentro las MISMAS listas internas. Cambia una lista interna por la copia y la original también lo ve.",
+      "リストの中にリストを入れることもできる（行が並んだマス目など）。浅いコピー（items[:]、list(items)、items.copy()、copy.copy(items)）は外側のリストを新しく作るが、中には「同じ」内側リストを入れる。コピーから内側を変えると元にも見えるよ。",
+    ),
+    ex("import copy\nrows = [[\"a\"], [\"b\"]]\nflat = copy.copy(rows)\nflat[1].append(\"z\")\nprint(rows)", "[['a'], ['b', 'z']]", L("A shallow copy shares the inner lists", "Una copia superficial comparte las listas internas", "浅いコピーは内側のリストを共有する")),
+    p(
+      "copy.deepcopy(items) copies everything, all the way down: a new outer list and new inner lists. After a deep copy nothing is shared, so you can change either side freely.",
+      "copy.deepcopy(items) copia todo, hasta el fondo: una lista externa nueva y listas internas nuevas. Después de una copia profunda no se comparte nada, así que puedes cambiar cualquiera de los dos libremente.",
+      "copy.deepcopy(items) は奥まで全部コピーする。外側も内側も新しいリストになる。深いコピーのあとは何も共有しないので、どちらを変えても大丈夫だよ。",
+    ),
+    ex("import copy\nrows = [[\"a\"], [\"b\"]]\ndeep = copy.deepcopy(rows)\ndeep[1].append(\"z\")\nprint(rows, deep)", "[['a'], ['b']] [['a'], ['b', 'z']]"),
+    p(
+      "Multiplying a list repeats references, not copies. [[\"-\"]] * 2 makes one inner list and puts it in the outer list twice, so both rows are the same object. With numbers inside, like [0] * 3, that's harmless, because numbers can't change.",
+      "Multiplicar una lista repite referencias, no copias. [[\"-\"]] * 2 crea una sola lista interna y la pone dos veces en la externa, así que ambas filas son el mismo objeto. Con números dentro, como [0] * 3, no hay problema, porque los números no cambian.",
+      "リストのかけ算は、コピーではなく参照をくり返す。[[\"-\"]] * 2 は内側リストを1つだけ作り、外側に2回入れる。だから2行とも同じ物。[0] * 3 のように中が数値なら、数値は変わらないので問題ないよ。",
+    ),
+    ex("twins = [[\"-\"]] * 2\ntwins[0].append(\"x\")\nprint(twins)", "[['-', 'x'], ['-', 'x']]", L("One inner list, seen twice", "Una lista interna, vista dos veces", "内側リスト1つが2回見える")),
+    p(
+      "Immutability is shallow too. A tuple can't change which objects it holds, but if one of them is a list, that list can still change. The tuple's slots are fixed; the insides of what they point to are not.",
+      "La inmutabilidad también es superficial. Una tupla no puede cambiar qué objetos contiene, pero si uno de ellos es una lista, esa lista sí puede cambiar. Los lugares de la tupla son fijos; el interior de lo que apuntan, no.",
+      "変更できないことも「浅い」。タプルはどの物を持つかは変えられないが、その1つがリストなら、そのリスト自体は変えられる。固定なのはタプルの枠だけで、枠がさす物の中身までは固定されないよ。",
+    ),
+    ex("box = (\"lid\", [1])\nbox[1].append(2)\nprint(box)", "('lid', [1, 2])"),
+  ),
+];
 
 // ─── 2.3 Shared treasure ───────────────────────────────────────────────────
 const shared: LessonDef = {
@@ -333,6 +649,7 @@ const shared: LessonDef = {
   xp: 75,
   enemy: "python/mutable-mimic",
   enemyName: L("MUTABLE MIMIC", "MÍMICO MUTABLE", "ミュータブルミミック"),
+  notes: sharedNotes,
   beats: [
     say(L(
       "Big secret: assignment NEVER copies. b = a sticks a second label on the SAME list. Change it through b, a sees it too.",
@@ -353,6 +670,8 @@ const shared: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("b = a doesn't copy anything. How many lists exist here?", "b = a no copia nada. ¿Cuántas listas existen aquí?", "b = a は何もコピーしない。ここにリストはいくつある？"),
+      note: "aliasing",
       code: "a = [1, 2]\nb = a\nb.append(3)\nprint(a)",
       options: ["[1, 2, 3]", "[1, 2]", "[3]"],
       answer: 0,
@@ -365,6 +684,8 @@ const shared: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("A slice of the whole list builds a new list. Does b still share a's list?", "Un corte de toda la lista crea una lista nueva. ¿b sigue compartiendo la lista de a?", "全体のスライスは新しいリストを作る。b はまだ a のリストを共有している？"),
+      note: "aliasing",
       code: "a = [1, 2]\nb = a[:]\nb.append(3)\nprint(a, b)",
       options: ["[1, 2] [1, 2, 3]", "[1, 2, 3] [1, 2, 3]", "[1, 2] [1, 2]"],
       answer: 0,
@@ -382,6 +703,8 @@ const shared: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("The parameter is a label on the caller's object. Does append change that object?", "El parámetro es una etiqueta en el objeto de quien llama. ¿append cambia ese objeto?", "パラメータは呼び出し側の物に貼られたラベル。append はその物を変える？"),
+      note: "functions-share",
       code: 'def add(item, bag):\n    bag.append(item)\n\ninv = []\nadd("gem", inv)\nprint(inv)',
       options: ["['gem']", "[]", "None"],
       answer: 0,
@@ -392,6 +715,8 @@ const shared: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Assigning to a parameter only moves the function's local label. Is the original list changed?", "Asignar a un parámetro solo mueve la etiqueta local de la función. ¿Cambia la lista original?", "パラメータへの代入は関数内のラベルを動かすだけ。元のリストは変わる？"),
+      note: "functions-share",
       code: 'def reset(bag):\n    bag = []\n\ninv = ["gem"]\nreset(inv)\nprint(inv)',
       options: ["['gem']", "[]", "None"],
       answer: 0,
@@ -407,6 +732,8 @@ const shared: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Strings can't change, so += must build a new string. Which name moves onto it?", "Los strings no cambian, así que += debe crear un string nuevo. ¿Qué nombre pasa a él?", "文字列は変えられないので += は新しい文字列を作る。そこへ移る名前は？"),
+      note: "plus-equals",
       code: 's = "hp"\nt = s\ns += "!"\nprint(s, t)',
       options: ["hp! hp", "hp! hp!", "hp hp"],
       answer: 0,
@@ -417,6 +744,8 @@ const shared: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("On a list, += changes the same object in place. Which list is b on?", "En una lista, += cambia el mismo objeto en su lugar. ¿En qué lista está b?", "リストの += は同じ物をその場で変える。b はどのリストに貼られている？"),
+      note: "plus-equals",
       code: "a = [1, 2]\nb = a\na += [3]\nprint(b)",
       options: ["[1, 2, 3]", "[1, 2]", "[3]"],
       answer: 0,
@@ -427,6 +756,8 @@ const shared: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("a + [3] builds a brand-new list. Which label moves to it, and which one stays?", "a + [3] crea una lista totalmente nueva. ¿Qué etiqueta pasa a ella y cuál se queda?", "a + [3] はまったく新しいリストを作る。移るラベルと残るラベルは？"),
+      note: "plus-equals",
       code: "a = [1, 2]\nb = a\na = a + [3]\nprint(b)",
       options: ["[1, 2]", "[1, 2, 3]", "[3]"],
       answer: 0,
@@ -442,6 +773,8 @@ const shared: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("* 2 on the outer list repeats a reference. Are the two rows separate lists?", "* 2 en la lista externa repite una referencia. ¿Las dos filas son listas separadas?", "外側の * 2 は参照をくり返す。2つの行は別々のリスト？"),
+      note: "shallow-deep",
       code: "grid = [[0] * 2] * 2\ngrid[0][0] = 9\nprint(grid)",
       options: ["[[9, 0], [9, 0]]", "[[9, 0], [0, 0]]", "[[9, 9], [0, 0]]"],
       answer: 0,
@@ -453,6 +786,8 @@ const shared: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("A shallow copy shares inner lists; a deep copy copies them. Which one sees the change to a[0]?", "Una copia superficial comparte las listas internas; una profunda las copia. ¿Cuál ve el cambio en a[0]?", "浅いコピーは内側を共有、深いコピーは複製。a[0] の変化が見えるのは？"),
+      note: "shallow-deep",
       code: "import copy\na = [[1], [2]]\ns = copy.copy(a)\nd = copy.deepcopy(a)\na[0].append(9)\nprint(s, d)",
       options: ["[[1, 9], [2]] [[1], [2]]", "[[1], [2]] [[1], [2]]", "[[1, 9], [2]] [[1, 9], [2]]"],
       answer: 0,
@@ -465,6 +800,8 @@ const shared: LessonDef = {
     {
       kind: "predict",
       prompt: L("A tablet holding a scroll. What does it print?", "Una tablilla con un pergamino. ¿Qué imprime?", "巻物入りの石板。何が表示される？"),
+      hint: L("The tuple's slots are fixed, but what about the object sitting in its first slot?", "Los lugares de la tupla son fijos, pero ¿qué pasa con el objeto de su primer lugar?", "タプルの枠は固定。でも最初の枠に入っている物そのものは？"),
+      note: "shallow-deep",
       code: "t = ([1], 2)\nt[0].append(3)\nprint(t)",
       options: ["([1, 3], 2)", "TypeError", "([1], 2)"],
       answer: 0,
@@ -475,6 +812,8 @@ const shared: LessonDef = {
     {
       kind: "run",
       prompt: L("Make a real backup: backup: [['sword'], ['bow']]", "Haz un respaldo real: backup: [['sword'], ['bow']]", "本物のバックアップを：backup: [['sword'], ['bow']]"),
+      hint: L("A plain copy shares the inner lists. You need a copy that goes all the way down.", "Una copia simple comparte las listas internas. Necesitas una copia que llegue hasta el fondo.", "ふつうのコピーは内側のリストを共有する。奥まで複製するコピーが必要。"),
+      note: "shallow-deep",
       starter: 'import copy\nteam = [["sword"], ["bow"]]\nbackup = copy.copy(team)\nteam[0].append("shield")\nprint("backup:", backup)\n',
       solution: 'import copy\nteam = [["sword"], ["bow"]]\nbackup = copy.deepcopy(team)\nteam[0].append("shield")\nprint("backup:", backup)\n',
       expect: "backup: [['sword'], ['bow']]",
@@ -483,6 +822,131 @@ const shared: LessonDef = {
     },
   ],
 };
+
+const comprehensionsNotes: NoteDef[] = [
+  note("comprehensions", L("range and comprehensions", "range y comprensiones", "range と内包表記"),
+    p(
+      "range(n) produces the numbers 0, 1, ..., n - 1: n numbers, starting at 0 and stopping before n. range(a, b) goes from a up to b - 1. It produces numbers lazily, so wrap it in list() to see them all.",
+      "range(n) produce los números 0, 1, ..., n - 1: n números, desde 0 y deteniéndose antes de n. range(a, b) va desde a hasta b - 1. Produce los números a medida que se piden, así que envuélvelo en list() para verlos todos.",
+      "range(n) は 0, 1, ..., n - 1 の n 個の数を作る。0 から始まり n の手前で止まる。range(a, b) は a から b - 1 まで。数は必要なときに作られるので、全部見るには list() で包もう。",
+    ),
+    ex("print(list(range(4)), list(range(2, 6)))", "[0, 1, 2, 3] [2, 3, 4, 5]", L("range stops before its end number", "range se detiene antes de su número final", "range は終わりの数の手前で止まる")),
+    p(
+      "A list comprehension builds a list in one expression: [expression for name in iterable]. Read it as \"for each name in the iterable, put the expression in the list\". It replaces the pattern of an empty list, a for loop and append.",
+      "Una comprensión de lista arma una lista en una sola expresión: [expresión for nombre in iterable]. Léela como \"por cada nombre del iterable, pon la expresión en la lista\". Reemplaza el patrón de lista vacía, bucle for y append.",
+      "リスト内包表記は1つの式でリストを作る：[式 for 名前 in 繰り返せるもの]。「繰り返せるものの各要素について、式の結果をリストに入れる」と読もう。空リスト＋for ループ＋append の代わりになるよ。",
+    ),
+    ex("print([n + 10 for n in range(3)], [w.upper() for w in [\"hi\", \"yo\"]])", "[10, 11, 12] ['HI', 'YO']"),
+    p(
+      "Add a condition at the end to filter: only the items for which the condition is true are kept. The filter goes after the for part. The expression at the front is computed only for the items that pass.",
+      "Agrega una condición al final para filtrar: solo se quedan los elementos para los que la condición es verdadera. El filtro va después de la parte for. La expresión del principio se calcula solo para los elementos que pasan.",
+      "最後に条件をつけるとふるいにかけられる。条件が真の要素だけが残る。条件は for の部分のあとに書き、先頭の式は条件を通った要素についてだけ計算されるよ。",
+    ),
+    ex("print([n for n in range(12) if n % 4 == 0])", "[0, 4, 8]", L("Only the numbers that pass the condition stay", "Solo se quedan los números que pasan la condición", "条件を通った数だけ残る")),
+    p(
+      "With curly braces and key: value you get a dict comprehension: {key: value for name in iterable}. With curly braces and a single expression, you get a set comprehension instead.",
+      "Con llaves y clave: valor obtienes una comprensión de dict: {clave: valor for nombre in iterable}. Con llaves y una sola expresión, obtienes en cambio una comprensión de set.",
+      "波かっこと キー: 値 を使うと辞書内包表記になる：{キー: 値 for 名前 in 繰り返せるもの}。波かっこに式が1つだけなら、set の内包表記になるよ。",
+    ),
+    ex("print({n: n * n for n in range(1, 4)})", "{1: 1, 2: 4, 3: 9}"),
+  ),
+  note("generators", L("Generators are used up once", "Los generadores se agotan", "ジェネレータは1回で使いきり"),
+    p(
+      "Swap the square brackets of a comprehension for parentheses and you get a generator expression. It doesn't build a list: it produces items one at a time, only when someone asks for the next one. That saves memory with big data.",
+      "Cambia los corchetes de una comprensión por paréntesis y obtienes una expresión generadora. No arma una lista: produce los elementos de a uno, solo cuando alguien pide el siguiente. Eso ahorra memoria con datos grandes.",
+      "内包表記の角かっこを丸かっこに変えるとジェネレータ式になる。リストは作らず、次の要素を求められたときに1つずつ作る。大きなデータでもメモリを節約できるよ。",
+    ),
+    ex("squares = (n * n for n in range(4))\nprint(list(squares))", "[0, 1, 4, 9]"),
+    p(
+      "A generator can be walked through only once. sum(), list(), max() or a for loop consume it; afterwards it is exhausted and acts like an empty sequence. Asking again gives nothing: a second list() gives [], a second sum() gives 0.",
+      "Un generador solo se puede recorrer una vez. sum(), list(), max() o un bucle for lo consumen; después queda agotado y actúa como una secuencia vacía. Pedirle de nuevo no da nada: un segundo list() da [], un segundo sum() da 0.",
+      "ジェネレータは1回しかたどれない。sum()、list()、max()、for ループで使いきると空っぽになり、空の並びと同じになる。もう一度求めても何も出ない。2回目の list() は []、2回目の sum() は 0 だよ。",
+    ),
+    ex("g = (c for c in \"ab\")\nprint(list(g), list(g))", "['a', 'b'] []", L("The second pass finds nothing left", "La segunda pasada ya no encuentra nada", "2回目にはもう何も残っていない")),
+    p(
+      "If you need the items more than once, build a list instead (square brackets), or create a new generator each time. Functions such as sum() and max() take a generator directly, without extra parentheses.",
+      "Si necesitas los elementos más de una vez, arma una lista (corchetes), o crea un generador nuevo cada vez. Funciones como sum() y max() aceptan un generador directamente, sin paréntesis extra.",
+      "要素を何回も使うなら、リスト（角かっこ）を作るか、毎回新しいジェネレータを作ろう。sum() や max() にはジェネレータをそのまま、余分なかっこなしで渡せるよ。",
+    ),
+    ex("print(sum(n for n in range(5)), max(len(w) for w in [\"ox\", \"bee\"]))", "10 3"),
+  ),
+  note("sort-keys", L("Sorting with key and reverse", "Ordenar con key y reverse", "key と reverse で並べかえ"),
+    p(
+      "By default sorted() compares the items themselves. Numbers go by size; strings go character by character, by code order, where every uppercase letter comes before every lowercase one. So \"Zoe\" sorts before \"adam\".",
+      "Por defecto, sorted() compara los elementos mismos. Los números van por tamaño; los strings van carácter por carácter, por orden de código, donde todas las mayúsculas van antes que todas las minúsculas. Así, \"Zoe\" queda antes que \"adam\".",
+      "sorted() は標準では要素そのものを比べる。数値は大きさで、文字列は1文字ずつ文字コード順で比べる。大文字はすべて小文字より前なので、\"Zoe\" は \"adam\" より前に来るよ。",
+    ),
+    ex("print(sorted([\"mia\", \"Zoe\", \"adam\"]))", "['Zoe', 'adam', 'mia']"),
+    p(
+      "key= tells sorted() what to compare: a function applied to each item, whose result is used for sorting. The items themselves come back unchanged. key=str.lower compares lowercased text, and key=len compares lengths.",
+      "key= le dice a sorted() qué comparar: una función que se aplica a cada elemento y cuyo resultado se usa para ordenar. Los elementos vuelven sin cambios. key=str.lower compara el texto en minúsculas y key=len compara largos.",
+      "key= は sorted() に何を比べるかを教える。各要素に関数を使い、その結果で並べる。返ってくる要素自体は変わらない。key=str.lower は小文字にして比べ、key=len は長さで比べるよ。",
+    ),
+    ex("names = [\"mia\", \"Zoe\", \"adam\"]\nprint(sorted(names, key=str.lower), sorted(names, key=len))", "['adam', 'mia', 'Zoe'] ['mia', 'Zoe', 'adam']", L("Same items, ordered by a different measure", "Los mismos elementos, ordenados con otra medida", "同じ要素を別の基準で並べる")),
+    p(
+      "lambda makes a tiny unnamed function right where you need it: lambda p: p[1] means \"given p, return p[1]\". It's the usual key for sorting pairs by their second item. reverse=True flips the order, so the largest comes first.",
+      "lambda crea una función mínima sin nombre justo donde la necesitas: lambda p: p[1] significa \"dado p, devuelve p[1]\". Es la key habitual para ordenar pares por su segundo elemento. reverse=True invierte el orden, así que el mayor va primero.",
+      "lambda はその場で名前のない小さな関数を作る。lambda p: p[1] は「p を受けとって p[1] を返す」。組を2つ目の要素で並べるときの定番の key だよ。reverse=True で順番が逆になり、大きいものが先頭に来る。",
+    ),
+    ex("items = [(\"bow\", 12), (\"axe\", 30), (\"dart\", 2)]\nprint(sorted(items, key=lambda it: it[1], reverse=True))", "[('axe', 30), ('bow', 12), ('dart', 2)]"),
+    p(
+      "Python's sort is stable: items with equal keys keep their original order. When two entries tie, the one that came first stays first.",
+      "El ordenamiento de Python es estable: los elementos con claves iguales conservan su orden original. Cuando dos entradas empatan, la que venía primero sigue primero.",
+      "Python の並べかえは「安定」で、key が同じ要素は元の順番を保つ。2つが同点なら、先にあった方が先のままだよ。",
+    ),
+    ex("tie = [(\"kim\", 1), (\"lea\", 2), (\"max\", 1)]\nprint(sorted(tie, key=lambda t: t[1]))", "[('kim', 1), ('max', 1), ('lea', 2)]", L("kim and max tie, so they keep their order", "kim y max empatan, así que conservan su orden", "kim と max は同点なので元の順のまま")),
+    p(
+      "Sorting a dict sorts its keys. To rank the keys by their values, the key function must turn each key into its value, for example a lambda that looks the key up in the dict.",
+      "Ordenar un dict ordena sus claves. Para clasificar las claves por sus valores, la función key debe convertir cada clave en su valor, por ejemplo una lambda que busque la clave en el dict.",
+      "dict を並べるとキーが並ぶ。キーを値の順に並べたいなら、key 関数で各キーをその値に変える必要がある。たとえば dict からキーを引く lambda を使うんだ。",
+    ),
+    ex("prices = {\"tea\": 3, \"jam\": 5, \"egg\": 1}\nprint(sorted(prices, key=lambda k: prices[k]))", "['egg', 'tea', 'jam']"),
+  ),
+  note("zip-enumerate", L("zip and enumerate", "zip y enumerate", "zip と enumerate"),
+    p(
+      "zip(a, b) walks two sequences side by side and gives pairs (tuples): first with first, second with second, and so on. It stops as soon as the shortest one runs out; extra items in the longer one are silently ignored.",
+      "zip(a, b) recorre dos secuencias lado a lado y da pares (tuplas): primero con primero, segundo con segundo, y así. Se detiene en cuanto la más corta se acaba; los elementos extra de la más larga se ignoran sin aviso.",
+      "zip(a, b) は2つの並びを横に並べて歩き、1つ目どうし、2つ目どうし…と組（タプル）を作る。短い方が終わった時点で止まり、長い方の余りは何も言わずに無視されるよ。",
+    ),
+    ex("print(list(zip([1, 2, 3], \"xy\")))", "[(1, 'x'), (2, 'y')]", L("The shorter input decides the length", "La entrada más corta decide el largo", "短い方の長さで決まる")),
+    p(
+      "enumerate(seq) pairs each item with its position: (0, first), (1, second), and so on. start= changes the first number, which is handy for counting from 1 like people do.",
+      "enumerate(seq) empareja cada elemento con su posición: (0, primero), (1, segundo), etc. start= cambia el primer número, útil para contar desde 1 como lo hacen las personas.",
+      "enumerate(seq) は各要素に位置番号をつけて (0, 1つ目)、(1, 2つ目)… の組にする。start= で最初の番号を変えられるので、人と同じように 1 から数えたいときに便利だよ。",
+    ),
+    ex("for i, fruit in enumerate([\"fig\", \"kiwi\"], start=10):\n    print(i, fruit)", "10 fig\n11 kiwi"),
+    p(
+      "Both return lazy objects, like generators, so wrap them in list() to print them, or loop over them directly with for a, b in zip(...). Unpacking in the for line gives each part of the pair its own name.",
+      "Ambos devuelven objetos perezosos, como los generadores, así que envuélvelos en list() para imprimirlos, o recórrelos directamente con for a, b in zip(...). Desempacar en la línea del for le da a cada parte del par su propio nombre.",
+      "どちらもジェネレータのように必要なときに作る物を返す。表示するなら list() で包み、ループなら for a, b in zip(...) のように直接使おう。for の行でアンパックすれば、組のそれぞれに名前がつくよ。",
+    ),
+  ),
+  note("counter-defaultdict", L("Counter and defaultdict", "Counter y defaultdict", "Counter と defaultdict"),
+    p(
+      "collections.Counter counts things: give it any iterable and it builds a dict-like object of item → count. most_common(n) returns the n most frequent items as (item, count) pairs, largest count first.",
+      "collections.Counter cuenta cosas: dale cualquier iterable y arma un objeto tipo dict de elemento → cantidad. most_common(n) devuelve los n elementos más frecuentes como pares (elemento, cantidad), de mayor a menor.",
+      "collections.Counter は数を数える。繰り返せるものを渡すと、要素 → 個数 の dict のような物を作る。most_common(n) は多い順に n 個を (要素, 個数) の組で返すよ。",
+    ),
+    ex("from collections import Counter\nvotes = Counter([\"cat\", \"dog\", \"cat\"])\nprint(votes[\"cat\"], votes.most_common(1))", "2 [('cat', 2)]"),
+    p(
+      "Unlike a plain dict, a Counter returns 0 for a missing key instead of raising KeyError. That makes sense: something you never saw was counted zero times.",
+      "A diferencia de un dict común, un Counter devuelve 0 para una clave que falta en vez de lanzar KeyError. Tiene sentido: algo que nunca viste se contó cero veces.",
+      "ふつうの dict とちがい、Counter はないキーに KeyError ではなく 0 を返す。見たことのないものは0回数えた、ということだから自然だね。",
+    ),
+    ex("from collections import Counter\nc = Counter(\"hello\")\nprint(c[\"q\"], c[\"l\"])", "0 2", L("Missing keys count as 0", "Las claves que faltan cuentan como 0", "ないキーは 0 と数える")),
+    p(
+      "defaultdict(factory) is a dict that creates missing keys for you: the first time you read a missing key, it calls factory() (list() gives [], int() gives 0), stores the result under that key and hands it back. Perfect for grouping with append or counting with += 1.",
+      "defaultdict(fábrica) es un dict que crea las claves que faltan por ti: la primera vez que lees una clave que falta, llama a fábrica() (list() da [], int() da 0), guarda el resultado en esa clave y te lo devuelve. Perfecto para agrupar con append o contar con += 1.",
+      "defaultdict(作る関数) は、ないキーを自動で作る dict。ないキーを初めて読むと 作る関数() を呼び（list() なら []、int() なら 0）、その結果をキーにしまって返す。append でのグループ分けや += 1 での数え上げにぴったりだよ。",
+    ),
+    ex("from collections import defaultdict\ntally = defaultdict(int)\ntally[\"x\"] += 1\ntally[\"x\"] += 1\nprint(dict(tally))", "{'x': 2}"),
+    p(
+      "Common mistake: passing a call instead of the function itself. defaultdict needs the factory (list, int), not a value it made ([] or 0): defaultdict([]) raises TypeError, because the first argument must be callable.",
+      "Error común: pasar una llamada en vez de la función misma. defaultdict necesita la fábrica (list, int), no un valor ya hecho ([] o 0): defaultdict([]) lanza TypeError, porque el primer argumento debe poder llamarse.",
+      "よくあるミス：関数そのものではなく呼び出した結果を渡すこと。defaultdict に必要なのは作る関数（list、int）で、できた値（[] や 0）ではない。defaultdict([]) は最初の引数が呼び出せないので TypeError になるよ。",
+    ),
+  ),
+];
 
 // ─── 2.4 The sorting caravan ───────────────────────────────────────────────
 const comprehensions: LessonDef = {
@@ -493,6 +957,7 @@ const comprehensions: LessonDef = {
   xp: 80,
   enemy: "ghost",
   enemyName: L("CARAVAN GHOST", "FANTASMA CARAVANA", "キャラバンゴースト"),
+  notes: comprehensionsNotes,
   beats: [
     say(L(
       "range(5) counts 0, 1, 2, 3, 4. A COMPREHENSION builds a list in one line: [n * n for n in range(5)].",
@@ -511,6 +976,8 @@ const comprehensions: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Which numbers does range(5) give, and where does it start? Then square each one.", "¿Qué números da range(5) y dónde empieza? Luego eleva cada uno al cuadrado.", "range(5) はどの数を作り、どこから始まる？それぞれを2乗しよう。"),
+      note: "comprehensions",
       code: "print([n * n for n in range(5)])",
       options: ["[0, 1, 4, 9, 16]", "[1, 4, 9, 16, 25]", "[0, 2, 4, 6, 8]"],
       answer: 0,
@@ -521,6 +988,8 @@ const comprehensions: LessonDef = {
     {
       kind: "type",
       prompt: L("Keep only multiples of 3", "Deja solo los múltiplos de 3", "3の倍数だけ残そう"),
+      hint: L("A filter at the end of a comprehension uses the same keyword as an ordinary condition.", "Un filtro al final de una comprensión usa la misma palabra clave que una condición normal.", "内包表記の最後のふるいは、ふつうの条件文と同じキーワードを使う。"),
+      note: "comprehensions",
       code: "print([n for n in range(10) ___ n % 3 == 0])",
       answer: "if",
       check: { compiles: true, stdout: "[0, 3, 6, 9]" },
@@ -530,6 +999,8 @@ const comprehensions: LessonDef = {
     {
       kind: "predict",
       prompt: L("Curly braces with key: value. What prints?", "Llaves con clave: valor. ¿Qué imprime?", "{ } に キー: 値。何が表示される？"),
+      hint: L("Curly braces with key: value build a dict. What becomes the key, and what the value?", "Las llaves con clave: valor arman un dict. ¿Qué se vuelve la clave y qué el valor?", "波かっこに キー: 値 なら dict。何がキーで、何が値になる？"),
+      note: "comprehensions",
       code: 'print({w: len(w) for w in ["gem", "sword"]})',
       options: ["{'gem': 3, 'sword': 5}", "[3, 5]", "{3, 5}"],
       answer: 0,
@@ -545,6 +1016,8 @@ const comprehensions: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("A generator can be consumed only once. What's left for the second sum?", "Un generador solo se puede consumir una vez. ¿Qué queda para la segunda suma?", "ジェネレータは1回しか使えない。2回目の sum には何が残っている？"),
+      note: "generators",
       code: "g = (n * 2 for n in range(3))\nprint(sum(g), sum(g))",
       options: ["6 0", "6 6", "0 0"],
       answer: 0,
@@ -561,6 +1034,8 @@ const comprehensions: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Without a key, uppercase letters come before lowercase. What does str.lower change?", "Sin key, las mayúsculas van antes que las minúsculas. ¿Qué cambia str.lower?", "key なしでは大文字が小文字より前。str.lower で何が変わる？"),
+      note: "sort-keys",
       code: 'names = ["bob", "Cy", "al"]\nprint(sorted(names), sorted(names, key=str.lower))',
       options: ["['Cy', 'al', 'bob'] ['al', 'bob', 'Cy']", "['al', 'bob', 'Cy'] ['al', 'bob', 'Cy']", "['al', 'bob', 'Cy'] ['Cy', 'al', 'bob']"],
       answer: 0,
@@ -571,6 +1046,8 @@ const comprehensions: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Sort by the number, highest first. When two numbers tie, does their original order change?", "Ordena por el número, de mayor a menor. Si dos números empatan, ¿cambia su orden original?", "数値の大きい順。同点のとき、元の順番は変わる？"),
+      note: "sort-keys",
       code: 'heroes = [("ada", 3), ("bo", 5), ("cy", 3)]\nprint(sorted(heroes, key=lambda h: h[1], reverse=True))',
       options: ["[('bo', 5), ('ada', 3), ('cy', 3)]", "[('bo', 5), ('cy', 3), ('ada', 3)]", "[('ada', 3), ('cy', 3), ('bo', 5)]"],
       answer: 0,
@@ -581,6 +1058,8 @@ const comprehensions: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("zip stops at the shortest input. Where does enumerate start counting here?", "zip se detiene en la entrada más corta. ¿Desde dónde empieza a contar enumerate aquí?", "zip は短い方で止まる。ここで enumerate はいくつから数える？"),
+      note: "zip-enumerate",
       code: 'print(list(zip("ab", [1, 2, 3])), list(enumerate("xy", start=1)))',
       options: ["[('a', 1), ('b', 2)] [(1, 'x'), (2, 'y')]", "[('a', 1), ('b', 2), (None, 3)] [(0, 'x'), (1, 'y')]", "[('a', 1), ('b', 2)] [(0, 'x'), (1, 'y')]"],
       answer: 0,
@@ -596,6 +1075,8 @@ const comprehensions: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Count each letter of banana. What does a Counter return for a letter it never saw?", "Cuenta cada letra de banana. ¿Qué devuelve un Counter para una letra que nunca vio?", "banana の文字を数えよう。Counter は見たことのない文字に何を返す？"),
+      note: "counter-defaultdict",
       code: 'from collections import Counter\nc = Counter("banana")\nprint(c.most_common(2), c["z"])',
       options: ["[('a', 3), ('n', 2)] 0", "[('a', 3), ('n', 2)] KeyError", "[('b', 1), ('a', 3)] 0"],
       answer: 0,
@@ -606,6 +1087,8 @@ const comprehensions: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("defaultdict creates a missing key with list() on first use. How many keys exist afterwards?", "defaultdict crea una clave que falta con list() al primer uso. ¿Cuántas claves hay después?", "defaultdict はないキーを初回に list() で作る。そのあとキーはいくつ？"),
+      note: "counter-defaultdict",
       code: 'from collections import defaultdict\nd = defaultdict(list)\nd["gems"].append(1)\nprint(dict(d), len(d))',
       options: ["{'gems': [1]} 1", "KeyError", "{} 0"],
       answer: 0,
@@ -616,6 +1099,8 @@ const comprehensions: LessonDef = {
     {
       kind: "run",
       prompt: L("Rank by score: ranking: ['bo', 'cy', 'ada']", "Ordena por puntaje: ranking: ['bo', 'cy', 'ada']", "点数順に：ranking: ['bo', 'cy', 'ada']"),
+      hint: L("sorted(scores) sorts the names alphabetically. Make it compare each name's score, highest first.", "sorted(scores) ordena los nombres alfabéticamente. Haz que compare el puntaje de cada nombre, de mayor a menor.", "sorted(scores) は名前のABC順。各名前の点数で、高い順に比べさせよう。"),
+      note: "sort-keys",
       starter: 'scores = {"ada": 3, "bo": 9, "cy": 5}\ntop = sorted(scores)\nprint("ranking:", top)\n',
       solution: 'scores = {"ada": 3, "bo": 9, "cy": 5}\ntop = sorted(scores, key=scores.get, reverse=True)\nprint("ranking:", top)\n',
       expect: "ranking: ['bo', 'cy', 'ada']",
@@ -624,6 +1109,89 @@ const comprehensions: LessonDef = {
     },
   ],
 };
+
+const bossNotes: NoteDef[] = [
+  note("recap-loops", L("Recap: changing what you loop over", "Repaso: cambiar lo que recorres", "復習：ループ中に変更する"),
+    p(
+      "A for loop over a list walks by position: item 0, then 1, then 2. If you remove an item during the loop, everything after it shifts one place left, and the loop's next step skips the item that slid into the current position.",
+      "Un bucle for sobre una lista avanza por posición: elemento 0, luego 1, luego 2. Si quitas un elemento durante el bucle, todo lo que sigue se corre un lugar a la izquierda, y el siguiente paso del bucle salta el elemento que se deslizó a la posición actual.",
+      "リストの for ループは位置で進む。要素 0、次に 1、次に 2。ループ中に要素を消すと、うしろの要素が1つずつ左にずれ、今の位置にすべりこんだ要素をループの次の一歩が飛ばしてしまうよ。",
+    ),
+    ex("words = [\"a\", \"b\", \"c\", \"d\"]\nfor w in words:\n    words.remove(w)\nprint(words)", "['b', 'd']", L("Every other item survives: the loop skips the shifted ones", "Sobrevive uno de cada dos: el bucle salta los corridos", "1つおきに残る。ずれた要素は飛ばされる")),
+    p(
+      "remove(x) deletes only the first item equal to x. To delete safely, loop over a copy (for n in nums[:]) or build a new list with a comprehension that keeps only what you want.",
+      "remove(x) borra solo el primer elemento igual a x. Para borrar con seguridad, recorre una copia (for n in nums[:]) o crea una lista nueva con una comprensión que deje solo lo que quieres.",
+      "remove(x) が消すのは x と等しい最初の1つだけ。安全に消すなら、コピーをループする（for n in nums[:]）か、残したいものだけの新しいリストを内包表記で作ろう。",
+    ),
+    ex("nums = [4, 0, 4, 1]\nkept = [n for n in nums if n != 4]\nprint(kept)", "[0, 1]"),
+    p(
+      "Dicts and sets are stricter: adding or removing keys while looping over them raises RuntimeError (\"changed size during iteration\"). Changing the values of existing keys is fine. If you must add or delete keys, loop over a copy such as list(d).",
+      "Los dicts y los sets son más estrictos: agregar o quitar claves mientras los recorres lanza RuntimeError (\"changed size during iteration\"). Cambiar los valores de claves existentes está bien. Si debes agregar o borrar claves, recorre una copia como list(d).",
+      "dict と set はもっときびしい。ループ中にキーを追加・削除すると RuntimeError（changed size during iteration）になる。今あるキーの値を変えるのは大丈夫。キーを増減したいなら list(d) のようなコピーをループしよう。",
+    ),
+    boom("s = {1}\nfor x in s:\n    s.add(x + 1)", "RuntimeError", L("A set can't grow while you loop over it", "Un set no puede crecer mientras lo recorres", "ループ中の set は増やせない")),
+  ),
+  note("recap-shared", L("Recap: hidden shared lists", "Repaso: listas compartidas ocultas", "復習：かくれた共有リスト"),
+    p(
+      "[inner] * n repeats one inner object n times; it doesn't copy it. A comprehension runs its expression again on every pass, so an expression like [] or list() makes a brand-new inner list each time.",
+      "[interna] * n repite un mismo objeto interno n veces; no lo copia. Una comprensión vuelve a ejecutar su expresión en cada vuelta, así que una expresión como [] o list() crea una lista interna totalmente nueva cada vez.",
+      "[内側] * n は内側の物を1つ n 回くり返すだけでコピーしない。内包表記は毎回式を実行し直すので、[] や list() のような式なら毎回まったく新しい内側リストができるよ。",
+    ),
+    ex("rows = [list() for i in range(3)]\nrows[0].append(\"x\")\nprint(rows)", "[['x'], [], []]", L("Each pass builds its own inner list", "Cada vuelta crea su propia lista interna", "1回ごとに別の内側リストができる")),
+    p(
+      "dict.fromkeys(keys, value) puts the very same value object under every key. With an immutable value like 0 that's fine; with a list, all keys share one list. Use a dict comprehension to give each key its own list.",
+      "dict.fromkeys(claves, valor) pone el mismísimo objeto valor en cada clave. Con un valor inmutable como 0 no hay problema; con una lista, todas las claves comparten una sola lista. Usa una comprensión de dict para darle a cada clave su propia lista.",
+      "dict.fromkeys(キー, 値) はすべてのキーにまったく同じ値の物を入れる。0 のような変わらない値なら問題ないが、リストだと全キーが1つのリストを共有する。キーごとに別のリストがほしいなら辞書内包表記を使おう。",
+    ),
+    ex("d = {k: [] for k in \"xy\"}\nd[\"x\"].append(1)\nprint(d)", "{'x': [1], 'y': []}"),
+    p(
+      "A slice copy items[:] is shallow: the outer list is new, the inner objects are shared. Mutating an inner object shows up in both lists, but assigning or adding a slot only changes the list you did it on.",
+      "Una copia por corte items[:] es superficial: la lista externa es nueva y los objetos internos se comparten. Mutar un objeto interno se ve en ambas listas, pero asignar o agregar un lugar solo cambia la lista en la que lo hiciste.",
+      "スライスのコピー items[:] は浅いコピー。外側のリストは新しく、中の物は共有される。中の物を変えると両方のリストに見えるが、枠に代入したり枠を追加したりすると、変わるのはそのリストだけだよ。",
+    ),
+    ex("a = [[\"p\"], [\"q\"]]\nb = a[:]\nb.append([\"r\"])\nprint(len(a), len(b), a[0] is b[0])", "2 3 True"),
+  ),
+  note("recap-ops", L("Recap: list and dict operators", "Repaso: operadores de listas y dicts", "復習：リストと dict の演算子"),
+    p(
+      "Slices: [:n] takes the first n items, [-n:] the last n, [:-1] everything except the last, and [::-1] gives a reversed copy. They always return new lists and never crash.",
+      "Cortes: [:n] toma los primeros n elementos, [-n:] los últimos n, [:-1] todos menos el último, y [::-1] da una copia invertida. Siempre devuelven listas nuevas y nunca fallan.",
+      "スライス：[:n] は最初の n 個、[-n:] は最後の n 個、[:-1] は最後以外ぜんぶ、[::-1] は逆順のコピー。いつも新しいリストを返し、エラーにならないよ。",
+    ),
+    ex("letters = [\"a\", \"b\", \"c\", \"d\"]\nprint(letters[:-1], letters[-3:])", "['a', 'b', 'c'] ['b', 'c', 'd']"),
+    p(
+      "+ joins two lists into a new one, and * n repeats a list n times. They never do math on the items. To transform each item, for example doubling it, use a comprehension.",
+      "+ une dos listas en una nueva, y * n repite una lista n veces. Nunca hacen cuentas con los elementos. Para transformar cada elemento, por ejemplo duplicarlo, usa una comprensión.",
+      "+ は2つのリストをつないで新しいリストに、* n はリストを n 回くり返す。要素で計算することはない。各要素を2倍にするなど変換したいなら内包表記を使おう。",
+    ),
+    ex("print([0, 9] * 3, [n * 2 for n in [0, 9]])", "[0, 9, 0, 9, 0, 9] [0, 18]", L("Repeating a list versus doubling its items", "Repetir una lista frente a duplicar sus elementos", "リストのくり返しと要素の2倍")),
+    p(
+      "| on sets is union. On dicts, | merges two dicts into a new one; when both have the same key, the value from the right side wins. & and - work on sets only.",
+      "| en sets es la unión. En dicts, | fusiona dos dicts en uno nuevo; cuando ambos tienen la misma clave, gana el valor del lado derecho. & y - solo funcionan con sets.",
+      "set の | は和集合。dict の | は2つの dict を合わせた新しい dict を作り、同じキーがあれば右側の値が勝つ。& と - は set だけで使えるよ。",
+    ),
+    ex("base = {\"hp\": 5, \"mp\": 1}\nprint(base | {\"mp\": 3, \"xp\": 0})", "{'hp': 5, 'mp': 3, 'xp': 0}"),
+  ),
+  note("recap-keys", L("Recap: key functions and Counter", "Repaso: funciones key y Counter", "復習：key 関数と Counter"),
+    p(
+      "max(), min() and sorted() accept key=: a function applied to each item to decide what is compared. With key=len, max() returns the longest item; when several tie, it returns the first one it found.",
+      "max(), min() y sorted() aceptan key=: una función que se aplica a cada elemento para decidir qué se compara. Con key=len, max() devuelve el elemento más largo; si varios empatan, devuelve el primero que encontró.",
+      "max()、min()、sorted() は key= を受けとる。各要素に関数を使い、何を比べるかを決める。key=len なら max() は最も長い要素を返し、同点がいくつかあれば最初に見つけたものを返すよ。",
+    ),
+    ex("print(max([\"ox\", \"yak\", \"elk\"], key=len), min([\"ox\", \"yak\"], key=len))", "yak ox", L("yak and elk tie; max keeps the first", "yak y elk empatan; max se queda con el primero", "yak と elk は同点。max は最初の方")),
+    p(
+      "sorted(..., key=len) orders items by length, shortest first, and because sorting is stable, items of the same length keep their original order.",
+      "sorted(..., key=len) ordena los elementos por largo, del más corto al más largo, y como el ordenamiento es estable, los elementos del mismo largo conservan su orden original.",
+      "sorted(..., key=len) は長さの短い順に並べる。並べかえは安定なので、同じ長さの要素は元の順番のままだよ。",
+    ),
+    ex("print(sorted([\"yak\", \"ox\", \"bee\"], key=len))", "['ox', 'yak', 'bee']"),
+    p(
+      "Counter, from the collections module, counts every item of an iterable in one step: c[item] is that item's count, and anything never seen counts as 0.",
+      "Counter, del módulo collections, cuenta cada elemento de un iterable en un solo paso: c[elemento] es la cantidad de ese elemento, y lo que nunca apareció cuenta como 0.",
+      "collections モジュールの Counter は、繰り返せるものの要素を一度に数える。c[要素] がその個数で、一度も出てこなかったものは 0 だよ。",
+    ),
+    ex("from collections import Counter\nc = Counter(\"level\")\nprint(c[\"l\"], c[\"v\"], c[\"x\"])", "2 1 0"),
+  ),
+];
 
 // ─── 2.5 Boss: Alias Hydra ─────────────────────────────────────────────────
 const boss: LessonDef = {
@@ -634,23 +1202,24 @@ const boss: LessonDef = {
   xp: 190,
   enemy: "dragon",
   enemyName: L("ALIAS HYDRA", "HIDRA DE ALIAS", "エイリアスヒドラ"),
+  notes: bossNotes,
   beats: [
     enemySays(L(
       "I AM THE ALIAS HYDRA. All my heads share ONE body. Cut one, and the others feel it!",
       "SOY LA HIDRA DE ALIAS. Todas mis cabezas comparten UN cuerpo. ¡Corta una y las demás lo sienten!",
       "我はエイリアスヒドラ。すべての首は「ひとつ」の体を共有する。1本切れば、ほかも感じるぞ！",
     )),
-    { kind: "predict", time: 15, prompt: PRINT, code: "x = [1, 2, 3]\nfor n in x:\n    if n == 2:\n        x.remove(n)\nprint(x)", options: ["[1, 3]", "[1, 2, 3]", "RuntimeError"], answer: 0, output: "[1, 3]", check: { compiles: true, stdout: "[1, 3]" }, explain: L("remove deletes the first matching value. Here the 2 is gone.", "remove borra el primer valor que coincide. Aquí el 2 desaparece.", "remove は最初に一致した値を消す。ここでは 2 が消える。") },
-    { kind: "predict", time: 18, prompt: PRINT, code: "x = [1, 2, 2, 3]\nfor n in x:\n    if n == 2:\n        x.remove(n)\nprint(x)", options: ["[1, 2, 3]", "[1, 3]", "[1, 2, 2, 3]"], answer: 0, output: "[1, 2, 3]", check: { compiles: true, stdout: "[1, 2, 3]" }, explain: L("Removing while looping shifts items left, so the loop skips the second 2. Loop over a copy.", "Quitar mientras recorres corre las cosas a la izquierda y el bucle salta el segundo 2. Recorre una copia.", "ループ中に消すと要素が左にずれ、2つ目の 2 を飛ばす。コピーをループしよう。") },
-    { kind: "predict", time: 15, prompt: HAPPENS, code: 'd = {"a": 1}\nfor k in d:\n    d["b"] = 2', options: ["RuntimeError", "KeyError", L("Nothing, it runs", "Nada, funciona", "問題なく動く")], answer: 0, check: { compiles: true, throws: "RuntimeError" }, explain: L("A dict can't grow while you loop over it: RuntimeError: dictionary changed size during iteration.", "Un dict no puede crecer mientras lo recorres: RuntimeError: dictionary changed size during iteration.", "ループ中の dict は増やせない。RuntimeError: dictionary changed size during iteration。") },
-    { kind: "pick", time: 15, prompt: L("Fix it so only one row changes", "Haz que cambie solo una fila", "1行だけ変わるように直そう"), code: "grid = [[0] * 2 ___]\ngrid[0][0] = 9\nprint(grid)", options: ["for _ in range(2)", "* 2"], answer: 0, check: { compiles: true, stdout: "[[9, 0], [0, 0]]" }, explain: L("The comprehension builds a NEW inner list on each pass, so the rows are separate.", "La comprensión crea una lista interna NUEVA en cada vuelta, así que las filas son independientes.", "内包表記は毎回「新しい」内側リストを作るので、行どうしは別物になる。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: 'd = dict.fromkeys(["a", "b"], [])\nd["a"].append(1)\nprint(d)', options: ["{'a': [1], 'b': [1]}", "{'a': [1], 'b': []}", "KeyError"], answer: 0, output: "{'a': [1], 'b': [1]}", check: { compiles: true, stdout: "{'a': [1], 'b': [1]}" }, explain: L("fromkeys puts the SAME list on every key. One list, two labels.", "fromkeys pone la MISMA lista en cada clave. Una lista, dos etiquetas.", "fromkeys は全キーに「同じ」リストを入れる。リスト1つにラベル2枚。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: "print([1, 2, 3][::-1], [1, 2, 3][-2:])", options: ["[3, 2, 1] [2, 3]", "[3, 2, 1] [1, 2]", "[1, 2, 3] [2, 3]"], answer: 0, output: "[3, 2, 1] [2, 3]", check: { compiles: true, stdout: "[3, 2, 1] [2, 3]" }, explain: L("[::-1] reverses. [-2:] takes the last two items.", "[::-1] invierte. [-2:] toma los dos últimos.", "[::-1] は逆順。[-2:] は最後の2つ。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: "x = [1, 2, 3]\nprint(x * 2, x[1:] + x[:1])", options: ["[1, 2, 3, 1, 2, 3] [2, 3, 1]", "[2, 4, 6] [2, 3, 1]", "[1, 2, 3, 1, 2, 3] [1, 2, 3]"], answer: 0, output: "[1, 2, 3, 1, 2, 3] [2, 3, 1]", check: { compiles: true, stdout: "[1, 2, 3, 1, 2, 3] [2, 3, 1]" }, explain: L("list * 2 repeats it. Gluing the tail to the head rotates it.", "list * 2 la repite. Pegar la cola a la cabeza la rota.", "list * 2 はくり返し。後ろと先頭をつなぐと回転する。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: 'print({"a": 1} | {"a": 2}, sorted({3, 1} | {2}))', options: ["{'a': 2} [1, 2, 3]", "{'a': 1} [1, 2, 3]", "TypeError"], answer: 0, output: "{'a': 2} [1, 2, 3]", check: { compiles: true, stdout: "{'a': 2} [1, 2, 3]" }, explain: L("| merges dicts too: on a shared key, the right side wins. On sets it's union.", "| también fusiona dicts: en una clave común gana el lado derecho. En sets es la unión.", "| は dict も合体できる。同じキーなら右側が勝つ。set では和集合。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: "a = [[0], [0]]\nb = a[:]\nb[0].append(1)\nb[1] = [7]\nprint(a)", options: ["[[0, 1], [0]]", "[[0, 1], [7]]", "[[0], [0]]"], answer: 0, output: "[[0, 1], [0]]", check: { compiles: true, stdout: "[[0, 1], [0]]" }, explain: L("b is a shallow copy: the inner [0] lists are shared, but b[1] = [7] only re-labels b's slot.", "b es una copia superficial: las listas [0] internas se comparten, pero b[1] = [7] solo cambia el lugar de b.", "b は浅いコピー。中の [0] は共有だけど、b[1] = [7] は b の枠を貼りかえるだけ。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: 'words = ["kiwi", "fig", "apple"]\nprint(max(words, key=len), sorted(words, key=len))', options: ["apple ['fig', 'kiwi', 'apple']", "kiwi ['apple', 'fig', 'kiwi']", "apple ['apple', 'kiwi', 'fig']"], answer: 0, output: "apple ['fig', 'kiwi', 'apple']", check: { compiles: true, stdout: "apple ['fig', 'kiwi', 'apple']" }, explain: L("key=len compares lengths: apple is longest, and sorting goes 3, 4, 5 letters.", "key=len compara largos: apple es el más largo y el orden va de 3, 4 a 5 letras.", "key=len は長さで比べる。最長は apple、並びは3文字・4文字・5文字。") },
-    { kind: "type", time: 15, prompt: L("Count the loot in one line", "Cuenta el botín en una línea", "1行で戦利品を数えよう"), code: 'from collections import Counter\nprint(___("gemgem")["g"])', answer: "Counter", check: { compiles: true, stdout: "2" }, explain: L("Counter counts every letter. There are two g's.", "Counter cuenta cada letra. Hay dos g.", "Counter は文字ごとに数える。g は2つ。") },
+    { kind: "predict", time: 15, prompt: PRINT, hint: L("remove deletes the first item equal to its argument. How many 2s are in this list?", "remove borra el primer elemento igual a su argumento. ¿Cuántos 2 hay en esta lista?", "remove は引数と等しい最初の要素を消す。このリストに 2 はいくつある？"), note: "recap-loops", code: "x = [1, 2, 3]\nfor n in x:\n    if n == 2:\n        x.remove(n)\nprint(x)", options: ["[1, 3]", "[1, 2, 3]", "RuntimeError"], answer: 0, output: "[1, 3]", check: { compiles: true, stdout: "[1, 3]" }, explain: L("remove deletes the first matching value. Here the 2 is gone.", "remove borra el primer valor que coincide. Aquí el 2 desaparece.", "remove は最初に一致した値を消す。ここでは 2 が消える。") },
+    { kind: "predict", time: 18, prompt: PRINT, hint: L("Removing during the loop shifts later items left. Does the loop ever see the item that slid back?", "Quitar durante el bucle corre los siguientes a la izquierda. ¿El bucle llega a ver el que se deslizó?", "ループ中に消すと後ろが左にずれる。ずれてきた要素をループは見る？"), note: "recap-loops", code: "x = [1, 2, 2, 3]\nfor n in x:\n    if n == 2:\n        x.remove(n)\nprint(x)", options: ["[1, 2, 3]", "[1, 3]", "[1, 2, 2, 3]"], answer: 0, output: "[1, 2, 3]", check: { compiles: true, stdout: "[1, 2, 3]" }, explain: L("Removing while looping shifts items left, so the loop skips the second 2. Loop over a copy.", "Quitar mientras recorres corre las cosas a la izquierda y el bucle salta el segundo 2. Recorre una copia.", "ループ中に消すと要素が左にずれ、2つ目の 2 を飛ばす。コピーをループしよう。") },
+    { kind: "predict", time: 15, prompt: HAPPENS, hint: L("Is it safe to add a new key to a dict while a for loop is walking over it?", "¿Es seguro agregar una clave nueva a un dict mientras un bucle for lo recorre?", "for ループで dict をたどっている最中に新しいキーを足しても大丈夫？"), note: "recap-loops", code: 'd = {"a": 1}\nfor k in d:\n    d["b"] = 2', options: ["RuntimeError", "KeyError", L("Nothing, it runs", "Nada, funciona", "問題なく動く")], answer: 0, check: { compiles: true, throws: "RuntimeError" }, explain: L("A dict can't grow while you loop over it: RuntimeError: dictionary changed size during iteration.", "Un dict no puede crecer mientras lo recorres: RuntimeError: dictionary changed size during iteration.", "ループ中の dict は増やせない。RuntimeError: dictionary changed size during iteration。") },
+    { kind: "pick", time: 15, prompt: L("Fix it so only one row changes", "Haz que cambie solo una fila", "1行だけ変わるように直そう"), hint: L("* 2 repeats one inner list. Which option builds a new inner list on every pass?", "* 2 repite una sola lista interna. ¿Qué opción crea una lista interna nueva en cada vuelta?", "* 2 は内側リスト1つをくり返す。毎回新しい内側リストを作るのはどっち？"), note: "recap-shared", code: "grid = [[0] * 2 ___]\ngrid[0][0] = 9\nprint(grid)", options: ["for _ in range(2)", "* 2"], answer: 0, check: { compiles: true, stdout: "[[9, 0], [0, 0]]" }, explain: L("The comprehension builds a NEW inner list on each pass, so the rows are separate.", "La comprensión crea una lista interna NUEVA en cada vuelta, así que las filas son independientes.", "内包表記は毎回「新しい」内側リストを作るので、行どうしは別物になる。") },
+    { kind: "predict", time: 15, prompt: PRINT, hint: L("fromkeys reuses one value object for every key. How many lists exist here?", "fromkeys reutiliza un mismo objeto valor para cada clave. ¿Cuántas listas existen aquí?", "fromkeys は全キーに同じ値の物を使う。ここにリストはいくつある？"), note: "recap-shared", code: 'd = dict.fromkeys(["a", "b"], [])\nd["a"].append(1)\nprint(d)', options: ["{'a': [1], 'b': [1]}", "{'a': [1], 'b': []}", "KeyError"], answer: 0, output: "{'a': [1], 'b': [1]}", check: { compiles: true, stdout: "{'a': [1], 'b': [1]}" }, explain: L("fromkeys puts the SAME list on every key. One list, two labels.", "fromkeys pone la MISMA lista en cada clave. Una lista, dos etiquetas.", "fromkeys は全キーに「同じ」リストを入れる。リスト1つにラベル2枚。") },
+    { kind: "predict", time: 12, prompt: PRINT, hint: L("A step of -1 walks backward; a negative start counts from the end.", "Un paso de -1 recorre al revés; un inicio negativo cuenta desde el final.", "ステップ -1 は後ろ向き。負の start は後ろから数える。"), note: "recap-ops", code: "print([1, 2, 3][::-1], [1, 2, 3][-2:])", options: ["[3, 2, 1] [2, 3]", "[3, 2, 1] [1, 2]", "[1, 2, 3] [2, 3]"], answer: 0, output: "[3, 2, 1] [2, 3]", check: { compiles: true, stdout: "[3, 2, 1] [2, 3]" }, explain: L("[::-1] reverses. [-2:] takes the last two items.", "[::-1] invierte. [-2:] toma los dos últimos.", "[::-1] は逆順。[-2:] は最後の2つ。") },
+    { kind: "predict", time: 15, prompt: PRINT, hint: L("* on a list repeats it; it doesn't multiply the items. Then glue the tail before the head.", "* en una lista la repite; no multiplica los elementos. Luego pega la cola antes de la cabeza.", "リストの * はくり返しで、要素の計算じゃない。次に後ろを先頭の前につなぐ。"), note: "recap-ops", code: "x = [1, 2, 3]\nprint(x * 2, x[1:] + x[:1])", options: ["[1, 2, 3, 1, 2, 3] [2, 3, 1]", "[2, 4, 6] [2, 3, 1]", "[1, 2, 3, 1, 2, 3] [1, 2, 3]"], answer: 0, output: "[1, 2, 3, 1, 2, 3] [2, 3, 1]", check: { compiles: true, stdout: "[1, 2, 3, 1, 2, 3] [2, 3, 1]" }, explain: L("list * 2 repeats it. Gluing the tail to the head rotates it.", "list * 2 la repite. Pegar la cola a la cabeza la rota.", "list * 2 はくり返し。後ろと先頭をつなぐと回転する。") },
+    { kind: "predict", time: 15, prompt: PRINT, hint: L("On dicts, | merges and the right side wins shared keys. On sets, it's a union.", "En dicts, | fusiona y el lado derecho gana en las claves comunes. En sets, es la unión.", "dict の | は合体で、同じキーは右側が勝つ。set では和集合。"), note: "recap-ops", code: 'print({"a": 1} | {"a": 2}, sorted({3, 1} | {2}))', options: ["{'a': 2} [1, 2, 3]", "{'a': 1} [1, 2, 3]", "TypeError"], answer: 0, output: "{'a': 2} [1, 2, 3]", check: { compiles: true, stdout: "{'a': 2} [1, 2, 3]" }, explain: L("| merges dicts too: on a shared key, the right side wins. On sets it's union.", "| también fusiona dicts: en una clave común gana el lado derecho. En sets es la unión.", "| は dict も合体できる。同じキーなら右側が勝つ。set では和集合。") },
+    { kind: "predict", time: 15, prompt: PRINT, hint: L("a[:] is a shallow copy. Mutating an inner list is shared, but replacing a slot is not.", "a[:] es una copia superficial. Mutar una lista interna se comparte, pero reemplazar un lugar no.", "a[:] は浅いコピー。内側を変えるのは共有されるが、枠の置きかえはされない。"), note: "recap-shared", code: "a = [[0], [0]]\nb = a[:]\nb[0].append(1)\nb[1] = [7]\nprint(a)", options: ["[[0, 1], [0]]", "[[0, 1], [7]]", "[[0], [0]]"], answer: 0, output: "[[0, 1], [0]]", check: { compiles: true, stdout: "[[0, 1], [0]]" }, explain: L("b is a shallow copy: the inner [0] lists are shared, but b[1] = [7] only re-labels b's slot.", "b es una copia superficial: las listas [0] internas se comparten, pero b[1] = [7] solo cambia el lugar de b.", "b は浅いコピー。中の [0] は共有だけど、b[1] = [7] は b の枠を貼りかえるだけ。") },
+    { kind: "predict", time: 15, prompt: PRINT, hint: L("key=len compares lengths. Which word is longest, and how do the lengths order the list?", "key=len compara largos. ¿Qué palabra es la más larga y cómo ordenan los largos la lista?", "key=len は長さで比べる。最長の単語は？長さでどう並ぶ？"), note: "recap-keys", code: 'words = ["kiwi", "fig", "apple"]\nprint(max(words, key=len), sorted(words, key=len))', options: ["apple ['fig', 'kiwi', 'apple']", "kiwi ['apple', 'fig', 'kiwi']", "apple ['apple', 'kiwi', 'fig']"], answer: 0, output: "apple ['fig', 'kiwi', 'apple']", check: { compiles: true, stdout: "apple ['fig', 'kiwi', 'apple']" }, explain: L("key=len compares lengths: apple is longest, and sorting goes 3, 4, 5 letters.", "key=len compara largos: apple es el más largo y el orden va de 3, 4 a 5 letras.", "key=len は長さで比べる。最長は apple、並びは3文字・4文字・5文字。") },
+    { kind: "type", time: 15, prompt: L("Count the loot in one line", "Cuenta el botín en una línea", "1行で戦利品を数えよう"), hint: L("Which helper from the collections module counts every item it's given?", "¿Qué ayudante del módulo collections cuenta cada elemento que recibe?", "collections モジュールで、渡された要素を全部数える道具は？"), note: "recap-keys", code: 'from collections import Counter\nprint(___("gemgem")["g"])', answer: "Counter", check: { compiles: true, stdout: "2" }, explain: L("Counter counts every letter. There are two g's.", "Counter cuenta cada letra. Hay dos g.", "Counter は文字ごとに数える。g は2つ。") },
     enemySays(L(
       "Ssss... you saw which heads shared a body. The Function Peaks await you, little traveler.",
       "Ssss... viste qué cabezas compartían cuerpo. Las Cumbres de Funciones te esperan, pequeño viajero.",

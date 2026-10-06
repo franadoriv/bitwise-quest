@@ -1,10 +1,103 @@
-import type { LessonDef, RegionDef } from "../../../lib/content/types.ts";
+import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L, enemySays, say } from "../helpers.ts";
 
 // REGION 1 · LET VILLAGE  (variables, mut, types, shadowing)
 
 const YES = L("Yes", "Sí", "はい");
 const NO = L("No", "No", "いいえ");
+
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example; the validator checks `output` against the real compiler. */
+const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code, output, caption });
+/** An example that must NOT compile (verified too). */
+const bad = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: false } });
+
+const letBasicsNotes: NoteDef[] = [
+  note("let-variables", L("Creating variables with let", "Crear variables con let", "let で変数を作る"),
+    p(
+      "A variable is a name stuck to a value, like a label on a box. In Rust you create one with the keyword let, followed by the name, an equals sign, the value and a semicolon: let name = value; From then on, writing the name means \"the value inside\".",
+      "Una variable es un nombre pegado a un valor, como la etiqueta de una caja. En Rust se crea con la palabra clave let, seguida del nombre, un signo igual, el valor y un punto y coma: let nombre = valor; Desde ahí, escribir el nombre significa \"el valor que guarda\".",
+      "変数とは、値に貼った名前のラベルのようなもの。Rustでは let というキーワードで作る。let のあとに名前、=、値、そしてセミコロンを書く：let 名前 = 値; それ以降、名前を書けば「中の値」という意味になる。",
+    ),
+    ex('let lives = 3;\nlet stars = 12;\nprintln!("{} {}", lives, stars);', "3 12",
+      L("Two variables, each with its own name and value", "Dos variables, cada una con su nombre y valor", "名前と値をもつ2つの変数")),
+    p(
+      "Why let? Each language picks its own words: JavaScript uses var or let, C uses int, Python uses no keyword at all. Rust always uses let, so var or int in Rust code is rejected by the compiler. The = here doesn't mean \"equals\" as in math: it means \"store this value under this name\".",
+      "¿Por qué let? Cada lenguaje elige sus palabras: JavaScript usa var o let, C usa int y Python no usa ninguna. Rust siempre usa let, así que el compilador rechaza var o int en código Rust. Aquí el = no significa \"es igual\" como en matemáticas: significa \"guarda este valor con este nombre\".",
+      "なぜ let なのか？言語ごとに使う言葉が違う。JavaScriptは var や let、Cは int、Pythonは何も書かない。Rustでは必ず let。var や int を書くとコンパイラに拒否される。ここの = は数学の「等しい」ではなく「この名前でこの値をしまう」という意味じゃ。",
+    ),
+    p(
+      "Names follow simple rules: letters, digits and underscores, but they can't start with a digit or contain spaces. Rust style is snake_case: all lowercase, with underscores between words, like max_speed. Pick names that say what the value means; hp is clearer than h.",
+      "Los nombres siguen reglas simples: letras, dígitos y guiones bajos, pero no pueden empezar con un dígito ni tener espacios. El estilo de Rust es snake_case: todo en minúsculas y con guiones bajos entre palabras, como max_speed. Elige nombres que digan qué significa el valor; hp es más claro que h.",
+      "名前のルールはかんたん。英字・数字・アンダースコアが使えるが、数字で始めたり空白を入れたりはできない。Rustの書き方は snake_case：全部小文字で、単語の間を _ でつなぐ（例：max_speed）。値の意味がわかる名前にしよう。h より hp のほうがわかりやすい。",
+    ),
+    bad("let 2nd_place = 5;",
+      L("Does not compile: a name can't start with a digit", "No compila: un nombre no puede empezar con un dígito", "コンパイル不可：名前は数字で始められない")),
+    p(
+      "Common mistake: forgetting the semicolon. Every let statement ends with ; and without it the compiler stops with \"expected `;`\". Read a let line as a sentence: let (create) lives (named lives) = 3 (holding 3) ; (done).",
+      "Error común: olvidar el punto y coma. Toda instrucción let termina en ; y sin él el compilador se detiene con \"expected `;`\". Lee una línea let como una frase: let (crea) lives (llamada lives) = 3 (que guarda 3) ; (listo).",
+      "よくあるミス：セミコロンを忘れること。let の文は必ず ; で終わり、ないとコンパイラが \"expected `;`\" と言って止まる。let の行は文として読もう：let（作る）lives（lives という名前で）= 3（3を入れて）;（おしまい）。",
+    ),
+  ),
+  note("println-slots", L("Printing with println! and {}", "Imprimir con println! y {}", "println! と {} で表示"),
+    p(
+      "println! prints a line of text on the screen. The text goes inside double quotes, and whatever is between the quotes is printed exactly as written. The ! means println! is a macro, a special kind of Rust command; just remember to always write it.",
+      "println! imprime una línea de texto en la pantalla. El texto va entre comillas dobles, y lo que esté entre las comillas se imprime tal cual. El ! indica que println! es una macro, un tipo especial de comando de Rust; solo recuerda escribirlo siempre.",
+      "println! は画面に1行の文字を表示する。文字は二重引用符 \" \" の中に書き、引用符の中身はそのまま表示される。! は println! がマクロ（Rustの特別な命令）であるしるし。いつも ! をつけると覚えよう。",
+    ),
+    ex('println!("Good morning");\nprintln!("See you soon");', "Good morning\nSee you soon",
+      L("Each println! prints one line, exactly as written", "Cada println! imprime una línea, tal cual", "println! 1つで1行、書いたとおりに表示")),
+    p(
+      "To print a variable's value, put {} in the text where the value should go, and add the variable after a comma. Each {} is a slot that is filled, in order, with the values after the text. Two slots need two values.",
+      "Para imprimir el valor de una variable, pon {} en el texto donde debe ir el valor y añade la variable después de una coma. Cada {} es un hueco que se rellena, en orden, con los valores que siguen al texto. Dos huecos necesitan dos valores.",
+      "変数の値を表示するには、値を入れたい場所に {} を書き、カンマのあとに変数を書く。{} は穴で、文字のあとに並べた値が順番に入る。穴が2つなら値も2つ必要じゃ。",
+    ),
+    ex('let speed = 4;\nlet laps = 2;\nprintln!("speed {} after {} laps", speed, laps);', "speed 4 after 2 laps"),
+    p(
+      "Quotes change everything. Without quotes, lives is a variable and Rust uses its value. With quotes, \"lives\" is just text: the five letters l-i-v-e-s. Both compile, so the compiler can't warn you; you only notice when the output shows a word instead of a number.",
+      "Las comillas lo cambian todo. Sin comillas, lives es una variable y Rust usa su valor. Con comillas, \"lives\" es solo texto: las cinco letras l-i-v-e-s. Ambas compilan, así que el compilador no te avisa; solo lo notas cuando la salida muestra una palabra en vez de un número.",
+      "引用符ですべてが変わる。引用符なしの lives は変数で、Rustはその値を使う。引用符つきの \"lives\" はただの文字、l-i-v-e-s の5文字じゃ。どちらもコンパイルできるので警告は出ない。数字ではなく単語が表示されて初めて気づく。",
+    ),
+    ex('let lives = 3;\nprintln!("{}", "lives");\nprintln!("{}", lives);', "lives\n3",
+      L("The same name, with and without quotes", "El mismo nombre, con y sin comillas", "同じ名前、引用符ありとなし")),
+    p(
+      "Common mistakes: leaving a {} with no value after the comma (it does not compile: each slot needs a value), or adding symbols from other languages, like $lives; Rust variable names never start with $. Remember: the text says where the value goes, and the values after the comma say what goes there.",
+      "Errores comunes: dejar un {} sin valor después de la coma (no compila: cada hueco necesita un valor) o añadir símbolos de otros lenguajes, como $lives; en Rust los nombres de variables nunca empiezan con $. Recuerda: el texto dice dónde va el valor, y los valores tras la coma dicen qué va ahí.",
+      "よくあるミス：カンマのあとに値がない {} を残すこと（穴には値が必要なのでコンパイルできない）。他の言語のくせで $lives のように記号をつけること。Rustの変数名は $ で始まらない。文字は「どこに」、カンマのあとの値は「何を」入れるかを決めるのじゃ。",
+    ),
+    bad('let lives = 3;\nprintln!("{} and {}", lives);',
+      L("Does not compile: two slots, only one value", "No compila: dos huecos y un solo valor", "コンパイル不可：穴が2つで値が1つ")),
+  ),
+  note("fn-main", L("Every program starts in fn main", "Todo programa empieza en fn main", "プログラムは fn main から"),
+    p(
+      "A Rust program needs a starting point, and that point is a function called main. fn means \"function\", main is its name, and the () after it hold its inputs (none here). When you run the program, Rust jumps into main and runs its lines from top to bottom.",
+      "Un programa en Rust necesita un punto de partida, y ese punto es una función llamada main. fn significa \"función\", main es su nombre y los () guardan sus entradas (aquí ninguna). Al ejecutar el programa, Rust entra en main y ejecuta sus líneas de arriba abajo.",
+      "Rustのプログラムには出発点が必要で、それが main という関数じゃ。fn は「関数」、main は名前、後ろの () は入力（ここではなし）を入れる場所。プログラムを動かすと、Rustは main に入り、上から下へ順に行を実行する。",
+    ),
+    p(
+      "The body of main lives between curly braces { and }. The opening brace goes right after fn main(), and the closing brace is the very last line. Everything inside is indented with four spaces, so you can see at a glance what belongs to main.",
+      "El cuerpo de main va entre llaves { y }. La llave de apertura va justo después de fn main(), y la de cierre es la última línea. Todo lo de dentro se indenta con cuatro espacios, para ver de un vistazo qué pertenece a main.",
+      "main の中身は波かっこ { と } の間に書く。開きかっこは fn main() のすぐあと、閉じかっこは一番最後の行。中の行は4つの空白で字下げして、main に属するものがひと目でわかるようにする。",
+    ),
+    ex('fn main() {\n    println!("first");\n    println!("second");\n}', "first\nsecond",
+      L("Lines inside main run from top to bottom", "Las líneas de main se ejecutan de arriba abajo", "main の中は上から下へ実行される")),
+    p(
+      "Order matters inside main. A variable must be created with let before any line uses it; if you use a name before its let, the compiler says it cannot find that value. It's like a recipe: you can't stir the soup before you pour it into the pot.",
+      "El orden importa dentro de main. Una variable debe crearse con let antes de que alguna línea la use; si usas un nombre antes de su let, el compilador dice que no encuentra ese valor. Es como una receta: no puedes remover la sopa antes de echarla en la olla.",
+      "main の中では順番が大事。変数は、使う行より前に let で作らないといけない。let より前に名前を使うと、コンパイラは「その値が見つからない」と言う。料理のレシピと同じで、鍋に入れる前にスープはかき混ぜられない。",
+    ),
+    bad('println!("{}", score);\nlet score = 9;',
+      L("Does not compile: score is used before its let", "No compila: score se usa antes de su let", "コンパイル不可：let より前に score を使っている")),
+    p(
+      "In many questions you will see only a few lines without fn main. That's a shortcut: imagine them inside main. In the run exercises you write whole programs, so keep the fn main() { ... } shell and change only what's inside.",
+      "En muchas preguntas verás solo unas líneas sin fn main. Es un atajo: imagínalas dentro de main. En los ejercicios de ejecutar escribes programas completos, así que conserva la envoltura fn main() { ... } y cambia solo lo de dentro.",
+      "多くの問題では fn main のない数行だけが出てくる。これは省略で、main の中にあると考えよう。実行の課題では完全なプログラムを書くので、fn main() { ... } の外枠は残して、中身だけを変えるのじゃ。",
+    ),
+  ),
+];
 
 const letBasics: LessonDef = {
   slug: "hello-let",
@@ -46,6 +139,8 @@ const letBasics: LessonDef = {
     {
       kind: "pick",
       prompt: L("Give the hero 5 HP", "Dale 5 de vida al héroe", "ヒーローにHP5をあげよう"),
+      hint: L("Look back at the demo: which word did Ferro use to create hp? Rust has its own word for this.", "Mira la demo: ¿qué palabra usó Ferro para crear hp? Rust tiene su propia palabra para esto.", "デモを思い出そう。フェロは hp を作るときどの言葉を使った？"),
+      note: "let-variables",
       code: "___ hp = 5;",
       options: ["let", "var", "set", "int"],
       answer: 0,
@@ -61,6 +156,8 @@ const letBasics: LessonDef = {
     {
       kind: "pick",
       prompt: L("Show the hero's gold", "Muestra el oro del héroe", "ヒーローのゴールドを表示"),
+      hint: L("Do you want the value stored in the variable, or the literal text? Quotes turn a name into plain text.", "¿Quieres el valor guardado en la variable o el texto literal? Las comillas convierten un nombre en texto.", "欲しいのは変数の値？文字そのもの？引用符をつけると名前はただの文字になる。"),
+      note: "println-slots",
       code: 'let gold = 10;\nprintln!("{}", ___);',
       options: ["gold", '"gold"', "$gold", "10gold"],
       answer: 0,
@@ -77,6 +174,8 @@ const letBasics: LessonDef = {
       kind: "predict",
       prompt: L("What does it print?", "¿Qué imprime?", "何が表示される？"),
       code: 'let x = 7;\nprintln!("x is {}", x);',
+      hint: L("Text in quotes prints as written, except each {}, which is replaced by the value after the comma.", "El texto entre comillas se imprime tal cual, salvo cada {}, que se cambia por el valor tras la coma.", "引用符の中はそのまま表示される。ただし {} はカンマのあとの値に置きかわる。"),
+      note: "println-slots",
       options: ["x is 7", "x is {}", "x is x", L("Error", "Error", "エラー")],
       answer: 0,
       output: "x is 7",
@@ -95,6 +194,8 @@ const letBasics: LessonDef = {
     {
       kind: "type",
       prompt: L("Type the word that creates variables", "Escribe la palabra que crea variables", "変数を作る言葉を書こう"),
+      hint: L("It's the same keyword that created hp and gold earlier in this lesson.", "Es la misma palabra clave que creó hp y gold antes en esta lección.", "このレッスンで hp や gold を作ったのと同じキーワードじゃ。"),
+      note: "let-variables",
       code: "___ shield = 2;",
       answer: "let",
       check: { compiles: true },
@@ -109,6 +210,8 @@ const letBasics: LessonDef = {
         "プログラムを組もう：始まりは fn main()",
       ),
       lines: ["fn main() {", "    let level = 1;", '    println!("{}", level);', "}"],
+      hint: L("What must open first and close last? And a variable has to exist before a line can use it.", "¿Qué debe abrirse primero y cerrarse al final? Y una variable debe existir antes de que una línea la use.", "最初に開いて最後に閉じるものは？変数は使う前に作っておく必要がある。"),
+      note: "fn-main",
       explain: L(
         "First open main, then create the variable, use it and close the brace.",
         "Primero abres main, luego creas la variable, la usas y cierras la llave.",
@@ -124,6 +227,8 @@ const letBasics: LessonDef = {
         "初めての本物のプログラム！Hello, Rust と表示させよう",
       ),
       starter: 'fn main() {\n    println!("write here");\n}\n',
+      hint: L("Only the text between the quotes is printed. Keep println!, the quotes and the semicolon as they are.", "Solo se imprime el texto entre comillas. Deja println!, las comillas y el punto y coma como están.", "表示されるのは引用符の中の文字だけ。println! と引用符とセミコロンはそのままに。"),
+      note: "println-slots",
       expect: "Hello, Rust",
       solution: 'fn main() {\n    println!("Hello, Rust");\n}\n',
       fallback: [
@@ -139,7 +244,81 @@ const letBasics: LessonDef = {
       win: [{ t: "say", actor: "hero", text: L("Hello, Rust!", "¡Hola, Rust!", "やあ、Rust！") }],
     },
   ],
+  notes: letBasicsNotes,
 };
+
+const mutNotes: NoteDef[] = [
+  note("mut", L("Immutable by default, mut to change", "Inmutable por defecto; mut para cambiar", "最初は不変、変えるなら mut"),
+    p(
+      "In Rust, a variable created with let is immutable: once it has a value, that value can't be replaced. If you later write name = new_value; the compiler stops with error E0384, \"cannot assign twice to immutable variable\". The program never runs, so the mistake can't sneak into your game.",
+      "En Rust, una variable creada con let es inmutable: una vez que tiene un valor, no se puede reemplazar. Si luego escribes nombre = nuevo_valor; el compilador se detiene con el error E0384, \"cannot assign twice to immutable variable\". El programa nunca se ejecuta, así que el fallo no se cuela en tu juego.",
+      "Rustでは let で作った変数は不変（イミュータブル）。一度値が入ると、別の値に置きかえられない。あとで 名前 = 新しい値; と書くと、コンパイラはエラー E0384 \"cannot assign twice to immutable variable\" で止まる。プログラムは動かないので、ミスがゲームに紛れこむことはない。",
+    ),
+    bad("let mana = 7;\nmana = 9;",
+      L("Does not compile: mana is immutable", "No compila: mana es inmutable", "コンパイル不可：mana は不変")),
+    p(
+      "To allow changes, write mut between let and the name: let mut name = value; mut stands for mutable, \"able to change\". After that, name = other_value; works as many times as you like. You write mut only once, when you create the variable, never on the lines that change it.",
+      "Para permitir cambios, escribe mut entre let y el nombre: let mut nombre = valor; mut viene de mutable, \"que puede cambiar\". Después, nombre = otro_valor; funciona tantas veces como quieras. mut se escribe una sola vez, al crear la variable, nunca en las líneas que la cambian.",
+      "変更できるようにするには、let と名前の間に mut を書く：let mut 名前 = 値; mut は mutable（変えられる）の略。そのあとは 名前 = 別の値; を何度でも書ける。mut を書くのは作るときの1回だけ。変更する行には書かない。",
+    ),
+    ex('let mut mana = 7;\nmana = 9;\nprintln!("{}", mana);', "9",
+      L("With mut, the new value replaces the old one", "Con mut, el valor nuevo reemplaza al anterior", "mut があれば新しい値が古い値を置きかえる")),
+    p(
+      "Why forbid changes? Most values in a program never need to change, and a value that changes by accident is a classic source of bugs. By making you write mut, Rust makes every changing variable easy to spot: when you read let mut, you know to keep an eye on that name.",
+      "¿Por qué prohibir cambios? La mayoría de los valores de un programa nunca necesitan cambiar, y un valor que cambia por accidente es una fuente clásica de bugs. Al pedirte mut, Rust hace que cada variable que cambia sea fácil de ver: cuando lees let mut, sabes que debes vigilar ese nombre.",
+      "なぜ変更を禁止するのか？プログラムの値の多くは変わる必要がなく、うっかり変わる値はバグの定番の原因じゃ。mut を書かせることで、変わる変数がひと目でわかる。let mut を見たら、その名前に注意すればいい。",
+    ),
+    p(
+      "Common mistakes: using var or const from other languages (in Rust, const is for fixed constants, which can't change either), or writing mut on the assignment line instead of on the let line. If the compiler says E0384, go back to the let that created the variable and add mut there.",
+      "Errores comunes: usar var o const de otros lenguajes (en Rust, const es para constantes fijas, que tampoco pueden cambiar) o escribir mut en la línea de asignación en vez de en la línea del let. Si el compilador dice E0384, vuelve al let que creó la variable y añade mut allí.",
+      "よくあるミス：他の言語の var や const を使うこと（Rustの const は固定の定数で、やはり変えられない）。代入の行に mut を書いてしまうこと。E0384 が出たら、その変数を作った let に戻って mut を足そう。",
+    ),
+  ),
+  note("update-in-order", L("Updating a value line by line", "Actualizar un valor línea a línea", "1行ずつ値を更新する"),
+    p(
+      "An assignment like n = n + 1; looks strange in math, but in code it's an instruction with two steps. First Rust computes the right side using the current value of n. Then it stores the result back in n, replacing the old value. After that line, the old value is gone.",
+      "Una asignación como n = n + 1; parece rara en matemáticas, pero en código es una instrucción de dos pasos. Primero Rust calcula el lado derecho con el valor actual de n. Después guarda el resultado en n, reemplazando el valor anterior. Tras esa línea, el valor viejo desaparece.",
+      "n = n + 1; は数学では変に見えるが、コードでは2段階の命令じゃ。まずRustは今の n の値で右側を計算する。次にその結果を n にしまい、古い値を置きかえる。その行のあとでは古い値はもう残っていない。",
+    ),
+    p(
+      "To predict the output, trace the value one line at a time, like a detective taking notes. Start with the value from let mut, apply each line in order, and write the new value next to it. Only the value at the moment of println! is printed.",
+      "Para predecir la salida, sigue el valor línea a línea, como un detective tomando notas. Empieza con el valor del let mut, aplica cada línea en orden y anota el nuevo valor al lado. Solo se imprime el valor que hay en el momento del println!.",
+      "出力を予想するには、探偵がメモをとるように1行ずつ値を追いかけよう。let mut の値から始めて、各行を順番に当てはめ、新しい値を横に書く。表示されるのは println! の時点の値だけじゃ。",
+    ),
+    ex('let mut steps = 4;\nsteps = steps + 2; // 6\nsteps = steps * 3; // 18\nprintln!("{}", steps);', "18",
+      L("Trace it: 4, then 6, then 18", "Síguelo: 4, luego 6, luego 18", "追ってみよう：4、6、18")),
+    p(
+      "Order matters: the same two lines in reverse give a different result. Starting from 4, multiplying first gives 12, and then adding 2 gives 14, not 18. A common mistake is computing every line from the starting value instead of from the value the previous line left behind.",
+      "El orden importa: las mismas dos líneas al revés dan otro resultado. Partiendo de 4, multiplicar primero da 12, y luego sumar 2 da 14, no 18. Un error común es calcular cada línea desde el valor inicial en vez de desde el valor que dejó la línea anterior.",
+      "順番が大事。同じ2行でも逆にすると結果が変わる。4から始めて先に掛けると12、次に2を足すと14で、18にはならない。よくあるミスは、前の行が残した値ではなく、最初の値から毎回計算してしまうことじゃ。",
+    ),
+    ex('let mut steps = 4;\nsteps = steps * 3; // 12\nsteps = steps + 2; // 14\nprintln!("{}", steps);', "14",
+      L("The same lines, swapped: a different result", "Las mismas líneas al revés: otro resultado", "同じ行を入れかえると結果が変わる")),
+  ),
+  note("compound-ops", L("Shortcut operators: +=, -=, *=", "Atajos: +=, -=, *=", "短縮演算子：+=、-=、*="),
+    p(
+      "Adding to a variable is so common that Rust has a shortcut: score += 5; means exactly score = score + 5;. The same works for other operations: -= subtracts, *= multiplies and /= divides. Like any change, it needs a variable declared with let mut.",
+      "Sumar a una variable es tan común que Rust tiene un atajo: score += 5; significa exactamente score = score + 5;. Lo mismo vale para otras operaciones: -= resta, *= multiplica y /= divide. Como cualquier cambio, necesita una variable declarada con let mut.",
+      "変数に足す操作はとても多いので、Rustには短縮形がある。score += 5; は score = score + 5; とまったく同じ意味。ほかの計算も同じで、-= は引き算、*= は掛け算、/= は割り算。ほかの変更と同じく、let mut で作った変数が必要じゃ。",
+    ),
+    ex('let mut score = 10;\nscore += 5;\nscore -= 3;\nscore *= 2;\nprintln!("{}", score);', "24",
+      L("10 + 5 = 15, minus 3 = 12, times 2 = 24", "10 + 5 = 15, menos 3 = 12, por 2 = 24", "10 + 5 = 15、3を引いて12、2倍で24")),
+    p(
+      "Write the operation first, then the equals sign. The reversed =+ is not an operator and does not compile. And unlike C or JavaScript, Rust has no ++ or -- operators: to add one, write += 1, and to take one away, write -= 1.",
+      "Escribe primero la operación y luego el signo igual. Al revés, =+ no es un operador y no compila. Y a diferencia de C o JavaScript, Rust no tiene los operadores ++ ni --: para sumar uno escribe += 1, y para restar uno, -= 1.",
+      "先に計算の記号、そのあとに = を書く。逆の =+ は演算子ではなく、コンパイルできない。また C や JavaScript と違い、Rustには ++ や -- がない。1足すなら += 1、1引くなら -= 1 と書こう。",
+    ),
+    bad("let mut turns = 0;\nturns++;",
+      L("Does not compile: Rust has no ++", "No compila: Rust no tiene ++", "コンパイル不可：Rustに ++ はない")),
+    p(
+      "Careful with ==. Two equals signs compare two values and give true or false; they never change anything. A line like score == 5; compiles (with a warning) but throws the answer away, so score keeps its old value. One = stores; two == ask a question.",
+      "Cuidado con ==. Dos signos igual comparan dos valores y dan true o false; nunca cambian nada. Una línea como score == 5; compila (con un aviso) pero descarta la respuesta, así que score conserva su valor anterior. Un = guarda; dos == hacen una pregunta.",
+      "== に注意。イコール2つは2つの値を比べて true か false を返すだけで、何も変えない。score == 5; はコンパイルできる（警告は出る）が、答えを捨ててしまうので score は元の値のまま。= 1つはしまう、== 2つは質問する、と覚えよう。",
+    ),
+    ex('let score = 10;\nprintln!("{}", score == 10);\nprintln!("{}", score);', "true\n10",
+      L("== only asks; score is still 10", "== solo pregunta; score sigue en 10", "== は質問だけ。score は10のまま")),
+  ),
+];
 
 const mutLesson: LessonDef = {
   slug: "mut-change",
@@ -189,6 +368,8 @@ const mutLesson: LessonDef = {
       kind: "pick",
       prompt: L("The bug attacks. Let the HP go down", "El bug ataca. Haz que la vida pueda bajar", "バグの攻撃！HPが減れるようにしよう"),
       code: "let ___ hp = 5;\nhp = hp - 1;",
+      hint: L("The second line changes hp. What does a variable need when it's created to be allowed to change?", "La segunda línea cambia hp. ¿Qué necesita una variable al crearse para poder cambiar?", "2行目で hp が変わる。変われるようにするには、作るときに何が必要？"),
+      note: "mut",
       options: ["mut", "var", "const", "&"],
       answer: 0,
       check: { compiles: true, wrongFail: true },
@@ -200,6 +381,8 @@ const mutLesson: LessonDef = {
       kind: "predict",
       prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"),
       code: "let gold = 10;\ngold = 20;",
+      hint: L("Look at the let line. Was gold created in a way that allows a new value later?", "Mira la línea del let. ¿Se creó gold de forma que permita un valor nuevo después?", "let の行を見よう。gold はあとで値を変えられる形で作られている？"),
+      note: "mut",
       options: [
         L("Yes: gold is 20", "Sí: gold vale 20", "はい：gold は20"),
         L("No: gold isn't mut", "No: gold no es mut", "いいえ：gold は mut でない"),
@@ -218,6 +401,8 @@ const mutLesson: LessonDef = {
       kind: "predict",
       prompt: L("What does it print?", "¿Qué imprime?", "何が表示される？"),
       code: 'let mut c = 1;\nc = c + 1;\nc = c * 10;\nprintln!("{}", c);',
+      hint: L("Trace c line by line: each line starts from the value the previous line left.", "Sigue c línea a línea: cada línea parte del valor que dejó la anterior.", "c を1行ずつ追おう。各行は前の行が残した値から計算する。"),
+      note: "update-in-order",
       options: ["1", "2", "20", "11"],
       answer: 2,
       output: "20",
@@ -228,6 +413,8 @@ const mutLesson: LessonDef = {
       kind: "type",
       prompt: L("Make the combo counter mutable", "Haz mutable el contador de combo", "コンボカウンターを可変にしよう"),
       code: "let ___ combo = 0;",
+      hint: L("Which word, written between let and the name, lets a variable change later?", "¿Qué palabra, escrita entre let y el nombre, permite que una variable cambie después?", "let と名前の間に書いて、変数をあとで変えられるようにする言葉は？"),
+      note: "mut",
       answer: "mut",
       check: { compiles: true },
       explain: L("let mut name = value;", "let mut nombre = valor;", "let mut 名前 = 値;"),
@@ -236,6 +423,8 @@ const mutLesson: LessonDef = {
       kind: "pick",
       prompt: L("Add 3 to a hit's damage", "Suma 3 al daño de un golpe", "攻撃のダメージに3を足そう"),
       code: "let mut dmg = 0;\ndmg ___ 3;",
+      hint: L("You need a symbol that adds AND stores the result. Only one option does both; another one just compares.", "Necesitas un símbolo que sume Y guarde el resultado. Solo una opción hace ambas cosas; otra solo compara.", "足して、さらに結果をしまう記号が必要。両方できるのは1つだけ。比べるだけのものもある。"),
+      note: "compound-ops",
       options: ["+=", "=+", "++", "=="],
       answer: 0,
       check: { compiles: true },
@@ -259,6 +448,8 @@ const mutLesson: LessonDef = {
         "このコードはコンパイルできない。3と表示されるよう直そう",
       ),
       starter: 'fn main() {\n    let counter = 0;\n    counter += 1;\n    counter += 1;\n    counter += 1;\n    println!("{}", counter);\n}\n',
+      hint: L("Read the error: counter changes three times. Look at the line where it's created.", "Lee el error: counter cambia tres veces. Mira la línea donde se crea.", "エラーを読もう。counter は3回変わる。作っている行を見てみよう。"),
+      note: "mut",
       expect: "3",
       solution: 'fn main() {\n    let mut counter = 0;\n    counter += 1;\n    counter += 1;\n    counter += 1;\n    println!("{}", counter);\n}\n',
       fallback: [
@@ -272,7 +463,102 @@ const mutLesson: LessonDef = {
       ),
     },
   ],
+  notes: mutNotes,
 };
+
+const typesNotes: NoteDef[] = [
+  note("basic-types", L("The four basic types", "Los cuatro tipos básicos", "4つの基本の型"),
+    p(
+      "Every value in Rust has a type, which tells the computer what kind of thing it is and what you can do with it. Four types cover most beginner code: i32 for whole numbers, f64 for numbers with a decimal point, bool for true or false, and &str for text in quotes.",
+      "Todo valor en Rust tiene un tipo, que le dice a la computadora qué clase de cosa es y qué puedes hacer con él. Cuatro tipos cubren casi todo el código de principiante: i32 para números enteros, f64 para números con punto decimal, bool para true o false y &str para texto entre comillas.",
+      "Rustの値にはすべて型がある。型は、それがどんな種類のもので何ができるかをコンピュータに伝える。初心者のコードはほぼ4つの型で書ける：整数の i32、小数点つきの数の f64、true か false の bool、引用符で囲んだ文字の &str じゃ。",
+    ),
+    ex('let floors: i32 = 8;\nlet weight: f64 = 2.5;\nlet open: bool = true;\nlet city: &str = "Lima";\nprintln!("{} {} {} {}", floors, weight, open, city);', "8 2.5 true Lima",
+      L("One variable of each basic type", "Una variable de cada tipo básico", "基本の型ごとに1つずつ")),
+    p(
+      "How to choose: look at the value. Digits with no point, like 7 or -20, are integers: i32 (i for integer, 32 for the bits it uses). A dot anywhere, like 0.75 or 9.0, makes it a decimal number: f64. The words true and false, without quotes, are bool. Anything inside double quotes is text: &str.",
+      "Cómo elegir: mira el valor. Dígitos sin punto, como 7 o -20, son enteros: i32 (i de integer, 32 por los bits que usa). Un punto en cualquier lugar, como 0.75 o 9.0, lo vuelve decimal: f64. Las palabras true y false, sin comillas, son bool. Todo lo que va entre comillas dobles es texto: &str.",
+      "選び方：値を見よう。7 や -20 のような小数点のない数字は整数で i32（i は integer、32 は使うビット数）。0.75 や 9.0 のように点があれば小数で f64。引用符なしの true と false は bool。二重引用符の中はすべて文字で &str じゃ。",
+    ),
+    p(
+      "Writing the type is optional when Rust can guess it: let floors = 8; is also an i32, and let weight = 2.5; is an f64. You add : type after the name when you want to be explicit, or when the default isn't what you want. Read the colon as \"of type\".",
+      "Escribir el tipo es opcional cuando Rust puede adivinarlo: let floors = 8; también es i32, y let weight = 2.5; es f64. Añades : tipo tras el nombre cuando quieres ser explícito, o cuando el tipo por defecto no es el que quieres. Lee los dos puntos como \"de tipo\".",
+      "Rustが推測できるときは、型を書かなくてもいい。let floors = 8; も i32、let weight = 2.5; も f64 になる。はっきりさせたいときや、標準の型以外にしたいときに、名前のあとに : 型 を書く。コロンは「〜型の」と読もう。",
+    ),
+    p(
+      "Common mistakes: writing \"true\" with quotes (that's text, not a bool), or using int, float or string from other languages. Rust's type names are short and exact: i32, f64, bool, &str. There is also char, for a single character in single quotes, like 'a'.",
+      "Errores comunes: escribir \"true\" con comillas (eso es texto, no bool) o usar int, float o string de otros lenguajes. Los nombres de tipos de Rust son cortos y exactos: i32, f64, bool, &str. También existe char, para un solo carácter entre comillas simples, como 'a'.",
+      "よくあるミス：\"true\" と引用符をつける（それは文字で bool ではない）、他の言語の int・float・string を使う。Rustの型名は短く正確：i32、f64、bool、&str。1文字を表す char もあり、'a' のように一重引用符で書く。",
+    ),
+    ex("let grade: char = 'B';\nprintln!(\"{}\", grade);", "B",
+      L("char holds one character, in single quotes", "char guarda un carácter, entre comillas simples", "char は1文字。一重引用符で書く")),
+  ),
+  note("type-mismatch", L("Type and value must match", "El tipo y el valor deben coincidir", "型と値は一致させる"),
+    p(
+      "When you write a type after the name, you make a promise: \"this variable will hold this kind of value\". Rust checks that promise before running anything. If the value on the right is of another kind, compilation stops with error E0308, mismatched types, and nothing runs.",
+      "Cuando escribes un tipo tras el nombre, haces una promesa: \"esta variable guardará esta clase de valor\". Rust revisa esa promesa antes de ejecutar nada. Si el valor de la derecha es de otra clase, la compilación se detiene con el error E0308, mismatched types, y no se ejecuta nada.",
+      "名前のあとに型を書くのは「この変数にはこの種類の値を入れる」という約束じゃ。Rustは何かを動かす前にその約束を確かめる。右側の値が別の種類なら、エラー E0308 mismatched types でコンパイルが止まり、何も実行されない。",
+    ),
+    bad("let floors: i32 = 2.5;",
+      L("E0308: 2.5 is an f64, not an i32", "E0308: 2.5 es un f64, no un i32", "E0308：2.5 は f64 で i32 ではない")),
+    p(
+      "Rust never converts between types silently. Some languages quietly turn 0 into false or \"5\" into 5; Rust refuses, because hidden conversions cause surprising bugs. Text in quotes is never a number, a number is never a bool, and even 3 and 3.0 are different types.",
+      "Rust nunca convierte entre tipos en silencio. Algunos lenguajes convierten 0 en false o \"5\" en 5 sin avisar; Rust se niega, porque las conversiones ocultas causan bugs sorprendentes. El texto entre comillas nunca es un número, un número nunca es bool, e incluso 3 y 3.0 son tipos distintos.",
+      "Rustは型をこっそり変換しない。0 を false に、\"5\" を 5 に勝手に変える言語もあるが、Rustは拒否する。隠れた変換は思わぬバグの元だからじゃ。引用符の中の文字は数ではないし、数は bool ではない。3 と 3.0 も別の型じゃ。",
+    ),
+    bad("let city: &str = 42;",
+      L("E0308: 42 is a number, not text", "E0308: 42 es un número, no texto", "E0308：42 は数で、文字ではない")),
+    p(
+      "To fix E0308, decide which side is wrong. If the type is right, change the value: a whole number for i32, true or false for bool, quotes for &str. If the value is right, change the type to match it. The error message points at both and says which type it expected and which it found.",
+      "Para arreglar E0308, decide qué lado está mal. Si el tipo es correcto, cambia el valor: un entero para i32, true o false para bool, comillas para &str. Si el valor es correcto, cambia el tipo para que coincida. El mensaje de error señala ambos y dice qué tipo esperaba y cuál encontró.",
+      "E0308 を直すには、どちらが間違いか決めよう。型が正しいなら値を変える：i32 には整数、bool には true か false、&str には引用符。値が正しいなら型を合わせる。エラーメッセージは期待した型（expected）と見つかった型（found）を教えてくれる。",
+    ),
+    ex('let floors: i32 = 2;\nlet height: f64 = 2.5;\nprintln!("{} {}", floors, height);', "2 2.5",
+      L("Fixed: each value matches its type", "Arreglado: cada valor coincide con su tipo", "修正済み：値と型が一致している")),
+  ),
+  note("shadowing", L("Shadowing: same name, new variable", "Shadowing: mismo nombre, nueva variable", "シャドーイング：同じ名前の新しい変数"),
+    p(
+      "Writing let again with a name that already exists creates a brand-new variable with that name. The new one hides, or shadows, the old one: from that line on, the name means the new variable. The old value is not changed; it just can't be reached by that name anymore.",
+      "Escribir let otra vez con un nombre que ya existe crea una variable totalmente nueva con ese nombre. La nueva oculta, o hace sombra, a la anterior: desde esa línea, el nombre significa la variable nueva. El valor viejo no cambia; simplemente ya no se alcanza con ese nombre.",
+      "すでにある名前でもう一度 let を書くと、同じ名前のまったく新しい変数ができる。新しい変数は古い変数を隠す（影にする）。その行から先、名前は新しい変数を指す。古い値は変わっておらず、その名前では届かなくなっただけじゃ。",
+    ),
+    p(
+      "The right side is computed before the new variable exists, so it can use the old one. In let width = width + 4; the width on the right is the old value. That's why shadowing is handy for transforming a value step by step without inventing names like width2 and width3.",
+      "El lado derecho se calcula antes de que exista la variable nueva, así que puede usar la anterior. En let width = width + 4; el width de la derecha es el valor viejo. Por eso el shadowing sirve para transformar un valor paso a paso sin inventar nombres como width2 y width3.",
+      "右側は新しい変数ができる前に計算されるので、古い変数を使える。let width = width + 4; の右側の width は古い値じゃ。だからシャドーイングは、width2 や width3 のような名前を作らずに、値を一歩ずつ変えるのに便利なのじゃ。",
+    ),
+    ex('let width = 3;\nlet width = width + 4; // 7\nlet width = width * 10; // 70\nprintln!("{}", width);', "70",
+      L("Each let builds on the previous width", "Cada let parte del width anterior", "let ごとに前の width をもとにする")),
+    p(
+      "To predict the output, trace it like with mut: write the value after each let and use the latest one on the next line. Common mistake: thinking each line starts from the first value. Another one: forgetting let; without it, width = width + 4; is an assignment and would need let mut.",
+      "Para predecir la salida, síguela como con mut: anota el valor tras cada let y usa el más reciente en la línea siguiente. Error común: pensar que cada línea parte del primer valor. Otro: olvidar el let; sin él, width = width + 4; es una asignación y necesitaría let mut.",
+      "出力を予想するには mut のときと同じく追いかけよう。let ごとに値を書き、次の行では最新の値を使う。よくあるミス：毎回最初の値から計算すると思うこと。もう1つ：let を忘れること。let がないと width = width + 4; はただの代入になり、let mut が必要になる。",
+    ),
+    bad("let width = 3;\nwidth = width + 4;",
+      L("Does not compile: without let, it's an assignment", "No compila: sin let, es una asignación", "コンパイル不可：let がないと代入になる")),
+  ),
+  note("shadow-vs-mut", L("Shadowing vs mut", "Shadowing frente a mut", "シャドーイングと mut の違い"),
+    p(
+      "Shadowing and mut both let a name hold a different value later, but they work differently. mut changes the value inside the same variable. Shadowing creates a second variable and reuses the name. Because it's a new variable, it can even have a different type.",
+      "Shadowing y mut permiten que un nombre tenga otro valor más adelante, pero funcionan distinto. mut cambia el valor dentro de la misma variable. Shadowing crea una segunda variable y reutiliza el nombre. Como es una variable nueva, puede incluso tener otro tipo.",
+      "シャドーイングも mut も、あとで名前に別の値を持たせられるが、しくみが違う。mut は同じ変数の中身を変える。シャドーイングは2つめの変数を作り、名前を使い回す。新しい変数なので、型が違ってもかまわない。",
+    ),
+    ex('let label = "ten";\nlet label = 10;\nprintln!("{}", label + 1);', "11",
+      L("label starts as text; a new label holds a number", "label empieza como texto; un label nuevo guarda un número", "label は文字から始まり、新しい label は数")),
+    p(
+      "A mut variable keeps its type for life. If it starts as text, it stays text, and assigning a number to it is a mismatched types error (E0308). So when you want to turn a value into a different kind of value, shadowing is the tool; mut is for updating a value of the same kind.",
+      "Una variable mut conserva su tipo para siempre. Si empieza como texto, sigue siendo texto, y asignarle un número da el error mismatched types (E0308). Así que, cuando quieres convertir un valor en otra clase de valor, la herramienta es shadowing; mut sirve para actualizar un valor de la misma clase.",
+      "mut の変数の型はずっと同じ。文字で始まれば文字のままで、数を代入すると mismatched types（E0308）エラーになる。だから、値を別の種類の値に変えたいときはシャドーイング。同じ種類の値を更新するなら mut じゃ。",
+    ),
+    bad('let mut label = "ten";\nlabel = 10;',
+      L("Does not compile: a mut variable can't change its type", "No compila: una variable mut no puede cambiar de tipo", "コンパイル不可：mut でも型は変えられない")),
+    p(
+      "Rule to remember: let again means a new variable (any type; the old one is only hidden). = alone means the same variable (it must be mut, and the type stays the same). When a name is declared twice with let, the second let wins from that line on.",
+      "Regla para recordar: let otra vez significa variable nueva (de cualquier tipo; la vieja solo queda oculta). = solo significa la misma variable (debe ser mut y el tipo no cambia). Cuando un nombre se declara dos veces con let, el segundo let manda desde esa línea.",
+      "覚えるルール：もう一度 let ＝ 新しい変数（型は自由、古いのは隠れるだけ）。= だけ ＝ 同じ変数（mut が必要で型も同じ）。同じ名前の let が2回あれば、その行からは2つめの let が有効じゃ。",
+    ),
+  ),
+];
 
 const typesLesson: LessonDef = {
   slug: "types-and-shadows",
@@ -302,6 +588,8 @@ const typesLesson: LessonDef = {
       kind: "pick",
       prompt: L("Pick the type for 42 coins", "Elige el tipo para 42 monedas", "コイン42枚の型を選ぼう"),
       code: "let coins: ___ = 42;",
+      hint: L("Look at the value: does it have a decimal point or quotes, or is it true/false?", "Mira el valor: ¿tiene punto decimal o comillas, o es true/false?", "値を見よう。小数点や引用符はある？それとも true/false？"),
+      note: "basic-types",
       options: ["i32", "f64", "bool", "&str"],
       answer: 0,
       check: { compiles: true, wrongFail: true },
@@ -312,6 +600,8 @@ const typesLesson: LessonDef = {
       kind: "pick",
       prompt: L("Pick the type for 3.14", "Elige el tipo para 3.14", "3.14 の型を選ぼう"),
       code: "let pi: ___ = 3.14;",
+      hint: L("Which type is made for numbers that have a dot in them?", "¿Qué tipo está pensado para números que llevan un punto?", "点のついた数のための型はどれ？"),
+      note: "basic-types",
       options: ["i32", "f64", "bool", "char"],
       answer: 1,
       check: { compiles: true, wrongFail: true },
@@ -321,6 +611,8 @@ const typesLesson: LessonDef = {
       kind: "predict",
       prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"),
       code: 'let x: i32 = "hello";',
+      hint: L("Compare the type after the colon with the kind of value on the right. Quotes mean text.", "Compara el tipo tras los dos puntos con la clase de valor de la derecha. Las comillas indican texto.", "コロンのあとの型と、右側の値の種類を比べよう。引用符は文字のしるし。"),
+      note: "type-mismatch",
       options: [YES, L('No: "hello" isn\'t i32', 'No: "hello" no es i32', 'いいえ："hello" は i32 でない')],
       answer: 1,
       check: { compiles: false },
@@ -349,6 +641,8 @@ const typesLesson: LessonDef = {
       kind: "predict",
       prompt: L("What does it print?", "¿Qué imprime?", "何が表示される？"),
       code: 'let x = 5;\nlet x = x + 1;\nlet x = x * 2;\nprintln!("{}", x);',
+      hint: L("Each let makes a new x from the previous one. Write down x's value after every line.", "Cada let crea una x nueva a partir de la anterior. Anota el valor de x tras cada línea.", "let のたびに前の x から新しい x ができる。各行のあとの x の値を書き出そう。"),
+      note: "shadowing",
       options: ["5", "6", "12", "11"],
       answer: 2,
       output: "12",
@@ -359,6 +653,8 @@ const typesLesson: LessonDef = {
       kind: "predict",
       prompt: L("Shadowing can change the type. Does it compile?", "Shadowing puede cambiar el tipo. ¿Compila?", "シャドーイングは型も変えられる。コンパイルできる？"),
       code: 'let spaces = "   ";\nlet spaces = spaces.len();',
+      hint: L("Is the second line changing the old variable, or creating another one with let?", "¿La segunda línea cambia la variable vieja o crea otra con let?", "2行目は古い変数を変えている？それとも let で別の変数を作っている？"),
+      note: "shadow-vs-mut",
       options: [
         L("Yes: it's a new variable", "Sí: es una variable nueva", "はい：新しい変数だから"),
         L("No: the type changes", "No: cambia de tipo", "いいえ：型が変わるから"),
@@ -375,6 +671,8 @@ const typesLesson: LessonDef = {
       kind: "type",
       prompt: L("Type the boolean type", "Escribe el tipo booleano", "真偽値の型を書こう"),
       code: "let ready: ___ = false;",
+      hint: L("true and false are not numbers or text. Which of the four basic types holds them?", "true y false no son números ni texto. ¿Cuál de los cuatro tipos básicos los guarda?", "true と false は数でも文字でもない。4つの基本の型のどれに入る？"),
+      note: "basic-types",
       answer: "bool",
       check: { compiles: true },
       explain: L("true and false are of type bool.", "true y false son de tipo bool.", "true と false は bool 型じゃ。"),
@@ -387,6 +685,8 @@ const typesLesson: LessonDef = {
         "シャドーイングで Level 2 と表示させよう",
       ),
       starter: 'fn main() {\n    let level = 1;\n    // use shadowing here\n    println!("Level {}", level);\n}\n',
+      hint: L("Don't change the first let. Add one more let with the same name that uses the old level.", "No cambies el primer let. Añade otro let con el mismo nombre que use el level anterior.", "最初の let は変えずに、古い level を使う同じ名前の let をもう1つ足そう。"),
+      note: "shadowing",
       expect: "Level 2",
       solution: 'fn main() {\n    let level = 1;\n    let level = level + 1;\n    println!("Level {}", level);\n}\n',
       fallback: [
@@ -396,7 +696,75 @@ const typesLesson: LessonDef = {
       explain: L("Add: let level = level + 1;", "Añade: let level = level + 1;", "追加しよう：let level = level + 1;"),
     },
   ],
+  notes: typesNotes,
 };
+
+// The boss recaps the whole region: one short note per idea it tests.
+const bossNotes: NoteDef[] = [
+  note("recap-let", L("Recap: creating variables", "Repaso: crear variables", "復習：変数を作る"),
+    p(
+      "let creates a variable: let name = value; It's Rust's only keyword for this; words like var or new come from other languages. Every let line ends with a semicolon.",
+      "let crea una variable: let nombre = valor; Es la única palabra clave de Rust para esto; palabras como var o new vienen de otros lenguajes. Toda línea let termina en punto y coma.",
+      "let は変数を作る：let 名前 = 値; Rustで変数を作るキーワードはこれだけ。var や new は他の言語の言葉じゃ。let の行は必ずセミコロンで終わる。",
+    ),
+    p(
+      "Once created, the name stands for its value. Use it without quotes in println!, where each {} slot is filled with the next value after the comma.",
+      "Una vez creada, el nombre representa su valor. Úsalo sin comillas en println!, donde cada hueco {} se rellena con el siguiente valor tras la coma.",
+      "作ったあとは、名前がその値を表す。println! では引用符なしで使い、{} の穴にはカンマのあとの値が順に入る。",
+    ),
+    ex('let torches = 6;\nprintln!("torches: {}", torches);', "torches: 6"),
+  ),
+  note("recap-mut", L("Recap: mut and +=", "Repaso: mut y +=", "復習：mut と +="),
+    p(
+      "Variables are immutable by default: assigning a new value to a plain let variable fails with E0384. To allow changes, create it with let mut name = value; mut is written once, on the let line.",
+      "Las variables son inmutables por defecto: asignar un valor nuevo a una variable let normal falla con E0384. Para permitir cambios, créala con let mut nombre = valor; mut se escribe una vez, en la línea del let.",
+      "変数は最初から不変。ふつうの let の変数に新しい値を代入すると E0384 で失敗する。変えたいなら let mut 名前 = 値; で作る。mut は let の行に1回だけ書く。",
+    ),
+    bad("let shield = 1;\nshield = 2;",
+      L("E0384: shield isn't mut", "E0384: shield no es mut", "E0384：shield は mut でない")),
+    p(
+      "To update a mut variable, use = or a shortcut: += adds, -= subtracts, *= multiplies. The operation symbol comes first, then =. Rust has no ++, and =+ is not an operator.",
+      "Para actualizar una variable mut, usa = o un atajo: += suma, -= resta, *= multiplica. Primero va el símbolo de la operación y luego el =. Rust no tiene ++, y =+ no es un operador.",
+      "mut の変数を更新するには = か短縮形を使う：+= は足す、-= は引く、*= は掛ける。計算の記号が先で、= があと。Rustに ++ はなく、=+ は演算子ではない。",
+    ),
+    ex('let mut arrows = 5;\narrows -= 2;\narrows *= 4;\nprintln!("{}", arrows);', "12",
+      L("5 - 2 = 3, then 3 × 4 = 12", "5 - 2 = 3, luego 3 × 4 = 12", "5 - 2 = 3、次に 3 × 4 = 12")),
+  ),
+  note("recap-shadowing", L("Recap: shadowing", "Repaso: shadowing", "復習：シャドーイング"),
+    p(
+      "Repeating let with an existing name creates a new variable that hides the old one. The right side is computed first, with the old value, so let name = name + 1; builds on the previous value.",
+      "Repetir let con un nombre existente crea una variable nueva que oculta a la anterior. El lado derecho se calcula primero, con el valor viejo, así que let nombre = nombre + 1; parte del valor anterior.",
+      "既存の名前で let を繰り返すと、古い変数を隠す新しい変数ができる。右側が先に古い値で計算されるので、let 名前 = 名前 + 1; は前の値をもとにする。",
+    ),
+    p(
+      "Shadowing compiles even without mut, because nothing is changed: there is simply a new variable. Trace the value after every let to predict what gets printed.",
+      "Shadowing compila incluso sin mut, porque nada cambia: simplemente hay una variable nueva. Sigue el valor tras cada let para predecir lo que se imprime.",
+      "何も変更していないので、シャドーイングは mut なしでもコンパイルできる。新しい変数ができるだけじゃ。let ごとに値を追えば、表示を予想できる。",
+    ),
+    ex('let depth = 3;\nlet depth = depth + depth;\nprintln!("{}", depth);', "6",
+      L("The new depth is computed from the old one: 3 + 3", "El depth nuevo se calcula con el viejo: 3 + 3", "新しい depth は古い depth から計算：3 + 3")),
+  ),
+  note("recap-types", L("Recap: types", "Repaso: tipos", "復習：型"),
+    p(
+      "i32 holds whole numbers, f64 numbers with a decimal point, bool only true or false, and &str text in double quotes. Look at the value to pick the type: a dot means f64, quotes mean &str.",
+      "i32 guarda números enteros, f64 números con punto decimal, bool solo true o false, y &str texto entre comillas dobles. Mira el valor para elegir el tipo: un punto indica f64, las comillas indican &str.",
+      "i32 は整数、f64 は小数点つきの数、bool は true か false だけ、&str は二重引用符の文字。値を見て型を選ぼう。点があれば f64、引用符があれば &str。",
+    ),
+    ex('let tower: &str = "North";\nlet ratio: f64 = 0.25;\nlet lit: bool = false;\nprintln!("{} {} {}", tower, ratio, lit);', "North 0.25 false"),
+    p(
+      "The type and the value must match, or compilation fails with E0308, mismatched types. Rust never converts silently: a number is never a bool, and text is never a number.",
+      "El tipo y el valor deben coincidir, o la compilación falla con E0308, mismatched types. Rust nunca convierte en silencio: un número nunca es bool y un texto nunca es número.",
+      "型と値は一致しないといけない。一致しないと E0308 mismatched types でコンパイルが失敗する。Rustはこっそり変換しない。数は bool にならず、文字は数にならない。",
+    ),
+    bad('let count: i32 = "seven";',
+      L("E0308: text in quotes is not an i32", "E0308: el texto entre comillas no es i32", "E0308：引用符の文字は i32 ではない")),
+    p(
+      "Why the & in &str? A text literal is stored inside the program itself, and &str means \"borrowed text\": your variable points to it instead of owning a copy. Borrowing gets its own region later; for now, text in quotes is &str.",
+      "¿Por qué el & en &str? Un literal de texto se guarda dentro del propio programa, y &str significa \"texto prestado\": tu variable apunta a él en vez de tener una copia propia. El préstamo tiene su propia región más adelante; por ahora, texto entre comillas es &str.",
+      "&str の & はなぜ？文字列リテラルはプログラムの中に保存されていて、&str は「借りた文字列」という意味。変数は自分のコピーを持たず、それを指しているのじゃ。借用はあとの地域で学ぶ。今は「引用符の文字は &str」と覚えよう。",
+    ),
+  ),
+];
 
 const boss1: LessonDef = {
   slug: "boss-golem",
@@ -412,20 +780,21 @@ const boss1: LessonDef = {
       "¡GRRR! En mi aldea NADA cambia. ¡Demuestra lo que sabes!",
       "グルル！わしの村では何も変わらん。実力を見せてみろ！",
     )),
-    { kind: "pick", time: 12, prompt: L("Quick! Create the variable", "¡Rápido! Crea la variable", "急げ！変数を作れ"), code: "___ x = 1;", options: ["let", "var", "new"], answer: 0, check: { compiles: true, wrongFail: true }, explain: L("let creates variables.", "let crea variables.", "let が変数を作る。") },
-    { kind: "predict", time: 12, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: "let a = 1;\na = 2;", options: [YES, NO], answer: 1, check: { compiles: false }, explain: L("a isn't mut.", "a no es mut.", "a は mut じゃない。") },
-    { kind: "type", time: 12, prompt: L("Make it mutable", "Hazla mutable", "可変にしよう"), code: "let ___ hp = 9;", answer: "mut", check: { compiles: true }, explain: L("let mut", "let mut", "let mut") },
-    { kind: "predict", time: 12, prompt: L("What does it print?", "¿Qué imprime?", "何が表示される？"), code: 'let n = 2;\nlet n = n * n;\nprintln!("{}", n);', options: ["2", "4", L("Error", "Error", "エラー")], answer: 1, output: "4", check: { compiles: true, stdout: "4" }, explain: L("Shadowing: new n = 4.", "Shadowing: n nueva = 4.", "シャドーイング：新しい n = 4。") },
-    { kind: "pick", time: 12, prompt: L("Type for 0.5", "Tipo para 0.5", "0.5 の型"), code: "let p: ___ = 0.5;", options: ["i32", "f64", "bool"], answer: 1, check: { compiles: true, wrongFail: true }, explain: L("Decimal → f64.", "Decimal → f64.", "小数 → f64。") },
-    { kind: "pick", time: 12, prompt: L("Add 10", "Suma 10", "10を足せ"), code: "let mut gold = 0;\ngold ___ 10;", options: ["+=", "++", "=+"], answer: 0, check: { compiles: true, wrongFail: true }, explain: L("+=", "+=", "+=") },
-    { kind: "predict", time: 12, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: "let v: bool = 1;", options: [YES, NO], answer: 1, check: { compiles: false }, explain: L("1 is i32, not bool.", "1 es i32, no bool.", "1 は i32 で、bool ではない。") },
-    { kind: "type", time: 15, prompt: L("Type of borrowed text", "Tipo de texto prestado", "借用した文字列の型"), code: 'let s: ___ = "hello";', answer: "&str", check: { compiles: true }, explain: L("Text literals are &str.", "Los literales de texto son &str.", "文字列リテラルは &str じゃ。") },
+    { kind: "pick", time: 12, prompt: L("Quick! Create the variable", "¡Rápido! Crea la variable", "急げ！変数を作れ"), code: "___ x = 1;", hint: L("Which keyword have you used all along to create variables in Rust?", "¿Qué palabra clave has usado todo el tiempo para crear variables en Rust?", "Rustで変数を作るのに、ずっと使ってきたキーワードは？"), note: "recap-let", options: ["let", "var", "new"], answer: 0, check: { compiles: true, wrongFail: true }, explain: L("let creates variables.", "let crea variables.", "let が変数を作る。") },
+    { kind: "predict", time: 12, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: "let a = 1;\na = 2;", hint: L("Check the let line: can a get a new value without something extra?", "Revisa la línea del let: ¿puede a recibir un valor nuevo sin algo extra?", "let の行を確かめよう。何かを足さずに a に新しい値を入れられる？"), note: "recap-mut", options: [YES, NO], answer: 1, check: { compiles: false }, explain: L("a isn't mut.", "a no es mut.", "a は mut じゃない。") },
+    { kind: "type", time: 12, prompt: L("Make it mutable", "Hazla mutable", "可変にしよう"), code: "let ___ hp = 9;", hint: L("Which word between let and the name allows the value to change?", "¿Qué palabra entre let y el nombre permite que el valor cambie?", "let と名前の間に書いて、値を変えられるようにする言葉は？"), note: "recap-mut", answer: "mut", check: { compiles: true }, explain: L("let mut", "let mut", "let mut") },
+    { kind: "predict", time: 12, prompt: L("What does it print?", "¿Qué imprime?", "何が表示される？"), code: 'let n = 2;\nlet n = n * n;\nprintln!("{}", n);', hint: L("The second let makes a new n from the old one. Compute the right side with the old value.", "El segundo let crea una n nueva a partir de la vieja. Calcula el lado derecho con el valor viejo.", "2つめの let は古い n から新しい n を作る。右側を古い値で計算しよう。"), note: "recap-shadowing", options: ["2", "4", L("Error", "Error", "エラー")], answer: 1, output: "4", check: { compiles: true, stdout: "4" }, explain: L("Shadowing: new n = 4.", "Shadowing: n nueva = 4.", "シャドーイング：新しい n = 4。") },
+    { kind: "pick", time: 12, prompt: L("Type for 0.5", "Tipo para 0.5", "0.5 の型"), code: "let p: ___ = 0.5;", hint: L("Look for a dot in the value. Which type holds numbers like that?", "Busca un punto en el valor. ¿Qué tipo guarda números así?", "値に点はある？そういう数を入れる型はどれ？"), note: "recap-types", options: ["i32", "f64", "bool"], answer: 1, check: { compiles: true, wrongFail: true }, explain: L("Decimal → f64.", "Decimal → f64.", "小数 → f64。") },
+    { kind: "pick", time: 12, prompt: L("Add 10", "Suma 10", "10を足せ"), code: "let mut gold = 0;\ngold ___ 10;", hint: L("You need one symbol that adds and stores at once. Which comes first: the math or the =?", "Necesitas un símbolo que sume y guarde a la vez. ¿Qué va primero: la operación o el =?", "足して結果をしまう記号が必要。先に来るのは計算の記号？それとも = ？"), note: "recap-mut", options: ["+=", "++", "=+"], answer: 0, check: { compiles: true, wrongFail: true }, explain: L("+=", "+=", "+=") },
+    { kind: "predict", time: 12, prompt: L("Does it compile?", "¿Compila?", "コンパイルできる？"), code: "let v: bool = 1;", hint: L("What kind of value is 1? Does it match the type written after the colon?", "¿Qué clase de valor es 1? ¿Coincide con el tipo escrito tras los dos puntos?", "1 はどんな種類の値？コロンのあとの型と合っている？"), note: "recap-types", options: [YES, NO], answer: 1, check: { compiles: false }, explain: L("1 is i32, not bool.", "1 es i32, no bool.", "1 は i32 で、bool ではない。") },
+    { kind: "type", time: 15, prompt: L("Type of borrowed text", "Tipo de texto prestado", "借用した文字列の型"), code: 'let s: ___ = "hello";', hint: L("It's the text type among the four basics. It starts with a symbol, not a letter.", "Es el tipo de texto de los cuatro básicos. Empieza con un símbolo, no con una letra.", "4つの基本の型のうち文字の型。最初は英字ではなく記号じゃ。"), note: "recap-types", answer: "&str", check: { compiles: true }, explain: L("Text literals are &str.", "Los literales de texto son &str.", "文字列リテラルは &str じゃ。") },
     enemySays(L(
       "Impossible...! My rock... is... crumbling...",
       "¡Imposible...! Mi roca... se... desmorona...",
       "ばかな…！わしの岩が…崩れて…いく…",
     )),
   ],
+  notes: bossNotes,
 };
 
 export const letVillage: RegionDef = {

@@ -1,4 +1,4 @@
-import type { LessonDef, RegionDef } from "../../../lib/content/types.ts";
+import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
 import { say, enemySays } from "../../rust/helpers.ts";
 
@@ -26,6 +26,425 @@ const QUIET =
 
 const LEAK_BODY = 'var gpa: std.heap.DebugAllocator(.{}) = .init;\nconst alloc = gpa.allocator();\n_ = try alloc.alloc(u8, 4);\nstd.debug.print("{s}\\n", .{@tagName(gpa.deinit())});';
 
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example; the validator checks `output` against the real compiler. */
+const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code, output, caption });
+/** An example that must NOT compile (verified too). */
+const bad = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: false } });
+/** A leaking example: verified inside a program that silences the leak log (QUIET). */
+const leaky = (body: string, output: string, caption: Text): NoteBlock => ({
+  t: "code", code: body, output, caption,
+  check: { compiles: true, stdout: output, program: `${QUIET}\n\npub fn main() !void {\n${body.split("\n").map((l) => "    " + l).join("\n")}\n}\n` },
+});
+
+const allocatorsNotes: NoteDef[] = [
+  note("allocators", L("Allocators: asking for heap memory", "Allocators: pedir memoria del heap", "アロケータ：ヒープを借りる"),
+    p(
+      "Some data has a size you only learn while the program runs, or must outlive the function that made it. That data goes on the HEAP. In Zig you never get heap memory by accident: you ask an ALLOCATOR for it with alloc, and give it back with free.",
+      "Algunos datos tienen un tamaño que solo se sabe al ejecutar, o deben vivir más que la función que los creó. Esos datos van al HEAP. En Zig nunca obtienes memoria del heap por accidente: se la pides a un ALLOCATOR con alloc y la devuelves con free.",
+      "実行してみないと大きさがわからないデータや、作った関数より長く生きるデータがある。それはヒープに置く。Zig では知らないうちにヒープを使うことはない。アロケータに alloc でたのみ、free で返す。",
+    ),
+    p(
+      "alloc(T, n) returns a slice of n items of type T, so it can be indexed and has a len. It can fail when memory runs out, so it is written with try. The bytes start undefined: fill them before reading.",
+      "alloc(T, n) devuelve un slice de n elementos de tipo T, así que se indexa y tiene len. Puede fallar si se acaba la memoria, por eso se escribe con try. Los bytes empiezan indefinidos: llénalos antes de leerlos.",
+      "alloc(T, n) は T 型 n 個のスライスを返すので、番号で読めて len もある。メモリが足りないと失敗するので try をつける。中身は最初は未定義。読む前にうめよう。",
+    ),
+    ex('var gpa: std.heap.DebugAllocator(.{}) = .init;\nconst alloc = gpa.allocator();\nconst slots = try alloc.alloc(u32, 5);\nslots[0] = 8;\nstd.debug.print("{d} {d}\\n", .{ slots.len, slots[0] });\nalloc.free(slots);\nstd.debug.print("{s}\\n", .{@tagName(gpa.deinit())});', "5 8\nok",
+      L("Borrow, use, give back: deinit reports .ok", "Pedir, usar, devolver: deinit informa .ok", "借りて、使って、返す。deinit は .ok")),
+    p(
+      "DebugAllocator is the allocator to use while learning. It is created with .init, hands out memory through gpa.allocator(), and keeps track of every allocation. Its deinit() checks the books and returns .ok if everything came back, or .leak if something did not.",
+      "DebugAllocator es el allocator para usar mientras aprendes. Se crea con .init, reparte memoria mediante gpa.allocator() y lleva la cuenta de cada asignación. Su deinit() revisa las cuentas y devuelve .ok si todo volvió, o .leak si algo no volvió.",
+      "学ぶ時に使うのは DebugAllocator。.init で作り、gpa.allocator() でメモリを配り、すべての確保を記録する。deinit() は帳簿を調べ、全部戻っていれば .ok、戻らないものがあれば .leak を返す。",
+    ),
+    p(
+      "Why pass an allocator around instead of using a global one? Because Zig has no garbage collector and no hidden allocations. A function that takes a std.mem.Allocator tells you, in its signature, that it may allocate. The caller decides which allocator to use: a debug one, an arena, a fixed buffer.",
+      "¿Por qué pasar un allocator en vez de usar uno global? Porque Zig no tiene recolector de basura ni asignaciones ocultas. Una función que recibe un std.mem.Allocator te dice, en su firma, que puede asignar. Quien llama decide qué allocator usar: uno de depuración, una arena, un buffer fijo.",
+      "なぜ全体共通のものではなくアロケータを渡すのか？Zig には GC も隠れた確保もないからじゃ。std.mem.Allocator を受けとる関数は、確保するかもしれないことを型で示す。どのアロケータを使うかは呼ぶ側が決める。",
+    ),
+  ),
+  note("create-dupe", L("create, destroy and dupe", "create, destroy y dupe", "create と destroy と dupe"),
+    p(
+      "alloc and free work with many items at once, as a slice. For ONE item there is a matching pair: create(T) makes space for a single T and returns a pointer *T; destroy(ptr) gives it back. Use ptr.* to read or write the value.",
+      "alloc y free trabajan con muchos elementos a la vez, como slice. Para UN elemento hay un par equivalente: create(T) hace espacio para un solo T y devuelve un puntero *T; destroy(ptr) lo devuelve. Usa ptr.* para leer o escribir el valor.",
+      "alloc と free は複数の要素をスライスであつかう。ひとつだけなら対になる組がある：create(T) は T ひとつ分の場所を作って *T を返し、destroy(ptr) で返す。値は ptr.* で読み書きする。",
+    ),
+    ex('const alloc = std.heap.page_allocator;\nconst hp = try alloc.create(u16);\ndefer alloc.destroy(hp);\nhp.* = 250;\nstd.debug.print("{d}\\n", .{hp.*});', "250",
+      L("One heap value, reached through a pointer", "Un valor en el heap, alcanzado con un puntero", "ヒープの値ひとつ、ポインタでとどく")),
+    p(
+      "Keep the pairs matched: what alloc gave, free returns; what create gave, destroy returns. Mixing them up confuses the allocator about how much memory to take back.",
+      "Mantén los pares: lo que dio alloc lo devuelve free; lo que dio create lo devuelve destroy. Mezclarlos confunde al allocator sobre cuánta memoria recuperar.",
+      "組を守ろう。alloc でもらったものは free、create でもらったものは destroy で返す。まぜるとアロケータがどれだけ回収するかわからなくなる。",
+    ),
+    p(
+      "dupe(T, slice) allocates a new slice and copies the items into it. It is the usual way to turn a string literal, which lives in read-only memory, into bytes you own and may change. Being heap memory, the copy must be freed.",
+      "dupe(T, slice) asigna un slice nuevo y copia los elementos en él. Es la forma habitual de convertir un literal de texto, que vive en memoria de solo lectura, en bytes tuyos que puedes cambiar. Al ser memoria del heap, la copia debe liberarse.",
+      "dupe(T, slice) は新しいスライスを確保して要素をコピーする。読みとり専用のメモリにある文字列リテラルを、自分の書きかえられるバイトにするよくある方法じゃ。ヒープなので、コピーは解放が必要。",
+    ),
+    ex('const alloc = std.heap.page_allocator;\nconst name = try alloc.dupe(u8, "kiln");\ndefer alloc.free(name);\nfor (name) |*c| c.* = std.ascii.toUpper(c.*);\nstd.debug.print("{s}\\n", .{name});', "KILN",
+      L("The copy is ours, so every byte can change", "La copia es nuestra, así que cada byte puede cambiar", "コピーは自分のものなので全バイトを変えられる")),
+    bad('const word = "kiln";\nword[0] = \'K\';',
+      L("Does not compile: a literal is read-only", "No compila: un literal es de solo lectura", "コンパイル不可：リテラルは読むだけ")),
+  ),
+  note("leaks-defer", L("Leaks, and defer to prevent them", "Fugas, y defer para evitarlas", "リークと、それを防ぐ defer"),
+    p(
+      "Every allocation must be freed exactly once. Forget a free and that memory stays taken until the program ends: a LEAK. In a long-running program leaks pile up. DebugAllocator notices them: deinit() returns .leak and logs where the lost memory was allocated.",
+      "Cada asignación debe liberarse exactamente una vez. Si olvidas un free, esa memoria queda ocupada hasta que el programa termina: una FUGA. En un programa que corre mucho, las fugas se acumulan. DebugAllocator las nota: deinit() devuelve .leak y registra dónde se asignó la memoria perdida.",
+      "確保したものは必ず1回だけ解放する。free を忘れると、そのメモリは終わるまで使われたまま。これがリーク。長く動くプログラムではたまっていく。DebugAllocator は気づき、deinit() が .leak を返し、どこで確保したかを記録する。",
+    ),
+    leaky('var gpa: std.heap.DebugAllocator(.{}) = .init;\nconst alloc = gpa.allocator();\nconst a = try alloc.alloc(u8, 2);\nconst b = try alloc.alloc(u8, 2);\nalloc.free(a);\n_ = b;\nstd.debug.print("{s}\\n", .{@tagName(gpa.deinit())});', "leak",
+      L("a came back, b did not: one leak is enough", "a volvió, b no: basta una fuga", "a は戻ったが b は戻らない。1つでもリーク")),
+    p(
+      "defer runs a line when the current scope ends, however it ends. Write defer alloc.free(x); on the line right after the allocation: you can't forget it later, and x is still usable until the end of the block, because the free waits.",
+      "defer ejecuta una línea cuando termina el bloque actual, termine como termine. Escribe defer alloc.free(x); en la línea justo después de la asignación: no podrás olvidarlo luego, y x sigue usable hasta el final del bloque, porque el free espera.",
+      "defer はスコープが終わる時に、どう終わっても1行を実行する。確保のすぐ下に defer alloc.free(x); と書こう。あとで忘れないし、free は待っているのでブロックの最後まで x を使える。",
+    ),
+    ex('var gpa: std.heap.DebugAllocator(.{}) = .init;\ndefer std.debug.print("{s}\\n", .{@tagName(gpa.deinit())});\nconst alloc = gpa.allocator();\nconst rope = try alloc.alloc(u8, 6);\ndefer alloc.free(rope);\n@memset(rope, \'~\');\nstd.debug.print("{s}\\n", .{rope});', "~~~~~~\nok",
+      L("defers run in reverse: free first, then the check", "Los defer corren al revés: primero free, luego la revisión", "defer は逆順：先に free、次に点検")),
+    p(
+      "Several defers run in REVERSE order, last written first. That is exactly what you want: create the allocator, schedule its check, allocate, schedule the free. At the end, the free runs first and the check runs last, when everything has been returned.",
+      "Varios defer corren en orden INVERSO: el último escrito, primero. Es justo lo que quieres: crear el allocator, programar su revisión, asignar, programar el free. Al final, el free corre primero y la revisión al último, cuando todo ya volvió.",
+      "defer がいくつもあると、最後に書いたものから逆順に動く。これがちょうどいい。アロケータを作り、点検を予約し、確保して free を予約する。最後は free が先に動き、全部戻ってから点検が動く。",
+    ),
+    p(
+      "Common mistakes: putting free at the very end of a function, where an early return or a try skips it, or using memory after it was freed. defer right after the allocation avoids the first; never keep a slice after its free to avoid the second.",
+      "Errores comunes: poner el free al final de la función, donde un return temprano o un try lo salta, o usar memoria después de liberarla. defer justo tras la asignación evita lo primero; nunca guardes un slice tras su free para evitar lo segundo.",
+      "よくあるミス：関数の最後に free を書いて、途中の return や try で飛ばされること。解放したメモリを使うこと。前者は確保の直後の defer で防げる。後者は free したスライスを持ち続けないことで防ぐ。",
+    ),
+  ),
+  note("ownership", L("Who frees returned memory?", "¿Quién libera la memoria devuelta?", "返されたメモリは誰が解放する？"),
+    p(
+      "When a function allocates memory and returns it, the memory is not freed when the function ends: it now belongs to the CALLER. The caller must free it, with the same allocator that made it. This is called ownership: whoever owns memory is responsible for freeing it.",
+      "Cuando una función asigna memoria y la devuelve, la memoria no se libera al terminar la función: ahora pertenece a QUIEN LLAMA. Quien llama debe liberarla, con el mismo allocator que la creó. Esto se llama propiedad: quien es dueño de la memoria debe liberarla.",
+      "関数が確保したメモリを返すと、関数が終わっても解放されず、呼んだ側のものになる。呼んだ側が、作ったのと同じアロケータで解放する。これを所有という。メモリの持ち主が解放の責任を持つ。",
+    ),
+    ex(zmain("fn zeros(alloc: std.mem.Allocator, n: usize) ![]u8 {\n    const buf = try alloc.alloc(u8, n);\n    @memset(buf, 0);\n    return buf;\n}", 'const z = try zeros(std.heap.page_allocator, 4);\ndefer std.heap.page_allocator.free(z);\nstd.debug.print("{any}\\n", .{z});'), "{ 0, 0, 0, 0 }",
+      L("zeros returns the memory; main owns it and frees it", "zeros devuelve la memoria; main es dueño y la libera", "zeros がメモリを返し、main が持ち主として解放")),
+    p(
+      "That is why such functions take an Allocator parameter and return ![]u8: the ! means it can fail with OutOfMemory, and the []u8 is a fresh slice for you to own. Seeing an allocator in a signature is a hint that something must be freed later.",
+      "Por eso esas funciones reciben un parámetro Allocator y devuelven ![]u8: el ! indica que puede fallar con OutOfMemory, y el []u8 es un slice nuevo del que serás dueño. Ver un allocator en una firma indica que algo deberá liberarse después.",
+      "だからそういう関数は Allocator を受けとり ![]u8 を返す。! は OutOfMemory で失敗しうるしるし、[]u8 は自分のものになる新しいスライス。型にアロケータがあれば、あとで何か解放が必要という合図じゃ。",
+    ),
+    p(
+      "std.fmt.allocPrint is a standard example: it formats text like std.debug.print, but into new heap memory sized to fit, and returns that slice. You print or use it, and free it when done.",
+      "std.fmt.allocPrint es un ejemplo estándar: formatea texto como std.debug.print, pero en memoria nueva del heap del tamaño justo, y devuelve ese slice. Lo imprimes o usas, y lo liberas al terminar.",
+      "std.fmt.allocPrint は標準の例。std.debug.print のように文字を組み立てるが、ちょうどの大きさの新しいヒープに書き、そのスライスを返す。使い終わったら解放する。",
+    ),
+    ex('const alloc = std.heap.page_allocator;\nconst label = try std.fmt.allocPrint(alloc, "room {d}", .{12});\ndefer alloc.free(label);\nstd.debug.print("{s}\\n", .{label});', "room 12"),
+  ),
+];
+
+const arenasNotes: NoteDef[] = [
+  note("arenas", L("Arenas: free everything at once", "Arenas: liberar todo de una vez", "アリーナ：まとめて解放"),
+    p(
+      "An ArenaAllocator wraps another allocator and works like one big sack. You allocate from it as many times as you like, and you never free the pieces one by one. When you are done, arena.deinit() frees everything in a single step.",
+      "Un ArenaAllocator envuelve otro allocator y funciona como un gran saco. Asignas de él tantas veces como quieras y nunca liberas las piezas una por una. Al terminar, arena.deinit() libera todo en un solo paso.",
+      "ArenaAllocator は別のアロケータを包み、大きな袋のように働く。何回でも確保でき、ひとつずつ解放はしない。終わったら arena.deinit() で全部を一度に解放する。",
+    ),
+    ex('var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);\ndefer arena.deinit();\nconst a = arena.allocator();\nconst names = try a.alloc([]const u8, 2);\nnames[0] = try a.dupe(u8, "fern");\nnames[1] = try a.dupe(u8, "moss");\nstd.debug.print("{s} {s}\\n", .{ names[0], names[1] });', "fern moss",
+      L("Three allocations, zero frees: deinit cleans up", "Tres asignaciones, cero free: deinit limpia", "確保3回、free 0回。deinit が片づける")),
+    p(
+      "Arenas fit work with a clear end: handling one request, loading one level, parsing one file. Many small allocations that all die together are simpler and faster with an arena than tracking each free.",
+      "Las arenas encajan con trabajo que tiene un final claro: atender una petición, cargar un nivel, leer un archivo. Muchas asignaciones pequeñas que mueren juntas son más simples y rápidas con una arena que siguiendo cada free.",
+      "アリーナは終わりがはっきりした仕事に向く。リクエストひとつ、レベルひとつの読みこみ、ファイルひとつの解析など。いっしょに消える小さな確保がたくさんあるなら、1つずつ free するよりかんたんで速い。",
+    ),
+    p(
+      "The trade-off: nothing is returned until deinit, so an arena that lives forever and keeps allocating only grows. Use it for a job, then throw the whole sack away. Calling free on arena memory is allowed but usually does nothing.",
+      "La contrapartida: nada vuelve hasta deinit, así que una arena que vive para siempre y sigue asignando solo crece. Úsala para una tarea y luego tira el saco entero. Llamar free sobre memoria de arena se permite, pero normalmente no hace nada.",
+      "ただし deinit まで何も戻らないので、ずっと生きて確保を続けるアリーナはふくらむ一方。ひとつの仕事に使い、袋ごと捨てよう。アリーナのメモリに free を呼んでもよいが、ふつうは何も起きない。",
+    ),
+  ),
+  note("fixed-buffer", L("FixedBufferAllocator: a fixed shelf", "FixedBufferAllocator: un estante fijo", "FixedBufferAllocator：決まった棚"),
+    p(
+      "A FixedBufferAllocator hands out memory from a buffer you give it, usually an array on the stack: var space: [10]u8 = undefined; It never touches the heap. It is fast and predictable, but it can only hand out as many bytes as the buffer has.",
+      "Un FixedBufferAllocator reparte memoria de un buffer que tú le das, normalmente un array en la pila: var space: [10]u8 = undefined; Nunca toca el heap. Es rápido y predecible, pero solo puede repartir tantos bytes como tenga el buffer.",
+      "FixedBufferAllocator は渡したバッファ（たいていスタックの配列）からメモリを配る：var space: [10]u8 = undefined; ヒープは使わない。速くて予測しやすいが、配れるのはバッファのバイト数まで。",
+    ),
+    p(
+      "When a request does not fit in what is left, alloc does not crash: it returns error.OutOfMemory, like any allocator that runs out. With try, that error leaves the function; you can also check for it with catch or if/else.",
+      "Cuando una petición no cabe en lo que queda, alloc no se rompe: devuelve error.OutOfMemory, como cualquier allocator que se queda sin memoria. Con try, ese error sale de la función; también puedes revisarlo con catch o if/else.",
+      "残りに入らない要求が来ても alloc はこわれず、メモリ切れのアロケータと同じく error.OutOfMemory を返す。try ならそのエラーは関数の外へ出る。catch や if/else で調べることもできる。",
+    ),
+    ex('var space: [10]u8 = undefined;\nvar fba = std.heap.FixedBufferAllocator.init(&space);\nconst fa = fba.allocator();\nconst first = try fa.alloc(u8, 4);\nstd.debug.print("got {d}\\n", .{first.len});\nif (fa.alloc(u8, 9)) |more| {\n    std.debug.print("got {d}\\n", .{more.len});\n} else |err| {\n    std.debug.print("{s}\\n", .{@errorName(err)});\n}', "got 4\nOutOfMemory",
+      L("4 of 10 bytes are taken, so 9 more can't fit", "4 de 10 bytes están ocupados, así que 9 más no caben", "10バイト中4つ使用済み、もう9は入らない")),
+    p(
+      "Remember that containers often ask for more than they hold right now. A growing list reserves extra room so it doesn't have to grow on every append. So a buffer that looks just big enough on paper can still run out: give a fixed buffer generous space.",
+      "Recuerda que los contenedores suelen pedir más de lo que guardan ahora. Una lista que crece reserva espacio extra para no crecer en cada append. Así que un buffer que en papel parece justo puede quedarse corto: dale a un buffer fijo espacio de sobra.",
+      "コンテナは今の中身より多くをたのむことが多い。のびるリストは append のたびにのびなくてすむよう余分に確保する。だから計算上ちょうどのバッファでも足りなくなる。固定バッファは大きめにしよう。",
+    ),
+  ),
+  note("array-list", L("ArrayList: a list that grows", "ArrayList: una lista que crece", "ArrayList：のびるリスト"),
+    p(
+      "std.ArrayList(T) is a list of T that grows as you add items. Behind the scenes it keeps a heap buffer and asks the allocator for a bigger one when it fills up. Its items field is a slice of exactly the values stored so far.",
+      "std.ArrayList(T) es una lista de T que crece al agregar elementos. Por dentro guarda un buffer en el heap y pide uno mayor al allocator cuando se llena. Su campo items es un slice exactamente de los valores guardados hasta ahora.",
+      "std.ArrayList(T) は要素を足すとのびる T のリスト。裏ではヒープのバッファを持ち、いっぱいになるとアロケータにもっと大きいものをたのむ。items フィールドは今入っている値ちょうどのスライス。",
+    ),
+    p(
+      "append adds ONE item at the end. appendSlice adds every item of a slice, one after another, so the list stays flat: it never contains a nested list. Both may need memory, so both take the allocator and are called with try.",
+      "append agrega UN elemento al final. appendSlice agrega cada elemento de un slice, uno tras otro, así que la lista queda plana: nunca contiene una lista anidada. Ambos pueden necesitar memoria, así que reciben el allocator y se llaman con try.",
+      "append は最後に1つ足す。appendSlice はスライスの要素を順に全部足すので、リストは平らなまま。入れ子にはならない。どちらもメモリが要るかもしれないので、アロケータを受けとり try で呼ぶ。",
+    ),
+    ex('const alloc = std.heap.page_allocator;\nvar bag: std.ArrayList(u8) = .empty;\ndefer bag.deinit(alloc);\ntry bag.append(alloc, \'a\');\ntry bag.appendSlice(alloc, "xe");\nstd.debug.print("{s} {d}\\n", .{ bag.items, bag.items.len });', "axe 3",
+      L("One byte, then two more from a slice", "Un byte y luego dos más desde un slice", "1バイト足して、スライスからさらに2つ")),
+    p(
+      "pop removes the LAST item and returns it. Because the list might be empty, it returns an optional ?T: the value, or null when there was nothing to remove. Lists work like a stack this way: last in, first out.",
+      "pop quita el ÚLTIMO elemento y lo devuelve. Como la lista podría estar vacía, devuelve un opcional ?T: el valor, o null si no había nada que quitar. Así las listas funcionan como una pila: el último en entrar es el primero en salir.",
+      "pop は最後の要素をとり出して返す。空かもしれないので ?T（オプショナル）を返す。値か、何もなければ null。こうしてリストはスタックのように使える。後に入れたものが先に出る。",
+    ),
+    ex('const alloc = std.heap.page_allocator;\nvar stack: std.ArrayList(u16) = .empty;\ndefer stack.deinit(alloc);\ntry stack.append(alloc, 40);\nstd.debug.print("{any} {any}\\n", .{ stack.pop(), stack.pop() });', "40 null"),
+  ),
+  note("list-api-015", L("ArrayList in Zig 0.15", "ArrayList en Zig 0.15", "Zig 0.15 の ArrayList"),
+    p(
+      "In Zig 0.15 ArrayList is UNMANAGED: the list does not store an allocator. You start with the ready-made empty value .empty (no items, no capacity, nothing allocated), and you pass the allocator to every call that may allocate or free: append(alloc, x), appendSlice(alloc, s), deinit(alloc).",
+      "En Zig 0.15 ArrayList es NO GESTIONADA: la lista no guarda un allocator. Empiezas con el valor vacío ya hecho .empty (sin elementos, sin capacidad, nada asignado) y pasas el allocator a cada llamada que pueda asignar o liberar: append(alloc, x), appendSlice(alloc, s), deinit(alloc).",
+      "Zig 0.15 の ArrayList はアロケータを持たない（unmanaged）。用意された空の値 .empty（要素も容量もなく、何も確保していない）から始め、確保や解放をする呼び出しにはすべてアロケータを渡す：append(alloc, x)、appendSlice(alloc, s)、deinit(alloc)。",
+    ),
+    p(
+      "Many older tutorials show std.ArrayList(T).init(alloc) and list.append(x). That was the old managed API. In 0.15 there is no init, and an append without the allocator fails with expected 2 argument(s), found 1. If you copy old code, update those calls.",
+      "Muchos tutoriales viejos muestran std.ArrayList(T).init(alloc) y list.append(x). Esa era la API gestionada antigua. En 0.15 no hay init, y un append sin allocator falla con expected 2 argument(s), found 1. Si copias código viejo, actualiza esas llamadas.",
+      "古い記事の多くは std.ArrayList(T).init(alloc) や list.append(x) と書く。それは昔の managed な API。0.15 には init がなく、アロケータなしの append は expected 2 argument(s), found 1 で失敗する。古いコードを写すなら直そう。",
+    ),
+    ex('const alloc = std.heap.page_allocator;\nvar bag: std.ArrayList(u8) = .empty;\ndefer bag.deinit(alloc);\nstd.debug.print("{d}\\n", .{bag.items.len});\ntry bag.ensureTotalCapacity(alloc, 8);\nstd.debug.print("{d} {}\\n", .{ bag.items.len, bag.capacity >= 8 });', "0\n0 true",
+      L("Capacity is room reserved; items is what's stored", "Capacity es espacio reservado; items es lo guardado", "capacity は予約した場所、items は中身")),
+    p(
+      "Anything that allocates can fail with error.OutOfMemory, so append returns an error union. Zig does not let you ignore an error union: a call like bag.append(alloc, 'a'); with nothing in front is a compile error. Put try before it (or handle the error with catch).",
+      "Todo lo que asigna puede fallar con error.OutOfMemory, así que append devuelve una unión de error. Zig no deja ignorar una unión de error: una llamada como bag.append(alloc, 'a'); sin nada delante es error de compilación. Pon try delante (o maneja el error con catch).",
+      "確保するものは error.OutOfMemory で失敗しうるので、append はエラー共用体を返す。Zig はエラー共用体の無視を許さない。前に何もない bag.append(alloc, 'a'); はコンパイルエラー。try をつける（か catch であつかう）。",
+    ),
+    bad("const alloc = std.heap.page_allocator;\nvar bag: std.ArrayList(u8) = .empty;\ndefer bag.deinit(alloc);\nbag.append(alloc, 'a');",
+      L("Does not compile: the possible error is ignored", "No compila: se ignora el posible error", "コンパイル不可：起こりうるエラーを無視している")),
+  ),
+  note("hash-map", L("StringHashMap: values by key", "StringHashMap: valores por clave", "StringHashMap：キーで値をひく"),
+    p(
+      "A hash map stores values under keys, so you can find a value by its key without searching a list. std.StringHashMap(V) uses text keys and values of type V. Unlike ArrayList in 0.15, it stores its allocator: create it with init(alloc) and clean it up with deinit().",
+      "Un hash map guarda valores bajo claves, así encuentras un valor por su clave sin buscar en una lista. std.StringHashMap(V) usa claves de texto y valores de tipo V. A diferencia de ArrayList en 0.15, guarda su allocator: créalo con init(alloc) y límpialo con deinit().",
+      "ハッシュマップはキーに値をひもづけて持つので、リストを探さずにキーで値が見つかる。std.StringHashMap(V) は文字列のキーと V 型の値を使う。0.15 の ArrayList とちがいアロケータを持つので、init(alloc) で作り deinit() で片づける。",
+    ),
+    p(
+      "put(key, value) stores a value. A key appears at most once: putting an existing key again REPLACES its value instead of adding a second entry, so count() does not grow. get(key) returns ?V: the value, or null when the key is missing.",
+      "put(key, value) guarda un valor. Una clave aparece como mucho una vez: poner otra vez una clave existente REEMPLAZA su valor en vez de agregar otra entrada, así que count() no crece. get(key) devuelve ?V: el valor, o null si la clave no está.",
+      "put(key, value) で値をしまう。キーは1回しか出てこない。同じキーにもう一度 put すると、2つ目を足すのではなく値を上書きするので count() は増えない。get(key) は ?V を返す。値か、キーがなければ null。",
+    ),
+    ex('var stock = std.StringHashMap(u8).init(std.heap.page_allocator);\ndefer stock.deinit();\ntry stock.put("rope", 2);\ntry stock.put("rope", 5);\ntry stock.put("lamp", 1);\nstd.debug.print("{any} {any} {d}\\n", .{ stock.get("rope"), stock.get("axe"), stock.count() });', "5 null 2",
+      L("rope was replaced, axe was never stored", "rope se reemplazó, axe nunca se guardó", "rope は上書き、axe は一度もしまっていない")),
+    p(
+      "Common mistake: expecting a missing key to give 0. Zig uses null for no value, so you must decide what to do: map.get(k) orelse 0 gives a default, and if (map.get(k)) |v| runs code only when the key exists.",
+      "Error común: esperar que una clave ausente dé 0. Zig usa null para sin valor, así que debes decidir qué hacer: map.get(k) orelse 0 da un valor por defecto, y if (map.get(k)) |v| ejecuta código solo si la clave existe.",
+      "よくあるミス：ないキーは 0 になると思うこと。Zig は値がない時 null を使うので、どうするか決める。map.get(k) orelse 0 でデフォルトを、if (map.get(k)) |v| でキーがある時だけ動かせる。",
+    ),
+  ),
+];
+
+const comptimeNotes: NoteDef[] = [
+  note("comptime-basics", L("comptime: run code while compiling", "comptime: ejecutar código al compilar", "comptime：コンパイル中に動かす"),
+    p(
+      "comptime asks the compiler to run code itself, while it builds the program. The result is stored inside the program as a ready-made value. When the program runs, the work is already done: comptime cube(4) costs nothing at run time, it is just 64.",
+      "comptime pide al compilador que ejecute código él mismo, mientras construye el programa. El resultado queda guardado dentro del programa como un valor ya hecho. Al ejecutar, el trabajo ya está hecho: comptime cube(4) no cuesta nada al ejecutar, es solo 64.",
+      "comptime はプログラムを作っている最中に、コンパイラ自身にコードを動かさせる。結果はできあがった値としてプログラムに入る。実行時にはもう計算ずみ。comptime cube(4) は実行時のコストゼロで、ただの 64 じゃ。",
+    ),
+    ex(zmain("fn cube(n: u32) u32 {\n    return n * n * n;\n}", 'const big = comptime cube(4);\nstd.debug.print("{d}\\n", .{big});'), "64",
+      L("An ordinary function, run by the compiler", "Una función normal, ejecutada por el compilador", "ふつうの関数をコンパイラが動かす")),
+    p(
+      "Ordinary functions work at comptime as long as everything they need is known while compiling. A labeled block marked comptime can do more: build a whole lookup table with loops, then hand it back with break :blk value.",
+      "Las funciones normales funcionan en comptime siempre que todo lo que necesitan se conozca al compilar. Un bloque con etiqueta marcado comptime puede hacer más: crear una tabla entera con loops y devolverla con break :blk valor.",
+      "必要なものがすべてコンパイル時にわかれば、ふつうの関数も comptime で動く。comptime をつけたラベルつきブロックなら、ループで表をまるごと作り、break :blk 値 で返せる。",
+    ),
+    ex('const evens = comptime blk: {\n    var out: [4]u8 = undefined;\n    for (&out, 0..) |*slot, i| slot.* = @intCast(i * 2);\n    break :blk out;\n};\nstd.debug.print("{any}\\n", .{evens});', "{ 0, 2, 4, 6 }",
+      L("i counts from 0; the table is built before the program runs", "i cuenta desde 0; la tabla se crea antes de ejecutar", "i は 0 から。表は実行前にできる")),
+    p(
+      "inline for unrolls a loop while compiling: the compiler writes out one copy of the body per item. That lets it loop over a tuple whose items have different types, and lets a comptime var be updated as it goes. A plain var can't be changed from comptime code like this.",
+      "inline for desenrolla un loop al compilar: el compilador escribe una copia del cuerpo por elemento. Eso permite recorrer una tupla con elementos de distintos tipos, e ir actualizando un comptime var. Un var simple no puede cambiarse así desde código comptime.",
+      "inline for はコンパイル時にループを展開し、要素ごとに本体のコピーを書く。だから型のちがう要素を持つタプルもまわせ、comptime var を更新していける。ふつうの var はこういう comptime のコードから変えられない。",
+    ),
+    ex('comptime var total = 0;\ninline for (.{ 10, 20 }) |n| total += n;\nstd.debug.print("{d}\\n", .{total});', "30"),
+  ),
+  note("type-params", L("Generic functions: comptime T: type", "Funciones genéricas: comptime T: type", "ジェネリック関数：comptime T: type"),
+    p(
+      "In Zig a type is a value you can pass to a function, as long as it is passed at comptime. fn first(comptime T: type, xs: []const T) T takes the type T first, then uses T for the other parameters and the return type. The word comptime is required: types only exist while compiling.",
+      "En Zig un tipo es un valor que puedes pasar a una función, siempre que se pase en comptime. fn first(comptime T: type, xs: []const T) T recibe primero el tipo T y luego usa T para los demás parámetros y el retorno. La palabra comptime es obligatoria: los tipos solo existen al compilar.",
+      "Zig では型も関数に渡せる値。ただし comptime で渡す。fn first(comptime T: type, xs: []const T) T はまず型 T を受けとり、ほかの引数と戻り値に T を使う。comptime は必須。型はコンパイル時にしか存在しないからじゃ。",
+    ),
+    p(
+      "Each different T creates its own version of the function, made for that type. first(u8, ...) returns a u8 and first(bool, ...) returns a bool. @TypeOf(expr) tells you the type of an expression without running it.",
+      "Cada T distinto crea su propia versión de la función, hecha para ese tipo. first(u8, ...) devuelve un u8 y first(bool, ...) devuelve un bool. @TypeOf(expr) te dice el tipo de una expresión sin ejecutarla.",
+      "T がちがうごとに、その型専用の関数ができる。first(u8, ...) は u8 を、first(bool, ...) は bool を返す。@TypeOf(式) は式を動かさずに型を教えてくれる。",
+    ),
+    ex(zmain("fn first(comptime T: type, xs: []const T) T {\n    return xs[0];\n}", 'const a = [_]u8{ 7, 8 };\nconst b = [_]bool{ false, true };\nstd.debug.print("{d} {} {}\\n", .{ first(u8, &a), first(bool, &b), @TypeOf(first(u8, &a)) });'), "7 false u8",
+      L("One function, two versions: one per type", "Una función, dos versiones: una por tipo", "関数ひとつ、型ごとに2つの版")),
+    p(
+      "Every argument must fit the chosen T. With T = i8, a value of 200 does not fit, so the call does not compile. Generic code is checked separately for each T you use: if the body does something the type can't do, like + on bool, only that call fails.",
+      "Cada argumento debe caber en el T elegido. Con T = i8, un valor de 200 no cabe, así que la llamada no compila. El código genérico se revisa por separado para cada T que uses: si el cuerpo hace algo que el tipo no puede, como + con bool, solo esa llamada falla.",
+      "引数はすべて選んだ T に入らないといけない。T = i8 なら 200 は入らず、コンパイルできない。ジェネリックは使う T ごとに別々にチェックされる。bool に + のように型にできないことを本体がすると、その呼び出しだけが失敗する。",
+    ),
+    bad(zmain("fn half(comptime T: type, x: T) T {\n    return x / 2;\n}", "_ = half(i8, 200);"),
+      L("Does not compile: 200 does not fit in an i8", "No compila: 200 no cabe en un i8", "コンパイル不可：200 は i8 に入らない")),
+    p(
+      "The chosen T also limits the results. A generic sum over u8 adds into a u8, which holds at most 255; a bigger total overflows, and Debug builds panic. When values can grow, pick a wider type for T.",
+      "El T elegido también limita los resultados. Una suma genérica sobre u8 suma en un u8, que guarda como mucho 255; un total mayor desborda, y en Debug hace panic. Cuando los valores pueden crecer, elige un tipo más ancho para T.",
+      "選んだ T は結果も制限する。u8 のジェネリックな合計は u8 に足していくので最大 255。それをこえるとオーバーフローし、Debug では panic する。値が大きくなるなら T に広い型を選ぼう。",
+    ),
+  ),
+  note("comptime-only", L("Values needed while compiling", "Valores necesarios al compilar", "コンパイル時に必要な値"),
+    p(
+      "Some things must be decided while compiling, because the compiler needs them to lay out memory. Types are one: a variable that holds a type must be const or comptime, never a runtime var. Array lengths are another: [n]u8 needs n known while compiling.",
+      "Algunas cosas deben decidirse al compilar, porque el compilador las necesita para organizar la memoria. Los tipos son una: una variable que guarda un tipo debe ser const o comptime, nunca un var de ejecución. Los largos de array son otra: [n]u8 necesita n conocido al compilar.",
+      "コンパイラがメモリの形を決めるために、コンパイル時に決まっていなければならないものがある。型がそのひとつ。型を持つ変数は const か comptime で、実行時の var にはできない。配列の長さもそう。[n]u8 の n はコンパイル時に必要。",
+    ),
+    ex('const T = u16;\nconst n = 3;\nconst arr = [n]T{ 1, 2, 3 };\nstd.debug.print("{any} {}\\n", .{ arr, T });', "{ 1, 2, 3 } u16",
+      L("const values known while compiling can size arrays", "Valores const conocidos al compilar pueden dar el largo", "コンパイル時にわかる const なら長さに使える")),
+    p(
+      "A normal function parameter is a runtime value: the compiler doesn't know which number will be passed. So inside the function it can't be an array length, and you get unable to resolve comptime value. Marking the parameter comptime n: usize fixes that: each call must pass a value known while compiling.",
+      "Un parámetro normal es un valor de ejecución: el compilador no sabe qué número se pasará. Así que dentro de la función no puede ser un largo de array, y obtienes unable to resolve comptime value. Marcar el parámetro comptime n: usize lo arregla: cada llamada debe pasar un valor conocido al compilar.",
+      "ふつうの引数は実行時の値で、どの数が渡されるかコンパイラは知らない。だから関数の中で配列の長さにできず、unable to resolve comptime value になる。comptime n: usize とすれば直る。呼ぶたびにコンパイル時にわかる値を渡す。",
+    ),
+    ex(zmain("fn filled(comptime n: usize) [n]u8 {\n    return [_]u8{9} ** n;\n}", 'std.debug.print("{any}\\n", .{filled(3)});'), "{ 9, 9, 9 }"),
+    bad("var size: usize = 3;\n_ = &size;\nconst arr: [size]u8 = undefined;\n_ = arr;",
+      L("Does not compile: size is a runtime var", "No compila: size es un var de ejecución", "コンパイル不可：size は実行時の var")),
+    p(
+      "Rule to remember: var means the value can change while the program runs, so the compiler can't rely on it. If something has to be known at compile time, make it const with a literal value, or a comptime parameter.",
+      "Regla: var significa que el valor puede cambiar mientras corre el programa, así que el compilador no puede contar con él. Si algo debe conocerse al compilar, hazlo const con un valor literal, o un parámetro comptime.",
+      "覚えかた：var は実行中に値が変わりうるという意味なので、コンパイラはあてにできない。コンパイル時に必要なものは、リテラルの値を入れた const か、comptime の引数にしよう。",
+    ),
+  ),
+  note("anytype-typeinfo", L("anytype and @typeInfo", "anytype y @typeInfo", "anytype と @typeInfo"),
+    p(
+      "A parameter declared x: anytype accepts a value of any type. Inside the function @TypeOf(x) tells you which type was passed, and @typeInfo(T) describes what kind of type it is: .int, .float, .bool, .pointer, .@\"struct\" and so on. A switch on it lets code take a different path per kind.",
+      "Un parámetro x: anytype acepta un valor de cualquier tipo. Dentro de la función, @TypeOf(x) dice qué tipo se pasó, y @typeInfo(T) describe qué clase de tipo es: .int, .float, .bool, .pointer, .@\"struct\", etc. Un switch sobre eso permite tomar otro camino según la clase.",
+      "x: anytype の引数はどんな型の値も受けとる。関数の中で @TypeOf(x) は渡された型を、@typeInfo(T) はその型の種類（.int、.float、.bool、.pointer、.@\"struct\" など）を教える。それを switch すれば種類ごとに道を分けられる。",
+    ),
+    ex(zmain('fn kind(x: anytype) []const u8 {\n    return switch (@typeInfo(@TypeOf(x))) {\n        .int, .comptime_int => "whole",\n        .pointer => "pointer",\n        else => "something",\n    };\n}', 'std.debug.print("{s} {s} {s}\\n", .{ kind(@as(i64, 3)), kind(5), kind(false) });'), "whole whole something"),
+    p(
+      "Watch out for bare literals. A number written as 5 or 1.25 with no type has a special compile-time type: comptime_int or comptime_float. They are separate kinds in @typeInfo, not .int or .float, until the value gets a real type.",
+      "Cuidado con los literales sueltos. Un número escrito como 5 o 1.25 sin tipo tiene un tipo especial de compilación: comptime_int o comptime_float. En @typeInfo son clases aparte, no .int ni .float, hasta que el valor recibe un tipo real.",
+      "型なしの数に注意。5 や 1.25 とだけ書いた数は、コンパイル時専用の型 comptime_int や comptime_float を持つ。値に本当の型がつくまで、@typeInfo では .int や .float とは別の種類じゃ。",
+    ),
+    ex('std.debug.print("{} {}\\n", .{ @TypeOf(1.25), @TypeOf(@as(f64, 1.25)) });', "comptime_float f64",
+      L("@as gives a literal a real type", "@as da a un literal un tipo real", "@as でリテラルに本当の型をつける")),
+    p(
+      "To give a literal a concrete type, use @as(T, value), or store it in a variable with a declared type. Common mistake: writing a switch with a .float prong and passing a bare decimal, which then falls through to else.",
+      "Para dar a un literal un tipo concreto, usa @as(T, valor), o guárdalo en una variable con tipo declarado. Error común: escribir un switch con rama .float y pasar un decimal suelto, que entonces cae en else.",
+      "リテラルに具体的な型をつけるには @as(T, 値) を使うか、型を書いた変数に入れる。よくあるミス：.float の分岐を書いたのに型なしの小数を渡し、else に落ちること。",
+    ),
+  ),
+];
+
+const SLOT = "fn Slot(comptime T: type) type {\n    return struct {\n        item: T,\n        const Self = @This();\n        fn show(self: Self) T { return self.item; }\n    };\n}";
+
+const genericsNotes: NoteDef[] = [
+  note("type-functions", L("Functions that return types", "Funciones que devuelven tipos", "型を返す関数"),
+    p(
+      "Since types are comptime values, a function can also RETURN a type. fn Slot(comptime T: type) type builds and returns a new struct type that uses T. Slot(bool) is then a real type, used like any struct: Slot(bool){ .item = true }. This is how std.ArrayList(T) is made.",
+      "Como los tipos son valores comptime, una función también puede DEVOLVER un tipo. fn Slot(comptime T: type) type crea y devuelve un tipo struct nuevo que usa T. Slot(bool) es entonces un tipo real, usado como cualquier struct: Slot(bool){ .item = true }. Así se hace std.ArrayList(T).",
+      "型は comptime の値なので、関数は型を返すこともできる。fn Slot(comptime T: type) type は T を使う新しい struct 型を作って返す。Slot(bool) は本物の型で、ふつうの struct のように使える：Slot(bool){ .item = true }。std.ArrayList(T) もこうできている。",
+    ),
+    p(
+      "The returned struct has no name of its own, so its methods use @This() to refer to it, often saved as const Self = @This();. Calling the function again with the SAME arguments gives back the very same type, while different arguments give a different type.",
+      "El struct devuelto no tiene nombre propio, así que sus métodos usan @This() para referirse a él, a menudo guardado como const Self = @This();. Llamar otra vez la función con los MISMOS argumentos devuelve exactamente el mismo tipo; argumentos distintos dan otro tipo.",
+      "返される struct には自分の名前がないので、メソッドは @This() で自分を指す。よく const Self = @This(); としておく。同じ引数でもう一度呼ぶとまったく同じ型が返り、引数がちがえば別の型になる。",
+    ),
+    ex(zmain(SLOT, 'const s = Slot(bool){ .item = true };\nstd.debug.print("{} {}\\n", .{ s.show(), Slot(bool) == Slot(i8) });'), "true false",
+      L("Slot(bool) and Slot(i8) are two different types", "Slot(bool) y Slot(i8) son dos tipos distintos", "Slot(bool) と Slot(i8) は別の型")),
+    p(
+      "Comptime parameters are not limited to types. A number such as comptime N: usize can size an array field, so Ring(3) has room for exactly 3 items. Writing past that room is a bug: pick N large enough for what you will store.",
+      "Los parámetros comptime no se limitan a tipos. Un número como comptime N: usize puede dar el largo de un campo array, así que Ring(3) tiene espacio para exactamente 3 elementos. Escribir más allá es un error: elige N suficiente para lo que guardarás.",
+      "comptime の引数は型だけではない。comptime N: usize のような数で配列フィールドの長さを決められ、Ring(3) にはちょうど3個分の場所がある。それをこえて書くのはバグ。入れる数に足りる N を選ぼう。",
+    ),
+    ex(zmain("fn Ring(comptime N: usize) type {\n    return struct { slots: [N]u8 = [_]u8{0} ** N };\n}", 'const r = Ring(3){};\nstd.debug.print("{d}\\n", .{r.slots.len});'), "3"),
+    p(
+      "Ordinary comptime logic works on types too: if (wide) i64 else i8 picks one of two types while compiling. Any function call that returns a type, even a method like Pair.of(u8), can be followed by a struct literal to build a value of that type.",
+      "La lógica comptime normal también funciona con tipos: if (wide) i64 else i8 elige uno de dos tipos al compilar. Cualquier llamada que devuelva un tipo, incluso un método como Pair.of(u8), puede ir seguida de un literal de struct para crear un valor de ese tipo.",
+      "ふつうの comptime の処理も型に使える。if (wide) i64 else i8 はコンパイル時に2つの型からひとつを選ぶ。型を返す呼び出しなら、Pair.of(u8) のようなメソッドでも、あとに struct リテラルを続けてその型の値を作れる。",
+    ),
+    ex('const wide = true;\nconst Num = if (wide) i64 else i8;\nstd.debug.print("{} {d}\\n", .{ Num, @sizeOf(Num) });', "i64 8"),
+  ),
+  note("test-blocks", L("test blocks and zig test", "Bloques test y zig test", "test ブロックと zig test"),
+    p(
+      "A test block, test \"name\" { ... }, is code that checks other code. It lives in the same file as the code it tests. A normal build (zig run, zig build-exe) skips test blocks entirely: they are not even compiled into the program, and main runs as usual.",
+      "Un bloque test, test \"name\" { ... }, es código que revisa otro código. Vive en el mismo archivo que el código que prueba. Una compilación normal (zig run, zig build-exe) ignora los bloques test por completo: ni se compilan en el programa, y main corre como siempre.",
+      "test \"name\" { ... } のブロックは、ほかのコードを確かめるコード。テストするコードと同じファイルに書く。ふつうのビルド（zig run、zig build-exe）は test ブロックを完全に無視する。プログラムに入りもせず、main はいつもどおり動く。",
+    ),
+    ex('test "list frees its memory" {\n    const alloc = std.testing.allocator;\n    var xs: std.ArrayList(u8) = .empty;\n    defer xs.deinit(alloc);\n    try xs.append(alloc, 1);\n    try std.testing.expect(xs.items.len == 1);\n}\n\npub fn main() void {\n    std.debug.print("build ok\\n", .{});\n}', "build ok",
+      L("A normal run only runs main", "Una ejecución normal solo corre main", "ふつうの実行で動くのは main だけ")),
+    p(
+      "zig test file.zig is the command that runs them. It builds a special program that runs every test block in the file and reports which passed and which failed. A test fails when it returns an error, usually from a try on a check that did not hold.",
+      "zig test archivo.zig es el comando que los ejecuta. Crea un programa especial que corre cada bloque test del archivo e informa cuáles pasaron y cuáles fallaron. Un test falla cuando devuelve un error, normalmente de un try sobre una revisión que no se cumplió.",
+      "テストを動かすコマンドは zig test file.zig。ファイルのすべての test ブロックを動かす特別なプログラムを作り、成功と失敗を報告する。テストはエラーを返すと失敗。ふつうは成り立たなかったチェックの try から来る。",
+    ),
+    p(
+      "Inside tests, use std.testing.allocator. It behaves like a debug allocator, and when the test ends it checks for leaks: if any memory was not freed, the test fails even if every expect passed. Tests catch forgotten frees for you.",
+      "Dentro de los tests, usa std.testing.allocator. Se comporta como un allocator de depuración y, al terminar el test, revisa fugas: si quedó memoria sin liberar, el test falla aunque todos los expect hayan pasado. Los tests atrapan por ti los free olvidados.",
+      "テストの中では std.testing.allocator を使おう。デバッグ用アロケータのように動き、テストの終わりにリークを調べる。解放もれがあれば、expect が全部通ってもテストは失敗。忘れた free をテストが見つけてくれる。",
+    ),
+  ),
+  note("expect-helpers", L("expect and expectEqual", "expect y expectEqual", "expect と expectEqual"),
+    p(
+      "std.testing.expect(ok) is an ordinary function. If ok is true it returns normally; if it is false it returns error.TestUnexpectedResult. That is why tests write try std.testing.expect(...): the try passes the error up and the test fails.",
+      "std.testing.expect(ok) es una función normal. Si ok es true, regresa normalmente; si es false, devuelve error.TestUnexpectedResult. Por eso los tests escriben try std.testing.expect(...): el try sube el error y el test falla.",
+      "std.testing.expect(ok) はふつうの関数。ok が true ならふつうに戻り、false なら error.TestUnexpectedResult を返す。だからテストでは try std.testing.expect(...) と書く。try がエラーを上に返し、テストが失敗する。",
+    ),
+    ex('try std.testing.expectEqual(@as(u8, 9), 4 + 5);\nstd.debug.print("equal\\n", .{});', "equal",
+      L("Outside a test it works too: equal, so no error", "Fuera de un test también funciona: igual, sin error", "テストの外でも動く。等しいのでエラーなし")),
+    p(
+      "expectEqual(expected, actual) compares two values. The EXPECTED value comes first, then the actual one. When they differ it first prints a message saying what was expected and what was found, then returns error.TestExpectedEqual.",
+      "expectEqual(expected, actual) compara dos valores. El valor ESPERADO va primero y luego el real. Cuando difieren, primero imprime un mensaje diciendo qué se esperaba y qué se encontró, y luego devuelve error.TestExpectedEqual.",
+      "expectEqual(expected, actual) は2つの値を比べる。期待する値が先、実際の値があと。ちがう時は、何を期待して何が見つかったかを先に表示し、それから error.TestExpectedEqual を返す。",
+    ),
+    ex('std.testing.expectEqual(@as(u32, 100), 10 * 9) catch |e| {\n    std.debug.print("{s}\\n", .{@errorName(e)});\n};', "expected 100, found 90\nTestExpectedEqual",
+      L("The message comes first, then the error", "Primero el mensaje, luego el error", "先にメッセージ、次にエラー")),
+    p(
+      "Because they are normal functions returning errors, you can also catch their errors yourself, as above, and @errorName(e) gives the error's name as text. Common mistake: swapping the arguments, which makes failure messages say the opposite of what happened.",
+      "Como son funciones normales que devuelven errores, también puedes atrapar sus errores tú mismo, como arriba, y @errorName(e) da el nombre del error como texto. Error común: invertir los argumentos, lo que hace que los mensajes digan lo contrario de lo que pasó.",
+      "エラーを返すふつうの関数なので、上のように自分で catch もでき、@errorName(e) でエラー名の文字列がとれる。よくあるミス：引数を逆にすること。失敗メッセージが起きたことと逆になる。",
+    ),
+  ),
+];
+
+const bossNotes: NoteDef[] = [
+  note("recap-memory", L("Recap: allocators and defer", "Repaso: allocators y defer", "復習：アロケータと defer"),
+    p(
+      "Every alloc needs one free, every create one destroy. DebugAllocator's deinit() reports .ok or .leak. Write defer free right after allocating. A FixedBufferAllocator can only hand out what its buffer holds; beyond that it returns error.OutOfMemory, and try sends that error out of the function, even out of main.",
+      "Cada alloc necesita un free, cada create un destroy. El deinit() de DebugAllocator informa .ok o .leak. Escribe defer free justo tras asignar. Un FixedBufferAllocator solo reparte lo que cabe en su buffer; más allá devuelve error.OutOfMemory, y try saca ese error de la función, incluso de main.",
+      "alloc には free、create には destroy を1回ずつ。DebugAllocator の deinit() は .ok か .leak。確保の直後に defer free。FixedBufferAllocator はバッファの分しか配れず、こえると error.OutOfMemory。try はそのエラーを関数の外へ、main の外へも出す。",
+    ),
+    ex('defer std.debug.print("last\\n", .{});\ndefer std.debug.print("middle\\n", .{});\nstd.debug.print("first\\n", .{});', "first\nmiddle\nlast",
+      L("defers run in reverse order at scope end", "Los defer corren en orden inverso al final", "defer はスコープの終わりに逆順で動く")),
+    p(
+      "defer always runs when the scope ends. errdefer runs only if the scope is left by returning an error: it undoes work when something fails halfway. To free memory you use and then drop, you want the one that always runs.",
+      "defer siempre corre al terminar el bloque. errdefer solo corre si se sale del bloque devolviendo un error: deshace trabajo cuando algo falla a medias. Para liberar memoria que usas y luego sueltas, quieres el que siempre corre.",
+      "defer はスコープが終わると必ず動く。errdefer はエラーを返して抜ける時だけ動き、途中で失敗した仕事をとり消す。使ってから手放すメモリの解放には、必ず動くほうを使う。",
+    ),
+    ex(zmain('fn risky(fail: bool) !void {\n    errdefer std.debug.print("cleanup\\n", .{});\n    if (fail) return error.Oops;\n    std.debug.print("fine\\n", .{});\n}', "risky(false) catch {};\nrisky(true) catch {};"), "fine\ncleanup"),
+  ),
+  note("recap-lists", L("Recap: ArrayList in 0.15", "Repaso: ArrayList en 0.15", "復習：0.15 の ArrayList"),
+    p(
+      "A 0.15 ArrayList stores no allocator. Start from .empty, pass the allocator to append, appendSlice and deinit, and call them with try. There is no init. items is the slice of stored values, and pop takes off the last one as an optional: null when empty.",
+      "Una ArrayList de 0.15 no guarda allocator. Empieza con .empty, pasa el allocator a append, appendSlice y deinit, y llámalos con try. No hay init. items es el slice de valores guardados, y pop saca el último como opcional: null si está vacía.",
+      "0.15 の ArrayList はアロケータを持たない。.empty から始め、append・appendSlice・deinit にアロケータを渡して try で呼ぶ。init はない。items は中身のスライス、pop は最後の値をオプショナルでとり出す。空なら null。",
+    ),
+    ex('const alloc = std.heap.page_allocator;\nvar q: std.ArrayList(u8) = .empty;\ndefer q.deinit(alloc);\ntry q.appendSlice(alloc, &.{ 6, 7 });\nstd.debug.print("{any} {any}\\n", .{ q.pop(), q.items });', "7 { 6 }"),
+    p(
+      "Old code that calls std.ArrayList(T).init(alloc) or append(x) without the allocator comes from earlier Zig versions and does not compile in 0.15.",
+      "El código viejo que llama std.ArrayList(T).init(alloc) o append(x) sin allocator viene de versiones anteriores de Zig y no compila en 0.15.",
+      "std.ArrayList(T).init(alloc) やアロケータなしの append(x) を使う古いコードは、昔の Zig のもので 0.15 ではコンパイルできない。",
+    ),
+  ),
+  note("recap-comptime", L("Recap: comptime and generics", "Repaso: comptime y genéricos", "復習：comptime とジェネリクス"),
+    p(
+      "comptime f(x) runs f in the compiler and bakes the result into the program. Array lengths and types must be known while compiling, so a runtime parameter can't size an array: mark it comptime. Functions can take comptime T: type and even return types.",
+      "comptime f(x) ejecuta f en el compilador y hornea el resultado en el programa. Los largos de array y los tipos deben conocerse al compilar, así que un parámetro de ejecución no puede dar el largo: márcalo comptime. Las funciones pueden recibir comptime T: type e incluso devolver tipos.",
+      "comptime f(x) はコンパイラの中で f を動かし、結果をプログラムに焼きこむ。配列の長さや型はコンパイル時に必要なので、実行時の引数では長さを決められない。comptime をつけよう。関数は comptime T: type を受けとり、型を返すこともできる。",
+    ),
+    ex(zmain("fn tri(n: u32) u32 {\n    return if (n == 0) 0 else n + tri(n - 1);\n}", 'const t = comptime tri(5);\nstd.debug.print("{d}\\n", .{t});'), "15"),
+    p(
+      "A type function called twice with the same comptime arguments returns the same type; other arguments give another type. A stack is last in, first out: pop returns the newest item first, and null once it is empty.",
+      "Una función de tipo llamada dos veces con los mismos argumentos comptime devuelve el mismo tipo; otros argumentos dan otro tipo. Una pila es último en entrar, primero en salir: pop devuelve primero lo más nuevo, y null cuando está vacía.",
+      "型を返す関数を同じ comptime 引数で2回呼ぶと同じ型が返り、引数がちがえば別の型。スタックは後入れ先出し。pop はいちばん新しいものから返し、空になれば null。",
+    ),
+  ),
+];
+
 // ─── 4.1 Allocators ────────────────────────────────────────────────────────
 const allocators: LessonDef = {
   slug: "allocators",
@@ -35,6 +454,7 @@ const allocators: LessonDef = {
   xp: 80,
   enemy: "zig/leak-jelly",
   enemyName: L("LEAK JELLY", "GELATINA FUGA", "リークゼリー"),
+  notes: allocatorsNotes,
   beats: [
     say(L(
       "Welcome to Comptime Tower! Zig never grabs heap memory behind your back. Code that needs it takes an ALLOCATOR.",
@@ -61,6 +481,8 @@ const allocators: LessonDef = {
       output: "zzz 3\nok",
       check: { compiles: true, stdout: "zzz 3\nok" },
       explain: L("alloc(u8, 3) gives a 3-byte slice. It was freed, so deinit reports .ok.", "alloc(u8, 3) da un slice de 3 bytes. Se liberó, así que deinit informa .ok.", "alloc(u8, 3) は3バイトのスライス。解放したので deinit は .ok。"),
+      hint: L("How many bytes were asked for? Then check: was every allocation freed before deinit?", "¿Cuántos bytes se pidieron? Luego revisa: ¿se liberó cada asignación antes de deinit?", "何バイトたのんだ？それから、deinit の前に全部解放したか確かめよう。"),
+      note: "allocators",
       setup: [{ t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: "gpa" }],
       win: [{ t: "item", kind: "sword", holder: "hero" }, { t: "give", to: "ally" }, { t: "print", text: "zzz 3" }, { t: "print", text: "ok" }],
     },
@@ -73,6 +495,8 @@ const allocators: LessonDef = {
       output: "9",
       check: { compiles: true, stdout: "9" },
       explain: L("create(T) makes ONE item and returns *T; destroy gives it back. alloc/free are for many.", "create(T) crea UN elemento y devuelve *T; destroy lo devuelve. alloc/free son para muchos.", "create(T) はひとつ作って *T を返し、destroy で返す。alloc/free は複数用。"),
+      hint: L("create gives a pointer to one value. What is stored through it before printing?", "create da un puntero a un valor. ¿Qué se guarda por él antes de imprimir?", "create は値ひとつへのポインタをくれる。表示の前にそこへ何をしまった？"),
+      note: "create-dupe",
     },
     {
       kind: "predict",
@@ -83,6 +507,8 @@ const allocators: LessonDef = {
       output: "Copy",
       check: { compiles: true, stdout: "Copy" },
       explain: L("dupe copies the literal into heap memory you own, so it is writable.", "dupe copia el literal a memoria del heap que es tuya, así que se puede escribir.", "dupe はリテラルを自分のヒープにコピーする。だから書きかえられる。"),
+      hint: L("dupe makes a copy you own. Can that copy be changed, and which letter changes?", "dupe crea una copia tuya. ¿Se puede cambiar esa copia, y qué letra cambia?", "dupe は自分のコピーを作る。そのコピーは変えられる？どの文字が変わる？"),
+      note: "create-dupe",
     },
     say(L(
       "Every alloc needs a matching free. Forget one and it LEAKS. DebugAllocator notices: deinit() returns .leak.",
@@ -98,6 +524,8 @@ const allocators: LessonDef = {
       output: "leak",
       check: { compiles: true, stdout: "leak", program: `${QUIET}\n\npub fn main() !void {\n${LEAK_BODY.split("\n").map((l) => "    " + l).join("\n")}\n}\n` },
       explain: L("The 4 bytes were never freed. deinit returns .leak and also logs where the leak was made.", "Los 4 bytes nunca se liberaron. deinit devuelve .leak y además registra dónde se creó la fuga.", "4バイトが解放されていない。deinit は .leak を返し、どこでリークしたかも記録する。"),
+      hint: L("Look for a free matching the alloc. What does deinit report if one is missing?", "Busca un free que corresponda al alloc. ¿Qué informa deinit si falta uno?", "alloc に対応する free をさがそう。足りないと deinit は何を報告する？"),
+      note: "leaks-defer",
       setup: [{ t: "enter", actor: "ally" }, { t: "item", kind: "sword", holder: "hero" }],
       win: [{ t: "enter", actor: "enemy" }, { t: "hp", actor: "enemy", value: 80 }, { t: "banner", text: L("LEAK!", "¡FUGA!", "リーク！") }],
     },
@@ -115,6 +543,8 @@ const allocators: LessonDef = {
       output: "hi, Iggi!",
       check: { compiles: true, stdout: "hi, Iggi!" },
       explain: L("allocPrint formats into new heap memory. greet returns it, so main frees it with defer.", "allocPrint formatea en memoria nueva del heap. greet la devuelve, así que main la libera con defer.", "allocPrint は新しいヒープに書く。greet が返すので main が defer で解放する。"),
+      hint: L("allocPrint fills the {s} slot like std.debug.print does. Who frees the result?", "allocPrint llena el hueco {s} como lo hace std.debug.print. ¿Quién libera el resultado?", "allocPrint は std.debug.print と同じように {s} をうめる。結果を解放するのは誰？"),
+      note: "ownership",
     },
     {
       kind: "type",
@@ -123,6 +553,8 @@ const allocators: LessonDef = {
       answer: "defer",
       check: { compiles: true, stdout: "xxxx" },
       explain: L("defer runs free at the end of the scope, after buf has been used. Write it right after alloc.", "defer ejecuta free al final del bloque, tras usar buf. Escríbelo justo después del alloc.", "defer は buf を使い終わったスコープの最後に free する。alloc のすぐ下に書こう。"),
+      hint: L("You need a word that delays a line until the scope ends, so buf can still be used below.", "Necesitas una palabra que retrase una línea hasta el final del bloque, para seguir usando buf debajo.", "その行をスコープの終わりまで遅らせる言葉が必要。そうすれば下で buf を使える。"),
+      note: "leaks-defer",
       win: [{ t: "print", text: "xxxx" }],
     },
     {
@@ -131,6 +563,8 @@ const allocators: LessonDef = {
       lines: ["var gpa: std.heap.DebugAllocator(.{}) = .init;", "defer _ = gpa.deinit();", "const alloc = gpa.allocator();", "const buf = try alloc.alloc(u8, 4);", "defer alloc.free(buf);"],
       check: { compiles: true },
       explain: L("Make the forge, schedule its check, get the allocator, then allocate and schedule the free.", "Crea la forja, programa su revisión, toma el allocator, luego pide memoria y programa el free.", "鍛冶場を作り、点検を予約し、アロケータをとり、確保して free を予約。"),
+      hint: L("Each thing must exist before it is used, and each defer goes right after what it cleans up.", "Cada cosa debe existir antes de usarse, y cada defer va justo tras lo que limpia.", "使う前に作っておく。defer は片づける対象のすぐ下に書く。"),
+      note: "leaks-defer",
     },
     {
       kind: "pick",
@@ -139,6 +573,8 @@ const allocators: LessonDef = {
       options: [L("No hidden allocations: the caller decides", "Sin asignaciones ocultas: decide quien llama", "隠れた確保なし：呼ぶ側が決める"), L("Zig has a garbage collector", "Zig tiene recolector de basura", "Zig には GC がある"), L("Only to run faster", "Solo para ir más rápido", "速くするためだけ")],
       answer: 0,
       explain: L("Zig has no garbage collector and no hidden allocation. Passing the allocator makes memory use visible.", "Zig no tiene recolector ni asignaciones ocultas. Pasar el allocator hace visible el uso de memoria.", "Zig には GC も隠れた確保もない。アロケータを渡すとメモリの使い方が見える。"),
+      hint: L("Does Zig clean up memory automatically? Think about what the parameter tells the reader.", "¿Zig limpia la memoria automáticamente? Piensa qué le dice el parámetro a quien lee.", "Zig は自動でメモリを片づける？その引数が読む人に何を伝えるか考えよう。"),
+      note: "allocators",
     },
     {
       kind: "run",
@@ -148,6 +584,8 @@ const allocators: LessonDef = {
       expect: "memory: ok",
       fallback: [String.raw`alloc\.free\(\s*scroll\s*\)`],
       explain: L("The scroll was never freed. Add defer alloc.free(scroll); right after the alloc line.", "El scroll nunca se liberaba. Agrega defer alloc.free(scroll); justo tras la línea del alloc.", "scroll が解放されていない。alloc の行のすぐ下に defer alloc.free(scroll); を。"),
+      hint: L("Every alloc needs a matching free. Which allocation has none?", "Cada alloc necesita su free. ¿Qué asignación no tiene ninguno?", "alloc には対になる free が必要。free のない確保はどれ？"),
+      note: "leaks-defer",
     },
   ],
 };
@@ -161,6 +599,7 @@ const arenas: LessonDef = {
   xp: 80,
   enemy: "zig/leak-jelly",
   enemyName: L("SACK JELLY", "GELATINA SACO", "袋ゼリー"),
+  notes: arenasNotes,
   beats: [
     say(L(
       "An ARENA is one big sack: allocate many times, never free one by one, and empty it all at once with deinit.",
@@ -187,6 +626,8 @@ const arenas: LessonDef = {
       output: "300",
       check: { compiles: true, stdout: "300" },
       explain: L("Three chunks of 100 go into the sack. No free per chunk: arena.deinit frees them all.", "Tres trozos de 100 van al saco. Sin free por trozo: arena.deinit los libera todos.", "100バイトを3つ袋に入れる。1つずつ free しなくても arena.deinit で全部解放。"),
+      hint: L("Each loop pass adds one chunk's len to total. How many passes, and how big is each chunk?", "Cada vuelta suma el len de un trozo a total. ¿Cuántas vueltas y qué tamaño tiene cada trozo?", "ループ1回ごとに total に len を足す。何回まわる？1つの大きさは？"),
+      note: "arenas",
       win: [{ t: "print", text: "300" }],
     },
     {
@@ -198,6 +639,8 @@ const arenas: LessonDef = {
       output: "6 error.OutOfMemory",
       check: { compiles: true, stdout: "6 error.OutOfMemory" },
       explain: L("A FixedBufferAllocator hands out a stack buffer. 8 bytes fit 6, not 6 more: error.OutOfMemory.", "Un FixedBufferAllocator reparte un buffer de pila. En 8 bytes caben 6, no 6 más: error.OutOfMemory.", "FixedBufferAllocator はスタックのバッファを配る。8バイトに6は入るが、もう6は無理。"),
+      hint: L("The shelf has 8 bytes. After the first 6 are taken, does another 6 fit?", "El estante tiene 8 bytes. Tras ocupar los primeros 6, ¿caben otros 6?", "棚は8バイト。最初の6をとったあと、もう6は入る？"),
+      note: "fixed-buffer",
       setup: [{ t: "enter", actor: "ally" }, { t: "tag", actor: "ally", text: "fba", value: "8 B" }],
       win: [{ t: "say", actor: "ally", text: L("Shelf is full!", "¡Estante lleno!", "棚がいっぱい！") }, { t: "print", text: "6 error.OutOfMemory" }],
     },
@@ -215,6 +658,8 @@ const arenas: LessonDef = {
       output: "{ 1, 2, 3, 4 } 4",
       check: { compiles: true, stdout: "{ 1, 2, 3, 4 } 4" },
       explain: L("append adds one item, appendSlice adds each item of a slice. items is the slice of what's stored.", "append agrega uno, appendSlice agrega cada elemento de un slice. items es el slice de lo guardado.", "append は1つ、appendSlice はスライスの全要素を足す。items は中身のスライス。"),
+      hint: L("Does appendSlice add the slice as one item, or each of its items?", "¿appendSlice agrega el slice como un elemento o cada uno de sus elementos?", "appendSlice はスライスを1つとして足す？それとも中の要素を1つずつ？"),
+      note: "array-list",
       setup: [{ t: "item", kind: "scroll", holder: "hero" }, { t: "tag", actor: "hero", text: "list" }],
       win: [{ t: "value", actor: "hero", text: "1 2 3 4" }, { t: "print", text: "{ 1, 2, 3, 4 } 4" }],
     },
@@ -227,6 +672,8 @@ const arenas: LessonDef = {
       output: "3 { 1, 2 }",
       check: { compiles: true, stdout: "3 { 1, 2 }" },
       explain: L("pop removes the LAST item and returns ?i32: null when the list is empty.", "pop quita el ÚLTIMO elemento y devuelve ?i32: null si la lista está vacía.", "pop は最後の要素をとり出し ?i32 を返す。空なら null。"),
+      hint: L("Which end does pop take from? After that, what is left in items?", "¿De qué extremo saca pop? Después, ¿qué queda en items?", "pop はどちらのはしからとる？そのあと items に何が残る？"),
+      note: "array-list",
     },
     {
       kind: "predict",
@@ -236,6 +683,8 @@ const arenas: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("In 0.15, append needs the allocator too: member function expected 2 argument(s), found 1.", "En 0.15, append también pide el allocator: member function expected 2 argument(s), found 1.", "0.15 では append にもアロケータが必要。引数が1つ足りない。"),
+      hint: L("In 0.15 the list keeps no allocator. Count what append needs, and what this call passes.", "En 0.15 la lista no guarda allocator. Cuenta lo que necesita append y lo que pasa esta llamada.", "0.15 のリストはアロケータを持たない。append に必要なものと、この呼び出しで渡すものを数えよう。"),
+      note: "list-api-015",
       win: [{ t: "shake" }],
     },
     {
@@ -246,6 +695,8 @@ const arenas: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("append can fail with OutOfMemory. Ignoring its error union is a compile error: use try.", "append puede fallar con OutOfMemory. Ignorar su unión de error es error de compilación: usa try.", "append は OutOfMemory で失敗しうる。エラー共用体を無視するとエラー。try を使おう。"),
+      hint: L("append can fail. Is anything in front of the call handling that possible error?", "append puede fallar. ¿Hay algo delante de la llamada que maneje ese posible error?", "append は失敗しうる。呼び出しの前に、そのエラーをあつかうものはある？"),
+      note: "list-api-015",
     },
     {
       kind: "predict",
@@ -255,6 +706,8 @@ const arenas: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("Old tutorials wrote .init(alloc). In 0.15 the list keeps no allocator: there is no init, start from .empty.", "Tutoriales viejos usaban .init(alloc). En 0.15 la lista no guarda allocator: no hay init, empieza con .empty.", "古い記事の .init(alloc) は 0.15 では使えない。init はないので .empty から始める。"),
+      hint: L("This is the style of older Zig versions. Does a 0.15 ArrayList have an init?", "Este es el estilo de versiones viejas de Zig. ¿Una ArrayList de 0.15 tiene init?", "これは古い Zig の書き方。0.15 の ArrayList に init はある？"),
+      note: "list-api-015",
     },
     {
       kind: "pick",
@@ -264,6 +717,8 @@ const arenas: LessonDef = {
       answer: 0,
       check: { compiles: true, stdout: "ok", wrongFail: true },
       explain: L(".empty is a ready-made empty list: no items, no capacity, nothing allocated yet.", ".empty es una lista vacía lista para usar: sin elementos, sin capacidad, nada asignado aún.", ".empty は用意された空リスト。要素も容量もなく、まだ何も確保していない。"),
+      hint: L("In 0.15 a list starts from a ready-made empty value, with nothing allocated yet.", "En 0.15 una lista empieza con un valor vacío ya hecho, sin nada asignado todavía.", "0.15 のリストは、まだ何も確保していない用意された空の値から始まる。"),
+      note: "list-api-015",
       win: [{ t: "print", text: "ok" }],
     },
     {
@@ -275,6 +730,8 @@ const arenas: LessonDef = {
       output: "12 null 1",
       check: { compiles: true, stdout: "12 null 1" },
       explain: L("put on an existing key replaces the value. get returns ?u32: null for a missing key.", "put sobre una clave existente reemplaza el valor. get devuelve ?u32: null si falta la clave.", "同じキーに put すると上書き。get は ?u32 を返し、ないキーは null。"),
+      hint: L("Putting the same key twice: two entries, or one replaced? And what does get give for a missing key?", "Poner la misma clave dos veces: ¿dos entradas o una reemplazada? ¿Y qué da get si falta la clave?", "同じキーに2回 put：2つになる？上書き？ないキーの get は何を返す？"),
+      note: "hash-map",
     },
     {
       kind: "run",
@@ -284,6 +741,8 @@ const arenas: LessonDef = {
       expect: "loot: { 10, 20, 30 }",
       fallback: [String.raw`var\s+buffer\s*:\s*\[\s*(?:[1-9]\d{2,}|[6-9]\d)\s*\]u8`, String.raw`ArenaAllocator|page_allocator|DebugAllocator`],
       explain: L("A 4-byte shelf can't hold the list, so append returns error.OutOfMemory. Give the buffer more room.", "Un estante de 4 bytes no aguanta la lista, así que append da error.OutOfMemory. Dale más espacio al buffer.", "4バイトの棚にリストは入らず error.OutOfMemory。バッファを大きくしよう。"),
+      hint: L("Three u32 need more than 4 bytes, and a growing list reserves extra room. What must grow?", "Tres u32 necesitan más de 4 bytes, y una lista que crece reserva espacio extra. ¿Qué debe crecer?", "u32 3つは4バイトより大きく、のびるリストは余分も確保する。何を大きくする？"),
+      note: "fixed-buffer",
     },
   ],
 };
@@ -299,6 +758,7 @@ const comptimeValues: LessonDef = {
   xp: 80,
   enemy: "zig/overflow-spark",
   enemyName: L("COMPTIME SPARK", "CHISPA COMPTIME", "コンプタイムスパーク"),
+  notes: comptimeNotes,
   beats: [
     say(L(
       "comptime runs code WHILE COMPILING. The result is baked into the program, so it costs nothing when it runs.",
@@ -323,6 +783,8 @@ const comptimeValues: LessonDef = {
       output: "55",
       check: { compiles: true, stdout: "55" },
       explain: L("The compiler runs fib(10) itself and stores 55 in the program.", "El compilador ejecuta fib(10) y guarda 55 en el programa.", "コンパイラ自身が fib(10) を計算し、55 をプログラムに入れる。"),
+      hint: L("comptime does not change the answer, only when it is computed. Work out fib for small n first.", "comptime no cambia la respuesta, solo cuándo se calcula. Calcula fib para n pequeños primero.", "comptime は答えを変えず、計算する時だけを変える。小さい n の fib から求めよう。"),
+      note: "comptime-basics",
       win: [{ t: "banner", text: L("COMPTIME", "COMPTIME", "コンプタイム") }, { t: "print", text: "55" }],
     },
     {
@@ -334,6 +796,8 @@ const comptimeValues: LessonDef = {
       output: "{ 0, 1, 4, 9, 16 }",
       check: { compiles: true, stdout: "{ 0, 1, 4, 9, 16 }" },
       explain: L("A comptime block can build a whole lookup table. i goes 0..4, so the squares are 0 to 16.", "Un bloque comptime puede crear una tabla entera. i va de 0 a 4, así que los cuadrados van de 0 a 16.", "comptime ブロックで表をまるごと作れる。i は 0〜4 なので 0〜16 の2乗。"),
+      hint: L("Which values does i take for 5 slots, starting at 0? Square each one.", "¿Qué valores toma i para 5 casillas, empezando en 0? Eleva cada uno al cuadrado.", "5マスで、0 から始まる i はどんな値？それぞれ2乗しよう。"),
+      note: "comptime-basics",
     },
     {
       kind: "predict",
@@ -344,6 +808,8 @@ const comptimeValues: LessonDef = {
       output: "6",
       check: { compiles: true, stdout: "6" },
       explain: L("inline for unrolls the loop while compiling, and a comptime var can change there.", "inline for desenrolla el loop al compilar, y un comptime var puede cambiar ahí.", "inline for はコンパイル時にループを展開する。comptime var はそこで変えられる。"),
+      hint: L("The loop body runs once per item, adding it to acc. Can a comptime var change this way?", "El cuerpo corre una vez por elemento y lo suma a acc. ¿Puede cambiar así un comptime var?", "本体は要素ごとに1回動き acc に足す。comptime var はこうして変えられる？"),
+      note: "comptime-basics",
     },
     say(L(
       "Types are values at comptime. fn max(comptime T: type, a: T, b: T) T works for any T you pass in.",
@@ -359,6 +825,8 @@ const comptimeValues: LessonDef = {
       output: "9 1.5",
       check: { compiles: true, stdout: "9 1.5" },
       explain: L("Each call makes a version of max for its T: one for u8, one for f32.", "Cada llamada crea una versión de max para su T: una para u8 y otra para f32.", "呼ぶたびにその T 用の max ができる。u8 用と f32 用。"),
+      hint: L("max returns the bigger of a and b, whatever T is. Do each call separately.", "max devuelve el mayor entre a y b, sea cual sea T. Haz cada llamada por separado.", "max は T が何でも a と b の大きいほうを返す。呼び出しを1つずつ考えよう。"),
+      note: "type-params",
     },
     {
       kind: "predict",
@@ -369,6 +837,8 @@ const comptimeValues: LessonDef = {
       output: "u16",
       check: { compiles: true, stdout: "u16" },
       explain: L("The return type is T, and T is u16 here. @TypeOf reads it without running max.", "El tipo de retorno es T, y aquí T es u16. @TypeOf lo lee sin ejecutar max.", "戻り値の型は T で、ここでは u16。@TypeOf は max を動かさずに型を読む。"),
+      hint: L("@TypeOf asks for the type, not the value. What is max's return type when T is given?", "@TypeOf pide el tipo, no el valor. ¿Cuál es el tipo de retorno de max con ese T?", "@TypeOf が聞くのは値ではなく型。その T のとき max の戻り値の型は？"),
+      note: "type-params",
     },
     {
       kind: "predict",
@@ -378,6 +848,8 @@ const comptimeValues: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("T is u8, so b must fit in u8: type 'u8' cannot represent integer value '300'.", "T es u8, así que b debe caber en u8: type 'u8' cannot represent integer value '300'.", "T は u8 なので b も u8 に入らないといけない。300 は入らない。"),
+      hint: L("With T = u8, every argument must be a u8. Do both numbers fit?", "Con T = u8, cada argumento debe ser u8. ¿Caben ambos números?", "T = u8 なら引数はすべて u8。両方の数は入る？"),
+      note: "type-params",
     },
     {
       kind: "predict",
@@ -387,6 +859,8 @@ const comptimeValues: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("Types only exist at compile time: variable of type 'type' must be const or comptime.", "Los tipos solo existen al compilar: variable of type 'type' must be const or comptime.", "型はコンパイル時にしか存在しない。type の変数は const か comptime に。"),
+      hint: L("A var can change while the program runs. Can a type exist at run time?", "Un var puede cambiar mientras corre el programa. ¿Puede existir un tipo al ejecutar?", "var は実行中に変わりうる。型は実行時に存在できる？"),
+      note: "comptime-only",
     },
     {
       kind: "predict",
@@ -396,6 +870,8 @@ const comptimeValues: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("An array length must be known while compiling, and n is a runtime parameter: unable to resolve comptime value.", "El largo de un array debe conocerse al compilar, y n es de ejecución: unable to resolve comptime value.", "配列の長さはコンパイル時に必要。n は実行時の引数なのでエラー。"),
+      hint: L("An array length must be known while compiling. Is n known then, or only when make is called?", "El largo de un array debe conocerse al compilar. ¿Se conoce n entonces, o solo al llamar make?", "配列の長さはコンパイル時に必要。n はその時わかる？make を呼ぶまでわからない？"),
+      note: "comptime-only",
       win: [{ t: "shake" }],
     },
     say(L(
@@ -412,6 +888,8 @@ const comptimeValues: LessonDef = {
       output: "int other bool",
       check: { compiles: true, stdout: "int other bool" },
       explain: L("A bare 2.5 is a comptime_float, not .float. Write @as(f32, 2.5) to get a real float.", "Un 2.5 suelto es comptime_float, no .float. Escribe @as(f32, 2.5) para un float de verdad.", "そのままの 2.5 は comptime_float で .float ではない。@as(f32, 2.5) と書こう。"),
+      hint: L("Some arguments have a real type, one is a bare literal. What kind of type does a bare literal have?", "Algunos argumentos tienen un tipo real y uno es un literal suelto. ¿Qué clase de tipo tiene un literal suelto?", "本当の型がある引数と、型なしのリテラルがある。型なしリテラルの型の種類は？"),
+      note: "anytype-typeinfo",
     },
     {
       kind: "predict",
@@ -421,6 +899,8 @@ const comptimeValues: LessonDef = {
       answer: 1,
       check: { compiles: false },
       explain: L("Generic code is checked per use. With T = bool, a + b has no meaning, so that call fails.", "El código genérico se revisa en cada uso. Con T = bool, a + b no tiene sentido y esa llamada falla.", "ジェネリックは使うたびにチェックされる。T = bool だと a + b は意味がない。"),
+      hint: L("Put bool in place of T in the body. Does a + b mean anything for bools?", "Pon bool en lugar de T en el cuerpo. ¿a + b tiene sentido con bools?", "本体の T を bool に置きかえよう。bool どうしの a + b に意味はある？"),
+      note: "type-params",
     },
     {
       kind: "type",
@@ -429,6 +909,8 @@ const comptimeValues: LessonDef = {
       answer: "comptime",
       check: { compiles: true, stdout: "42" },
       explain: L("A type parameter must be comptime: the compiler needs T to build this version of twice.", "Un parámetro de tipo debe ser comptime: el compilador necesita T para crear esta versión de twice.", "型の引数は comptime。コンパイラは T を知ってこの版の twice を作る。"),
+      hint: L("A type can only be passed while compiling. Which keyword marks such a parameter?", "Un tipo solo se puede pasar al compilar. ¿Qué palabra clave marca ese parámetro?", "型はコンパイル時にしか渡せない。そういう引数につけるキーワードは？"),
+      note: "type-params",
       win: [{ t: "print", text: "42" }],
     },
     {
@@ -439,6 +921,8 @@ const comptimeValues: LessonDef = {
       expect: "sum: 300",
       fallback: [String.raw`\[_\][ui](?:16|32|64)\s*\{\s*200\s*,\s*100\s*\}[\s\S]*sum\(\s*[ui](?:16|32|64)\s*,`],
       explain: L("sum was made for u8, and 200 + 100 overflows a u8. Use a wider type such as u16 for both.", "sum se creó para u8, y 200 + 100 desborda un u8. Usa un tipo más ancho como u16 en ambos.", "sum は u8 用に作られ、200 + 100 で u8 があふれる。両方 u16 など広い型に。"),
+      hint: L("What is the largest value a u8 can hold? Compare it with the total.", "¿Cuál es el mayor valor que cabe en un u8? Compáralo con el total.", "u8 に入る最大の値は？合計とくらべよう。"),
+      note: "type-params",
     },
   ],
 };
@@ -456,6 +940,7 @@ const generics: LessonDef = {
   xp: 85,
   enemy: "zig/leak-jelly",
   enemyName: L("MOLD JELLY", "GELATINA MOLDE", "鋳型ゼリー"),
+  notes: genericsNotes,
   beats: [
     say(L(
       "A function can RETURN a type: fn Box(comptime T: type) type. It's a mold that casts new molds. std.ArrayList(T) is built this way.",
@@ -481,6 +966,8 @@ const generics: LessonDef = {
       output: "7",
       check: { compiles: true, stdout: "7" },
       explain: L("Box(u8) is a real struct type with a u8 field. @This() lets its methods name it.", "Box(u8) es un tipo struct real con un campo u8. @This() permite que sus métodos lo nombren.", "Box(u8) は u8 のフィールドをもつ本物の struct 型。@This() でメソッドから名前を呼べる。"),
+      hint: L("Box(u8) is a struct type. The literal sets value; what does get return?", "Box(u8) es un tipo struct. El literal fija value; ¿qué devuelve get?", "Box(u8) は struct 型。リテラルで value を決める。get は何を返す？"),
+      note: "type-functions",
       win: [{ t: "print", text: "7" }],
     },
     {
@@ -492,6 +979,8 @@ const generics: LessonDef = {
       output: "true false",
       check: { compiles: true, stdout: "true false" },
       explain: L("The same comptime arguments give back the SAME type. A different T makes a different type.", "Los mismos argumentos comptime devuelven el MISMO tipo. Otro T crea otro tipo.", "同じ comptime 引数なら同じ型が返る。T がちがえば別の型。"),
+      hint: L("Compare the arguments in each pair. Same comptime arguments, same type?", "Compara los argumentos de cada par. ¿Mismos argumentos comptime, mismo tipo?", "それぞれの組の引数をくらべよう。同じ comptime 引数なら同じ型？"),
+      note: "type-functions",
     },
     {
       kind: "predict",
@@ -502,6 +991,8 @@ const generics: LessonDef = {
       output: "3",
       check: { compiles: true, stdout: "3" },
       explain: L("Pair.of(u8) returns a struct type; the literal after it builds a value of that type.", "Pair.of(u8) devuelve un tipo struct; el literal que sigue crea un valor de ese tipo.", "Pair.of(u8) は struct 型を返し、続くリテラルでその型の値を作る。"),
+      hint: L("Pair.of(u8) gives a type. Can a struct literal follow a call that returns a type?", "Pair.of(u8) da un tipo. ¿Puede seguir un literal de struct a una llamada que devuelve un tipo?", "Pair.of(u8) は型をくれる。型を返す呼び出しのあとに struct リテラルを続けられる？"),
+      note: "type-functions",
     },
     {
       kind: "predict",
@@ -512,6 +1003,8 @@ const generics: LessonDef = {
       output: "u64",
       check: { compiles: true, stdout: "u64" },
       explain: L("if works on types at comptime. On a 64-bit target usize is 8 bytes, so T is u64.", "if funciona con tipos en comptime. En 64 bits usize mide 8 bytes, así que T es u64.", "comptime では if で型を選べる。64ビットでは usize は8バイトなので T は u64。"),
+      hint: L("How many bytes is usize on a 64-bit machine? Then follow the if.", "¿Cuántos bytes ocupa usize en una máquina de 64 bits? Luego sigue el if.", "64ビットで usize は何バイト？そのあと if をたどろう。"),
+      note: "type-functions",
     },
     say(L(
       "test \"name\" { ... } blocks run with zig test, not in a normal program. std.testing.expect returns an error when a check fails.",
@@ -527,6 +1020,8 @@ const generics: LessonDef = {
       output: "main runs",
       check: { compiles: true, stdout: "main runs" },
       explain: L("A normal build skips test blocks entirely. Only zig test compiles and runs them.", "Una compilación normal ignora los bloques test. Solo zig test los compila y ejecuta.", "普通のビルドは test ブロックを無視する。動かすのは zig test だけ。"),
+      hint: L("This program is built and run normally, not with zig test. Are test blocks part of it?", "Este programa se compila y ejecuta normalmente, no con zig test. ¿Los bloques test forman parte?", "このプログラムは zig test ではなく、ふつうにビルドして動かす。test ブロックはふくまれる？"),
+      note: "test-blocks",
     },
     {
       kind: "predict",
@@ -537,6 +1032,8 @@ const generics: LessonDef = {
       output: "TestUnexpectedResult",
       check: { compiles: true, stdout: "TestUnexpectedResult" },
       explain: L("expect is a normal function: on false it returns error.TestUnexpectedResult, which catch handles.", "expect es una función normal: si es false devuelve error.TestUnexpectedResult, que catch maneja.", "expect は普通の関数。false なら error.TestUnexpectedResult を返し、catch で受ける。"),
+      hint: L("Is the condition true? If not, expect returns an error, and catch prints its name.", "¿La condición es true? Si no, expect devuelve un error, y catch imprime su nombre.", "条件は true？でなければ expect はエラーを返し、catch がその名前を表示する。"),
+      note: "expect-helpers",
     },
     {
       kind: "predict",
@@ -547,6 +1044,8 @@ const generics: LessonDef = {
       output: "expected 5, found 4\nTestExpectedEqual",
       check: { compiles: true, stdout: "expected 5, found 4\nTestExpectedEqual" },
       explain: L("expectEqual(expected, actual) first prints what differed, then returns error.TestExpectedEqual.", "expectEqual(esperado, real) primero imprime la diferencia y luego devuelve error.TestExpectedEqual.", "expectEqual(期待値, 実際の値) は差を表示してから error.TestExpectedEqual を返す。"),
+      hint: L("expectEqual prints a message before returning its error. Which argument is the expected one?", "expectEqual imprime un mensaje antes de devolver su error. ¿Qué argumento es el esperado?", "expectEqual はエラーを返す前にメッセージを出す。期待する値はどちらの引数？"),
+      note: "expect-helpers",
     },
     {
       kind: "pick",
@@ -555,6 +1054,8 @@ const generics: LessonDef = {
       options: ["zig test", "zig run", "zig build-exe"],
       answer: 0,
       explain: L("zig test builds a special program that runs every test block and reports which failed.", "zig test crea un programa especial que corre cada bloque test e informa cuáles fallaron.", "zig test はすべての test ブロックを動かす特別なプログラムを作り、失敗を報告する。"),
+      hint: L("One zig command is named after the blocks it runs.", "Un comando de zig se llama como los bloques que ejecuta.", "動かすブロックと同じ名前の zig コマンドがある。"),
+      note: "test-blocks",
     },
     {
       kind: "pick",
@@ -563,6 +1064,8 @@ const generics: LessonDef = {
       options: ["std.testing.allocator", "std.heap.page_allocator", "std.heap.c_allocator"],
       answer: 0,
       explain: L("std.testing.allocator checks for leaks when the test ends and fails the test if memory was not freed.", "std.testing.allocator revisa fugas al terminar el test y lo hace fallar si quedó memoria sin liberar.", "std.testing.allocator はテスト終了時にリークを調べ、解放もれがあれば失敗にする。"),
+      hint: L("Look for the allocator made for tests: it lives in the testing namespace.", "Busca el allocator hecho para tests: vive en el espacio de nombres testing.", "テスト用に作られたアロケータをさがそう。testing の中にある。"),
+      note: "test-blocks",
     },
     {
       kind: "run",
@@ -572,6 +1075,8 @@ const generics: LessonDef = {
       expect: "top: 3",
       fallback: [String.raw`Stack\(\s*u8\s*,\s*(?:[3-9]|\d{2,})\s*\)`, String.raw`Stack\(\s*u(?:16|32|64)\s*,\s*(?:[3-9]|\d{2,})\s*\)`],
       explain: L("Stack(u8, 2) has room for 2 items; the third push writes past the end. Cast the mold with N = 3.", "Stack(u8, 2) tiene espacio para 2; el tercer push escribe fuera. Funde el molde con N = 3.", "Stack(u8, 2) は2個まで。3回目の push で範囲外に。N = 3 で鋳造しよう。"),
+      hint: L("Count the pushes, then look at N in Stack(u8, N). Is there room for all of them?", "Cuenta los push y mira N en Stack(u8, N). ¿Hay espacio para todos?", "push の回数を数え、Stack(u8, N) の N を見よう。全部入る場所はある？"),
+      note: "type-functions",
     },
   ],
 };
@@ -585,23 +1090,24 @@ const boss: LessonDef = {
   xp: 200,
   enemy: "zig/leak-jelly",
   enemyName: L("LEAK JELLY", "GELATINA FUGA", "リークゼリー"),
+  notes: bossNotes,
   beats: [
     enemySays(L(
       "Blorp... every byte you forget to free makes me bigger. Your forge is full of drips. Let's see you plug them all!",
       "Blorp... cada byte que olvidas liberar me hace más grande. Tu forja gotea por todas partes. ¡A ver si tapas todo!",
       "ぶよん…解放し忘れたバイトでおれは大きくなる。鍛冶場はもれだらけ。全部ふさげるかな！",
     )),
-    { kind: "predict", time: 18, prompt: PRINT, code: 'var gpa: std.heap.DebugAllocator(.{}) = .init;\nconst alloc = gpa.allocator();\nconst buf = try alloc.alloc(u8, 3);\n@memset(buf, \'z\');\nstd.debug.print("{s} {d}\\n", .{ buf, buf.len });\nalloc.free(buf);\nstd.debug.print("{s}\\n", .{@tagName(gpa.deinit())});', options: ["zzz 3 / ok", "zzz 3 / leak", "z 1 / ok"], answer: 0, output: "zzz 3\nok", check: { compiles: true, stdout: "zzz 3\nok" }, explain: L("Allocated, used, freed: deinit says .ok.", "Asignado, usado, liberado: deinit dice .ok.", "確保・使用・解放。deinit は .ok。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: LEAK_BODY, options: ["leak", "ok", PANICS], answer: 0, output: "leak", check: { compiles: true, stdout: "leak", program: `${QUIET}\n\npub fn main() !void {\n${LEAK_BODY.split("\n").map((l) => "    " + l).join("\n")}\n}\n` }, explain: L("Nothing freed the 4 bytes, so deinit reports .leak.", "Nadie liberó los 4 bytes, así que deinit informa .leak.", "4バイトを誰も解放していないので .leak。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: 'var mem: [8]u8 = undefined;\nvar fba = std.heap.FixedBufferAllocator.init(&mem);\nconst fa = fba.allocator();\nconst a = try fa.alloc(u8, 6);\nstd.debug.print("{d} {any}\\n", .{ a.len, fa.alloc(u8, 6) });', options: ["6 error.OutOfMemory", "6 6", PANICS], answer: 0, output: "6 error.OutOfMemory", check: { compiles: true, stdout: "6 error.OutOfMemory" }, explain: L("8 bytes of shelf: 6 fit, 6 more don't.", "8 bytes de estante: caben 6, otros 6 no.", "棚は8バイト。6は入るが、もう6は入らない。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: 'const alloc = std.heap.page_allocator;\nvar list: std.ArrayList(i32) = .empty;\ndefer list.deinit(alloc);\ntry list.appendSlice(alloc, &.{ 1, 2, 3 });\nconst last = list.pop();\nstd.debug.print("{any} {any}\\n", .{ last, list.items });', options: ["3 { 1, 2 }", "1 { 2, 3 }", "3 { 1, 2, 3 }"], answer: 0, output: "3 { 1, 2 }", check: { compiles: true, stdout: "3 { 1, 2 }" }, explain: L("pop takes the last item off and returns it as ?i32.", "pop saca el último elemento y lo devuelve como ?i32.", "pop は最後の要素をとり出し ?i32 で返す。") },
-    { kind: "predict", time: 12, prompt: COMPILES, code: "const list = std.ArrayList(u8).init(std.heap.page_allocator);\n_ = list;", options: [YES, NO_CE], answer: 1, check: { compiles: false }, explain: L("0.15 lists are unmanaged: start from .empty, no init.", "Las listas de 0.15 no guardan allocator: empieza con .empty, sin init.", "0.15 のリストは .empty から。init はない。") },
-    { kind: "predict", time: 15, prompt: HAPPENS, code: 'var buffer: [4]u8 = undefined;\nvar fba = std.heap.FixedBufferAllocator.init(&buffer);\nconst alloc = fba.allocator();\nstd.debug.print("start\\n", .{});\n_ = try alloc.alloc(u8, 10);\nstd.debug.print("done\\n", .{});', options: [L("start, then error: OutOfMemory", "start, luego error: OutOfMemory", "start のあと error: OutOfMemory"), "start / done", PANICS], answer: 0, check: { compiles: true, stdout: "start", throws: "error: OutOfMemory" }, explain: L("try passes error.OutOfMemory up and out of main, so the program stops before done.", "try sube error.OutOfMemory y sale de main, así que el programa para antes de done.", "try が error.OutOfMemory を main の外へ返すので、done の前に止まる。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: zmain("fn fib(n: u32) u32 {\n    return if (n < 2) n else fib(n - 1) + fib(n - 2);\n}", 'const f = comptime fib(12);\nstd.debug.print("{d}\\n", .{f});'), options: ["144", "89", "233"], answer: 0, output: "144", check: { compiles: true, stdout: "144" }, explain: L("fib(12) = 144, computed by the compiler.", "fib(12) = 144, calculado por el compilador.", "fib(12) = 144。コンパイラが計算する。") },
-    { kind: "predict", time: 15, prompt: COMPILES, code: zmain("fn make(n: u32) u32 {\n    var a: [n]u8 = undefined;\n    _ = &a;\n    return 0;\n}", "_ = make(3);"), options: [YES, NO_CE], answer: 1, check: { compiles: false }, explain: L("Array lengths need comptime values. Mark n as comptime n: u32.", "Los largos de array necesitan valores comptime. Marca n como comptime n: u32.", "配列の長さは comptime 値が必要。comptime n: u32 にしよう。") },
-    { kind: "predict", time: 18, prompt: PRINT, code: `${STACK}\npub fn main() void {\n    var s: Stack(u8, 4) = .{};\n    s.push(1);\n    s.push(2);\n    std.debug.print("{any} {any} {any}\\n", .{ s.pop(), s.pop(), s.pop() });\n}`, options: ["2 1 null", "1 2 null", "2 1 0"], answer: 0, output: "2 1 null", check: { compiles: true, stdout: "2 1 null" }, explain: L("Last in, first out: 2, then 1, then the empty stack returns null.", "Último en entrar, primero en salir: 2, luego 1, y la pila vacía da null.", "後入れ先出し。2、1、空になったら null。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: zmain(BOX, 'std.debug.print("{} {}\\n", .{ Box(u8) == Box(u8), Box(u8) == Box(u16) });'), options: ["true false", "false false", "true true"], answer: 0, output: "true false", check: { compiles: true, stdout: "true false" }, explain: L("Same comptime arguments, same type.", "Mismos argumentos comptime, mismo tipo.", "同じ comptime 引数なら同じ型。") },
-    { kind: "pick", time: 15, prompt: L("Plug the leak", "Tapa la fuga", "リークをふさごう"), code: 'var gpa: std.heap.DebugAllocator(.{}) = .init;\ndefer _ = gpa.deinit();\nconst alloc = gpa.allocator();\nconst g = try std.fmt.allocPrint(alloc, "lv{d}", .{9});\n___ alloc.free(g);\nstd.debug.print("{s}\\n", .{g});', options: ["defer", "errdefer"], answer: 0, check: { compiles: true, stdout: "lv9" }, explain: L("defer always frees at scope end; errdefer would free only if an error left the scope.", "defer siempre libera al final; errdefer solo liberaría si saliera un error del bloque.", "defer は必ず最後に解放。errdefer はエラーで抜ける時だけ。") },
+    { kind: "predict", time: 18, prompt: PRINT, code: 'var gpa: std.heap.DebugAllocator(.{}) = .init;\nconst alloc = gpa.allocator();\nconst buf = try alloc.alloc(u8, 3);\n@memset(buf, \'z\');\nstd.debug.print("{s} {d}\\n", .{ buf, buf.len });\nalloc.free(buf);\nstd.debug.print("{s}\\n", .{@tagName(gpa.deinit())});', options: ["zzz 3 / ok", "zzz 3 / leak", "z 1 / ok"], answer: 0, output: "zzz 3\nok", check: { compiles: true, stdout: "zzz 3\nok" }, explain: L("Allocated, used, freed: deinit says .ok.", "Asignado, usado, liberado: deinit dice .ok.", "確保・使用・解放。deinit は .ok。"), hint: L("Was every allocation freed before deinit?", "¿Se liberó cada asignación antes de deinit?", "deinit の前に全部解放した？"), note: "recap-memory" },
+    { kind: "predict", time: 15, prompt: PRINT, code: LEAK_BODY, options: ["leak", "ok", PANICS], answer: 0, output: "leak", check: { compiles: true, stdout: "leak", program: `${QUIET}\n\npub fn main() !void {\n${LEAK_BODY.split("\n").map((l) => "    " + l).join("\n")}\n}\n` }, explain: L("Nothing freed the 4 bytes, so deinit reports .leak.", "Nadie liberó los 4 bytes, así que deinit informa .leak.", "4バイトを誰も解放していないので .leak。"), hint: L("Find the free for this alloc.", "Busca el free de este alloc.", "この alloc の free をさがそう。"), note: "recap-memory" },
+    { kind: "predict", time: 15, prompt: PRINT, code: 'var mem: [8]u8 = undefined;\nvar fba = std.heap.FixedBufferAllocator.init(&mem);\nconst fa = fba.allocator();\nconst a = try fa.alloc(u8, 6);\nstd.debug.print("{d} {any}\\n", .{ a.len, fa.alloc(u8, 6) });', options: ["6 error.OutOfMemory", "6 6", PANICS], answer: 0, output: "6 error.OutOfMemory", check: { compiles: true, stdout: "6 error.OutOfMemory" }, explain: L("8 bytes of shelf: 6 fit, 6 more don't.", "8 bytes de estante: caben 6, otros 6 no.", "棚は8バイト。6は入るが、もう6は入らない。"), hint: L("Add up what is asked for and compare with the buffer size.", "Suma lo pedido y compáralo con el tamaño del buffer.", "たのんだ合計とバッファの大きさをくらべよう。"), note: "recap-memory" },
+    { kind: "predict", time: 15, prompt: PRINT, code: 'const alloc = std.heap.page_allocator;\nvar list: std.ArrayList(i32) = .empty;\ndefer list.deinit(alloc);\ntry list.appendSlice(alloc, &.{ 1, 2, 3 });\nconst last = list.pop();\nstd.debug.print("{any} {any}\\n", .{ last, list.items });', options: ["3 { 1, 2 }", "1 { 2, 3 }", "3 { 1, 2, 3 }"], answer: 0, output: "3 { 1, 2 }", check: { compiles: true, stdout: "3 { 1, 2 }" }, explain: L("pop takes the last item off and returns it as ?i32.", "pop saca el último elemento y lo devuelve como ?i32.", "pop は最後の要素をとり出し ?i32 で返す。"), hint: L("Which end does pop take from?", "¿De qué extremo saca pop?", "pop はどちらのはしからとる？"), note: "recap-lists" },
+    { kind: "predict", time: 12, prompt: COMPILES, code: "const list = std.ArrayList(u8).init(std.heap.page_allocator);\n_ = list;", options: [YES, NO_CE], answer: 1, check: { compiles: false }, explain: L("0.15 lists are unmanaged: start from .empty, no init.", "Las listas de 0.15 no guardan allocator: empieza con .empty, sin init.", "0.15 のリストは .empty から。init はない。"), hint: L("Is this the 0.15 way to start a list?", "¿Es esta la forma de 0.15 de empezar una lista?", "これは 0.15 のリストの始め方？"), note: "recap-lists" },
+    { kind: "predict", time: 15, prompt: HAPPENS, code: 'var buffer: [4]u8 = undefined;\nvar fba = std.heap.FixedBufferAllocator.init(&buffer);\nconst alloc = fba.allocator();\nstd.debug.print("start\\n", .{});\n_ = try alloc.alloc(u8, 10);\nstd.debug.print("done\\n", .{});', options: [L("start, then error: OutOfMemory", "start, luego error: OutOfMemory", "start のあと error: OutOfMemory"), "start / done", PANICS], answer: 0, check: { compiles: true, stdout: "start", throws: "error: OutOfMemory" }, explain: L("try passes error.OutOfMemory up and out of main, so the program stops before done.", "try sube error.OutOfMemory y sale de main, así que el programa para antes de done.", "try が error.OutOfMemory を main の外へ返すので、done の前に止まる。"), hint: L("Does 10 fit in a 4-byte buffer? And what does try do with an error?", "¿Caben 10 en un buffer de 4 bytes? ¿Y qué hace try con un error?", "4バイトに10は入る？try はエラーをどうする？"), note: "recap-memory" },
+    { kind: "predict", time: 15, prompt: PRINT, code: zmain("fn fib(n: u32) u32 {\n    return if (n < 2) n else fib(n - 1) + fib(n - 2);\n}", 'const f = comptime fib(12);\nstd.debug.print("{d}\\n", .{f});'), options: ["144", "89", "233"], answer: 0, output: "144", check: { compiles: true, stdout: "144" }, explain: L("fib(12) = 144, computed by the compiler.", "fib(12) = 144, calculado por el compilador.", "fib(12) = 144。コンパイラが計算する。"), hint: L("Continue the sequence 0, 1, 1, 2, 3, 5... up to index 12.", "Sigue la serie 0, 1, 1, 2, 3, 5... hasta el índice 12.", "0, 1, 1, 2, 3, 5… を 12 番まで続けよう。"), note: "recap-comptime" },
+    { kind: "predict", time: 15, prompt: COMPILES, code: zmain("fn make(n: u32) u32 {\n    var a: [n]u8 = undefined;\n    _ = &a;\n    return 0;\n}", "_ = make(3);"), options: [YES, NO_CE], answer: 1, check: { compiles: false }, explain: L("Array lengths need comptime values. Mark n as comptime n: u32.", "Los largos de array necesitan valores comptime. Marca n como comptime n: u32.", "配列の長さは comptime 値が必要。comptime n: u32 にしよう。"), hint: L("Is n known while compiling?", "¿Se conoce n al compilar?", "n はコンパイル時にわかる？"), note: "recap-comptime" },
+    { kind: "predict", time: 18, prompt: PRINT, code: `${STACK}\npub fn main() void {\n    var s: Stack(u8, 4) = .{};\n    s.push(1);\n    s.push(2);\n    std.debug.print("{any} {any} {any}\\n", .{ s.pop(), s.pop(), s.pop() });\n}`, options: ["2 1 null", "1 2 null", "2 1 0"], answer: 0, output: "2 1 null", check: { compiles: true, stdout: "2 1 null" }, explain: L("Last in, first out: 2, then 1, then the empty stack returns null.", "Último en entrar, primero en salir: 2, luego 1, y la pila vacía da null.", "後入れ先出し。2、1、空になったら null。"), hint: L("Which item comes out first, and what does pop give when empty?", "¿Qué sale primero, y qué da pop si está vacía?", "最初に出るのは？空の時 pop は何を返す？"), note: "recap-comptime" },
+    { kind: "predict", time: 12, prompt: PRINT, code: zmain(BOX, 'std.debug.print("{} {}\\n", .{ Box(u8) == Box(u8), Box(u8) == Box(u16) });'), options: ["true false", "false false", "true true"], answer: 0, output: "true false", check: { compiles: true, stdout: "true false" }, explain: L("Same comptime arguments, same type.", "Mismos argumentos comptime, mismo tipo.", "同じ comptime 引数なら同じ型。"), hint: L("Compare the comptime arguments in each pair.", "Compara los argumentos comptime de cada par.", "それぞれの組の comptime 引数をくらべよう。"), note: "recap-comptime" },
+    { kind: "pick", time: 15, prompt: L("Plug the leak", "Tapa la fuga", "リークをふさごう"), code: 'var gpa: std.heap.DebugAllocator(.{}) = .init;\ndefer _ = gpa.deinit();\nconst alloc = gpa.allocator();\nconst g = try std.fmt.allocPrint(alloc, "lv{d}", .{9});\n___ alloc.free(g);\nstd.debug.print("{s}\\n", .{g});', options: ["defer", "errdefer"], answer: 0, check: { compiles: true, stdout: "lv9" }, explain: L("defer always frees at scope end; errdefer would free only if an error left the scope.", "defer siempre libera al final; errdefer solo liberaría si saliera un error del bloque.", "defer は必ず最後に解放。errdefer はエラーで抜ける時だけ。"), hint: L("Is an error involved here? One word runs always, the other only on error.", "¿Hay algún error aquí? Una palabra corre siempre, la otra solo con error.", "ここでエラーは起きる？片方は必ず、もう片方はエラーの時だけ動く。"), note: "recap-memory" },
     enemySays(L(
       "Blorp... no drips left. Every byte came back to the forge. Comptia's pipes run clean. You are a true Zig engineer!",
       "Blorp... no quedan goteras. Cada byte volvió a la forja. Las tuberías de Comptia están limpias. ¡Eres ingeniero Zig!",

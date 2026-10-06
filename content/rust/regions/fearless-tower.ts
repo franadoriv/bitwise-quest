@@ -1,4 +1,4 @@
-import type { LessonDef, RegionDef } from "../../../lib/content/types.ts";
+import type { LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { enemySays, L, say } from "../helpers.ts";
 
 // REGION 5 · FEARLESS TOWER  (closures and move, thread::spawn and join, Arc vs Rc, Mutex and
@@ -31,6 +31,362 @@ const KEEPS_WAITING = L("It keeps waiting", "Se queda esperando", "ずっと待�
 const DEADLOCK = L("Freezes: deadlock", "Se congela: deadlock", "固まる: デッドロック");
 const ASK_KEY = L("Ask for the key", "Pide la llave", "鍵をもらおう");
 
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+// Every example prints the same thing on every run (threads are joined before printing).
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example; the validator checks `output` against the real compiler. */
+const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code, output, caption });
+/** An example that must NOT compile (verified too). */
+const bad = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: false } });
+/** An example that must compile but whose output may vary between runs, so it isn't compared. */
+const varies = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: true } });
+
+const threadsNotes: NoteDef[] = [
+  note("closures", L("Closures: functions with no name", "Closures: funciones sin nombre", "クロージャ：名前のない関数"),
+    p(
+      "A closure is a small function you can store in a variable. Its parameters go between bars instead of parentheses, and the body comes right after: |a, b| a + b. A closure with no parameters has empty bars: || println!(\"hi\"). You call it like any function, with parentheses: add(2, 5).",
+      "Un closure es una pequeña función que puedes guardar en una variable. Sus parámetros van entre barras en vez de paréntesis, y el cuerpo va justo después: |a, b| a + b. Un closure sin parámetros tiene las barras vacías: || println!(\"hi\"). Se llama como cualquier función, con paréntesis: add(2, 5).",
+      "クロージャは変数にしまえる小さな関数じゃ。引数はかっこではなく縦棒 | | の間に書き、すぐあとに本体が続く：|a, b| a + b。引数のないクロージャは棒の間が空：|| println!(\"hi\")。呼ぶときはふつうの関数と同じくかっこを使う：add(2, 5)。",
+    ),
+    ex('let add = |a: i32, b: i32| a + b;\nlet hello = || println!("hello");\nhello();\nprintln!("{}", add(2, 5));', "hello\n7",
+      L("Bars hold the parameters; call it with ()", "Las barras guardan los parámetros; se llama con ()", "棒の間が引数、呼ぶときは ()")),
+    p(
+      "A one-expression body needs no braces and no return: the value of the expression is the result. For several lines, use braces: |x| { let y = x * 3; y + 1 }. The types of the parameters can usually be left out, because Rust infers them from how the closure is used.",
+      "Un cuerpo de una sola expresión no necesita llaves ni return: el valor de la expresión es el resultado. Para varias líneas, usa llaves: |x| { let y = x * 3; y + 1 }. Los tipos de los parámetros casi siempre se pueden omitir, porque Rust los deduce de cómo se usa el closure.",
+      "式が1つだけの本体なら、波かっこも return もいらない。その式の値が結果になる。何行もあるなら波かっこを使う：|x| { let y = x * 3; y + 1 }。引数の型はたいてい省略できる。使い方からRustが推測するからじゃ。",
+    ),
+    p(
+      "Unlike a normal fn, a closure can use variables from the place where it was created; this is called capturing. By default it borrows them. That's what makes closures perfect for threads: you hand the thread a closure with the work to do, and the closure brings the data it needs.",
+      "A diferencia de un fn normal, un closure puede usar variables del lugar donde se creó; a eso se le llama capturar. Por defecto las toma prestadas. Eso hace a los closures perfectos para los hilos: le das al hilo un closure con el trabajo, y el closure lleva los datos que necesita.",
+      "ふつうの fn と違い、クロージャは作られた場所の変数を使える。これをキャプチャという。ふだんは借りるだけじゃ。だからクロージャはスレッドにぴったり。仕事の入ったクロージャを渡せば、必要なデータも一緒に運んでくれる。",
+    ),
+    ex('let bonus = 10;\nlet boost = |x: i32| x + bonus;\nprintln!("{}", boost(5));', "15",
+      L("boost captures bonus from the surrounding code", "boost captura bonus del código que lo rodea", "boost はまわりの bonus をキャプチャする")),
+  ),
+  note("spawn-join", L("thread::spawn and join", "thread::spawn y join", "thread::spawn と join"),
+    p(
+      "A thread is a helper that runs code at the same time as main. thread::spawn(closure) starts one (after use std::thread;) and runs the closure on it. It returns right away with a JoinHandle, a ticket that lets you deal with that thread later. Without the use line, write std::thread::spawn in full.",
+      "Un hilo es un ayudante que ejecuta código al mismo tiempo que main. thread::spawn(closure) lanza uno (tras use std::thread;) y ejecuta el closure en él. Devuelve enseguida un JoinHandle, un boleto para ocuparte de ese hilo más tarde. Sin la línea use, escribe std::thread::spawn completo.",
+      "スレッドは main と同時にコードを動かす助っ人じゃ。thread::spawn(クロージャ) で1つ起動し（先に use std::thread; を書く）、そこでクロージャを実行する。すぐに JoinHandle（あとでそのスレッドを扱うための引換券）を返す。use の行がなければ std::thread::spawn と全部書く。",
+    ),
+    p(
+      "handle.join() makes the current thread wait until that helper finishes. It returns a Result, so you add .unwrap(): Ok holds the value the closure returned, and an Err would mean the helper crashed. So join both waits AND hands back the closure's result. A closure like || 6 * 7 sends 42 back through join.",
+      "handle.join() hace que el hilo actual espere hasta que ese ayudante termine. Devuelve un Result, así que añades .unwrap(): Ok guarda el valor que devolvió el closure, y un Err indicaría que el ayudante falló. Así que join espera Y devuelve el resultado del closure. Un closure como || 6 * 7 envía 42 de vuelta por join.",
+      "handle.join() は、その助っ人が終わるまで今のスレッドを待たせる。Result を返すので .unwrap() をつける。Ok にはクロージャが返した値が入り、Err なら助っ人が落ちたということ。つまり join は「待つ」と「結果を受け取る」の両方をする。|| 6 * 7 なら join で 42 が戻る。",
+    ),
+    ex('use std::thread;\nlet h = thread::spawn(|| 6 * 7);\nlet answer = h.join().unwrap();\nprintln!("{}", answer);', "42",
+      L("join waits, then returns what the closure returned", "join espera y luego devuelve lo que devolvió el closure", "join は待ってから、クロージャの戻り値を返す")),
+    p(
+      "Why join? When main ends, the whole program ends, and unfinished helpers are cut off mid-work. Joining before main finishes guarantees the helper's work is done. Common mistake: inventing names like wait or end; for threads, the method is join.",
+      "¿Por qué join? Cuando main termina, todo el programa termina, y los ayudantes sin acabar se cortan a medias. Hacer join antes de que main acabe garantiza que el trabajo del ayudante está hecho. Error común: inventar nombres como wait o end; para hilos, el método es join.",
+      "なぜ join？main が終わるとプログラム全体が終わり、終わっていない助っ人は途中で打ち切られる。main が終わる前に join すれば、助っ人の仕事が済んだことが保証される。よくあるミス：wait や end のような名前を作ってしまうこと。スレッドのメソッドは join じゃ。",
+    ),
+    p(
+      "Threads run in parallel, and the operating system decides who goes first. Two helpers that print can appear in either order, and the order may change from one run to the next. join only waits; it never reorders lines that were already printed. If order matters, join one thread before starting the next, or send results back.",
+      "Los hilos corren en paralelo, y el sistema operativo decide quién va primero. Dos ayudantes que imprimen pueden salir en cualquier orden, y el orden puede cambiar de una ejecución a otra. join solo espera; nunca reordena líneas ya impresas. Si el orden importa, haz join de un hilo antes de lanzar el siguiente, o envía los resultados de vuelta.",
+      "スレッドは並行して動き、どれが先に動くかはOSが決める。表示する2つの助っ人はどちらの順にもなりえ、実行ごとに変わることもある。join は待つだけで、表示済みの行を並べ替えはしない。順番が大事なら、1つ join してから次を起動するか、結果を送り返そう。",
+    ),
+    varies('use std::thread;\nlet x = thread::spawn(|| println!("left"));\nlet y = thread::spawn(|| println!("right"));\nx.join().unwrap();\ny.join().unwrap();',
+      L("Compiles, but left and right may swap between runs", "Compila, pero left y right pueden cambiar de orden", "コンパイルできるが left と right の順は変わりうる")),
+  ),
+  note("move-closures", L("move: hand the data to the thread", "move: entrega los datos al hilo", "move：データをスレッドに渡す"),
+    p(
+      "A closure normally borrows the variables it uses. For a thread that's a problem: the thread might keep running after main's variables are gone, and the borrow would point at nothing. So Rust refuses with E0373, \"closure may outlive the current function, but it borrows\" the variable.",
+      "Un closure normalmente toma prestadas las variables que usa. Para un hilo eso es un problema: el hilo podría seguir corriendo cuando las variables de main ya no existan, y el préstamo apuntaría a nada. Por eso Rust se niega con E0373, \"closure may outlive the current function, but it borrows\" la variable.",
+      "クロージャはふつう使う変数を借りる。スレッドではこれが問題になる。main の変数が消えたあともスレッドが動き続けるかもしれず、借用が何も指さなくなるからじゃ。だからRustは E0373 \"closure may outlive the current function, but it borrows\" で拒否する。",
+    ),
+    bad('use std::thread;\nlet names = vec!["Ana", "Leo"];\nlet h = thread::spawn(|| println!("{}", names.len()));\nh.join().unwrap();',
+      L("E0373: the closure only borrows names", "E0373: el closure solo toma prestado names", "E0373：クロージャは names を借りているだけ")),
+    p(
+      "Writing move before the bars, move || { ... }, makes the closure take OWNERSHIP of every variable it uses. The data now travels with the thread, so it lives as long as the thread needs it, and the error disappears. move goes right before the closure's bars, never on the variable.",
+      "Escribir move antes de las barras, move || { ... }, hace que el closure tome la PROPIEDAD de cada variable que usa. Los datos viajan ahora con el hilo, así que viven tanto como el hilo los necesite, y el error desaparece. move va justo antes de las barras del closure, nunca en la variable.",
+      "棒の前に move を書く（move || { ... }）と、クロージャは使う変数すべての所有権を受け取る。データはスレッドと一緒に旅するので、スレッドが必要な間ずっと生きていて、エラーは消える。move を書くのはクロージャの棒の直前で、変数のところではない。",
+    ),
+    ex('use std::thread;\nlet names = vec!["Ana", "Leo"];\nlet h = thread::spawn(move || {\n    println!("{}", names.len());\n});\nh.join().unwrap();', "2",
+      L("With move, the thread owns names", "Con move, el hilo es dueño de names", "move があればスレッドが names を持つ")),
+    p(
+      "move is a real move: after it, main can no longer use that variable, and trying gives E0382, \"borrow of moved value\". Plan the order: create the value, then spawn with move, then join. Numbers are the exception: types like i32 are Copy, so move gives the thread a copy and main keeps its own.",
+      "move es un move de verdad: después, main ya no puede usar esa variable, e intentarlo da E0382, \"borrow of moved value\". Planea el orden: crea el valor, luego lanza con move, luego haz join. Los números son la excepción: tipos como i32 son Copy, así que move le da al hilo una copia y main conserva la suya.",
+      "move は本物のムーブ。そのあと main はその変数を使えず、使うと E0382 \"borrow of moved value\" になる。順番を考えよう：値を作る、move で spawn する、join する。例外は数じゃ。i32 などは Copy なので、move してもスレッドにはコピーが渡り、main の分は残る。",
+    ),
+    ex('use std::thread;\nlet level = 3;\nlet h = thread::spawn(move || level * 2);\nprintln!("{} {}", level, h.join().unwrap());', "3 6",
+      L("level is Copy: main keeps using it after the move", "level es Copy: main lo sigue usando tras el move", "level は Copy なので move 後も main で使える")),
+  ),
+];
+
+const arcNotes: NoteDef[] = [
+  note("arc-passes", L("Arc: one value, many owners", "Arc: un valor, muchos dueños", "Arc：1つの値に多くの持ち主"),
+    p(
+      "Normally a value has exactly one owner. Arc<T> lets several owners share one value. Arc::new(value) puts the value on the heap together with a counter of owners, starting at 1. Arc stands for Atomic Reference Counted, and you bring it in with use std::sync::Arc;.",
+      "Normalmente un valor tiene exactamente un dueño. Arc<T> permite que varios dueños compartan un valor. Arc::new(valor) pone el valor en el heap junto con un contador de dueños, que empieza en 1. Arc significa Atomic Reference Counted, y se importa con use std::sync::Arc;.",
+      "ふつう値の持ち主はちょうど1人。Arc<T> なら複数の持ち主が1つの値を共有できる。Arc::new(値) は値を持ち主のカウンター（最初は1）と一緒にヒープに置く。Arc は Atomic Reference Counted の略で、use std::sync::Arc; で使えるようになる。",
+    ),
+    p(
+      "Arc::clone(&a) does NOT copy the value. It creates one more pointer, a new pass, to the same value and adds 1 to the counter. That's cheap even for a huge value. Arc::strong_count(&a) tells you how many passes exist right now; any of them gives the same number, since they share one counter.",
+      "Arc::clone(&a) NO copia el valor. Crea un puntero más, un pase nuevo, al mismo valor y suma 1 al contador. Eso es barato incluso para un valor enorme. Arc::strong_count(&a) te dice cuántos pases existen ahora; cualquiera de ellos da el mismo número, porque comparten un contador.",
+      "Arc::clone(&a) は値をコピーしない。同じ値を指すポインタ（新しい通行証）を1つ増やし、カウンターに1足すだけじゃ。巨大な値でも安い。Arc::strong_count(&a) は今ある通行証の数を教えてくれる。カウンターは共有なので、どの通行証で聞いても同じ数になる。",
+    ),
+    ex('use std::sync::Arc;\nlet song = Arc::new(String::from("la la"));\nlet copy1 = Arc::clone(&song);\nprintln!("{} {}", copy1, Arc::strong_count(&song));\ndrop(copy1);\nprintln!("{}", Arc::strong_count(&song));', "la la 2\n1",
+      L("Each clone adds a pass; drop removes one", "Cada clone suma un pase; drop quita uno", "clone で1枚増え、drop で1枚減る")),
+    p(
+      "Every pass reads the same value, so printing any of them shows the same thing, and nothing is moved by Arc::clone. When a pass is dropped, the counter goes down by 1; when it reaches 0, the value is freed. To count passes, add one for the original and one for each clone that still exists.",
+      "Todos los pases leen el mismo valor, así que imprimir cualquiera muestra lo mismo, y Arc::clone no mueve nada. Cuando un pase se suelta, el contador baja 1; al llegar a 0, el valor se libera. Para contar pases, suma uno por el original y uno por cada clone que aún exista.",
+      "どの通行証も同じ値を読むので、どれを表示しても同じものが出る。Arc::clone は何もムーブしない。通行証が手放されるとカウンターは1減り、0 になると値が解放される。数えるときは、元の1枚に、まだ残っている clone の数を足そう。",
+    ),
+    p(
+      "Common mistakes: expecting a.clone() to deep-copy the value (on an Arc, a.clone() is the same as Arc::clone(&a): one more pass, no copy), or looking for a len or count method; the counter is read with Arc::strong_count. Arc gives shared, read-only access: to change the value you'll need a Mutex, coming in the next lesson.",
+      "Errores comunes: esperar que a.clone() copie el valor completo (en un Arc, a.clone() es lo mismo que Arc::clone(&a): un pase más, sin copia), o buscar un método len o count; el contador se lee con Arc::strong_count. Arc da acceso compartido de solo lectura: para cambiar el valor necesitarás un Mutex, en la próxima lección.",
+      "よくあるミス：a.clone() で値が丸ごとコピーされると思うこと（Arc の a.clone() は Arc::clone(&a) と同じで、通行証が増えるだけ）。len や count を探すこと。カウンターは Arc::strong_count で読む。Arc は読み取り専用の共有じゃ。値を変えるには次のレッスンの Mutex が必要。",
+    ),
+  ),
+  note("rc-vs-arc", L("Rc vs Arc, and the Send badge", "Rc vs Arc, y la insignia Send", "Rc と Arc、そして Send バッジ"),
+    p(
+      "Rc<T> (use std::rc::Rc;) does the same job as Arc: Rc::new, Rc::clone and Rc::strong_count work the same way. The difference is the counter. Rc updates it with ordinary operations, which is a bit faster; Arc uses atomic operations, which stay correct even when several threads update the counter at the same moment.",
+      "Rc<T> (use std::rc::Rc;) hace el mismo trabajo que Arc: Rc::new, Rc::clone y Rc::strong_count funcionan igual. La diferencia es el contador. Rc lo actualiza con operaciones normales, algo más rápidas; Arc usa operaciones atómicas, que siguen siendo correctas aunque varios hilos actualicen el contador en el mismo instante.",
+      "Rc<T>（use std::rc::Rc;）は Arc と同じ仕事をする。Rc::new・Rc::clone・Rc::strong_count も同じように使える。違いはカウンターじゃ。Rc はふつうの操作で更新するので少し速い。Arc はアトミック操作を使い、複数のスレッドが同時にカウンターを変えても正しく保てる。",
+    ),
+    ex('use std::rc::Rc;\nlet note = Rc::new(8);\nlet other = Rc::clone(&note);\nprintln!("{} {}", other, Rc::strong_count(&note));', "8 2",
+      L("Within one thread, Rc works just like Arc", "Dentro de un hilo, Rc funciona igual que Arc", "1つのスレッドの中なら Rc も Arc と同じ")),
+    p(
+      "If two threads bumped an Rc's counter at once, the count could end up wrong and the value could be freed too early. Rust prevents this with Send, an automatic badge meaning \"safe to move to another thread\". Arc has it; Rc doesn't. Moving an Rc into a thread fails with E0277, \"Rc cannot be sent between threads safely\".",
+      "Si dos hilos tocaran el contador de un Rc a la vez, la cuenta podría quedar mal y el valor liberarse antes de tiempo. Rust lo impide con Send, una insignia automática que significa \"seguro de mover a otro hilo\". Arc la tiene; Rc no. Mover un Rc a un hilo falla con E0277, \"Rc cannot be sent between threads safely\".",
+      "2つのスレッドが同時に Rc のカウンターを変えると、数がずれて値が早く解放されかねない。Rustは Send でこれを防ぐ。Send は「別のスレッドへ移しても安全」という自動のバッジ。Arc は持ち、Rc は持たない。Rc をスレッドへムーブすると E0277 \"Rc cannot be sent between threads safely\" になる。",
+    ),
+    bad('use std::rc::Rc;\nuse std::thread;\nlet note = Rc::new(8);\nthread::spawn(move || println!("{}", note));',
+      L("E0277: Rc isn't Send", "E0277: Rc no es Send", "E0277：Rc は Send ではない")),
+    p(
+      "Rule to remember: one thread, use Rc; several threads, use Arc. Switching is easy because the methods have the same names: change the use line to use std::sync::Arc; and every Rc:: to Arc::. The compiler checks Send for you, so a wrong choice never reaches a running program.",
+      "Regla para recordar: un hilo, usa Rc; varios hilos, usa Arc. Cambiar es fácil porque los métodos se llaman igual: cambia la línea use por use std::sync::Arc; y cada Rc:: por Arc::. El compilador revisa Send por ti, así que una mala elección nunca llega a un programa en ejecución.",
+      "覚えるルール：スレッドが1つなら Rc、複数なら Arc。メソッド名が同じなので切りかえはかんたん。use の行を use std::sync::Arc; にし、Rc:: を全部 Arc:: に変えるだけ。Send はコンパイラが確かめるので、間違った選択が実行中のプログラムに届くことはない。",
+    ),
+  ),
+  note("arc-threads", L("Giving each thread its own Arc", "Dar a cada hilo su propio Arc", "スレッドごとに自分の Arc を渡す"),
+    p(
+      "To share a value with a thread and keep using it in main, clone the Arc BEFORE spawning, and move the clone into the thread. The thread owns its pass, main keeps the original, and both point to the same value. This clone-then-move pattern is the standard way to share data between threads.",
+      "Para compartir un valor con un hilo y seguir usándolo en main, clona el Arc ANTES de lanzar el hilo, y mueve el clon dentro del hilo. El hilo es dueño de su pase, main conserva el original y ambos apuntan al mismo valor. Este patrón de clonar y luego mover es la forma estándar de compartir datos entre hilos.",
+      "値をスレッドと共有しつつ main でも使い続けるには、spawn の前に Arc を clone し、その clone をスレッドへムーブする。スレッドは自分の通行証を持ち、main は元の分を持ち、どちらも同じ値を指す。この「clone してから move」がスレッド間でデータを共有する定番の形じゃ。",
+    ),
+    ex('use std::sync::Arc;\nuse std::thread;\nlet book = Arc::new(vec![1, 2, 3]);\nlet copy = Arc::clone(&book);\nlet h = thread::spawn(move || copy.len());\nprintln!("{} {}", h.join().unwrap(), book.len());', "3 3",
+      L("The thread moves copy; main still has book", "El hilo mueve copy; main aún tiene book", "スレッドは copy をムーブし、main には book が残る")),
+    p(
+      "Why not the other options? Moving the original Arc into the thread leaves main with nothing, so using it afterward is E0382. Passing a plain reference like &book doesn't work either: the thread might outlive main's variables, so a borrow isn't allowed (E0373). Only a new pass can travel safely.",
+      "¿Por qué no las otras opciones? Mover el Arc original al hilo deja a main sin nada, así que usarlo después da E0382. Pasar una referencia simple como &book tampoco sirve: el hilo podría vivir más que las variables de main, así que no se permite un préstamo (E0373). Solo un pase nuevo puede viajar con seguridad.",
+      "ほかの方法はなぜダメ？元の Arc をスレッドへムーブすると main には何も残らず、あとで使うと E0382。&book のようなただの参照もダメ。スレッドは main の変数より長生きするかもしれないので、借用は許されない（E0373）。安全に旅できるのは新しい通行証だけじゃ。",
+    ),
+    bad('use std::sync::Arc;\nuse std::thread;\nlet book = Arc::new(5);\nlet h = thread::spawn(move || println!("{}", book));\nh.join().unwrap();\nprintln!("{}", book);',
+      L("E0382: the only Arc moved into the thread", "E0382: el único Arc se movió al hilo", "E0382：唯一の Arc がスレッドへムーブ済み")),
+    p(
+      "Order matters: the Arc must exist first, then the clone, then the spawn that moves the clone, then join, and only then main's final use. With several threads, clone once per thread, inside the loop, right before each spawn.",
+      "El orden importa: primero debe existir el Arc, luego el clon, luego el spawn que mueve el clon, luego join, y solo entonces el uso final en main. Con varios hilos, clona una vez por hilo, dentro del bucle, justo antes de cada spawn.",
+      "順番が大事。まず Arc、次に clone、clone をムーブする spawn、join、最後に main での使用。スレッドが複数なら、ループの中で spawn の直前に1つずつ clone しよう。",
+    ),
+  ),
+];
+
+const mutexNotes: NoteDef[] = [
+  note("mutex-lock", L("Mutex and lock()", "Mutex y lock()", "Mutex と lock()"),
+    p(
+      "A Mutex<T> (use std::sync::Mutex;) keeps a value locked away so that only one part of the program can touch it at a time. To reach it, call lock(): it waits until nobody else holds the key, then hands you a guard. lock() returns a Result, so you add .unwrap(), just like with join.",
+      "Un Mutex<T> (use std::sync::Mutex;) guarda un valor bajo llave para que solo una parte del programa pueda tocarlo a la vez. Para llegar a él, llama a lock(): espera hasta que nadie más tenga la llave y luego te da un guard. lock() devuelve un Result, así que añades .unwrap(), igual que con join.",
+      "Mutex<T>（use std::sync::Mutex;）は値を鍵のかかった場所にしまい、一度に1か所からしか触れないようにする。中に届くには lock() を呼ぶ。ほかに鍵を持つ者がいなくなるまで待ち、ガードをくれる。lock() は Result を返すので、join と同じく .unwrap() をつける。",
+    ),
+    p(
+      "The guard works like a mutable reference to the value inside. Use * to reach the value: *guard += 1 changes it, and *guard reads it. Notice that the Mutex variable itself doesn't need mut: the Mutex hands out the right to change the value, one holder at a time.",
+      "El guard funciona como una referencia mutable al valor de dentro. Usa * para llegar al valor: *guard += 1 lo cambia y *guard lo lee. Fíjate en que la variable del Mutex no necesita mut: el Mutex reparte el derecho a cambiar el valor, a un poseedor por vez.",
+      "ガードは中の値への可変参照のように働く。* で値に届く：*guard += 1 で変更し、*guard で読む。Mutex の変数自体には mut がいらない点に注目。値を変える権利は Mutex が一度に1人ずつ配るのじゃ。",
+    ),
+    ex('use std::sync::Mutex;\nlet jar = Mutex::new(3);\n{\n    let mut cookies = jar.lock().unwrap();\n    *cookies -= 1;\n}\nprintln!("{}", *jar.lock().unwrap());', "2",
+      L("lock, change through *, and the key returns at }", "lock, cambia con * y la llave vuelve en }", "lock して * で変更、} で鍵が戻る")),
+    p(
+      "Common mistakes: looking for methods like open or key (the only way in is lock), or forgetting the * and trying to add a number to the guard itself. If you see a type error about MutexGuard, you probably need a * in front of it.",
+      "Errores comunes: buscar métodos como open o key (la única entrada es lock), u olvidar el * e intentar sumarle un número al guard mismo. Si ves un error de tipos sobre MutexGuard, probablemente necesitas un * delante.",
+      "よくあるミス：open や key のようなメソッドを探すこと（入り口は lock だけ）。* を忘れてガードそのものに数を足そうとすること。MutexGuard についての型エラーが出たら、たぶん前に * が必要じゃ。",
+    ),
+  ),
+  note("guard-scope", L("When the key comes back", "Cuándo vuelve la llave", "鍵が戻るとき"),
+    p(
+      "You never give the key back by hand: the lock is released automatically when the guard is dropped. A guard stored in a variable is dropped at the closing brace } of the block where it was created. That's why examples wrap the change in a small { ... } block: the key returns right at that brace.",
+      "Nunca devuelves la llave a mano: el bloqueo se libera solo cuando el guard se suelta. Un guard guardado en una variable se suelta en la llave de cierre } del bloque donde se creó. Por eso los ejemplos envuelven el cambio en un pequeño bloque { ... }: la llave vuelve justo en esa }.",
+      "鍵を手で返すことはない。ガードが手放されると、ロックは自動で解除される。変数に入れたガードは、作られたブロックの閉じかっこ } で手放される。だから例では変更を小さな { ... } ブロックで囲む。その } でちょうど鍵が戻るのじゃ。",
+    ),
+    p(
+      "A guard that is never stored in a variable is temporary: it's dropped at the end of its statement, at the semicolon. So jar.lock().unwrap().push(x); takes the key, pushes and returns the key on that same line, and a lock() on the next line gets it again without any problem.",
+      "Un guard que nunca se guarda en una variable es temporal: se suelta al final de su instrucción, en el punto y coma. Así, jar.lock().unwrap().push(x); toma la llave, agrega y la devuelve en esa misma línea, y un lock() en la línea siguiente la obtiene otra vez sin problema.",
+      "変数に入れないガードは一時的なもので、その文の終わり（セミコロン）で手放される。だから jar.lock().unwrap().push(x); は同じ行で鍵を取り、追加し、鍵を返す。次の行の lock() も問題なく鍵を受け取れる。",
+    ),
+    ex('use std::sync::Mutex;\nlet bag = Mutex::new(vec![5]);\nbag.lock().unwrap().push(6);\nbag.lock().unwrap().push(7);\nprintln!("{}", bag.lock().unwrap().len());', "3",
+      L("Each temporary guard returns the key at its semicolon", "Cada guard temporal devuelve la llave en su punto y coma", "一時的なガードはセミコロンで鍵を返す")),
+    p(
+      "The danger is a guard that stays alive. If a variable still holds the key and the same thread calls lock() again, that second call waits for a key that will never come back: the program freezes. That's a deadlock. Close the block or call drop(guard) before locking again.",
+      "El peligro es un guard que sigue vivo. Si una variable aún tiene la llave y el mismo hilo vuelve a llamar a lock(), esa segunda llamada espera una llave que nunca volverá: el programa se congela. Eso es un deadlock. Cierra el bloque o llama a drop(guard) antes de volver a bloquear.",
+      "危ないのは生き続けるガードじゃ。変数がまだ鍵を持ったまま同じスレッドがもう一度 lock() を呼ぶと、2回目は戻らない鍵を待ち続け、プログラムが固まる。これがデッドロック。もう一度ロックする前に、ブロックを閉じるか drop(guard) を呼ぼう。",
+    ),
+    ex('use std::sync::Mutex;\nlet bag = Mutex::new(1);\nlet mut g = bag.lock().unwrap();\n*g += 4;\ndrop(g);\nprintln!("{}", *bag.lock().unwrap());', "5",
+      L("drop(g) returns the key before the next lock()", "drop(g) devuelve la llave antes del siguiente lock()", "drop(g) で次の lock() の前に鍵を返す")),
+  ),
+  note("arc-mutex", L("Arc<Mutex<T>>: shared and changeable", "Arc<Mutex<T>>: compartido y modificable", "Arc<Mutex<T>>：共有して変更できる"),
+    p(
+      "Arc alone lets threads share a value, but only to read it: changing a value through an Arc fails to compile (\"cannot assign to data in an Arc\"). Mutex alone lets you change a value safely, but it has a single owner. Together, Arc<Mutex<T>> gives every thread a pass to the same chest and one key to take turns.",
+      "Arc solo permite que los hilos compartan un valor, pero solo para leerlo: cambiar un valor a través de un Arc no compila (\"cannot assign to data in an Arc\"). Mutex solo permite cambiar un valor con seguridad, pero tiene un único dueño. Juntos, Arc<Mutex<T>> da a cada hilo un pase al mismo cofre y una llave para turnarse.",
+      "Arc だけだとスレッドは値を共有できるが、読むだけ。Arc 越しに値を変えようとするとコンパイルできない（\"cannot assign to data in an Arc\"）。Mutex だけだと安全に変えられるが、持ち主は1人。合わせた Arc<Mutex<T>> なら、どのスレッドも同じ宝箱への通行証と、順番に使う1本の鍵を持てる。",
+    ),
+    bad("use std::sync::Arc;\nlet score = Arc::new(100);\n*score -= 30;",
+      L("Does not compile: an Arc only gives read access", "No compila: un Arc solo da acceso de lectura", "コンパイル不可：Arc は読み取りしかできない")),
+    p(
+      "The order of the layers matters: the Mutex goes inside the Arc, Arc::new(Mutex::new(value)). Each thread gets its own Arc::clone, moves it in with move ||, and calls .lock().unwrap() on it. Arc handles \"who can reach it\"; Mutex handles \"one at a time\". Box shares nothing and has no lock.",
+      "El orden de las capas importa: el Mutex va dentro del Arc, Arc::new(Mutex::new(valor)). Cada hilo recibe su propio Arc::clone, lo mueve con move || y llama a .lock().unwrap() sobre él. Arc se ocupa de \"quién puede llegar\"; Mutex de \"uno a la vez\". Box no comparte nada y no tiene lock.",
+      "重ねる順番が大事。Mutex を Arc の中に入れる：Arc::new(Mutex::new(値))。各スレッドは自分用の Arc::clone をもらい、move || でムーブし、.lock().unwrap() を呼ぶ。Arc は「誰が届くか」、Mutex は「一度に1人」を受け持つ。Box は何も共有せず、lock もない。",
+    ),
+    ex('use std::sync::{Arc, Mutex};\nuse std::thread;\nlet score = Arc::new(Mutex::new(100));\nlet copy = Arc::clone(&score);\nlet h = thread::spawn(move || { *copy.lock().unwrap() -= 30; });\nh.join().unwrap();\nprintln!("{}", *score.lock().unwrap());', "70",
+      L("The thread changes the value; main sees the result", "El hilo cambia el valor; main ve el resultado", "スレッドが値を変え、main が結果を見る")),
+    p(
+      "Is the result predictable? Threads may take the key in any order, but each change happens whole, with the key in hand, so none is lost. After joining every thread, the total is always the same: for additions, the starting value plus everything each thread added. A Vec of handles plus a for loop over join waits for all of them.",
+      "¿El resultado es predecible? Los hilos pueden tomar la llave en cualquier orden, pero cada cambio ocurre entero, con la llave en mano, así que ninguno se pierde. Tras el join de todos los hilos, el total es siempre el mismo: en sumas, el valor inicial más todo lo que sumó cada hilo. Un Vec de handles y un for con join espera a todos.",
+      "結果は予想できる？スレッドが鍵を取る順はバラバラでも、各変更は鍵を持ったまま丸ごと行われるので、なくならない。全スレッドを join したあとの合計はいつも同じ。足し算なら、最初の値に各スレッドが足した分を全部足したものじゃ。ハンドルの Vec と join の for ループで全員を待てる。",
+    ),
+    ex('use std::sync::{Arc, Mutex};\nuse std::thread;\nlet log = Arc::new(Mutex::new(Vec::new()));\nlet mut hs = vec![];\nfor i in 0..3 {\n    let l = Arc::clone(&log);\n    hs.push(thread::spawn(move || l.lock().unwrap().push(i)));\n}\nfor h in hs { h.join().unwrap(); }\nprintln!("{}", log.lock().unwrap().len());', "3",
+      L("Order varies, but after the joins all 3 pushes are there", "El orden varía, pero tras los join están los 3", "順番は変わっても join 後は3つそろう")),
+  ),
+  note("rwlock", L("RwLock: many readers or one writer", "RwLock: muchos lectores o un escritor", "RwLock：読み手は大勢、書き手は1人"),
+    p(
+      "RwLock<T> (use std::sync::RwLock;) is a relative of Mutex with two kinds of keys. read() hands out a read guard, and many read guards can exist at the same time, since looking doesn't change anything. write() hands out a write guard, and only when there are no other guards of any kind.",
+      "RwLock<T> (use std::sync::RwLock;) es pariente de Mutex con dos clases de llaves. read() entrega un guard de lectura, y pueden existir muchos guards de lectura a la vez, porque mirar no cambia nada. write() entrega un guard de escritura, y solo cuando no hay otros guards de ninguna clase.",
+      "RwLock<T>（use std::sync::RwLock;）は Mutex の仲間で、鍵が2種類ある。read() は読み取りガードをくれ、見るだけでは何も変わらないので、同時にいくつあってもいい。write() は書き込みガードをくれるが、ほかのガードが1つもないときだけじゃ。",
+    ),
+    ex('use std::sync::RwLock;\nlet board = RwLock::new(String::from("v1"));\n{\n    let mut w = board.write().unwrap();\n    w.push_str("+");\n}\nlet a = board.read().unwrap();\nlet b = board.read().unwrap();\nprintln!("{} {}", *a, *b);', "v1+ v1+",
+      L("One writer first, then two readers at once", "Primero un escritor, luego dos lectores a la vez", "先に書き手1人、そのあと読み手2人が同時に")),
+    p(
+      "So two read() guards alive together are fine: no freeze. What would freeze is asking for write() while a read guard is still alive in the same thread, the same kind of deadlock as locking a Mutex twice. Use RwLock when a value is read often and changed rarely; otherwise a plain Mutex is simpler.",
+      "Así que dos guards de read() vivos a la vez están bien: no se congela. Lo que sí congelaría es pedir write() mientras un guard de lectura sigue vivo en el mismo hilo, el mismo tipo de deadlock que bloquear un Mutex dos veces. Usa RwLock cuando un valor se lee a menudo y cambia poco; si no, un Mutex simple es más sencillo.",
+      "だから read() のガードが2つ同時に生きていても大丈夫で、固まらない。固まるのは、同じスレッドで読み取りガードが生きたまま write() を求めるとき。Mutex を2回ロックするのと同じデッドロックじゃ。よく読んでたまに変える値なら RwLock、そうでなければふつうの Mutex がかんたん。",
+    ),
+  ),
+];
+
+const channelsNotes: NoteDef[] = [
+  note("channel-basics", L("Channels: send and recv", "Canales: send y recv", "チャネル：send と recv"),
+    p(
+      "A channel is a pipe between threads. mpsc::channel() (after use std::sync::mpsc;) creates both ends at once: let (tx, rx) = mpsc::channel(); tx is the transmitter, the sending end, and rx is the receiver. Usually tx moves into a helper thread and rx stays in main.",
+      "Un canal es un tubo entre hilos. mpsc::channel() (tras use std::sync::mpsc;) crea los dos extremos a la vez: let (tx, rx) = mpsc::channel(); tx es el transmisor, el extremo que envía, y rx es el receptor. Normalmente tx se mueve a un hilo ayudante y rx se queda en main.",
+      "チャネルはスレッドどうしをつなぐ管じゃ。mpsc::channel()（先に use std::sync::mpsc;）は両端を一度に作る：let (tx, rx) = mpsc::channel(); tx は送り手（送信側）、rx は受け手。ふつう tx は助っ人スレッドへムーブし、rx は main に残す。",
+    ),
+    p(
+      "tx.send(value) puts a value into the pipe and returns a Result, so add .unwrap(). rx.recv() takes the next value out; if nothing has arrived yet, it waits until something does. It also returns a Result, so it's rx.recv().unwrap(). The names are exact: send on tx, recv on rx.",
+      "tx.send(valor) mete un valor en el tubo y devuelve un Result, así que añade .unwrap(). rx.recv() saca el siguiente valor; si aún no llegó nada, espera hasta que llegue. También devuelve un Result, así que se escribe rx.recv().unwrap(). Los nombres son exactos: send en tx, recv en rx.",
+      "tx.send(値) は値を管に入れ、Result を返すので .unwrap() をつける。rx.recv() は次の値を取り出す。まだ何も届いていなければ、届くまで待つ。これも Result を返すので rx.recv().unwrap() と書く。名前は正確に：tx には send、rx には recv。",
+    ),
+    ex('use std::sync::mpsc;\nuse std::thread;\nlet (tx, rx) = mpsc::channel();\nthread::spawn(move || { tx.send(String::from("ping")).unwrap(); });\nlet got = rx.recv().unwrap();\nprintln!("{}", got);', "ping",
+      L("The helper sends; main waits in recv() until it arrives", "El ayudante envía; main espera en recv() hasta que llega", "助っ人が送り、main は届くまで recv() で待つ")),
+    p(
+      "send MOVES the value into the channel: after sending, the value belongs to whoever receives it, and the sender can't use it anymore. Using it afterward is E0382, like any other move. If you still need it, send a clone, or read what you need before sending.",
+      "send MUEVE el valor al canal: tras enviarlo, el valor pertenece a quien lo reciba, y el que envía ya no puede usarlo. Usarlo después es E0382, como cualquier otro move. Si aún lo necesitas, envía un clon, o lee lo que necesites antes de enviarlo.",
+      "send は値をチャネルへムーブする。送ったあと値は受け取る側のもので、送った側はもう使えない。あとで使うと、ほかのムーブと同じく E0382。まだ必要なら clone を送るか、送る前に必要なものを読んでおこう。",
+    ),
+    bad("use std::sync::mpsc;\nlet (tx, rx) = mpsc::channel();\nlet parcel = vec![1, 2];\ntx.send(parcel).unwrap();\nprintln!(\"{}\", parcel.len());",
+      L("E0382: parcel moved into the channel", "E0382: parcel se movió al canal", "E0382：parcel はチャネルへムーブ済み")),
+  ),
+  note("many-senders", L("Many senders, one receiver", "Muchos emisores, un receptor", "送り手は大勢、受け手は1人"),
+    p(
+      "mpsc means multiple producer, single consumer: many senders, one receiver. Each thread needs its own sender, so clone tx: let tx2 = tx.clone(); Every clone sends into the same pipe, and everything arrives at the one rx. A tx moved into one thread can't be used by another (E0382), which is why you clone first.",
+      "mpsc significa multiple producer, single consumer: muchos emisores, un receptor. Cada hilo necesita su propio emisor, así que clona tx: let tx2 = tx.clone(); Cada clon envía al mismo tubo, y todo llega al único rx. Un tx movido a un hilo no puede usarlo otro (E0382), por eso se clona primero.",
+      "mpsc は multiple producer, single consumer（送り手は複数、受け手は1人）の意味。スレッドごとに送り手が必要なので tx を clone する：let tx2 = tx.clone(); どの clone も同じ管に送り、すべて1つの rx に届く。1つのスレッドへムーブした tx は別のスレッドでは使えない（E0382）。だから先に clone するのじゃ。",
+    ),
+    ex('use std::sync::mpsc;\nuse std::thread;\nlet (tx, rx) = mpsc::channel();\nlet tx_b = tx.clone();\nthread::spawn(move || { tx.send(4).unwrap(); });\nthread::spawn(move || { tx_b.send(5).unwrap(); });\nlet mut total = 0;\nfor n in rx { total += n; }\nprintln!("{}", total);', "9",
+      L("Two senders, one receiver; the sum doesn't depend on order", "Dos emisores, un receptor; la suma no depende del orden", "送り手2人、受け手1人。合計は順番に関係ない")),
+    p(
+      "for n in rx keeps receiving until the channel closes, and it closes only when EVERY sender is gone. Senders moved into threads disappear when those threads finish. But a tx still alive in main keeps the channel open, so the loop waits forever. That's why, after cloning one tx per thread in a loop, you call drop(tx) on the original.",
+      "for n in rx sigue recibiendo hasta que el canal se cierra, y solo se cierra cuando TODOS los emisores han desaparecido. Los emisores movidos a hilos desaparecen cuando esos hilos terminan. Pero un tx aún vivo en main mantiene el canal abierto, y el bucle espera para siempre. Por eso, tras clonar un tx por hilo en un bucle, se hace drop(tx) del original.",
+      "for n in rx はチャネルが閉じるまで受け取り続け、チャネルは「すべての」送り手が消えたときだけ閉じる。スレッドへムーブした送り手は、そのスレッドが終わると消える。でも main に tx が生きていればチャネルは開いたままで、ループは永遠に待つ。だからループでスレッドごとに clone したあと、元の tx を drop(tx) するのじゃ。",
+    ),
+    ex('use std::sync::mpsc;\nuse std::thread;\nlet (tx, rx) = mpsc::channel();\nfor word in ["a", "b"] {\n    let t = tx.clone();\n    thread::spawn(move || t.send(word).unwrap());\n}\ndrop(tx);\nprintln!("{}", rx.iter().count());', "2",
+      L("drop(tx) lets the receiving side finish", "drop(tx) deja que el lado receptor termine", "drop(tx) で受け取り側が終われる")),
+    p(
+      "Messages from different threads can arrive in any order, so don't rely on it. A sum or a count is safe, because it gives the same result in any order. Common mistake: forgetting drop(tx) and wondering why the program never ends.",
+      "Los mensajes de hilos distintos pueden llegar en cualquier orden, así que no dependas de él. Una suma o un conteo son seguros, porque dan el mismo resultado en cualquier orden. Error común: olvidar drop(tx) y preguntarse por qué el programa nunca termina.",
+      "別々のスレッドからのメッセージはどんな順でも届くので、順番に頼らないこと。合計や個数なら順番に関係なく同じ結果になるので安全じゃ。よくあるミス：drop(tx) を忘れて、プログラムが終わらない理由に悩むこと。",
+    ),
+  ),
+  note("send-sync", L("Send and Sync: thread badges", "Send y Sync: insignias de hilos", "Send と Sync：スレッドのバッジ"),
+    p(
+      "Send and Sync are marker traits: they have no methods, they only state a fact about a type. Send means \"a value of this type can be moved to another thread\". Sync means \"several threads can look at it through & at the same time\". Rust adds them automatically to every type whose parts are all safe.",
+      "Send y Sync son traits marcadores: no tienen métodos, solo afirman algo sobre un tipo. Send significa \"un valor de este tipo se puede mover a otro hilo\". Sync significa \"varios hilos pueden mirarlo con & a la vez\". Rust los añade automáticamente a todo tipo cuyas partes sean todas seguras.",
+      "Send と Sync はマーカートレイト。メソッドはなく、型についての事実を示すだけじゃ。Send は「この型の値は別のスレッドへムーブできる」、Sync は「複数のスレッドが & で同時に見られる」という意味。部品がすべて安全な型には、Rustが自動でつけてくれる。",
+    ),
+    p(
+      "thread::spawn requires everything the closure carries to be Send (and 'static, meaning it doesn't borrow short-lived local data). Sending through a channel is moving to another thread too, so the value must be Send. When you write your own function that moves a T into a thread, you add the same bound: T: Send + 'static.",
+      "thread::spawn exige que todo lo que lleva el closure sea Send (y 'static, es decir, que no tome prestados datos locales de vida corta). Enviar por un canal también es mover a otro hilo, así que el valor debe ser Send. Cuando escribes tu propia función que mueve un T a un hilo, añades el mismo bound: T: Send + 'static.",
+      "thread::spawn は、クロージャが運ぶものすべてに Send を求める（さらに 'static、つまり短命なローカルデータを借りていないこと）。チャネルで送るのも別スレッドへのムーブなので、値は Send でなければならない。T をスレッドへムーブする関数を自分で書くときは、同じ境界 T: Send + 'static をつける。",
+    ),
+    ex('use std::thread;\nfn hand_off<T: Send + std::fmt::Debug + \'static>(x: T) {\n    thread::spawn(move || println!("{:?}", x)).join().unwrap();\n}\nhand_off(vec![4, 5]);', "[4, 5]",
+      L("The bound promises T can travel to the new thread", "El bound promete que T puede viajar al nuevo hilo", "境界が「T は新しいスレッドへ旅できる」と約束する")),
+    p(
+      "Most types are Send: numbers, String, Vec, Arc, Mutex. The famous exception is Rc, whose counter isn't thread-safe; moving or sending an Rc to another thread fails with E0277. Copy is unrelated: it's about duplicating values, not about threads. Sync matters when sharing through references, for example inside an Arc.",
+      "La mayoría de los tipos son Send: números, String, Vec, Arc, Mutex. La excepción famosa es Rc, cuyo contador no es seguro entre hilos; mover o enviar un Rc a otro hilo falla con E0277. Copy no tiene que ver: trata de duplicar valores, no de hilos. Sync importa al compartir mediante referencias, por ejemplo dentro de un Arc.",
+      "ほとんどの型は Send じゃ：数、String、Vec、Arc、Mutex。有名な例外は Rc で、カウンターがスレッド安全でないため、Rc を別スレッドへムーブしたり送ったりすると E0277 になる。Copy は無関係で、値の複製の話でありスレッドの話ではない。Sync は参照で共有するとき（たとえば Arc の中）に効いてくる。",
+    ),
+    bad('use std::rc::Rc;\nuse std::thread;\nlet shared = Rc::new(String::from("x"));\nthread::spawn(move || println!("{}", shared));',
+      L("E0277: Rc isn't Send", "E0277: Rc no es Send", "E0277：Rc は Send ではない")),
+  ),
+];
+
+// The boss recaps the whole region: one short note per idea it tests.
+const bossNotes: NoteDef[] = [
+  note("recap-threads", L("Recap: spawn, join and move", "Repaso: spawn, join y move", "復習：spawn・join・move"),
+    p(
+      "thread::spawn(closure) starts a thread and returns a handle; handle.join().unwrap() waits for it and returns the closure's value.",
+      "thread::spawn(closure) lanza un hilo y devuelve un handle; handle.join().unwrap() lo espera y devuelve el valor del closure.",
+      "thread::spawn(クロージャ) はスレッドを起動してハンドルを返す。handle.join().unwrap() はそれを待ち、クロージャの値を返す。",
+    ),
+    p(
+      "A closure that uses main's variables only borrows them, which a thread can't do (E0373). Write move || so the thread takes ownership; after that, main can't use the moved value.",
+      "Un closure que usa variables de main solo las toma prestadas, y un hilo no puede hacer eso (E0373). Escribe move || para que el hilo tome la propiedad; después, main no puede usar el valor movido.",
+      "main の変数を使うクロージャは借りるだけで、スレッドではそれができない（E0373）。move || と書けばスレッドが所有権を持つ。そのあと main はムーブした値を使えない。",
+    ),
+    ex('use std::thread;\nlet word = String::from("go");\nlet h = thread::spawn(move || word.len());\nprintln!("{}", h.join().unwrap());', "2"),
+  ),
+  note("recap-arc", L("Recap: Arc and Rc", "Repaso: Arc y Rc", "復習：Arc と Rc"),
+    p(
+      "Arc::new(v) creates a shared value with a pass counter. Arc::clone(&a) adds a pass without copying; Arc::strong_count(&a) counts the passes, the original included.",
+      "Arc::new(v) crea un valor compartido con un contador de pases. Arc::clone(&a) suma un pase sin copiar; Arc::strong_count(&a) cuenta los pases, incluido el original.",
+      "Arc::new(v) は通行証カウンターつきの共有値を作る。Arc::clone(&a) はコピーせずに通行証を1枚増やし、Arc::strong_count(&a) は元の分も含めて数える。",
+    ),
+    p(
+      "Rc does the same for a single thread, but it isn't Send: moving it into a thread fails with E0277. Across threads, use Arc.",
+      "Rc hace lo mismo para un solo hilo, pero no es Send: moverlo a un hilo falla con E0277. Entre hilos, usa Arc.",
+      "Rc は1つのスレッド用に同じことをするが、Send ではない。スレッドへムーブすると E0277。スレッドをまたぐなら Arc を使う。",
+    ),
+    ex('use std::sync::Arc;\nlet orb = Arc::new(0);\nlet x = Arc::clone(&orb);\nlet y = Arc::clone(&orb);\nlet z = Arc::clone(&orb);\nprintln!("{}", Arc::strong_count(&z));', "4"),
+  ),
+  note("recap-mutex", L("Recap: Mutex and lock", "Repaso: Mutex y lock", "復習：Mutex と lock"),
+    p(
+      "Arc only gives read access: changing the value through it doesn't compile. To change shared data, put a Mutex inside: Arc::new(Mutex::new(v)).",
+      "Arc solo da acceso de lectura: cambiar el valor a través de él no compila. Para cambiar datos compartidos, pon un Mutex dentro: Arc::new(Mutex::new(v)).",
+      "Arc は読み取りだけ。Arc 越しに値を変えるとコンパイルできない。共有データを変えるには中に Mutex を入れる：Arc::new(Mutex::new(v))。",
+    ),
+    p(
+      "m.lock().unwrap() waits for the key and gives a guard; use * to read or change the value. The key returns when the guard is dropped.",
+      "m.lock().unwrap() espera la llave y da un guard; usa * para leer o cambiar el valor. La llave vuelve cuando el guard se suelta.",
+      "m.lock().unwrap() は鍵を待ってガードをくれる。* で値を読み書きする。ガードが手放されると鍵が戻る。",
+    ),
+    ex('use std::sync::Mutex;\nlet coins = Mutex::new(10);\n*coins.lock().unwrap() *= 3;\nprintln!("{}", *coins.lock().unwrap());', "30"),
+  ),
+  note("recap-channels", L("Recap: channels and Send", "Repaso: canales y Send", "復習：チャネルと Send"),
+    p(
+      "let (tx, rx) = mpsc::channel(); tx.send(v) moves a value in; rx.recv() waits for one. Clone tx for each extra sender. for n in rx ends only when every tx is gone, so drop(tx) the unused original.",
+      "let (tx, rx) = mpsc::channel(); tx.send(v) mete un valor; rx.recv() espera uno. Clona tx para cada emisor extra. for n in rx termina solo cuando todos los tx desaparecen, así que haz drop(tx) del original sin usar.",
+      "let (tx, rx) = mpsc::channel(); tx.send(v) で値を入れ、rx.recv() で待って受け取る。送り手を増やすなら tx を clone。for n in rx はすべての tx が消えたときだけ終わるので、使わない元の tx は drop(tx) する。",
+    ),
+    p(
+      "Moving a value to another thread, by spawn or by send, requires the Send badge. Generic code asks for it with T: Send + 'static.",
+      "Mover un valor a otro hilo, con spawn o con send, exige la insignia Send. El código genérico la pide con T: Send + 'static.",
+      "spawn でも send でも、値を別スレッドへ移すには Send バッジが必要。ジェネリックなコードでは T: Send + 'static で求める。",
+    ),
+    ex('use std::sync::mpsc;\nuse std::thread;\nlet (tx, rx) = mpsc::channel();\nfor k in 1..=4 {\n    let t = tx.clone();\n    thread::spawn(move || t.send(k * k).unwrap());\n}\ndrop(tx);\nprintln!("{}", rx.iter().sum::<i32>());', "30"),
+  ),
+];
+
 const threads: LessonDef = {
   slug: "threads-and-move",
   title: L("Helpers in parallel", "Ayudantes en paralelo", "並行して働く助っ人"),
@@ -39,6 +395,7 @@ const threads: LessonDef = {
   xp: 75,
   enemy: "rust/mite",
   enemyName: L("IMPATIENT BUG", "BUG IMPACIENTE", "せっかちバグ"),
+  notes: threadsNotes,
   beats: [
     say(L(
       "Welcome to the Fearless Tower. Here you don't work alone: you call HELPERS that run at the same time. They're called threads.",
@@ -54,6 +411,7 @@ const threads: LessonDef = {
       kind: "predict",
       prompt: WHAT_PRINTS,
       code: 'let double = |x: i32| x * 2;\nprintln!("{}", double(4));',
+      hint: L("double is a closure. Calling it runs its body with x set to the value you pass in.", "double es un closure. Llamarlo ejecuta su cuerpo con x igual al valor que le pasas.", "double はクロージャ。呼ぶと、渡した値を x として本体が動く。"), note: "closures",
       options: ["8", "4", L("Error: missing fn", "Error: falta fn", "エラー: fnがない")],
       answer: 0,
       output: "8",
@@ -85,6 +443,7 @@ const threads: LessonDef = {
       kind: "pick",
       prompt: L("Wait for the helper to finish", "Espera a que el ayudante termine", "助っ人が終わるのを待とう"),
       code: `${T}let h = thread::spawn(|| {\n    println!("done");\n});\nh.___().unwrap();`,
+      hint: L("spawn returned a JoinHandle. Which method of the handle waits for its thread? Its name echoes the type.", "spawn devolvió un JoinHandle. ¿Qué método del handle espera a su hilo? Su nombre recuerda al tipo.", "spawn は JoinHandle を返した。スレッドを待つメソッドは？名前は型名に似ている。"), note: "spawn-join",
       options: ["join", "wait", "end"],
       answer: 0,
       explain: L(
@@ -100,6 +459,7 @@ const threads: LessonDef = {
       kind: "predict",
       prompt: L("join() also brings the result. What prints?", "join() también trae el resultado. ¿Qué imprime?", "join() は結果も運ぶ。何が表示される？"),
       code: `${T}let h = thread::spawn(|| 2 + 3);\nlet r = h.join().unwrap();\nprintln!("{}", r);`,
+      hint: L("A closure's last expression is its return value. What does join().unwrap() hand back to main?", "La última expresión de un closure es su valor de retorno. ¿Qué le entrega join().unwrap() a main?", "クロージャの最後の式が戻り値。join().unwrap() は main に何を渡す？"), note: "spawn-join",
       options: ["5", "()", L("Error: a thread returns nothing", "Error: un hilo no devuelve nada", "エラー: スレッドは値を返さない")],
       answer: 0,
       output: "5",
@@ -121,6 +481,7 @@ const threads: LessonDef = {
       kind: "predict",
       prompt: L("In what order do A and B come out?", "¿En qué orden salen A y B?", "A と B はどの順で出る？"),
       code: `${T}let a = thread::spawn(|| println!("A"));\nlet b = thread::spawn(|| println!("B"));\na.join().unwrap();\nb.join().unwrap();`,
+      hint: L("Both threads start right away and run in parallel. Does join decide when each one prints?", "Ambos hilos arrancan enseguida y corren en paralelo. ¿Decide join cuándo imprime cada uno?", "2つのスレッドはすぐに起動し並行して動く。表示のタイミングを join が決める？"), note: "spawn-join",
       options: [L("Always A, then B", "Siempre A y luego B", "いつも A、次に B"), L("It can vary on each run", "Puede variar en cada ejecución", "実行ごとに変わりうる")],
       answer: 1,
       explain: L(
@@ -170,6 +531,7 @@ const threads: LessonDef = {
       kind: "pick",
       prompt: L("Hand the loot to the thread", "Entrega el botín al hilo", "戦利品をスレッドに渡そう"),
       code: `${T}let loot = vec![1, 2, 3];\nlet h = thread::spawn(___ || {\n    println!("{:?}", loot);\n});\nh.join().unwrap();`,
+      hint: L("The closure only borrows loot, and the thread may outlive main. Which keyword makes it take ownership?", "El closure solo toma prestado loot, y el hilo puede vivir más que main. ¿Qué palabra le da la propiedad?", "クロージャは loot を借りるだけで、スレッドは main より長生きしうる。所有権を取らせる言葉は？"), note: "move-closures",
       options: ["move", "ref", "mut"],
       answer: 0,
       explain: L(
@@ -185,6 +547,7 @@ const threads: LessonDef = {
       kind: "predict",
       prompt: L("main uses loot after the move. Does it compile?", "main usa loot después del move. ¿Compila?", "move の後に main が loot を使う。コンパイルできる？"),
       code: `${T}let loot = vec![1, 2, 3];\nlet h = thread::spawn(move || {\n    println!("{}", loot.len());\n});\nh.join().unwrap();\nprintln!("{:?}", loot);`,
+      hint: L("After move ||, who owns loot? Look at what main does with it on the last line.", "Tras move ||, ¿de quién es loot? Mira qué hace main con él en la última línea.", "move || のあと、loot の持ち主は誰？最後の行で main が何をしているか見よう。"), note: "move-closures",
       options: [L("Yes: prints 3 and [1, 2, 3]", "Sí: imprime 3 y [1, 2, 3]", "はい: 3 と [1, 2, 3] を表示"), L("No: loot moved into the thread", "No: loot se movió al hilo", "いいえ: loot はスレッドへムーブ済み")],
       answer: 1,
       explain: L(
@@ -200,6 +563,7 @@ const threads: LessonDef = {
       kind: "type",
       prompt: L("Start the thread", "Lanza el hilo", "スレッドを起動しよう"),
       code: `${T}let h = thread::___(move || 7);\nprintln!("{}", h.join().unwrap());`,
+      hint: L("Which function of std::thread starts a new thread from a closure and returns a JoinHandle?", "¿Qué función de std::thread lanza un hilo nuevo a partir de un closure y devuelve un JoinHandle?", "クロージャから新しいスレッドを起動し JoinHandle を返す std::thread の関数は？"), note: "spawn-join",
       answer: "spawn",
       explain: L(
         "thread::spawn(closure) starts a new thread.",
@@ -213,6 +577,7 @@ const threads: LessonDef = {
       kind: "order",
       prompt: L("Order: create, hand over, wait", "Ordena: crea, entrega, espera", "並べよう: 作る、渡す、待つ"),
       lines: ['let name = String::from("Ada");', "let h = thread::spawn(move || {", '    println!("Hello, {}", name);', "});", "h.join().unwrap();"],
+      hint: L("A value must exist before a closure can take it, and you wait for the thread after starting it.", "Un valor debe existir antes de que un closure lo tome, y esperas al hilo después de lanzarlo.", "クロージャが受け取る前に値が必要。スレッドを待つのは起動したあと。"), note: "move-closures",
       explain: L(
         "The value exists before the thread; move hands it over; join waits at the end.",
         "El valor existe antes del hilo; move lo entrega; join espera al final.",
@@ -225,6 +590,7 @@ const threads: LessonDef = {
       kind: "run",
       prompt: L("Fix it: it must print Helper: Tower taken", "Arréglalo: debe imprimir Helper: Tower taken", "直そう: Helper: Tower taken と表示させる"),
       starter: 'use std::thread;\n\nfn main() {\n    let message = String::from("Tower taken");\n    let h = thread::spawn(|| {\n        println!("Helper: {}", message);\n    });\n    h.join().unwrap();\n}\n',
+      hint: L("Read the error: the closure only borrows message. One keyword before the bars makes the thread own it.", "Lee el error: el closure solo toma prestado message. Una palabra antes de las barras hace que el hilo sea su dueño.", "エラーを読もう。クロージャは message を借りるだけ。棒の前の言葉でスレッドの物になる。"), note: "move-closures",
       expect: "Helper: Tower taken",
       solution: 'use std::thread;\n\nfn main() {\n    let message = String::from("Tower taken");\n    let h = thread::spawn(move || {\n        println!("Helper: {}", message);\n    });\n    h.join().unwrap();\n}\n',
       fallback: [String.raw`spawn\s*\(\s*move\s*\|`],
@@ -245,6 +611,7 @@ const arc: LessonDef = {
   xp: 80,
   enemy: "rust/dangler",
   enemyName: L("DUPLICATE BUG", "BUG DUPLICADO", "分身バグ"),
+  notes: arcNotes,
   beats: [
     say(L(
       "move hands the map to ONE helper. What if three helpers need to read the same map?",
@@ -278,6 +645,7 @@ const arc: LessonDef = {
       kind: "predict",
       prompt: WHAT_PRINTS,
       code: "use std::sync::Arc;\nlet a = Arc::new(5);\nlet b = Arc::clone(&a);\nlet c = Arc::clone(&a);\nprintln!(\"{}\", Arc::strong_count(&a));",
+      hint: L("Count the passes: the original Arc plus every clone that still exists.", "Cuenta los pases: el Arc original más cada clone que aún existe.", "通行証を数えよう。元の Arc と、残っている clone の数を足す。"), note: "arc-passes",
       options: ["1", "2", "3"],
       answer: 2,
       output: "3",
@@ -294,6 +662,7 @@ const arc: LessonDef = {
       kind: "pick",
       prompt: L("Ask how many passes there are", "Pregunta cuántos pases hay", "通行証が何枚あるか聞こう"),
       code: 'use std::sync::Arc;\nlet map = Arc::new(String::from("cave"));\nlet pass = Arc::clone(&map);\nprintln!("{}", Arc::___(&map));',
+      hint: L("Which Arc function reads the pass counter? It's called as Arc::name(&x), and it counts owners.", "¿Qué función de Arc lee el contador de pases? Se llama como Arc::nombre(&x) y cuenta dueños.", "通行証のカウンターを読む Arc の関数は？Arc::名前(&x) の形で、持ち主を数える。"), note: "arc-passes",
       options: ["strong_count", "len", "count"],
       answer: 0,
       explain: L(
@@ -309,6 +678,7 @@ const arc: LessonDef = {
       kind: "predict",
       prompt: WHAT_PRINTS,
       code: 'use std::sync::Arc;\nlet map = Arc::new(String::from("cave"));\nlet pass = Arc::clone(&map);\nprintln!("{} {}", map, pass);',
+      hint: L("Arc::clone made a new pass to the same String. Was anything moved out of map?", "Arc::clone creó un pase nuevo al mismo String. ¿Se movió algo fuera de map?", "Arc::clone は同じ String への通行証を増やした。map から何かムーブされた？"), note: "arc-passes",
       options: ["cave cave", L("cave and an error", "cave y un error", "cave とエラー"), L("Error: map was moved", "Error: map se movió", "エラー: map はムーブ済み")],
       answer: 0,
       output: "cave cave",
@@ -357,6 +727,7 @@ const arc: LessonDef = {
       kind: "predict",
       prompt: COMPILES,
       code: `use std::rc::Rc;\n${T}let map = Rc::new(5);\nlet pass = Rc::clone(&map);\nlet h = thread::spawn(move || println!("{}", pass));\nh.join().unwrap();`,
+      hint: L("Moving a value into a thread needs the Send badge. Does Rc have it?", "Mover un valor a un hilo exige la insignia Send. ¿La tiene Rc?", "値をスレッドへムーブするには Send バッジが必要。Rc は持っている？"), note: "rc-vs-arc",
       options: [L("Yes: prints 5", "Sí: imprime 5", "はい: 5 を表示"), L("No: Rc can't be sent between threads", "No: Rc no se puede enviar entre hilos", "いいえ: Rc はスレッド間で送れない")],
       answer: 1,
       explain: L(
@@ -372,6 +743,7 @@ const arc: LessonDef = {
       kind: "pick",
       prompt: L("Main and the helper both read the map", "Main y el ayudante leen el mapa", "main と助っ人の両方が地図を読む"),
       code: `${A}let map = Arc::new(5);\nlet pass = ___;\nlet h = thread::spawn(move || println!("{}", pass));\nh.join().unwrap();\nprintln!("{}", map);`,
+      hint: L("main still prints map at the end, and the thread needs its own owner. A borrow can't travel into a thread.", "main aún imprime map al final, y el hilo necesita su propio dueño. Un préstamo no puede viajar a un hilo.", "main は最後に map を表示し、スレッドには自分の持ち主が要る。借用はスレッドへ行けない。"), note: "arc-threads",
       options: ["Arc::clone(&map)", "map", "&map"],
       answer: 0,
       explain: L(
@@ -387,6 +759,7 @@ const arc: LessonDef = {
       kind: "type",
       prompt: L("Get another pass", "Saca otro pase", "通行証をもう1枚"),
       code: 'use std::sync::Arc;\nlet map = Arc::new(String::from("cave"));\nlet pass = Arc::___(&map);\nprintln!("{}", Arc::strong_count(&pass));',
+      hint: L("Which Arc function makes one more pass to the same value without copying it?", "¿Qué función de Arc crea un pase más al mismo valor sin copiarlo?", "コピーせずに同じ値への通行証を1枚増やす Arc の関数は？"), note: "arc-passes",
       answer: "clone",
       explain: L(
         "Arc::clone(&x) makes one more pass to the same value.",
@@ -400,6 +773,7 @@ const arc: LessonDef = {
       kind: "order",
       prompt: L("Order: the helper and the hero read the map", "Ordena: el ayudante y el héroe leen el mapa", "並べよう: 助っ人と勇者が地図を読む"),
       lines: ['let map = Arc::new(String::from("cave"));', "let pass = Arc::clone(&map);", 'let h = thread::spawn(move || println!("Helper: {}", pass));', "h.join().unwrap();", 'println!("Hero: {}", map);'],
+      hint: L("Each line needs what the earlier lines created. And main should read only after waiting for the helper.", "Cada línea necesita lo que crearon las anteriores. Y main debe leer solo tras esperar al ayudante.", "各行は前の行が作ったものを使う。main が読むのは助っ人を待ったあと。"), note: "arc-threads",
       explain: L(
         "First the map, then the pass that travels to the thread, join, and finally the hero reads.",
         "Primero el mapa, luego el pase que viaja al hilo, join y al final lee el héroe.",
@@ -412,6 +786,7 @@ const arc: LessonDef = {
       kind: "run",
       prompt: L("Fix it: it must print Helper reads: cave", "Arréglalo: debe imprimir Helper reads: cave", "直そう: Helper reads: cave と表示させる"),
       starter: 'use std::rc::Rc;\nuse std::thread;\n\nfn main() {\n    let map = Rc::new(String::from("cave"));\n    let pass = Rc::clone(&map);\n    let h = thread::spawn(move || {\n        println!("Helper reads: {}", pass);\n    });\n    h.join().unwrap();\n}\n',
+      hint: L("The error says Rc can't be sent between threads. Which type does the same job with a thread-safe counter?", "El error dice que Rc no se puede enviar entre hilos. ¿Qué tipo hace lo mismo con un contador seguro entre hilos?", "Rc はスレッド間で送れないとエラーが言う。スレッド安全なカウンターで同じ仕事をする型は？"), note: "rc-vs-arc",
       expect: "Helper reads: cave",
       solution: 'use std::sync::Arc;\nuse std::thread;\n\nfn main() {\n    let map = Arc::new(String::from("cave"));\n    let pass = Arc::clone(&map);\n    let h = thread::spawn(move || {\n        println!("Helper reads: {}", pass);\n    });\n    h.join().unwrap();\n}\n',
       fallback: [String.raw`Arc\s*::\s*new\s*\(`, String.raw`Arc\s*::\s*clone\s*\(`],
@@ -432,6 +807,7 @@ const mutex: LessonDef = {
   xp: 85,
   enemy: "rust/cog-golem",
   enemyName: L("RACE BUG", "BUG DE CARRERA", "競合バグ"),
+  notes: mutexNotes,
   beats: [
     say(L(
       "Arc lets several threads READ. And writing? If two add at once, the gold gets corrupted: a data race.",
@@ -466,6 +842,7 @@ const mutex: LessonDef = {
       kind: "pick",
       prompt: L("Ask for the chest's key", "Pide la llave del cofre", "宝箱の鍵をもらおう"),
       code: 'use std::sync::Mutex;\nlet chest = Mutex::new(5);\n{\n    let mut gold = chest.___().unwrap();\n    *gold += 1;\n}\nprintln!("{}", *chest.lock().unwrap());',
+      hint: L("A Mutex has a single way in: one method that waits for the key and gives you a guard.", "Un Mutex tiene una sola entrada: un método que espera la llave y te da un guard.", "Mutex の入り口は1つ。鍵を待ってガードをくれるメソッドじゃ。"), note: "mutex-lock",
       options: ["lock", "open", "key"],
       answer: 0,
       explain: L(
@@ -481,6 +858,7 @@ const mutex: LessonDef = {
       kind: "predict",
       prompt: WHAT_PRINTS,
       code: 'use std::sync::Mutex;\nlet chest = Mutex::new(vec![1, 2]);\nchest.lock().unwrap().push(3);\nprintln!("{}", chest.lock().unwrap().len());',
+      hint: L("These guards are never stored in a variable. When is a temporary guard dropped?", "Estos guards nunca se guardan en una variable. ¿Cuándo se suelta un guard temporal?", "このガードは変数に入れていない。一時的なガードはいつ手放される？"), note: "guard-scope",
       options: ["3", "2", L("Freezes waiting for the key", "Se congela esperando la llave", "鍵を待って固まる")],
       answer: 0,
       output: "3",
@@ -515,6 +893,7 @@ const mutex: LessonDef = {
       kind: "predict",
       prompt: L("Five threads add 2 each. What prints?", "Cinco hilos suman 2 cada uno. ¿Qué imprime?", "5つのスレッドが2ずつ足す。何が表示される？"),
       code: "let chest = Arc::new(Mutex::new(0));\nlet mut threads = vec![];\nfor _ in 0..5 {\n    let pass = Arc::clone(&chest);\n    threads.push(thread::spawn(move || { *pass.lock().unwrap() += 2; }));\n}\nfor h in threads { h.join().unwrap(); }\nprintln!(\"{}\", *chest.lock().unwrap());",
+      hint: L("Each thread adds while holding the key, so no addition gets lost. After all the joins, what's the total?", "Cada hilo suma con la llave en mano, así que ninguna suma se pierde. Tras todos los join, ¿cuál es el total?", "各スレッドは鍵を持って足すので、足し算は消えない。全部 join したら合計は？"), note: "arc-mutex",
       options: ["10", "2", L("Varies on each run", "Varía en cada ejecución", "実行ごとに変わる")],
       answer: 0,
       output: "10",
@@ -531,6 +910,7 @@ const mutex: LessonDef = {
       kind: "pick",
       prompt: L("What goes inside the Arc so you can add?", "¿Qué va dentro del Arc para poder sumar?", "足せるように Arc の中に何を入れる？"),
       code: `${AM}let chest = Arc::new(___::new(0));\nlet pass = Arc::clone(&chest);\nlet h = thread::spawn(move || { *pass.lock().unwrap() += 5; });\nh.join().unwrap();\nprintln!("{}", *chest.lock().unwrap());`,
+      hint: L("The thread calls lock() on it. Which type has lock() and allows changes one at a time?", "El hilo llama a lock() sobre él. ¿Qué tipo tiene lock() y permite cambios de uno en uno?", "スレッドは lock() を呼ぶ。lock() を持ち、1人ずつ変更させる型は？"), note: "arc-mutex",
       options: ["Mutex", "Box", "Arc"],
       answer: 0,
       explain: L(
@@ -545,6 +925,7 @@ const mutex: LessonDef = {
       kind: "predict",
       prompt: L("Arc without Mutex. Does it compile?", "Arc sin Mutex. ¿Compila?", "Mutex なしの Arc。コンパイルできる？"),
       code: `${A}let gold = Arc::new(0);\nlet pass = Arc::clone(&gold);\nlet h = thread::spawn(move || { *pass += 1; });\nh.join().unwrap();`,
+      hint: L("The thread writes *pass += 1. Does an Arc alone allow changing the value it shares?", "El hilo escribe *pass += 1. ¿Permite un Arc solo cambiar el valor que comparte?", "スレッドは *pass += 1 と書く。Arc だけで共有値を変えられる？"), note: "arc-mutex",
       options: [YES, L("No: you can't mutate through Arc", "No: no se puede mutar a través de Arc", "いいえ: Arc 越しには変更できない")],
       answer: 1,
       explain: L(
@@ -564,6 +945,7 @@ const mutex: LessonDef = {
       kind: "predict",
       prompt: L("The block frees the key before the 2nd lock. Output?", "El bloque suelta la llave antes del 2.º lock. ¿Qué imprime?", "2回目の lock の前に鍵が戻る。何が出る？"),
       code: 'use std::sync::Mutex;\nlet chest = Mutex::new(1);\n{\n    let mut a = chest.lock().unwrap();\n    *a += 1;\n}\nlet b = chest.lock().unwrap();\nprintln!("{}", *b);',
+      hint: L("Where is guard a dropped? Check whether the key is back before the second lock() is called.", "¿Dónde se suelta el guard a? Revisa si la llave volvió antes de llamar al segundo lock().", "ガード a はどこで手放される？2回目の lock() の前に鍵は戻っている？"), note: "guard-scope",
       options: ["2", "1", DEADLOCK],
       answer: 0,
       output: "2",
@@ -585,6 +967,7 @@ const mutex: LessonDef = {
       kind: "predict",
       prompt: L("Two readers at once. What prints?", "Dos lectores a la vez. ¿Qué imprime?", "2人が同時に読む。何が表示される？"),
       code: 'use std::sync::RwLock;\nlet map = RwLock::new(5);\nlet r1 = map.read().unwrap();\nlet r2 = map.read().unwrap();\nprintln!("{}", *r1 + *r2);',
+      hint: L("RwLock allows many readers at the same time. Is anyone asking to write here?", "RwLock permite muchos lectores a la vez. ¿Alguien pide escribir aquí?", "RwLock は同時に何人でも読める。ここで書こうとしている者はいる？"), note: "rwlock",
       options: ["10", "5", DEADLOCK],
       answer: 0,
       output: "10",
@@ -599,6 +982,7 @@ const mutex: LessonDef = {
       kind: "type",
       prompt: ASK_KEY,
       code: 'use std::sync::Mutex;\nlet chest = Mutex::new(1);\nlet mut gold = chest.___().unwrap();\n*gold += 1;\nprintln!("{}", *gold);',
+      hint: L("It's the only Mutex method that hands you a guard, the same one used throughout this lesson.", "Es el único método de Mutex que te da un guard, el mismo que se usó en toda esta lección.", "ガードをくれる Mutex の唯一のメソッド。このレッスンでずっと使ってきたものじゃ。"), note: "mutex-lock",
       answer: "lock",
       explain: L(
         "chest.lock().unwrap() gives you the guard with the key.",
@@ -612,6 +996,7 @@ const mutex: LessonDef = {
       kind: "order",
       prompt: L("Order: a helper adds to the chest", "Ordena: un ayudante suma al cofre", "並べよう: 助っ人が宝箱に足す"),
       lines: ["let pass = Arc::clone(&chest);", "let h = thread::spawn(move || {", "    *pass.lock().unwrap() += 1;", "});", "h.join().unwrap();"],
+      hint: L("The thread moves the pass, so the pass must exist first. And you wait for the thread at the end.", "El hilo mueve el pase, así que el pase debe existir antes. Y al hilo se le espera al final.", "スレッドは通行証をムーブするので、通行証が先。スレッドを待つのは最後。"), note: "arc-mutex",
       explain: L(
         "First the pass, then the thread that moves it, and finally join.",
         "Primero el pase, luego el hilo que lo mueve, y al final join.",
@@ -624,6 +1009,7 @@ const mutex: LessonDef = {
       kind: "run",
       prompt: L("Fix it: it must print Total gold: 4", "Arréglalo: debe imprimir Total gold: 4", "直そう: Total gold: 4 と表示させる"),
       starter: 'use std::sync::Arc;\nuse std::thread;\n\nfn main() {\n    let gold = Arc::new(0);\n    let mut threads = vec![];\n    for _ in 0..4 {\n        let pass = Arc::clone(&gold);\n        threads.push(thread::spawn(move || { *pass += 1; }));\n    }\n    for h in threads { h.join().unwrap(); }\n    println!("Total gold: {}", gold);\n}\n',
+      hint: L("An Arc alone can't be changed. Wrap the gold in a type that hands out a key, and add through lock().", "Un Arc solo no se puede cambiar. Envuelve el oro en un tipo que reparta una llave, y suma con lock().", "Arc だけでは変更できない。鍵を配る型で金貨を包み、lock() を通して足そう。"), note: "arc-mutex",
       expect: "Total gold: 4",
       solution: 'use std::sync::{Arc, Mutex};\nuse std::thread;\n\nfn main() {\n    let gold = Arc::new(Mutex::new(0));\n    let mut threads = vec![];\n    for _ in 0..4 {\n        let pass = Arc::clone(&gold);\n        threads.push(thread::spawn(move || { *pass.lock().unwrap() += 1; }));\n    }\n    for h in threads { h.join().unwrap(); }\n    println!("Total gold: {}", *gold.lock().unwrap());\n}\n',
       fallback: [String.raw`Mutex\s*::\s*new\s*\(`, String.raw`Atomic\w+\s*::\s*new\s*\(`],
@@ -644,6 +1030,7 @@ const channels: LessonDef = {
   xp: 80,
   enemy: "rust/dangler",
   enemyName: L("GOSSIP BUG", "BUG CHISMOSO", "うわさバグ"),
+  notes: channelsNotes,
   beats: [
     say(L(
       "Another way to cooperate: instead of sharing the chest, send MESSAGES. Don't share memory: communicate.",
@@ -677,6 +1064,7 @@ const channels: LessonDef = {
       kind: "pick",
       prompt: L("Send the number through the channel", "Envía el número por el canal", "数をチャネルで送ろう"),
       code: `${CH}let (tx, rx) = mpsc::channel();\nthread::spawn(move || { tx.___(5).unwrap(); });\nprintln!("{}", rx.recv().unwrap());`,
+      hint: L("tx is the sending end of the channel. Which of its methods puts a value into the pipe?", "tx es el extremo que envía del canal. ¿Cuál de sus métodos mete un valor en el tubo?", "tx はチャネルの送信側。値を管に入れるメソッドはどれ？"), note: "channel-basics",
       options: ["send", "push", "recv"],
       answer: 0,
       explain: L(
@@ -692,6 +1080,7 @@ const channels: LessonDef = {
       kind: "predict",
       prompt: COMPILES,
       code: 'use std::sync::mpsc;\nlet (tx, rx) = mpsc::channel();\nlet letter = String::from("hello");\ntx.send(letter).unwrap();\nprintln!("{}", letter);',
+      hint: L("send takes its argument by value. Who owns letter after that line?", "send recibe su argumento por valor. ¿De quién es letter después de esa línea?", "send は引数を値で受け取る。その行のあと letter の持ち主は誰？"), note: "channel-basics",
       options: [L("Yes: prints hello", "Sí: imprime hello", "はい: hello を表示"), L("No: letter moved into the channel", "No: letter se movió al canal", "いいえ: letter はチャネルへムーブ済み")],
       answer: 1,
       explain: L(
@@ -707,6 +1096,7 @@ const channels: LessonDef = {
       kind: "type",
       prompt: L("Receive the message", "Recibe el mensaje", "メッセージを受け取ろう"),
       code: `${CH}let (tx, rx) = mpsc::channel();\nthread::spawn(move || { tx.send("hello").unwrap(); });\nlet msg = rx.___().unwrap();\nprintln!("{}", msg);`,
+      hint: L("rx is the receiving end. Its method waits until a message arrives; the name is a short form of the verb.", "rx es el extremo receptor. Su método espera hasta que llega un mensaje; el nombre es una forma corta del verbo.", "rx は受信側。メッセージが届くまで待つメソッドで、名前は英語の動詞の略じゃ。"), note: "channel-basics",
       answer: "recv",
       explain: L(
         "rx.recv() waits until a message arrives.",
@@ -743,6 +1133,7 @@ const channels: LessonDef = {
       kind: "predict",
       prompt: L("Three messengers send 10, 20 and 30. What prints?", "Tres mensajeros envían 10, 20 y 30. ¿Qué imprime?", "3人が 10, 20, 30 を送る。何が表示される？"),
       code: `${CH}let (tx, rx) = mpsc::channel();\nfor i in 1..=3 {\n    let tx = tx.clone();\n    thread::spawn(move || { tx.send(i * 10).unwrap(); });\n}\ndrop(tx);\nlet mut total = 0;\nfor n in rx { total += n; }\nprintln!("{}", total);`,
+      hint: L("Every message reaches rx, in some order. Does order change a sum? And what lets the for loop end?", "Cada mensaje llega a rx, en algún orden. ¿Cambia el orden una suma? ¿Y qué deja terminar el for?", "どのメッセージも順不同で rx に届く。順番で合計は変わる？for を終わらせるのは何？"), note: "many-senders",
       options: ["60", "10", KEEPS_WAITING],
       answer: 0,
       output: "60",
@@ -764,6 +1155,7 @@ const channels: LessonDef = {
       kind: "pick",
       prompt: L("Which badge is needed to move x to another thread?", "¿Qué insignia exige mover x a otro hilo?", "x を別スレッドへ移すのに必要なバッジは？"),
       code: 'fn ship<T: ___ + \'static>(x: T) {\n    std::thread::spawn(move || drop(x)).join().unwrap();\n}\nship(String::from("letter"));\nprintln!("ok");',
+      hint: L("Moving x into a new thread needs one badge. The other thread badge is about sharing through &.", "Mover x a un hilo nuevo exige una insignia. La otra insignia de hilos trata de compartir con &.", "x を新しいスレッドへ移すにはバッジが要る。もう1つのバッジは & で共有するためのもの。"), note: "send-sync",
       options: ["Send", "Sync", "Copy"],
       answer: 0,
       explain: L(
@@ -777,6 +1169,7 @@ const channels: LessonDef = {
       kind: "predict",
       prompt: L("An Rc through the channel. Does it compile?", "Un Rc por el canal. ¿Compila?", "Rc をチャネルで送る。コンパイルできる？"),
       code: `use std::rc::Rc;\n${CH}let (tx, rx) = mpsc::channel();\nthread::spawn(move || { tx.send(Rc::new(5)).unwrap(); });\nprintln!("{}", rx.recv().unwrap());`,
+      hint: L("Sending through a channel moves the value to another thread. Which badge does that need? Does Rc have it?", "Enviar por un canal mueve el valor a otro hilo. ¿Qué insignia exige eso? ¿La tiene Rc?", "チャネルで送ると値は別スレッドへ移る。必要なバッジは？Rc は持っている？"), note: "send-sync",
       options: [L("Yes: prints 5", "Sí: imprime 5", "はい: 5 を表示"), L("No: Rc isn't Send", "No: Rc no es Send", "いいえ: Rc は Send じゃない")],
       answer: 1,
       explain: L(
@@ -791,6 +1184,7 @@ const channels: LessonDef = {
       kind: "order",
       prompt: L("Order: the helper signals and the hero listens", "Ordena: el ayudante avisa y el héroe escucha", "並べよう: 助っ人が知らせ、勇者が聞く"),
       lines: ["let (tx, rx) = mpsc::channel();", "thread::spawn(move || {", '    tx.send("done").unwrap();', "});", 'println!("{}", rx.recv().unwrap());'],
+      hint: L("The channel must exist before a thread can use tx, and main can only receive what was sent.", "El canal debe existir antes de que un hilo use tx, y main solo puede recibir lo que se envió.", "スレッドが tx を使う前にチャネルが必要。main が受け取れるのは送られたものだけ。"), note: "channel-basics",
       explain: L(
         "First the channel, then the thread that sends, and finally main receives.",
         "Primero el canal, luego el hilo que envía, y al final main recibe.",
@@ -803,6 +1197,7 @@ const channels: LessonDef = {
       kind: "run",
       prompt: L("Fix it: it must print Total: 42", "Arréglalo: debe imprimir Total: 42", "直そう: Total: 42 と表示させる"),
       starter: 'use std::sync::mpsc;\nuse std::thread;\n\nfn main() {\n    let (tx, rx) = mpsc::channel();\n    thread::spawn(move || { tx.send(20).unwrap(); });\n    thread::spawn(move || { tx.send(22).unwrap(); });\n    let mut total = 0;\n    for n in rx { total += n; }\n    println!("Total: {}", total);\n}\n',
+      hint: L("The first thread moved tx away. Each messenger needs its own sender, made before the threads start.", "El primer hilo se llevó tx. Cada mensajero necesita su propio emisor, creado antes de lanzar los hilos.", "最初のスレッドが tx を持っていった。伝令ごとに、起動前に自分の送り手を用意しよう。"), note: "many-senders",
       expect: "Total: 42",
       solution: 'use std::sync::mpsc;\nuse std::thread;\n\nfn main() {\n    let (tx, rx) = mpsc::channel();\n    let tx2 = tx.clone();\n    thread::spawn(move || { tx.send(20).unwrap(); });\n    thread::spawn(move || { tx2.send(22).unwrap(); });\n    let mut total = 0;\n    for n in rx { total += n; }\n    println!("Total: {}", total);\n}\n',
       fallback: [String.raw`tx\s*\.\s*clone\s*\(\s*\)`, String.raw`Sender\s*::\s*clone\s*\(`],
@@ -823,22 +1218,23 @@ const boss5: LessonDef = {
   xp: 200,
   enemy: "rust/borrow-dragon",
   enemyName: L("FEARLESS DRAGON", "DRAGÓN FEARLESS", "フィアレス竜"),
+  notes: bossNotes,
   beats: [
     enemySays(L(
       "I AM THE TOWER'S DRAGON. My flames run on a thousand threads at once. Can you keep up?",
       "SOY EL DRAGÓN DE LA TORRE. Mis llamas corren en mil hilos a la vez. ¿Puedes seguirles el paso?",
       "我こそ塔の竜。我が炎は千のスレッドで同時に走る。ついてこられるか？",
     )),
-    { kind: "predict", time: 12, prompt: COMPILES, code: `${T}let v = vec![1, 2];\nlet h = thread::spawn(|| println!("{:?}", v));\nh.join().unwrap();`, options: [YES, NO], answer: 1, explain: L("Missing move: E0373.", "Falta move: E0373.", "move がない: E0373。"), check: { compiles: false } },
-    { kind: "pick", time: 12, prompt: L("Wait for the thread", "Espera al hilo", "スレッドを待とう"), code: `${T}let h = thread::spawn(|| 1);\nprintln!("{}", h.___().unwrap());`, options: ["join", "wait", "end"], answer: 0, explain: L("join() waits and brings back the value.", "join() espera y trae el valor.", "join() は待って値を持ち帰る。"), check: { compiles: true, stdout: "1", wrongFail: true } },
-    { kind: "type", time: 12, prompt: L("Hand v to the thread", "Entrega v al hilo", "v をスレッドに渡そう"), code: `${T}let v = vec![1, 2];\nlet h = thread::spawn(___ || println!("{}", v.len()));\nh.join().unwrap();`, answer: "move", explain: L("move || takes v along.", "move || se lleva v.", "move || が v を持っていく。"), check: { compiles: true, stdout: "2" } },
-    { kind: "predict", time: 12, prompt: COMPILES, code: `use std::rc::Rc;\n${T}let r = Rc::new(1);\nlet h = thread::spawn(move || println!("{}", r));\nh.join().unwrap();`, options: [YES, NO], answer: 1, explain: L("Rc isn't Send.", "Rc no es Send.", "Rc は Send じゃない。"), check: { compiles: false } },
-    { kind: "predict", time: 12, prompt: WHAT_PRINTS, code: 'use std::sync::Arc;\nlet a = Arc::new(1);\nlet b = Arc::clone(&a);\nprintln!("{}", Arc::strong_count(&b));', options: ["1", "2"], answer: 1, explain: L("Two passes: a and b.", "Dos pases: a y b.", "通行証は2枚: a と b。"), check: { compiles: true, stdout: "2" } },
-    { kind: "pick", time: 12, prompt: L("To mutate shared data", "Para mutar compartido", "共有データを変更するには"), code: 'use std::sync::{Arc, Mutex};\nlet c = Arc::new(___::new(0));\n*c.lock().unwrap() += 1;\nprintln!("{}", *c.lock().unwrap());', options: ["Mutex", "Box", "Arc"], answer: 0, explain: L("Arc<Mutex<T>>.", "Arc<Mutex<T>>.", "Arc<Mutex<T>> だ。"), check: { compiles: true, stdout: "1", wrongFail: true } },
-    { kind: "predict", time: 12, prompt: COMPILES, code: "use std::sync::Arc;\nlet gold = Arc::new(0);\n*gold += 1;", options: [YES, NO], answer: 1, explain: L("Arc doesn't allow mutation: Mutex is missing.", "Arc no deja mutar: falta Mutex.", "Arc では変更できない。Mutex が足りない。"), check: { compiles: false } },
-    { kind: "type", time: 12, prompt: ASK_KEY, code: 'use std::sync::Mutex;\nlet m = Mutex::new(1);\nlet mut g = m.___().unwrap();\n*g += 1;\nprintln!("{}", *g);', answer: "lock", explain: L("m.lock().unwrap()", "m.lock().unwrap()", "m.lock().unwrap() だよ。"), check: { compiles: true, stdout: "2" } },
-    { kind: "predict", time: 15, prompt: WHAT_PRINTS, code: `${CH}let (tx, rx) = mpsc::channel();\nfor i in 1..=3 {\n    let tx = tx.clone();\n    thread::spawn(move || { tx.send(i).unwrap(); });\n}\ndrop(tx);\nlet mut t = 0;\nfor n in rx { t += n; }\nprintln!("{}", t);`, options: ["6", "3", KEEPS_WAITING], answer: 0, explain: L("1 + 2 + 3, and drop(tx) closes the channel.", "1 + 2 + 3, y drop(tx) cierra el canal.", "1 + 2 + 3。drop(tx) でチャネルが閉じる。"), check: { compiles: true, stdout: "6" } },
-    { kind: "pick", time: 15, prompt: L("Badge to move to another thread", "Insignia para mudarse de hilo", "スレッドを移るためのバッジ"), code: "fn f<T: ___ + 'static>(x: T) {\n    std::thread::spawn(move || drop(x));\n}", options: ["Send", "Sync", "Copy"], answer: 0, explain: L("Moving to another thread requires Send.", "Mover a otro hilo exige Send.", "別スレッドへ移すには Send が必要。"), check: { compiles: true, wrongFail: true } },
+    { kind: "predict", time: 12, prompt: COMPILES, code: `${T}let v = vec![1, 2];\nlet h = thread::spawn(|| println!("{:?}", v));\nh.join().unwrap();`, hint: L("The closure uses v from main, and the thread might outlive main. Is anything missing before the bars?", "El closure usa v de main, y el hilo podría vivir más que main. ¿Falta algo antes de las barras?", "クロージャは main の v を使い、スレッドは main より長生きしうる。棒の前に何か足りない？"), note: "recap-threads", options: [YES, NO], answer: 1, explain: L("Missing move: E0373.", "Falta move: E0373.", "move がない: E0373。"), check: { compiles: false } },
+    { kind: "pick", time: 12, prompt: L("Wait for the thread", "Espera al hilo", "スレッドを待とう"), code: `${T}let h = thread::spawn(|| 1);\nprintln!("{}", h.___().unwrap());`, hint: L("Which handle method waits for the thread and brings back its value?", "¿Qué método del handle espera al hilo y trae de vuelta su valor?", "スレッドを待って値を持ち帰るハンドルのメソッドは？"), note: "recap-threads", options: ["join", "wait", "end"], answer: 0, explain: L("join() waits and brings back the value.", "join() espera y trae el valor.", "join() は待って値を持ち帰る。"), check: { compiles: true, stdout: "1", wrongFail: true } },
+    { kind: "type", time: 12, prompt: L("Hand v to the thread", "Entrega v al hilo", "v をスレッドに渡そう"), code: `${T}let v = vec![1, 2];\nlet h = thread::spawn(___ || println!("{}", v.len()));\nh.join().unwrap();`, hint: L("The closure uses v. Which keyword makes it take ownership so the thread can keep v?", "El closure usa v. ¿Qué palabra hace que tome la propiedad para que el hilo conserve v?", "クロージャは v を使う。スレッドが v を持てるよう所有権を取らせる言葉は？"), note: "recap-threads", answer: "move", explain: L("move || takes v along.", "move || se lleva v.", "move || が v を持っていく。"), check: { compiles: true, stdout: "2" } },
+    { kind: "predict", time: 12, prompt: COMPILES, code: `use std::rc::Rc;\n${T}let r = Rc::new(1);\nlet h = thread::spawn(move || println!("{}", r));\nh.join().unwrap();`, hint: L("Moving a value into a thread needs the Send badge. Does Rc have it?", "Mover un valor a un hilo exige la insignia Send. ¿La tiene Rc?", "値をスレッドへムーブするには Send が必要。Rc は持っている？"), note: "recap-arc", options: [YES, NO], answer: 1, explain: L("Rc isn't Send.", "Rc no es Send.", "Rc は Send じゃない。"), check: { compiles: false } },
+    { kind: "predict", time: 12, prompt: WHAT_PRINTS, code: 'use std::sync::Arc;\nlet a = Arc::new(1);\nlet b = Arc::clone(&a);\nprintln!("{}", Arc::strong_count(&b));', hint: L("Count the original plus every clone. Asking through b or through a reads the same counter.", "Cuenta el original más cada clone. Preguntar con b o con a lee el mismo contador.", "元の分と clone を全部数えよう。b で聞いても a で聞いても同じカウンター。"), note: "recap-arc", options: ["1", "2"], answer: 1, explain: L("Two passes: a and b.", "Dos pases: a y b.", "通行証は2枚: a と b。"), check: { compiles: true, stdout: "2" } },
+    { kind: "pick", time: 12, prompt: L("To mutate shared data", "Para mutar compartido", "共有データを変更するには"), code: 'use std::sync::{Arc, Mutex};\nlet c = Arc::new(___::new(0));\n*c.lock().unwrap() += 1;\nprintln!("{}", *c.lock().unwrap());', hint: L("The code calls lock(). Which type inside the Arc provides it?", "El código llama a lock(). ¿Qué tipo dentro del Arc lo ofrece?", "コードは lock() を呼ぶ。Arc の中でそれを提供する型は？"), note: "recap-mutex", options: ["Mutex", "Box", "Arc"], answer: 0, explain: L("Arc<Mutex<T>>.", "Arc<Mutex<T>>.", "Arc<Mutex<T>> だ。"), check: { compiles: true, stdout: "1", wrongFail: true } },
+    { kind: "predict", time: 12, prompt: COMPILES, code: "use std::sync::Arc;\nlet gold = Arc::new(0);\n*gold += 1;", hint: L("Can you change a value through an Arc alone, without any lock?", "¿Puedes cambiar un valor a través de un Arc solo, sin ningún lock?", "lock なしで、Arc だけを通して値を変えられる？"), note: "recap-mutex", options: [YES, NO], answer: 1, explain: L("Arc doesn't allow mutation: Mutex is missing.", "Arc no deja mutar: falta Mutex.", "Arc では変更できない。Mutex が足りない。"), check: { compiles: false } },
+    { kind: "type", time: 12, prompt: ASK_KEY, code: 'use std::sync::Mutex;\nlet m = Mutex::new(1);\nlet mut g = m.___().unwrap();\n*g += 1;\nprintln!("{}", *g);', hint: L("Which Mutex method waits for the key and returns a guard?", "¿Qué método de Mutex espera la llave y devuelve un guard?", "鍵を待ってガードを返す Mutex のメソッドは？"), note: "recap-mutex", answer: "lock", explain: L("m.lock().unwrap()", "m.lock().unwrap()", "m.lock().unwrap() だよ。"), check: { compiles: true, stdout: "2" } },
+    { kind: "predict", time: 15, prompt: WHAT_PRINTS, code: `${CH}let (tx, rx) = mpsc::channel();\nfor i in 1..=3 {\n    let tx = tx.clone();\n    thread::spawn(move || { tx.send(i).unwrap(); });\n}\ndrop(tx);\nlet mut t = 0;\nfor n in rx { t += n; }\nprintln!("{}", t);`, hint: L("Every message arrives, in some order. Does order change a sum, and what lets the loop end?", "Cada mensaje llega, en algún orden. ¿Cambia el orden una suma, y qué deja terminar el bucle?", "どのメッセージも順不同で届く。順番で合計は変わる？ループを終わらせるのは？"), note: "recap-channels", options: ["6", "3", KEEPS_WAITING], answer: 0, explain: L("1 + 2 + 3, and drop(tx) closes the channel.", "1 + 2 + 3, y drop(tx) cierra el canal.", "1 + 2 + 3。drop(tx) でチャネルが閉じる。"), check: { compiles: true, stdout: "6" } },
+    { kind: "pick", time: 15, prompt: L("Badge to move to another thread", "Insignia para mudarse de hilo", "スレッドを移るためのバッジ"), code: "fn f<T: ___ + 'static>(x: T) {\n    std::thread::spawn(move || drop(x));\n}", hint: L("Which badge means 'this value can be moved to another thread'?", "¿Qué insignia significa 'este valor se puede mover a otro hilo'?", "「この値は別のスレッドへ移せる」という意味のバッジは？"), note: "recap-channels", options: ["Send", "Sync", "Copy"], answer: 0, explain: L("Moving to another thread requires Send.", "Mover a otro hilo exige Send.", "別スレッドへ移すには Send が必要。"), check: { compiles: true, wrongFail: true } },
     enemySays(L(
       "Grrr... not a single data race. Your threads work without fear. The Tower is yours, Rustacean.",
       "Grrr... ni una carrera de datos. Tus hilos trabajan sin miedo. La Torre es tuya, rustáceo.",

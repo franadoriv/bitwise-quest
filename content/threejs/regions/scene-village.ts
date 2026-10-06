@@ -1,4 +1,4 @@
-import type { Beat, LessonDef, RegionDef, Text } from "../../../lib/content/types.ts";
+import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
 
 // REGION 1 · SCENE VILLAGE  (scene/camera/renderer, meshes, geometry and materials, Object3D transforms)
@@ -12,6 +12,116 @@ const PRINT = L("What does it print?", "¿Qué imprime?", "何が表示される
 const COMPILES = L("Does it compile?", "¿Compila?", "コンパイルできる？");
 const YES = L("Yes", "Sí", "はい");
 const NO_TSC = L("No: tsc stops it", "No: tsc lo detiene", "いいえ：tsc が止める");
+
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example (three is imported for it); the validator checks `output` with the real runner. */
+const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code: IMP + code, output, caption });
+/** An example that is only type-checked (e.g. it uses a declared WebGLRenderer). */
+const typed = (code: string, caption: Text): NoteBlock => ({ t: "code", code: IMP + code, caption, check: { compiles: true } });
+/** An example that must NOT compile (verified too). */
+const bad = (code: string, caption: Text): NoteBlock => ({ t: "code", code: IMP + code, caption, check: { compiles: false } });
+
+const sceneCameraNotes: NoteDef[] = [
+  note("three-parts", L("Scene, camera and renderer", "Escena, cámara y renderer", "シーン・カメラ・レンダラー"),
+    p(
+      "Every three.js picture is made by three objects working together. The Scene is the stage: a container that holds everything you want to show. The camera is the eye: it decides from where and how wide you look. The renderer is the painter: it turns the scene, seen through the camera, into pixels on a canvas.",
+      "Toda imagen de three.js sale de tres objetos que trabajan juntos. La Scene es el escenario: un contenedor con todo lo que quieres mostrar. La cámara es el ojo: decide desde dónde y con qué amplitud miras. El renderer es el pintor: convierte la escena, vista por la cámara, en píxeles sobre un canvas.",
+      "three.js の絵は3つのオブジェクトの共同作業でできる。Scene は舞台で、見せたい物を全部入れる入れ物。カメラは目で、どこからどれくらいの広さで見るかを決める。レンダラーは絵描きで、カメラから見たシーンをキャンバスのピクセルに変えるよ。",
+    ),
+    p(
+      "Objects only appear if they are on the stage. scene.add(object) puts an object into scene.children, the list of things the scene holds. You can add several at once. Order your code like a recipe: import three, create the scene, create the objects, add them, and only then use the result.",
+      "Los objetos solo aparecen si están en el escenario. scene.add(objeto) mete un objeto en scene.children, la lista de cosas que guarda la escena. Puedes agregar varios a la vez. Ordena el código como una receta: importa three, crea la escena, crea los objetos, agrégalos y solo entonces usa el resultado.",
+      "物体は舞台にのせたときだけ映る。scene.add(物体) で scene.children（シーンが持つ物のリスト）に入る。一度に何個でも足せる。コードはレシピの順番で：three を import し、シーンを作り、物体を作って追加し、そのあとで結果を使おう。",
+    ),
+    ex('const stage = new THREE.Scene();\nconst lamp = new THREE.Object3D();\nconst tree = new THREE.Object3D();\nstage.add(lamp, tree);\nconsole.log(stage.children.length);', "2",
+      L("add() can take several objects at once", "add() puede recibir varios objetos a la vez", "add() は一度に複数の物体を受け取れる")),
+    p(
+      "The renderer does nothing on its own. It paints exactly one frame each time you call renderer.render(scene, camera). Forget that call and the canvas stays empty, even if your scene is full. In an animation you call it again on every frame.",
+      "El renderer no hace nada por sí solo. Pinta exactamente un cuadro cada vez que llamas a renderer.render(scene, camera). Si olvidas esa llamada, el canvas queda vacío aunque la escena esté llena. En una animación la llamas de nuevo en cada cuadro.",
+      "レンダラーは勝手には動かない。renderer.render(scene, camera) を呼ぶたびに、ちょうど1枚だけ描く。呼び忘れると、シーンが物でいっぱいでもキャンバスはからっぽ。アニメーションでは毎フレーム呼び直すよ。",
+    ),
+    typed("declare const painter: THREE.WebGLRenderer;\nconst world = new THREE.Scene();\nconst eye = new THREE.PerspectiveCamera(60, 2, 0.1, 50);\npainter.setSize(640, 320);\npainter.render(world, eye);",
+      L("Type-checked only: the renderer is declared, not built", "Solo se verifica el tipo: el renderer se declara, no se crea", "型チェックのみ：レンダラーは宣言だけ")),
+    p(
+      "The renderer also decides how many pixels to paint. setPixelRatio sets how many real pixels it uses per CSS pixel, both across and down. Since the ratio multiplies the width AND the height, the work grows much faster than the ratio itself. Dense phone screens can report 3 or more, so apps usually put a ceiling on it with Math.min.",
+      "El renderer también decide cuántos píxeles pintar. setPixelRatio fija cuántos píxeles reales usa por cada píxel CSS, a lo ancho y a lo alto. Como el ratio multiplica el ancho Y el alto, el trabajo crece mucho más rápido que el propio ratio. Las pantallas densas de los teléfonos pueden dar 3 o más, así que las apps suelen ponerle un tope con Math.min.",
+      "レンダラーは描くピクセル数も決める。setPixelRatio は CSS の1ピクセルに本物のピクセルを縦横いくつ使うかの設定。比率は幅と高さの両方にかかるので、仕事量は比率よりずっと速く増える。スマホの細かい画面は3以上のこともあるから、Math.min で上限をつけるのが定番だよ。",
+    ),
+  ),
+  note("camera-settings", L("PerspectiveCamera settings", "Ajustes de PerspectiveCamera", "PerspectiveCamera の設定"),
+    p(
+      "new THREE.PerspectiveCamera(fov, aspect, near, far) takes four numbers. fov is the vertical field of view in degrees: bigger means a wider, more zoomed-out view. aspect is the width of the picture divided by its height. near and far are the closest and the farthest distances the camera can see.",
+      "new THREE.PerspectiveCamera(fov, aspect, near, far) recibe cuatro números. fov es el campo de visión vertical en grados: más grande es una vista más amplia y alejada. aspect es el ancho de la imagen dividido por su alto. near y far son la distancia más cercana y la más lejana que la cámara puede ver.",
+      "new THREE.PerspectiveCamera(fov, aspect, near, far) は4つの数を受け取る。fov は縦の視野角（度）で、大きいほど広く引いた画になる。aspect は画面の幅÷高さ。near と far は、カメラが見える一番近い距離と一番遠い距離だよ。",
+    ),
+    ex("const lens = new THREE.PerspectiveCamera(35, 2, 1, 500);\nconsole.log(lens.fov, lens.aspect, lens.near, lens.far);", "35 2 1 500",
+      L("Each argument lands in a property with the same name", "Cada argumento va a una propiedad del mismo nombre", "引数はそれぞれ同じ名前のプロパティに入る")),
+    p(
+      "Every argument is optional. If you leave one out, three fills in a default value, and the arguments you did pass keep their positions: the first number is always fov, the second always aspect. Defaults are handy for quick tests, but a real app passes all four so the picture matches the canvas.",
+      "Todos los argumentos son opcionales. Si omites uno, three pone un valor por defecto, y los que sí pasaste conservan su posición: el primer número siempre es fov, el segundo siempre aspect. Los valores por defecto sirven para pruebas rápidas, pero una app real pasa los cuatro para que la imagen coincida con el canvas.",
+      "引数はどれも省略できる。省くと three が初期値を入れ、渡した引数は位置どおりに使われる。1つ目はいつも fov、2つ目はいつも aspect。初期値はちょっと試すには便利だけど、本番では4つとも渡して画面に合わせよう。",
+    ),
+    p(
+      "near and far build an invisible box shaped like a pyramid with its tip cut off, called the frustum. Only what lies inside it is drawn. An object closer than near or farther than far is simply cut away, no matter how big it is. If something vanishes as it moves away, check far first.",
+      "near y far forman una caja invisible con forma de pirámide sin punta, llamada frustum. Solo se dibuja lo que está dentro. Un objeto más cerca que near o más lejos que far simplemente se recorta, sin importar su tamaño. Si algo desaparece al alejarse, revisa primero far.",
+      "near と far は、先を切ったピラミッドのような見えない箱（視錐台）を作る。描かれるのはその中だけ。near より近い物や far より遠い物は、どんなに大きくても切り落とされる。遠ざかると消えるときは、まず far を確認しよう。",
+    ),
+    p(
+      "These settings are typed. fov, aspect, near and far are all numbers, so TypeScript rejects a string like \"60\" with error TS2322 before anything runs. Quotes turn a number into text, and the type checker notices.",
+      "Estos ajustes tienen tipo. fov, aspect, near y far son números, así que TypeScript rechaza un string como \"60\" con el error TS2322 antes de ejecutar nada. Las comillas convierten un número en texto, y el verificador de tipos lo nota.",
+      "この設定には型がある。fov・aspect・near・far はどれも number なので、\"60\" のような文字列は実行前に TypeScript がエラー TS2322 で止める。引用符をつけると数は文字になり、型チェックが気づくよ。",
+    ),
+    bad('const lens = new THREE.PerspectiveCamera();\nlens.far = "800";',
+      L("Does not compile: far is a number, not a string", "No compila: far es un number, no un string", "コンパイル不可：far は文字列ではなく number")),
+  ),
+  note("camera-position", L("Where the camera stands", "Dónde está la cámara", "カメラの立ち位置"),
+    p(
+      "A camera is an object in the world, just like a mesh, so it has a position. Every new camera starts at the origin, the point (0, 0, 0), and looks toward negative Z. If you put a cube at the origin too, the camera ends up inside it and sees nothing useful.",
+      "Una cámara es un objeto del mundo, igual que una malla, así que tiene posición. Toda cámara nueva empieza en el origen, el punto (0, 0, 0), y mira hacia Z negativa. Si también pones un cubo en el origen, la cámara queda dentro de él y no ve nada útil.",
+      "カメラもメッシュと同じく世界の中の物体なので、位置を持つ。新しいカメラはみな原点 (0, 0, 0) にいて、マイナス Z の方を向いている。立方体も原点に置くと、カメラはその中に入ってしまい何も見えない。",
+    ),
+    p(
+      "three uses a right-handed system: +X points right, +Y points up and +Z points out of the screen, toward you. Since the camera looks down -Z, moving it to a positive z pulls it back toward the viewer, and the origin comes into view in front of it.",
+      "three usa un sistema diestro: +X apunta a la derecha, +Y hacia arriba y +Z sale de la pantalla, hacia ti. Como la cámara mira hacia -Z, llevarla a una z positiva la retira hacia quien mira, y el origen aparece delante de ella.",
+      "three は右手系：+X は右、+Y は上、+Z は画面から手前（あなたの方）に向かう。カメラは -Z を向いているので、z をプラスにすると見る人の方へ下がり、原点が目の前に見えてくる。",
+    ),
+    ex('const eye = new THREE.PerspectiveCamera();\neye.position.y = 3;\nconsole.log(eye.position.toArray().join(","));', "0,3,0",
+      L("Changing one axis leaves the other two alone", "Cambiar un eje deja los otros dos igual", "1つの軸を変えても、残り2つはそのまま")),
+    p(
+      "You can change one axis at a time, like position.x = 2, or all three with position.set(x, y, z). Either way you are editing the position vector that already exists. A camera that is too close, or inside an object, is a very common reason for a blank screen, so check where it stands first.",
+      "Puedes cambiar un eje a la vez, como position.x = 2, o los tres con position.set(x, y, z). En ambos casos editas el vector de posición que ya existe. Una cámara demasiado cerca, o dentro de un objeto, es una causa muy común de pantalla vacía, así que revisa primero dónde está.",
+      "position.x = 2 のように1軸ずつでも、position.set(x, y, z) で3つ同時でも変えられる。どちらも今ある位置ベクトルを書きかえている。画面が真っ白なときは、カメラが近すぎたり物の中にいたりすることが多い。まず立ち位置を確かめよう。",
+    ),
+    ex("const eye = new THREE.PerspectiveCamera();\neye.position.set(4, 1, 0);\nconsole.log(eye.position.x, eye.position.z);", "4 0"),
+  ),
+  note("projection-update", L("updateProjectionMatrix after changes", "updateProjectionMatrix tras cambios", "変更後 updateProjectionMatrix"),
+    p(
+      "A camera turns its fov, aspect, near and far into 16 numbers called the projectionMatrix. three computes it once and keeps it, because redoing that math on every frame would be wasted work. The renderer reads the matrix, not the four settings.",
+      "Una cámara convierte su fov, aspect, near y far en 16 números llamados projectionMatrix. three la calcula una vez y la guarda, porque repetir esa cuenta en cada cuadro sería trabajo perdido. El renderer lee la matriz, no los cuatro ajustes.",
+      "カメラは fov・aspect・near・far を projectionMatrix という16個の数に変える。毎フレーム計算するのはむだなので、three は1回計算して保存しておく。レンダラーが読むのは4つの設定ではなくこの行列だよ。",
+    ),
+    p(
+      "That means changing a setting is not enough. After you edit fov, aspect, near or far, call camera.updateProjectionMatrix() so the stored matrix is rebuilt. Until you do, the camera keeps using the old numbers and the picture looks squashed or stretched.",
+      "Por eso cambiar un ajuste no basta. Después de editar fov, aspect, near o far, llama a camera.updateProjectionMatrix() para reconstruir la matriz guardada. Mientras no lo hagas, la cámara sigue usando los números viejos y la imagen se ve aplastada o estirada.",
+      "だから設定を変えるだけでは足りない。fov・aspect・near・far を変えたら camera.updateProjectionMatrix() を呼んで行列を作り直そう。呼ぶまではカメラが古い数を使い続け、絵がつぶれたり伸びたりして見える。",
+    ),
+    ex("const lens = new THREE.PerspectiveCamera(90, 1, 0.1, 100);\nlens.fov = 60;\nconsole.log(lens.projectionMatrix.elements[5].toFixed(3));\nlens.updateProjectionMatrix();\nconsole.log(lens.projectionMatrix.elements[5].toFixed(3));", "1.000\n1.732",
+      L("The matrix only changes after the update call", "La matriz solo cambia tras la llamada de update", "update を呼んで初めて行列が変わる")),
+    p(
+      "The classic case is a window resize. The canvas gets a new shape, so you set camera.aspect = width / height, call camera.updateProjectionMatrix(), and give the renderer the new size with renderer.setSize(width, height). Three steps, every time.",
+      "El caso clásico es cambiar el tamaño de la ventana. El canvas cambia de forma, así que pones camera.aspect = ancho / alto, llamas a camera.updateProjectionMatrix() y le das el nuevo tamaño al renderer con renderer.setSize(ancho, alto). Tres pasos, siempre.",
+      "定番はウィンドウのリサイズ。キャンバスの形が変わるので、camera.aspect = 幅 / 高さ にして、camera.updateProjectionMatrix() を呼び、renderer.setSize(幅, 高さ) で新しい大きさを伝える。毎回この3ステップだよ。",
+    ),
+    p(
+      "Common mistake: calling updateMatrix() instead. That one rebuilds the object's position, rotation and scale matrix, which has nothing to do with the lens. Remember: lens settings → updateProjectionMatrix; pose → updateMatrix.",
+      "Error común: llamar a updateMatrix() en su lugar. Ese reconstruye la matriz de posición, rotación y escala del objeto, que no tiene nada que ver con la lente. Recuerda: ajustes de lente → updateProjectionMatrix; pose → updateMatrix.",
+      "よくあるミス：かわりに updateMatrix() を呼ぶこと。あれは物体の位置・回転・大きさの行列を作り直すもので、レンズとは関係ない。レンズの設定→updateProjectionMatrix、ポーズ→updateMatrix と覚えよう。",
+    ),
+  ),
+];
 
 // ─── 1.1 Stage, eye and painter ────────────────────────────────────────────
 const sceneCamera: LessonDef = {
@@ -46,6 +156,8 @@ const sceneCamera: LessonDef = {
     {
       kind: "predict",
       prompt: L("No arguments. What does it print?", "Sin argumentos. ¿Qué imprime?", "引数なし。何が表示される？"),
+      hint: L("With no arguments, every setting falls back to its default. The values in the demo were chosen by hand.", "Sin argumentos, cada ajuste usa su valor por defecto. Los valores de la demo se eligieron a mano.", "引数なしなら全部初期値になる。デモの数は手で選んだ値だよ。"),
+      note: "camera-settings",
       code: IMP + "const cam = new THREE.PerspectiveCamera();\nconsole.log(cam.fov, cam.aspect, cam.near, cam.far);",
       options: ["50 1 0.1 2000", "75 1 0.1 1000", "0 0 0 0"],
       answer: 0,
@@ -63,6 +175,8 @@ const sceneCamera: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("fov, aspect, near and far shape the lens. Does any of them move the camera?", "fov, aspect, near y far dan forma a la lente. ¿Alguno de ellos mueve la cámara?", "fov・aspect・near・far はレンズの形を決める。どれかがカメラを動かす？"),
+      note: "camera-position",
       code: IMP + "const cam = new THREE.PerspectiveCamera(75, 16 / 9, 0.1, 1000);\nconsole.log(cam.position.z);",
       options: ["0", "1000", "75"],
       answer: 0,
@@ -75,6 +189,8 @@ const sceneCamera: LessonDef = {
     {
       kind: "type",
       prompt: L("Move the camera back, toward the viewer", "Aleja la cámara, hacia quien mira", "カメラを手前に下げよう"),
+      hint: L("The camera looks down -Z. Which axis points from the scene toward the viewer?", "La cámara mira hacia -Z. ¿Qué eje apunta desde la escena hacia quien mira?", "カメラは -Z を向いている。シーンから見る人の方を指す軸はどれ？"),
+      note: "camera-position",
       code: IMP + "const camera = new THREE.PerspectiveCamera();\ncamera.position.___ = 5;\nconsole.log(camera.position.toArray().join(\",\"));",
       answer: "z",
       check: { compiles: true, stdout: "0,0,5" },
@@ -84,6 +200,8 @@ const sceneCamera: LessonDef = {
     {
       kind: "predict",
       prompt: COMPILES,
+      hint: L("Look at the quotes. What type does fov expect, and what type is \"75\"?", "Mira las comillas. ¿Qué tipo espera fov y de qué tipo es \"75\"?", "引用符に注目。fov が期待する型は？\"75\" の型は？"),
+      note: "camera-settings",
       code: IMP + 'const cam = new THREE.PerspectiveCamera();\ncam.fov = "75";',
       options: [YES, NO_TSC],
       answer: 1,
@@ -93,6 +211,8 @@ const sceneCamera: LessonDef = {
     },
     {
       kind: "order",
+      hint: L("Each line uses something made by an earlier line. Start with what everything else depends on.", "Cada línea usa algo creado por una línea anterior. Empieza por aquello de lo que todo depende.", "各行は前の行で作った物を使う。すべての土台になる行から始めよう。"),
+      note: "three-parts",
       prompt: L("Order the lines to put a mesh on stage", "Ordena las líneas para poner una malla", "メッシュを舞台に置く順に並べよう"),
       lines: [
         'import * as THREE from "three";',
@@ -113,6 +233,8 @@ const sceneCamera: LessonDef = {
     {
       kind: "pick",
       prompt: L("Complete the resize handler", "Completa el manejador de resize", "リサイズ処理を完成させよう"),
+      hint: L("fov and aspect live in a cached matrix of the lens. Which method rebuilds that specific matrix?", "fov y aspect viven en una matriz guardada de la lente. ¿Qué método reconstruye esa matriz?", "fov と aspect はレンズの行列に保存される。その行列を作り直すメソッドは？"),
+      note: "projection-update",
       code: IMP + "declare const renderer: THREE.WebGLRenderer;\nconst camera = new THREE.PerspectiveCamera(75, 1, 0.1, 100);\nfunction onResize(w: number, h: number) {\n  camera.aspect = w / h;\n  camera.___();\n  renderer.setSize(w, h);\n}",
       options: ["updateProjectionMatrix", "updateMatrix", "render"],
       answer: 0,
@@ -122,6 +244,8 @@ const sceneCamera: LessonDef = {
     {
       kind: "predict",
       prompt: L("A mesh 2500 units away, far = 2000. Seen?", "Una malla a 2500 unidades, far = 2000. ¿Se ve?", "2500 先のメッシュ、far = 2000。見える？"),
+      hint: L("Compare the mesh's distance with the camera's far value. What happens outside near–far?", "Compara la distancia de la malla con el far de la cámara. ¿Qué pasa fuera de near–far?", "メッシュの距離と far を比べよう。near〜far の外はどうなる？"),
+      note: "camera-settings",
       code: IMP + "const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 2000);\nconst mesh = new THREE.Mesh();\nmesh.position.z = -2500;",
       options: [L("No: it's past far", "No: está más allá de far", "いいえ：far より遠い"), L("Yes, just tiny", "Sí, pero diminuta", "はい、小さく見える")],
       answer: 0,
@@ -130,6 +254,8 @@ const sceneCamera: LessonDef = {
     {
       kind: "predict",
       prompt: L("Why cap setPixelRatio at 2?", "¿Por qué limitar setPixelRatio a 2?", "setPixelRatio を2までにする理由は？"),
+      hint: L("The ratio applies to the width and to the height. Think about how the pixel count changes.", "El ratio se aplica al ancho y al alto. Piensa en cómo cambia la cantidad de píxeles.", "比率は幅にも高さにもかかる。ピクセル数はどう変わる？"),
+      note: "three-parts",
       code: IMP + "declare const renderer: THREE.WebGLRenderer;\nrenderer.setPixelRatio(Math.min(devicePixelRatio, 2));",
       options: [L("Pixels grow with its square", "Los píxeles crecen al cuadrado", "画素数が2乗で増える"), L("Textures break above 2", "Las texturas fallan sobre 2", "2超でテクスチャが壊れる")],
       answer: 0,
@@ -137,6 +263,8 @@ const sceneCamera: LessonDef = {
     },
     {
       kind: "run",
+      hint: L("Changing aspect alone isn't enough: the lens matrix is cached. Add one call after it.", "Cambiar aspect no basta: la matriz de la lente está guardada. Agrega una llamada después.", "aspect を変えるだけでは足りない。行列は保存されたまま。後に1つ呼び出しを足そう。"),
+      note: "projection-update",
       prompt: L("Fix the resize: it must print p00 0.652", "Arregla el resize: debe imprimir p00 0.652", "リサイズを直そう：p00 0.652 と表示"),
       starter: IMP + "const camera = new THREE.PerspectiveCamera(75, 16 / 9, 0.1, 1000);\nfunction onResize(width: number, height: number): void {\n  camera.aspect = width / height;\n}\nonResize(800, 400);\nconsole.log(\"p00 \" + camera.projectionMatrix.elements[0].toFixed(3));\n",
       solution: IMP + "const camera = new THREE.PerspectiveCamera(75, 16 / 9, 0.1, 1000);\nfunction onResize(width: number, height: number): void {\n  camera.aspect = width / height;\n  camera.updateProjectionMatrix();\n}\nonResize(800, 400);\nconsole.log(\"p00 \" + camera.projectionMatrix.elements[0].toFixed(3));\n",
@@ -145,7 +273,109 @@ const sceneCamera: LessonDef = {
       explain: L("Without updateProjectionMatrix() the old 16:9 matrix stays and the picture looks stretched.", "Sin updateProjectionMatrix() queda la matriz vieja de 16:9 y la imagen se ve estirada.", "updateProjectionMatrix() がないと古い 16:9 の行列のままで、絵が伸びて見えるよ。"),
     },
   ],
+  notes: sceneCameraNotes,
 };
+
+const meshesNotes: NoteDef[] = [
+  note("mesh-parts", L("A Mesh: geometry plus material", "Una Mesh: geometría y material", "メッシュ＝ジオメトリ＋マテリアル"),
+    p(
+      "A Mesh is the visible actor of three.js. It joins two things: a geometry, the shape made of points and triangles, and a material, which says how its surface looks. new THREE.Mesh(geometry, material) puts them together, and the mesh itself holds the pose: position, rotation and scale.",
+      "Una Mesh es el actor visible de three.js. Une dos cosas: una geometría, la forma hecha de puntos y triángulos, y un material, que dice cómo se ve su superficie. new THREE.Mesh(geometría, material) las junta, y la propia malla guarda la pose: posición, rotación y escala.",
+      "Mesh は three.js の目に見える役者。2つを組み合わせる：点と三角形でできた形のジオメトリと、表面の見た目を決めるマテリアル。new THREE.Mesh(ジオメトリ, マテリアル) で合体し、位置・回転・大きさのポーズはメッシュ自身が持つ。",
+    ),
+    ex("const ball = new THREE.Mesh(new THREE.SphereGeometry(1), new THREE.MeshNormalMaterial());\nconsole.log(ball.geometry.type, ball.material.type);", "SphereGeometry MeshNormalMaterial"),
+    p(
+      "Both arguments are optional. A Mesh made with no arguments still gets something to hold: an empty geometry and a simple default material. That's why mesh.geometry is never undefined, even though an empty mesh has no points and draws nothing.",
+      "Ambos argumentos son opcionales. Una Mesh creada sin argumentos igual recibe algo: una geometría vacía y un material sencillo por defecto. Por eso mesh.geometry nunca es undefined, aunque una malla vacía no tiene puntos y no dibuja nada.",
+      "どちらの引数も省略できる。引数なしの Mesh にも、空のジオメトリとシンプルな初期マテリアルが入る。だから mesh.geometry が undefined になることはない。ただし空のメッシュには点がないので何も描かれない。",
+    ),
+    p(
+      "Every geometry in three.js is a BufferGeometry. BoxGeometry, SphereGeometry and PlaneGeometry are just BufferGeometry objects whose points were filled in for you. Each one has a type string with its class name, which is useful when you inspect a scene.",
+      "Toda geometría de three.js es una BufferGeometry. BoxGeometry, SphereGeometry y PlaneGeometry son solo BufferGeometry cuyos puntos se rellenaron por ti. Cada una tiene un string type con el nombre de su clase, útil para inspeccionar una escena.",
+      "three.js のジオメトリはすべて BufferGeometry。BoxGeometry・SphereGeometry・PlaneGeometry は、点があらかじめ入った BufferGeometry にすぎない。どれもクラス名の入った type 文字列を持っていて、シーンを調べるときに便利だよ。",
+    ),
+    ex("const cone = new THREE.ConeGeometry(1, 2);\nconsole.log(cone instanceof THREE.BufferGeometry);", "true",
+      L("A ready-made shape is still a BufferGeometry", "Una forma ya hecha sigue siendo una BufferGeometry", "できあいの形も BufferGeometry")),
+  ),
+  note("lights-materials", L("Materials and light", "Materiales y luz", "マテリアルと光"),
+    p(
+      "A material decides how a surface reacts to light. MeshBasicMaterial ignores lights completely: it always paints its flat color, so it's visible even in an empty, dark scene. It's great for debugging, UI or cartoon looks, but it never shows shading.",
+      "Un material decide cómo reacciona una superficie a la luz. MeshBasicMaterial ignora por completo las luces: siempre pinta su color plano, así que se ve incluso en una escena vacía y oscura. Es ideal para depurar, interfaces o un look de caricatura, pero nunca muestra sombreado.",
+      "マテリアルは表面が光にどう反応するかを決める。MeshBasicMaterial は光を完全に無視し、いつも同じ色で塗るので、暗いシーンでも見える。デバッグやUI、アニメ風の見た目に便利だけど、陰影は出ない。",
+    ),
+    p(
+      "MeshLambertMaterial, MeshPhongMaterial, MeshStandardMaterial and MeshPhysicalMaterial do react to light. That's what makes them look 3D, but it also means that with no light in the scene they come out black. A black mesh is usually a missing light, not a broken color.",
+      "MeshLambertMaterial, MeshPhongMaterial, MeshStandardMaterial y MeshPhysicalMaterial sí reaccionan a la luz. Eso las hace verse en 3D, pero también significa que sin luz en la escena salen negras. Una malla negra suele ser una luz que falta, no un color roto.",
+      "MeshLambertMaterial・MeshPhongMaterial・MeshStandardMaterial・MeshPhysicalMaterial は光に反応する。だから立体的に見えるけど、シーンに光がないと真っ黒になる。メッシュが黒いときは、たいてい色の故障ではなく光の入れ忘れだよ。",
+    ),
+    ex('const room = new THREE.Scene();\nroom.add(new THREE.AmbientLight(0xffffff, 0.4));\nroom.add(new THREE.DirectionalLight(0xffffff, 2));\nconsole.log(room.children.map((c) => c.type).join(","));', "AmbientLight,DirectionalLight",
+      L("Lights are objects too: add them to the scene", "Las luces también son objetos: agrégalas a la escena", "ライトも物体。シーンに追加しよう")),
+    p(
+      "MeshStandardMaterial is physically based. Two knobs describe the surface: roughness, from 0 (smooth as a mirror) to 1 (fully rough), and metalness, from 0 (not metal) to 1 (metal). You can pass them in the options object or change them later.",
+      "MeshStandardMaterial es de base física. Dos perillas describen la superficie: roughness, de 0 (liso como un espejo) a 1 (totalmente rugoso), y metalness, de 0 (no metálico) a 1 (metal). Puedes pasarlas en el objeto de opciones o cambiarlas después.",
+      "MeshStandardMaterial は物理ベース。表面を2つのつまみで表す：roughness は 0（鏡のようにつるつる）〜1（ザラザラ）、metalness は 0（金属でない）〜1（金属）。オプションで渡しても、あとで変えてもいい。",
+    ),
+    ex("const gold = new THREE.MeshStandardMaterial({ roughness: 0.3, metalness: 1 });\nconsole.log(gold.roughness, gold.metalness);", "0.3 1"),
+    p(
+      "Each material class only has the properties it uses, and TypeScript knows them. Asking a material for a knob it doesn't have, such as metalness on a MeshLambertMaterial, is error TS2339: \"Property does not exist\". If tsc complains, check which material you created.",
+      "Cada clase de material solo tiene las propiedades que usa, y TypeScript las conoce. Pedirle a un material una perilla que no tiene, como metalness en un MeshLambertMaterial, es el error TS2339: \"Property does not exist\". Si tsc se queja, revisa qué material creaste.",
+      "マテリアルのクラスは使うプロパティだけを持ち、TypeScript はそれを知っている。MeshLambertMaterial の metalness のように、ないつまみを使うとエラー TS2339「Property does not exist」になる。tsc に怒られたら、どのマテリアルを作ったか確認しよう。",
+    ),
+    bad("const clay = new THREE.MeshLambertMaterial();\nclay.metalness = 1;",
+      L("Does not compile: Lambert has no metalness", "No compila: Lambert no tiene metalness", "コンパイル不可：Lambert に metalness はない")),
+  ),
+  note("vertices", L("Vertices and indices", "Vértices e índices", "頂点とインデックス"),
+    p(
+      "A geometry is a list of corner points called vertices. They live in geometry.attributes.position, and its count says how many there are. The GPU draws everything as triangles, so the vertices are grouped three by three into triangles.",
+      "Una geometría es una lista de puntos de esquina llamados vértices. Viven en geometry.attributes.position, y su count dice cuántos hay. La GPU dibuja todo con triángulos, así que los vértices se agrupan de tres en tres en triángulos.",
+      "ジオメトリは頂点という角の点のリスト。geometry.attributes.position に入っていて、その count が頂点の数。GPU はすべてを三角形で描くので、頂点は3つずつ三角形にまとめられる。",
+    ),
+    p(
+      "To avoid repeating points, most built-in geometries also have an index: a list of vertex numbers, three per triangle. geometry.index.count is the number of entries in that list, so triangles = index count ÷ 3. A square, for example, is two triangles that share an edge.",
+      "Para no repetir puntos, la mayoría de las geometrías incluidas también tienen un index: una lista de números de vértice, tres por triángulo. geometry.index.count es la cantidad de entradas de esa lista, así que triángulos = index count ÷ 3. Un cuadrado, por ejemplo, son dos triángulos que comparten un lado.",
+      "点のくり返しを避けるため、多くの組みこみジオメトリは index（頂点番号のリスト、三角形1つにつき3つ）も持つ。geometry.index.count はそのリストの長さなので、三角形の数＝index の数÷3。たとえば四角形は辺を共有する2つの三角形だよ。",
+    ),
+    ex("const disc = new THREE.CircleGeometry(1, 8);\nconsole.log(disc.attributes.position.count, disc.index?.count);", "10 24",
+      L("8 slices: a center, 9 rim points, 8 triangles", "8 porciones: un centro, 9 puntos de borde, 8 triángulos", "8切れ：中心1つ、ふち9点、三角形8つ")),
+    p(
+      "Why does a cube need more than 8 vertices? Each vertex also stores a normal, the direction its face points, which lighting uses. A corner touches three faces pointing three different ways, so it gets one copy per face. Sharp edges always duplicate vertices like this.",
+      "¿Por qué un cubo necesita más de 8 vértices? Cada vértice también guarda una normal, la dirección hacia donde mira su cara, que usa la iluminación. Una esquina toca tres caras que miran a tres lados distintos, así que recibe una copia por cara. Los bordes afilados siempre duplican vértices así.",
+      "立方体はなぜ8頂点では足りないの？頂点は法線（面の向き）も持っていて、光の計算に使う。角は向きのちがう3つの面にふれるので、面ごとにコピーが1つずつ必要。とがった辺ではいつもこうして頂点が増えるんだ。",
+    ),
+    p(
+      "The size you pass doesn't change these counts: a big box and a tiny box have the same number of vertices. Only the shape and the number of segments do. Common mistake: confusing vertices (points) with indices (three per triangle).",
+      "El tamaño que pasas no cambia estas cuentas: una caja grande y una diminuta tienen la misma cantidad de vértices. Solo cambian con la forma y el número de segmentos. Error común: confundir vértices (puntos) con índices (tres por triángulo).",
+      "渡す大きさでは数は変わらない。大きな箱も小さな箱も頂点の数は同じ。変わるのは形と分割数だけ。よくあるミス：頂点（点）とインデックス（三角形1つにつき3つ）を混同すること。",
+    ),
+    ex("const small = new THREE.CircleGeometry(1, 6);\nconst huge = new THREE.CircleGeometry(50, 6);\nconsole.log(small.attributes.position.count === huge.attributes.position.count);", "true"),
+  ),
+  note("colors", L("THREE.Color and color space", "THREE.Color y espacio de color", "THREE.Color と色空間"),
+    p(
+      "Colors in three.js are THREE.Color objects with three channels: r, g and b. Each channel is a number from 0 to 1, not 0 to 255, and 1 means full intensity. You can create a color from a hex number like 0x3366ff, from a CSS string like \"#3366ff\", or from a color name.",
+      "Los colores en three.js son objetos THREE.Color con tres canales: r, g y b. Cada canal es un número de 0 a 1, no de 0 a 255, y 1 significa intensidad máxima. Puedes crear un color con un número hex como 0x3366ff, un string CSS como \"#3366ff\" o un nombre de color.",
+      "three.js の色は r・g・b の3チャンネルを持つ THREE.Color オブジェクト。各チャンネルは 0〜255 ではなく 0〜1 で、1が最大。0x3366ff のような16進数、\"#3366ff\" のような CSS 文字列、色の名前から作れる。",
+    ),
+    p(
+      "To read a color back, getHexString() returns six hex digits without a # in front, and getHex() returns it as a number. If you need a CSS string, add the # yourself or use getStyle().",
+      "Para leer un color, getHexString() devuelve seis dígitos hex sin # delante, y getHex() lo devuelve como número. Si necesitas un string CSS, agrega el # tú mismo o usa getStyle().",
+      "色を読み出すとき、getHexString() は先頭に # のない6桁の16進文字列を返し、getHex() は数値で返す。CSS 文字列が必要なら自分で # をつけるか getStyle() を使おう。",
+    ),
+    ex("const sun = new THREE.Color(0xffff00);\nconsole.log(sun.r, sun.b, sun.getHexString());", "1 0 ffff00",
+      L("Channels from 0 to 1; hex text without #", "Canales de 0 a 1; texto hex sin #", "チャンネルは0〜1、16進文字列に # はない")),
+    p(
+      "There is a twist. CSS and hex colors are written in sRGB, a curved scale made for screens. Lighting math only works in linear light, so three converts colors to linear when you set them and back to sRGB when you read hex. That's why in-between channel values come out lower than the hex digits suggest; only 0 and 1 stay the same.",
+      "Hay un detalle. Los colores CSS y hex se escriben en sRGB, una escala curva pensada para pantallas. Las cuentas de iluminación solo funcionan en luz lineal, así que three convierte los colores a lineal al asignarlos y de vuelta a sRGB al leer el hex. Por eso los canales intermedios quedan más bajos de lo que sugiere el hex; solo 0 y 1 no cambian.",
+      "ひとつ注意。CSS や16進の色は、画面向けの曲がった目盛り sRGB で書かれている。光の計算はリニアでしか正しくできないので、three は設定時にリニアへ変換し、16進で読むときに sRGB へ戻す。だから中間のチャンネルは16進から想像するより小さな値になる。0 と 1 だけは変わらない。",
+    ),
+    ex('const dim = new THREE.Color("#404040");\nconsole.log(dim.r.toFixed(4), dim.getHexString());', "0.0513 404040"),
+    p(
+      "Material colors are Color objects too, built once with the material. To repaint, change the existing object in place with mat.color.set(...), which accepts hex numbers, CSS strings and other colors. Assigning a plain number to mat.color would replace the object with something that isn't a Color, and TypeScript rejects that.",
+      "Los colores de los materiales también son objetos Color, creados una vez con el material. Para repintar, cambia el objeto existente con mat.color.set(...), que acepta números hex, strings CSS y otros colores. Asignar un número suelto a mat.color reemplazaría el objeto por algo que no es un Color, y TypeScript lo rechaza.",
+      "マテリアルの色も Color オブジェクトで、マテリアルと一緒に1回だけ作られる。塗り直すなら mat.color.set(...) で今のオブジェクトをその場で変えよう。16進数・CSS 文字列・他の色を受け取れる。mat.color に数値を代入すると Color でない物に置きかわるので、TypeScript が拒否するよ。",
+    ),
+    ex('const paint = new THREE.MeshBasicMaterial({ color: 0x000000 });\npaint.color.set("#ff8800");\nconsole.log(paint.color.getHexString());', "ff8800"),
+  ),
+];
 
 // ─── 1.2 Body and skin ─────────────────────────────────────────────────────
 const meshes: LessonDef = {
@@ -181,6 +411,8 @@ const meshes: LessonDef = {
     {
       kind: "pick",
       prompt: L("This skin is visible with no lights", "Esta piel se ve sin luces", "光なしでも見える肌は？"),
+      hint: L("Which material doesn't do any lighting math at all?", "¿Qué material no hace ningún cálculo de iluminación?", "光の計算をまったくしないマテリアルはどれ？"),
+      note: "lights-materials",
       code: IMP + "const mat = new THREE.___({ color: 0x00ff00 });\nconst mesh = new THREE.Mesh(new THREE.BoxGeometry(), mat);",
       options: ["MeshBasicMaterial", "MeshStandardMaterial", "MeshPhongMaterial"],
       answer: 0,
@@ -191,6 +423,8 @@ const meshes: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("No geometry was passed, yet mesh.geometry exists. Which class do all geometries share?", "No se pasó geometría, pero mesh.geometry existe. ¿Qué clase comparten todas las geometrías?", "ジオメトリを渡していないのに mesh.geometry はある。全ジオメトリ共通のクラスは？"),
+      note: "mesh-parts",
       code: IMP + "const m = new THREE.Mesh();\nconsole.log(m.geometry.type);",
       options: ["BufferGeometry", "BoxGeometry", "undefined"],
       answer: 0,
@@ -207,6 +441,8 @@ const meshes: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Count corners per face, not per cube: each face has its own. Then count triangles × 3.", "Cuenta esquinas por cara, no por cubo: cada cara tiene las suyas. Luego triángulos × 3.", "立方体ではなく面ごとに角を数えよう。各面が自分の角を持つ。次に三角形×3。"),
+      note: "vertices",
       code: IMP + "const g = new THREE.BoxGeometry(1, 1, 1);\nconsole.log(g.attributes.position.count, g.index?.count);",
       options: ["24 36", "8 12", "8 36"],
       answer: 0,
@@ -219,6 +455,8 @@ const meshes: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("A flat square has a single face. How many corners does one face need?", "Un cuadrado plano tiene una sola cara. ¿Cuántas esquinas necesita una cara?", "平らな四角形は面が1つ。1つの面に角はいくつ必要？"),
+      note: "vertices",
       code: IMP + "const g = new THREE.PlaneGeometry(2, 2);\nconsole.log(g.attributes.position.count);",
       options: ["4", "6", "2"],
       answer: 0,
@@ -229,6 +467,8 @@ const meshes: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Think of the most neutral, non-shiny surface. Each knob runs from 0 to 1.", "Piensa en la superficie más neutra y sin brillo. Cada perilla va de 0 a 1.", "いちばん地味でツヤのない表面を想像しよう。つまみはどちらも0〜1。"),
+      note: "lights-materials",
       code: IMP + "const s = new THREE.MeshStandardMaterial();\nconsole.log(s.roughness, s.metalness);",
       options: ["1 0", "0 1", "0.5 0.5"],
       answer: 0,
@@ -239,6 +479,8 @@ const meshes: LessonDef = {
     {
       kind: "predict",
       prompt: COMPILES,
+      hint: L("Does a material that ignores light need a knob for surface roughness?", "¿Un material que ignora la luz necesita una perilla de rugosidad?", "光を無視するマテリアルに、ザラザラ度のつまみは必要？"),
+      note: "lights-materials",
       code: IMP + "const mat = new THREE.MeshBasicMaterial();\nmat.roughness = 0.5;",
       options: [YES, NO_TSC],
       answer: 1,
@@ -254,6 +496,8 @@ const meshes: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Two things to check: does getHexString put anything in front, and what range do channels use?", "Revisa dos cosas: ¿getHexString pone algo delante? ¿Y en qué rango van los canales?", "2点を確認：getHexString は先頭に何かつける？チャンネルの範囲は？"),
+      note: "colors",
       code: IMP + "const c = new THREE.Color(0xff0000);\nconsole.log(c.getHexString(), c.r);",
       options: ["ff0000 1", "#ff0000 255", "ff0000 255"],
       answer: 0,
@@ -265,6 +509,8 @@ const meshes: LessonDef = {
     {
       kind: "predict",
       prompt: L("Gray #808080. What does it print?", "Gris #808080. ¿Qué imprime?", "灰色 #808080。何が表示される？"),
+      hint: L("The hex comes back unchanged, but the channel is stored in linear light, not in sRGB.", "El hex vuelve igual, pero el canal se guarda en luz lineal, no en sRGB.", "16進は元どおりに戻る。でもチャンネルは sRGB ではなくリニアで保存される。"),
+      note: "colors",
       code: IMP + 'const c = new THREE.Color("#808080");\nconsole.log(c.r.toFixed(4), c.getHexString());',
       options: ["0.2159 808080", "0.5020 808080", "0.5000 808080"],
       answer: 0,
@@ -274,6 +520,8 @@ const meshes: LessonDef = {
     },
     {
       kind: "run",
+      hint: L("mat.color already holds a Color object. Change that object instead of replacing it.", "mat.color ya contiene un objeto Color. Cambia ese objeto en lugar de reemplazarlo.", "mat.color にはもう Color オブジェクトがある。置きかえずにそれを変えよう。"),
+      note: "colors",
       prompt: L("Repaint the skin: it must print color 00ff00", "Repinta la piel: debe imprimir color 00ff00", "肌を塗り直そう：color 00ff00 と表示"),
       starter: IMP + "const mat = new THREE.MeshStandardMaterial({ color: 0xff0000 });\n// @ts-expect-error a number is not a Color\nmat.color = 0x00ff00;\nconsole.log(\"color \" + mat.color.getHexString());\n",
       solution: IMP + "const mat = new THREE.MeshStandardMaterial({ color: 0xff0000 });\nmat.color.set(0x00ff00);\nconsole.log(\"color \" + mat.color.getHexString());\n",
@@ -282,7 +530,107 @@ const meshes: LessonDef = {
       explain: L("mat.color is a Color object: replacing it with a number breaks it. Change it in place with set().", "mat.color es un objeto Color: cambiarlo por un número lo rompe. Modifícalo en su lugar con set().", "mat.color は Color オブジェクト。数値で置きかえると壊れる。set() でその場で変えよう。"),
     },
   ],
+  notes: meshesNotes,
 };
+
+const transformsNotes: NoteDef[] = [
+  note("pose", L("position, rotation and scale", "position, rotation y scale", "position・rotation・scale"),
+    p(
+      "Every Object3D (meshes, groups, cameras, lights) carries a pose made of three parts. position says where it is, rotation says which way it faces and scale says how big it is on each axis. A new object starts at the origin, unrotated, at its natural size. Scale multiplies the size, so a scale of 0 on any axis flattens the object until it disappears.",
+      "Todo Object3D (mallas, grupos, cámaras, luces) lleva una pose de tres partes. position dice dónde está, rotation hacia dónde mira y scale qué tan grande es en cada eje. Un objeto nuevo empieza en el origen, sin girar, en su tamaño natural. La escala multiplica el tamaño, así que una escala 0 en cualquier eje aplana el objeto hasta hacerlo desaparecer.",
+      "Object3D（メッシュ・グループ・カメラ・ライト）はみな3つの部分のポーズを持つ。position は場所、rotation は向き、scale は軸ごとの大きさ。新しい物体は原点にいて、回転なし、元の大きさ。scale は大きさの掛け算なので、どれかの軸が0だと平らになって消えてしまう。",
+    ),
+    p(
+      "position, rotation and scale are objects, not plain numbers: position and scale are Vector3s, rotation is an Euler. They are created once with the object and are read-only properties, so you can't swap them for new objects (error TS2540). Change the numbers inside them instead.",
+      "position, rotation y scale son objetos, no números sueltos: position y scale son Vector3, rotation es un Euler. Se crean una vez con el objeto y son propiedades de solo lectura, así que no puedes cambiarlas por objetos nuevos (error TS2540). Cambia los números de adentro.",
+      "position・rotation・scale はただの数ではなくオブジェクト。position と scale は Vector3、rotation は Euler。物体と一緒に1回だけ作られる読み取り専用のプロパティなので、新しいオブジェクトとは交換できない（エラー TS2540）。かわりに中の数を変えよう。",
+    ),
+    bad("const crate = new THREE.Object3D();\ncrate.rotation = new THREE.Euler(0, 1, 0);",
+      L("Does not compile: rotation is read-only too", "No compila: rotation también es de solo lectura", "コンパイル不可：rotation も読み取り専用")),
+    p(
+      "To change them, write one axis (crate.position.x = 4), all three with set(x, y, z), or the same value on every axis with setScalar(n). All of these edit the existing vector in place, which is exactly what three expects.",
+      "Para cambiarlas, escribe un eje (crate.position.x = 4), los tres con set(x, y, z) o el mismo valor en todos los ejes con setScalar(n). Todas estas formas editan el vector existente en su lugar, que es justo lo que three espera.",
+      "変えるときは1軸だけ（crate.position.x = 4）、set(x, y, z) で3つ同時、setScalar(n) で全軸に同じ値。どれも今あるベクトルをその場で書きかえる。three が期待しているのはまさにこれだよ。",
+    ),
+    ex('const crate = new THREE.Object3D();\ncrate.position.set(0, 2, -4);\ncrate.scale.setScalar(0.5);\nconsole.log(crate.position.toArray().join(","), crate.scale.x);', "0,2,-4 0.5"),
+    p(
+      "Scale works per axis and multiplies the geometry's own size. A slab of size 2 with a scale of (1, 0.5, 3) ends up 2 wide, 1 tall and 6 deep. Box3.setFromObject measures the final size of an object in the world.",
+      "La escala va por eje y multiplica el tamaño propio de la geometría. Una losa de tamaño 2 con escala (1, 0.5, 3) termina con 2 de ancho, 1 de alto y 6 de fondo. Box3.setFromObject mide el tamaño final de un objeto en el mundo.",
+      "scale は軸ごとに、ジオメトリ自身の大きさに掛け算される。大きさ2の板に (1, 0.5, 3) をかけると、幅2・高さ1・奥行き6になる。Box3.setFromObject で物体の最終的な大きさを測れるよ。",
+    ),
+    ex('const slab = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2));\nslab.scale.set(1, 0.5, 3);\nslab.updateMatrixWorld();\nconst size = new THREE.Box3().setFromObject(slab).getSize(new THREE.Vector3());\nconsole.log(size.toArray().join(","));', "2,1,6"),
+  ),
+  note("radians", L("Rotation uses radians", "La rotación usa radianes", "回転はラジアン"),
+    p(
+      "three.js measures angles in radians, not degrees. A full turn is 2π radians (about 6.283), a half turn is Math.PI and a quarter turn is Math.PI / 2. One radian is roughly 57 degrees, so a radian is a much bigger unit than a degree.",
+      "three.js mide los ángulos en radianes, no en grados. Una vuelta completa son 2π radianes (unos 6.283), media vuelta es Math.PI y un cuarto de vuelta es Math.PI / 2. Un radián son unos 57 grados, así que el radián es una unidad mucho más grande que el grado.",
+      "three.js は角度を度ではなくラジアンで測る。1回転は 2π ラジアン（約 6.283）、半回転は Math.PI、4分の1回転は Math.PI / 2。1ラジアンは約57度なので、度よりずっと大きな単位だよ。",
+    ),
+    p(
+      "THREE.MathUtils converts for you: degToRad(degrees) gives radians and radToDeg(radians) gives degrees. Use them whenever you think in degrees. Writing rotation.y = 45 doesn't turn 45 degrees: it turns 45 radians, more than seven full spins.",
+      "THREE.MathUtils convierte por ti: degToRad(grados) da radianes y radToDeg(radianes) da grados. Úsalos siempre que pienses en grados. Escribir rotation.y = 45 no gira 45 grados: gira 45 radianes, más de siete vueltas completas.",
+      "THREE.MathUtils が変換してくれる。degToRad(度) でラジアンに、radToDeg(ラジアン) で度に。度で考えるときはいつも使おう。rotation.y = 45 は45度ではなく45ラジアン、7回転以上も回ってしまう。",
+    ),
+    ex("console.log(THREE.MathUtils.radToDeg(Math.PI).toFixed(0), THREE.MathUtils.degToRad(360).toFixed(3));", "180 6.283"),
+    p(
+      "tsc can't catch this mistake. Both 45 and Math.PI / 4 are numbers, so the code compiles either way. It's a logic bug: the type is right but the unit is wrong. When an object spins strangely or points the wrong way, check the units first.",
+      "tsc no puede atrapar este error. Tanto 45 como Math.PI / 4 son números, así que el código compila de cualquier forma. Es un bug de lógica: el tipo es correcto pero la unidad no. Cuando un objeto gira raro o apunta mal, revisa primero las unidades.",
+      "tsc はこのミスを見つけられない。45 も Math.PI / 4 も number なので、どちらでもコンパイルできる。型は正しいのに単位がちがう、ロジックのバグだ。物体が変に回ったり向きがおかしいときは、まず単位を確認しよう。",
+    ),
+    p(
+      "lookAt(x, y, z) is another way to rotate: it turns the object to face a point, and three works out the angles for you. Those angles come out in radians too, so reading rotation after lookAt gives values like 0.785 (45°), never 45.",
+      "lookAt(x, y, z) es otra forma de girar: gira el objeto para que mire a un punto, y three calcula los ángulos por ti. Esos ángulos también salen en radianes, así que leer rotation después de lookAt da valores como 0.785 (45°), nunca 45.",
+      "lookAt(x, y, z) も回転の方法のひとつ。物体を点の方へ向け、角度は three が計算する。その角度もラジアンなので、lookAt のあとに rotation を読むと 0.785（45°）のような値になり、45 にはならない。",
+    ),
+    ex("const tower = new THREE.Object3D();\ntower.lookAt(3, 0, 3);\nconsole.log(tower.rotation.y.toFixed(3));", "0.785",
+      L("A point at 45° to the side: π/4 ≈ 0.785 radians", "Un punto a 45° de lado: π/4 ≈ 0.785 radianes", "45°ななめの点：π/4 ≈ 0.785 ラジアン")),
+  ),
+  note("local-matrix", L("The local matrix updates later", "La matriz local se actualiza luego", "ローカル行列はあとで更新"),
+    p(
+      "position, rotation and scale are friendly to edit, but the GPU wants a single 4×4 matrix. three bakes the pose into object.matrix, the local matrix. It doesn't do that every time you change a number: it waits and rebuilds the matrix right before rendering.",
+      "position, rotation y scale son cómodos de editar, pero la GPU quiere una sola matriz 4×4. three guarda la pose en object.matrix, la matriz local. No lo hace cada vez que cambias un número: espera y reconstruye la matriz justo antes de renderizar.",
+      "position・rotation・scale は編集しやすいけど、GPU が欲しいのは4×4の行列1つ。three はポーズを object.matrix（ローカル行列）にまとめる。数を変えるたびではなく、描画の直前にまとめて作り直すんだ。",
+    ),
+    p(
+      "So right after you change position, object.matrix still holds the old pose. Calling object.updateMatrix() rebuilds it immediately. In the matrix, the translation sits in elements 12, 13 and 14 (x, y, z), so that's where a move shows up.",
+      "Así que justo después de cambiar position, object.matrix todavía tiene la pose vieja. Llamar a object.updateMatrix() la reconstruye en el acto. En la matriz, la traslación está en los elementos 12, 13 y 14 (x, y, z), así que ahí se ve un movimiento.",
+      "だから position を変えた直後の object.matrix は、まだ古いポーズのまま。object.updateMatrix() を呼ぶとすぐに作り直される。行列では移動が12・13・14番（x・y・z）に入るので、動きはそこに現れる。",
+    ),
+    ex('const flag = new THREE.Object3D();\nflag.position.set(4, 5, 6);\nflag.updateMatrix();\nconsole.log(flag.matrix.elements.slice(12, 15).join(","));', "4,5,6",
+      L("After the update, the move sits in slots 12-14", "Tras el update, el movimiento está en 12-14", "更新後、移動は12〜14番に入る")),
+    p(
+      "Why wait? A game may change an object several times in one frame, and rebuilding the matrix after each change would waste work. So three does it once per frame (matrixAutoUpdate is true by default). You only call updateMatrix() yourself when you read the matrix before the next render, as in tests or tools.",
+      "¿Por qué esperar? Un juego puede cambiar un objeto varias veces en un cuadro, y reconstruir la matriz tras cada cambio sería trabajo perdido. Así que three lo hace una vez por cuadro (matrixAutoUpdate es true por defecto). Solo llamas a updateMatrix() tú mismo cuando lees la matriz antes del próximo render, como en pruebas o herramientas.",
+      "なぜ待つの？ゲームでは1フレームに何度も物体を動かすことがあり、そのたびに行列を作るのはむだ。だから three は1フレームに1回だけ作る（matrixAutoUpdate の初期値は true）。次の描画より前に行列を読むとき、たとえばテストやツールでだけ、自分で updateMatrix() を呼ぼう。",
+    ),
+    p(
+      "Once the matrix is up to date, you can apply it to points: vector.applyMatrix4(object.matrix) takes a point in the object's local space and places it using the object's pose. That's how you find where a tip or a corner ends up.",
+      "Con la matriz al día, puedes aplicarla a puntos: vector.applyMatrix4(object.matrix) toma un punto del espacio local del objeto y lo coloca según la pose del objeto. Así averiguas dónde termina una punta o una esquina.",
+      "行列が最新になれば、点にかけられる。vector.applyMatrix4(object.matrix) は物体のローカル空間の点を、物体のポーズで置き直す。先っぽや角がどこへ行くか、これで調べられるよ。",
+    ),
+    ex('const lever = new THREE.Object3D();\nlever.position.x = 2;\nlever.updateMatrix();\nconst end = new THREE.Vector3(0, 1, 0).applyMatrix4(lever.matrix);\nconsole.log(end.toArray().join(","));', "2,1,0"),
+  ),
+  note("clone-shares", L("clone() shares geometry and material", "clone() comparte geometría y material", "clone() は形と素材を共有"),
+    p(
+      "mesh.clone() makes a new mesh with the same pose: position, rotation and scale are copied into new vectors of its own. Moving the clone doesn't move the original. That part works like a real copy.",
+      "mesh.clone() crea una malla nueva con la misma pose: position, rotation y scale se copian en vectores nuevos propios. Mover el clon no mueve al original. Esa parte funciona como una copia de verdad.",
+      "mesh.clone() は同じポーズの新しいメッシュを作る。position・rotation・scale は自分専用の新しいベクトルにコピーされる。クローンを動かしても元は動かない。ここは本物のコピーだよ。",
+    ),
+    p(
+      "The geometry and the material are not copied: the clone points to the very same objects. That's on purpose. A forest of 500 identical trees should share one geometry and one material, which saves memory and GPU uploads.",
+      "La geometría y el material no se copian: el clon apunta a los mismos objetos. Es a propósito. Un bosque de 500 árboles idénticos debería compartir una geometría y un material, lo que ahorra memoria y subidas a la GPU.",
+      "ジオメトリとマテリアルはコピーされず、クローンはまったく同じオブジェクトを指す。これはわざと。同じ木が500本の森なら、形と素材を1つずつ共有すればメモリも GPU への転送も節約できる。",
+    ),
+    ex("const rock = new THREE.Mesh(new THREE.SphereGeometry(), new THREE.MeshBasicMaterial());\nconst pebble = rock.clone();\npebble.scale.setScalar(0.2);\nconsole.log(rock.scale.x, pebble.material === rock.material);", "1 true"),
+    p(
+      "The catch: change the shared material and every mesh that uses it changes too. If one copy needs its own color, give it its own material with copy.material = original.material.clone(). The same goes for the geometry when you edit its points.",
+      "La trampa: cambia el material compartido y cambian todas las mallas que lo usan. Si una copia necesita su propio color, dale su propio material con copia.material = original.material.clone(). Lo mismo con la geometría si editas sus puntos.",
+      "注意点：共有マテリアルを変えると、それを使うメッシュが全部変わる。1つだけ色を変えたいなら、copy.material = original.material.clone() で専用のマテリアルを持たせよう。点を編集するならジオメトリも同じだよ。",
+    ),
+    ex("const rock = new THREE.Mesh(new THREE.SphereGeometry(), new THREE.MeshBasicMaterial());\nconst gem = rock.clone();\ngem.material = rock.material.clone();\ngem.material.color.set(0xff00ff);\nconsole.log(rock.material.color.getHexString(), gem.material.color.getHexString());", "ffffff ff00ff",
+      L("Its own material: repainting it leaves the rock alone", "Material propio: repintarlo no toca la roca", "専用の素材なら、塗っても元の石はそのまま")),
+  ),
+];
 
 // ─── 1.3 Move, turn, grow ──────────────────────────────────────────────────
 const transforms: LessonDef = {
@@ -320,6 +668,8 @@ const transforms: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Where does a new object stand, and which size multiplier leaves it unchanged?", "¿Dónde está un objeto nuevo y qué multiplicador de tamaño lo deja igual?", "新しい物体はどこにいる？大きさを変えない倍率はいくつ？"),
+      note: "pose",
       code: IMP + 'const o = new THREE.Object3D();\nconsole.log(o.position.toArray().join(","), o.scale.toArray().join(","));',
       options: ["0,0,0 1,1,1", "0,0,0 0,0,0", "1,1,1 1,1,1"],
       answer: 0,
@@ -331,6 +681,8 @@ const transforms: LessonDef = {
     {
       kind: "predict",
       prompt: COMPILES,
+      hint: L("Can the position property itself be replaced, or only the numbers inside it?", "¿Se puede reemplazar la propiedad position, o solo los números de adentro?", "position そのものを置きかえられる？それとも中の数だけ？"),
+      note: "pose",
       code: IMP + "const mesh = new THREE.Mesh();\nmesh.position = new THREE.Vector3(1, 2, 3);",
       options: [YES, NO_TSC],
       answer: 1,
@@ -341,6 +693,8 @@ const transforms: LessonDef = {
     {
       kind: "type",
       prompt: L("Move the mesh in place", "Mueve la malla en su lugar", "その場でメッシュを動かそう"),
+      hint: L("You need a method that writes x, y and z into the existing vector in one call.", "Necesitas un método que escriba x, y y z en el vector existente en una sola llamada.", "今あるベクトルに x・y・z を1回で書きこむメソッドが必要。"),
+      note: "pose",
       code: IMP + 'const mesh = new THREE.Mesh();\nmesh.position.___(1, 2, 3);\nconsole.log(mesh.position.toArray().join(","));',
       answer: "set",
       check: { compiles: true, stdout: "1,2,3" },
@@ -355,6 +709,8 @@ const transforms: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("PI radians is half a turn. What fraction of a turn is PI / 2?", "PI radianes es media vuelta. ¿Qué fracción de vuelta es PI / 2?", "PI ラジアンは半回転。PI / 2 は何分の何回転？"),
+      note: "radians",
       code: IMP + "console.log(THREE.MathUtils.radToDeg(Math.PI / 2), THREE.MathUtils.degToRad(180) === Math.PI);",
       options: ["90 true", "1.5708 true", "90 false"],
       answer: 0,
@@ -365,6 +721,8 @@ const transforms: LessonDef = {
     {
       kind: "predict",
       prompt: COMPILES,
+      hint: L("tsc only checks types. Is 90 a number? Then ask which unit rotation uses.", "tsc solo revisa tipos. ¿90 es un number? Luego pregúntate qué unidad usa rotation.", "tsc が見るのは型だけ。90 は number？次に rotation の単位を考えよう。"),
+      note: "radians",
       code: IMP + "const mesh = new THREE.Mesh();\nmesh.rotation.y = 90;",
       options: [L("Yes, but it spins 90 radians", "Sí, pero gira 90 radianes", "はい、でも90ラジアン回る"), NO_TSC],
       answer: 0,
@@ -380,6 +738,8 @@ const transforms: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Changing position doesn't rebuild the matrix by itself. Look at when updateMatrix() runs.", "Cambiar position no reconstruye la matriz por sí solo. Mira cuándo se ejecuta updateMatrix().", "position を変えても行列は自動では作り直されない。updateMatrix() がいつ動くか見よう。"),
+      note: "local-matrix",
       code: IMP + "const o = new THREE.Object3D();\no.position.set(1, 0, 0);\nconsole.log(o.matrix.elements[12]);\no.updateMatrix();\nconsole.log(o.matrix.elements[12]);",
       options: [L("0, then 1", "0, luego 1", "0 のあと 1"), L("1, then 1", "1, luego 1", "1 のあと 1"), L("0, then 0", "0, luego 0", "0 のあと 0")],
       answer: 0,
@@ -390,6 +750,8 @@ const transforms: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("For each pair, ask: did clone() make a new object, or reuse the same one?", "Para cada par, pregúntate: ¿clone() creó un objeto nuevo o reutilizó el mismo?", "各ペアで考えよう：clone() は新しく作った？同じ物を使い回した？"),
+      note: "clone-shares",
       code: IMP + "const a = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());\nconst b = a.clone();\nconsole.log(b.geometry === a.geometry, b.material === a.material, b.position === a.position);",
       options: ["true true false", "false false false", "true true true"],
       answer: 0,
@@ -402,6 +764,8 @@ const transforms: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("lookAt answers in radians. How big a turn around Y takes the default facing to +X?", "lookAt responde en radianes. ¿Qué giro en Y lleva la dirección inicial a mirar a +X?", "lookAt の答えはラジアン。初めの向きから +X を向くには Y でどれだけ回る？"),
+      note: "radians",
       code: IMP + "const o = new THREE.Object3D();\no.lookAt(5, 0, 0);\nconsole.log(o.rotation.y.toFixed(3));",
       options: ["1.571", "90.000", "5.000"],
       answer: 0,
@@ -412,6 +776,8 @@ const transforms: LessonDef = {
     {
       kind: "predict",
       prompt: PRINT,
+      hint: L("Scale multiplies each axis separately. Which axes were multiplied by something other than 1?", "La escala multiplica cada eje por separado. ¿Qué ejes se multiplicaron por algo distinto de 1?", "scale は軸ごとに掛け算する。1以外を掛けた軸はどれ？"),
+      note: "pose",
       code: IMP + 'const box = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1));\nbox.scale.set(2, 1, 1);\nbox.updateMatrixWorld();\nconst size = new THREE.Box3().setFromObject(box).getSize(new THREE.Vector3());\nconsole.log(size.toArray().join(","));',
       options: ["2,1,1", "2,2,2", "1,1,1"],
       answer: 0,
@@ -422,6 +788,8 @@ const transforms: LessonDef = {
     },
     {
       kind: "run",
+      hint: L("rotation.z = 90 is read in radians. Write a quarter turn in radians instead.", "rotation.z = 90 se lee en radianes. Escribe un cuarto de vuelta en radianes.", "rotation.z = 90 はラジアンで読まれる。4分の1回転をラジアンで書こう。"),
+      note: "radians",
       prompt: L("Point the arm up: it must print tip 0.00 1.00", "Apunta el brazo arriba: debe imprimir tip 0.00 1.00", "腕を上へ：tip 0.00 1.00 と表示"),
       starter: IMP + "const arm = new THREE.Object3D();\narm.rotation.z = 90;\narm.updateMatrix();\nconst tip = new THREE.Vector3(1, 0, 0).applyMatrix4(arm.matrix);\nconsole.log(`tip ${tip.x.toFixed(2)} ${tip.y.toFixed(2)}`);\n",
       solution: IMP + "const arm = new THREE.Object3D();\narm.rotation.z = Math.PI / 2;\narm.updateMatrix();\nconst tip = new THREE.Vector3(1, 0, 0).applyMatrix4(arm.matrix);\nconsole.log(`tip ${tip.x.toFixed(2)} ${tip.y.toFixed(2)}`);\n",
@@ -430,7 +798,75 @@ const transforms: LessonDef = {
       explain: L("90 is read as 90 radians. A quarter turn is Math.PI / 2, or MathUtils.degToRad(90).", "90 se lee como 90 radianes. Un cuarto de vuelta es Math.PI / 2, o MathUtils.degToRad(90).", "90 は90ラジアンとして読まれる。4分の1回転は Math.PI / 2 か degToRad(90) だよ。"),
     },
   ],
+  notes: transformsNotes,
 };
+
+const bossNotes: NoteDef[] = [
+  note("recap-camera", L("Recap: camera and lens", "Repaso: cámara y lente", "復習：カメラとレンズ"),
+    p(
+      "PerspectiveCamera(fov, aspect, near, far): fov is the vertical view angle in degrees, aspect is width ÷ height, and near and far limit what gets drawn. Arguments fill in from the left; any you leave out keep their default values.",
+      "PerspectiveCamera(fov, aspect, near, far): fov es el ángulo de visión vertical en grados, aspect es ancho ÷ alto, y near y far limitan lo que se dibuja. Los argumentos se llenan desde la izquierda; los que omitas conservan su valor por defecto.",
+      "PerspectiveCamera(fov, aspect, near, far)：fov は縦の視野角（度）、aspect は幅÷高さ、near と far は描く範囲。引数は左から順に入り、省いたものは初期値のままだよ。",
+    ),
+    p(
+      "The four settings are cached in camera.projectionMatrix. After changing any of them, call camera.updateProjectionMatrix(), or the camera keeps drawing with the old lens. updateMatrixWorld() is a different job: it refreshes the pose, not the lens.",
+      "Los cuatro ajustes se guardan en camera.projectionMatrix. Después de cambiar cualquiera, llama a camera.updateProjectionMatrix(), o la cámara seguirá dibujando con la lente vieja. updateMatrixWorld() es otra tarea: refresca la pose, no la lente.",
+      "4つの設定は camera.projectionMatrix に保存される。どれかを変えたら camera.updateProjectionMatrix() を呼ぼう。呼ばないと古いレンズのまま描く。updateMatrixWorld() は別の仕事で、レンズではなくポーズを更新する。",
+    ),
+    ex("const lens = new THREE.PerspectiveCamera(45, 2);\nlens.aspect = 1;\nlens.updateProjectionMatrix();\nconsole.log(lens.fov, lens.aspect, lens.near);", "45 1 0.1"),
+    p(
+      "Common mistakes: writing fov in radians (it's degrees, unlike rotation), forgetting the update call after a resize, and a far value too small for a big world.",
+      "Errores comunes: escribir fov en radianes (va en grados, a diferencia de rotation), olvidar la llamada de update tras un resize y un far demasiado pequeño para un mundo grande.",
+      "よくあるミス：fov をラジアンで書く（rotation とちがって度）、リサイズ後の update 忘れ、広い世界なのに far が小さすぎる。",
+    ),
+  ),
+  note("recap-materials", L("Recap: materials, lights, colors", "Repaso: materiales, luces, colores", "復習：素材・光・色"),
+    p(
+      "MeshBasicMaterial ignores light. Lambert, Phong, Standard and Physical react to light, so in a scene without any light they show up black. The fix for a black lit material is a light, such as a DirectionalLight or an AmbientLight, added to the scene.",
+      "MeshBasicMaterial ignora la luz. Lambert, Phong, Standard y Physical reaccionan a la luz, así que en una escena sin luces se ven negras. El arreglo para un material iluminado que sale negro es una luz, como DirectionalLight o AmbientLight, agregada a la escena.",
+      "MeshBasicMaterial は光を無視する。Lambert・Phong・Standard・Physical は光に反応するので、光のないシーンでは黒く見える。光に反応する素材が黒いなら、DirectionalLight や AmbientLight などのライトをシーンに足そう。",
+    ),
+    p(
+      "THREE.Color channels r, g and b go from 0 to 1, and getHexString() gives six hex digits with no # in front. Hex and CSS colors are stored in linear light inside, so in-between channel values differ from the hex, but pure 0 and 1 stay the same.",
+      "Los canales r, g y b de THREE.Color van de 0 a 1, y getHexString() da seis dígitos hex sin # delante. Los colores hex y CSS se guardan por dentro en luz lineal, así que los canales intermedios difieren del hex, pero 0 y 1 puros no cambian.",
+      "THREE.Color の r・g・b は0〜1。getHexString() は先頭に # のない6桁の16進を返す。16進や CSS の色は内部でリニアに保存されるので、中間の値は16進とずれるけど、0 と 1 はそのまま。",
+    ),
+    ex("const pink = new THREE.Color(0xff00ff);\nconsole.log(pink.r, pink.g, pink.getHexString());", "1 0 ff00ff"),
+  ),
+  note("recap-geometry", L("Recap: counting geometry", "Repaso: contar geometría", "復習：ジオメトリを数える"),
+    p(
+      "attributes.position.count is the number of vertices; index.count is the number of indices, three per triangle. To count indices, count the faces, then the triangles per face, then multiply by 3. A flat square face is always two triangles.",
+      "attributes.position.count es la cantidad de vértices; index.count es la cantidad de índices, tres por triángulo. Para contar índices, cuenta las caras, luego los triángulos por cara, y multiplica por 3. Una cara cuadrada plana siempre son dos triángulos.",
+      "attributes.position.count は頂点の数、index.count はインデックスの数（三角形1つにつき3つ）。インデックスを数えるには、面の数→面ごとの三角形の数→×3。平らな四角い面はいつも三角形2つだよ。",
+    ),
+    ex("const fan = new THREE.CircleGeometry(1, 5);\nconsole.log(fan.attributes.position.count, fan.index?.count);", "7 15",
+      L("5 slices: 5 triangles × 3 = 15 indices", "5 porciones: 5 triángulos × 3 = 15 índices", "5切れ：三角形5つ×3＝15")),
+    p(
+      "The size arguments only stretch the points; they never change how many there are. Only the kind of shape and its segment counts do. Common mistake: mixing up vertices (points) and indices (three per triangle).",
+      "Los argumentos de tamaño solo estiran los puntos; nunca cambian cuántos hay. Solo cambian con el tipo de forma y sus segmentos. Error común: confundir vértices (puntos) con índices (tres por triángulo).",
+      "大きさの引数は点を伸ばすだけで、数は変えない。変わるのは形の種類と分割数だけ。よくあるミス：頂点（点）とインデックス（三角形1つにつき3つ）の混同。",
+    ),
+  ),
+  note("recap-pose", L("Recap: pose and clones", "Repaso: pose y clones", "復習：ポーズとクローン"),
+    p(
+      "position, rotation and scale are read-only objects. Change their numbers with set(x, y, z), one axis at a time, or setScalar(n) for the same value on all three axes. Replacing them with new objects is error TS2540.",
+      "position, rotation y scale son objetos de solo lectura. Cambia sus números con set(x, y, z), un eje a la vez o setScalar(n) para el mismo valor en los tres ejes. Reemplazarlos por objetos nuevos es el error TS2540.",
+      "position・rotation・scale は読み取り専用のオブジェクト。数を変えるには set(x, y, z)、1軸ずつ、または全軸同じ値の setScalar(n)。新しいオブジェクトに置きかえるとエラー TS2540。",
+    ),
+    p(
+      "Rotation is in radians: Math.PI is a half turn, Math.PI / 2 a quarter turn, and MathUtils.degToRad converts from degrees. To see where a point lands after a turn, call updateMatrix() and apply the matrix to the point.",
+      "La rotación va en radianes: Math.PI es media vuelta, Math.PI / 2 un cuarto de vuelta, y MathUtils.degToRad convierte desde grados. Para ver dónde cae un punto tras un giro, llama a updateMatrix() y aplica la matriz al punto.",
+      "回転はラジアン。Math.PI は半回転、Math.PI / 2 は4分の1回転、MathUtils.degToRad で度から変換。回したあと点がどこへ行くかは、updateMatrix() を呼んで行列を点にかければわかる。",
+    ),
+    ex("const wheel = new THREE.Object3D();\nwheel.rotation.z = Math.PI / 2;\nwheel.updateMatrix();\nconst spoke = new THREE.Vector3(0, 2, 0).applyMatrix4(wheel.matrix);\nconsole.log(spoke.x.toFixed(2), spoke.y.toFixed(2));", "-2.00 0.00",
+      L("A quarter turn around Z swings +Y over to -X", "Un cuarto de vuelta en Z lleva +Y hasta -X", "Z 軸で4分の1回転すると +Y は -X へ")),
+    p(
+      "clone() gives the copy its own pose but shares the geometry and the material with the original. Move the copy and the original stays put; repaint the shared material and both change.",
+      "clone() le da a la copia su propia pose, pero comparte la geometría y el material con el original. Mueve la copia y el original no se mueve; repinta el material compartido y cambian los dos.",
+      "clone() はコピーに専用のポーズを与え、ジオメトリとマテリアルは元と共有する。コピーを動かしても元はそのまま。共有マテリアルを塗り直すと両方変わる。",
+    ),
+  ),
+];
 
 // ─── 1.4 Boss: Scene Gremlin ───────────────────────────────────────────────
 const boss: LessonDef = {
@@ -447,22 +883,23 @@ const boss: LessonDef = {
       "¡JE! Apagué tus luces, encogí tus cámaras y torcí cada pose. ¿Aún sabes encuadrar una toma?",
       "ヘヘ！光を消して、カメラを縮めて、ポーズを全部ねじった。それでも絵を撮れるかな？",
     )),
-    { kind: "predict", time: 12, prompt: PRINT, code: IMP + "const cam = new THREE.PerspectiveCamera(60);\nconsole.log(cam.fov, cam.aspect);", options: ["60 1", "60 undefined", "50 1"], answer: 0, output: "60 1", check: { compiles: true, stdout: "60 1" }, explain: L("Only fov was given; aspect keeps its default of 1.", "Solo se dio fov; aspect mantiene su valor por defecto de 1.", "fov だけ指定。aspect は初期値の1のまま。") },
-    { kind: "predict", time: 12, prompt: L("Standard material, all black. Fix?", "Material Standard, todo negro. ¿Arreglo?", "Standard で真っ黒。直し方は？"), code: IMP + "const mat = new THREE.MeshStandardMaterial({ color: 0x3366ff });\nconst scene = new THREE.Scene();\nscene.add(new THREE.Mesh(new THREE.BoxGeometry(), mat));", options: [L("Add a light", "Agregar una luz", "ライトを足す"), L("Raise camera.far", "Subir camera.far", "far を増やす")], answer: 0, explain: L("Standard needs light to show its color. No light, no color.", "Standard necesita luz para mostrar su color. Sin luz, sin color.", "Standard は光がないと色が出ない。") },
-    { kind: "predict", time: 12, prompt: COMPILES, code: IMP + "const mesh = new THREE.Mesh();\nmesh.scale = new THREE.Vector3(2, 2, 2);", options: [YES, NO_TSC], answer: 1, check: { compiles: false }, explain: L("TS2540: scale is read-only. Use mesh.scale.set(2, 2, 2).", "TS2540: scale es de solo lectura. Usa mesh.scale.set(2, 2, 2).", "TS2540：scale は読み取り専用。set(2, 2, 2) を使おう。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: IMP + "const m = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());\nconst c = m.clone();\nc.position.x = 5;\nconsole.log(m.position.x, c.geometry === m.geometry);", options: ["0 true", "5 true", "0 false"], answer: 0, output: "0 true", check: { compiles: true, stdout: "0 true" }, explain: L("Each clone has its own pose, but the geometry is shared.", "Cada clon tiene su propia pose, pero la geometría se comparte.", "ポーズはそれぞれ別、ジオメトリは共有。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: IMP + "const c = new THREE.Color(0x00ff00);\nconsole.log(c.g, c.getHexString());", options: ["1 00ff00", "255 00ff00", "1 #00ff00"], answer: 0, output: "1 00ff00", check: { compiles: true, stdout: "1 00ff00" }, explain: L("Channels go from 0 to 1, and the hex string has no #.", "Los canales van de 0 a 1 y el string hex no lleva #.", "チャンネルは0〜1、16進文字列に # はない。") },
-    { kind: "pick", time: 12, prompt: L("After changing fov, call…", "Tras cambiar fov, llama a…", "fov を変えたら呼ぶのは…"), code: IMP + "const camera = new THREE.PerspectiveCamera();\ncamera.fov = 30;\ncamera.___();\nconsole.log(camera.projectionMatrix.elements[5].toFixed(2));", options: ["updateProjectionMatrix", "updateMatrixWorld"], answer: 0, check: { compiles: true, stdout: "3.73" }, explain: L("The projection matrix caches fov, aspect, near and far.", "La matriz de proyección guarda fov, aspect, near y far.", "射影行列が fov・aspect・near・far を覚えている。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: IMP + "console.log(THREE.MathUtils.degToRad(90).toFixed(4));", options: ["1.5708", "90.0000", "3.1416"], answer: 0, output: "1.5708", check: { compiles: true, stdout: "1.5708" }, explain: L("90 degrees is PI/2 radians ≈ 1.5708.", "90 grados son PI/2 radianes ≈ 1.5708.", "90度は PI/2 ラジアン ≈ 1.5708。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: IMP + "const g = new THREE.BoxGeometry(2, 2, 2);\nconst p = new THREE.PlaneGeometry(2, 2);\nconsole.log(g.index?.count, p.index?.count);", options: ["36 6", "12 2", "24 4"], answer: 0, output: "36 6", check: { compiles: true, stdout: "36 6" }, explain: L("Indices: 12 triangles × 3 for the box, 2 × 3 for the plane. Size doesn't change counts.", "Índices: 12 triángulos × 3 en la caja, 2 × 3 en el plano. El tamaño no cambia la cuenta.", "箱は12三角形×3、平面は2×3。大きさで数は変わらない。") },
-    { kind: "type", time: 15, prompt: L("Grow it 3x in every direction", "Hazlo 3x más grande en todo", "全方向に3倍にしよう"), code: IMP + 'const mesh = new THREE.Mesh();\nmesh.scale.___(3);\nconsole.log(mesh.scale.toArray().join(","));', answer: "setScalar", check: { compiles: true, stdout: "3,3,3" }, explain: L("setScalar(3) sets x, y and z to 3 at once.", "setScalar(3) pone x, y y z en 3 a la vez.", "setScalar(3) で x・y・z を一度に3にする。") },
-    { kind: "predict", time: 15, prompt: PRINT, code: IMP + "const o = new THREE.Object3D();\no.rotation.z = Math.PI;\no.updateMatrix();\nconst p = new THREE.Vector3(1, 0, 0).applyMatrix4(o.matrix);\nconsole.log(p.x.toFixed(2));", options: ["-1.00", "1.00", "0.00"], answer: 0, output: "-1.00", check: { compiles: true, stdout: "-1.00" }, explain: L("Math.PI is a half turn, so +X ends up at -X.", "Math.PI es media vuelta, así que +X termina en -X.", "Math.PI は半回転。+X は -X へ。") },
+    { hint: L("Only the first argument was given. The others keep their default values.", "Solo se dio el primer argumento. Los demás conservan sus valores por defecto.", "渡したのは1つ目の引数だけ。残りは初期値のまま。"), note: "recap-camera", kind: "predict", time: 12, prompt: PRINT, code: IMP + "const cam = new THREE.PerspectiveCamera(60);\nconsole.log(cam.fov, cam.aspect);", options: ["60 1", "60 undefined", "50 1"], answer: 0, output: "60 1", check: { compiles: true, stdout: "60 1" }, explain: L("Only fov was given; aspect keeps its default of 1.", "Solo se dio fov; aspect mantiene su valor por defecto de 1.", "fov だけ指定。aspect は初期値の1のまま。") },
+    { hint: L("Standard reacts to light. What does this scene contain besides the mesh?", "Standard reacciona a la luz. ¿Qué contiene esta escena además de la malla?", "Standard は光に反応する。シーンにはメッシュ以外に何がある？"), note: "recap-materials", kind: "predict", time: 12, prompt: L("Standard material, all black. Fix?", "Material Standard, todo negro. ¿Arreglo?", "Standard で真っ黒。直し方は？"), code: IMP + "const mat = new THREE.MeshStandardMaterial({ color: 0x3366ff });\nconst scene = new THREE.Scene();\nscene.add(new THREE.Mesh(new THREE.BoxGeometry(), mat));", options: [L("Add a light", "Agregar una luz", "ライトを足す"), L("Raise camera.far", "Subir camera.far", "far を増やす")], answer: 0, explain: L("Standard needs light to show its color. No light, no color.", "Standard necesita luz para mostrar su color. Sin luz, sin color.", "Standard は光がないと色が出ない。") },
+    { hint: L("Same rule as position: can the whole scale object be swapped?", "La misma regla que position: ¿se puede cambiar todo el objeto scale?", "position と同じルール。scale のオブジェクトごと交換できる？"), note: "recap-pose", kind: "predict", time: 12, prompt: COMPILES, code: IMP + "const mesh = new THREE.Mesh();\nmesh.scale = new THREE.Vector3(2, 2, 2);", options: [YES, NO_TSC], answer: 1, check: { compiles: false }, explain: L("TS2540: scale is read-only. Use mesh.scale.set(2, 2, 2).", "TS2540: scale es de solo lectura. Usa mesh.scale.set(2, 2, 2).", "TS2540：scale は読み取り専用。set(2, 2, 2) を使おう。") },
+    { hint: L("Does moving a clone touch the original's pose? And is the geometry copied or reused?", "¿Mover un clon toca la pose del original? ¿Y la geometría se copia o se reutiliza?", "クローンを動かすと元のポーズは変わる？ジオメトリはコピー？使い回し？"), note: "recap-pose", kind: "predict", time: 15, prompt: PRINT, code: IMP + "const m = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());\nconst c = m.clone();\nc.position.x = 5;\nconsole.log(m.position.x, c.geometry === m.geometry);", options: ["0 true", "5 true", "0 false"], answer: 0, output: "0 true", check: { compiles: true, stdout: "0 true" }, explain: L("Each clone has its own pose, but the geometry is shared.", "Cada clon tiene su propia pose, pero la geometría se comparte.", "ポーズはそれぞれ別、ジオメトリは共有。") },
+    { hint: L("Which range do Color channels use, and what does getHexString put in front?", "¿Qué rango usan los canales de Color y qué pone getHexString delante?", "Color のチャンネルの範囲は？getHexString は先頭に何をつける？"), note: "recap-materials", kind: "predict", time: 12, prompt: PRINT, code: IMP + "const c = new THREE.Color(0x00ff00);\nconsole.log(c.g, c.getHexString());", options: ["1 00ff00", "255 00ff00", "1 #00ff00"], answer: 0, output: "1 00ff00", check: { compiles: true, stdout: "1 00ff00" }, explain: L("Channels go from 0 to 1, and the hex string has no #.", "Los canales van de 0 a 1 y el string hex no lleva #.", "チャンネルは0〜1、16進文字列に # はない。") },
+    { hint: L("fov lives in a cached matrix of the lens, not in the pose.", "fov vive en una matriz guardada de la lente, no en la pose.", "fov はポーズではなく、レンズの保存された行列に入っている。"), note: "recap-camera", kind: "pick", time: 12, prompt: L("After changing fov, call…", "Tras cambiar fov, llama a…", "fov を変えたら呼ぶのは…"), code: IMP + "const camera = new THREE.PerspectiveCamera();\ncamera.fov = 30;\ncamera.___();\nconsole.log(camera.projectionMatrix.elements[5].toFixed(2));", options: ["updateProjectionMatrix", "updateMatrixWorld"], answer: 0, check: { compiles: true, stdout: "3.73" }, explain: L("The projection matrix caches fov, aspect, near and far.", "La matriz de proyección guarda fov, aspect, near y far.", "射影行列が fov・aspect・near・far を覚えている。") },
+    { hint: L("Half a turn is PI radians. What fraction of that is 90 degrees?", "Media vuelta son PI radianes. ¿Qué fracción de eso son 90 grados?", "半回転は PI ラジアン。90度はその何分の一？"), note: "recap-pose", kind: "predict", time: 12, prompt: PRINT, code: IMP + "console.log(THREE.MathUtils.degToRad(90).toFixed(4));", options: ["1.5708", "90.0000", "3.1416"], answer: 0, output: "1.5708", check: { compiles: true, stdout: "1.5708" }, explain: L("90 degrees is PI/2 radians ≈ 1.5708.", "90 grados son PI/2 radianes ≈ 1.5708.", "90度は PI/2 ラジアン ≈ 1.5708。") },
+    { hint: L("Count the triangles of each shape, then × 3. Does the size argument matter?", "Cuenta los triángulos de cada forma y luego × 3. ¿Importa el tamaño?", "形ごとに三角形を数えて×3。大きさは関係ある？"), note: "recap-geometry", kind: "predict", time: 15, prompt: PRINT, code: IMP + "const g = new THREE.BoxGeometry(2, 2, 2);\nconst p = new THREE.PlaneGeometry(2, 2);\nconsole.log(g.index?.count, p.index?.count);", options: ["36 6", "12 2", "24 4"], answer: 0, output: "36 6", check: { compiles: true, stdout: "36 6" }, explain: L("Indices: 12 triangles × 3 for the box, 2 × 3 for the plane. Size doesn't change counts.", "Índices: 12 triángulos × 3 en la caja, 2 × 3 en el plano. El tamaño no cambia la cuenta.", "箱は12三角形×3、平面は2×3。大きさで数は変わらない。") },
+    { hint: L("There's a method that sets the same number on x, y and z in one call.", "Hay un método que pone el mismo número en x, y y z en una sola llamada.", "x・y・z に同じ数を1回で入れるメソッドがある。"), note: "recap-pose", kind: "type", time: 15, prompt: L("Grow it 3x in every direction", "Hazlo 3x más grande en todo", "全方向に3倍にしよう"), code: IMP + 'const mesh = new THREE.Mesh();\nmesh.scale.___(3);\nconsole.log(mesh.scale.toArray().join(","));', answer: "setScalar", check: { compiles: true, stdout: "3,3,3" }, explain: L("setScalar(3) sets x, y and z to 3 at once.", "setScalar(3) pone x, y y z en 3 a la vez.", "setScalar(3) で x・y・z を一度に3にする。") },
+    { hint: L("Math.PI is half a turn. Where does a point on +X end up after half a turn?", "Math.PI es media vuelta. ¿Dónde termina un punto en +X tras media vuelta?", "Math.PI は半回転。+X の点は半回転後どこへ？"), note: "recap-pose", kind: "predict", time: 15, prompt: PRINT, code: IMP + "const o = new THREE.Object3D();\no.rotation.z = Math.PI;\no.updateMatrix();\nconst p = new THREE.Vector3(1, 0, 0).applyMatrix4(o.matrix);\nconsole.log(p.x.toFixed(2));", options: ["-1.00", "1.00", "0.00"], answer: 0, output: "-1.00", check: { compiles: true, stdout: "-1.00" }, explain: L("Math.PI is a half turn, so +X ends up at -X.", "Math.PI es media vuelta, así que +X termina en -X.", "Math.PI は半回転。+X は -X へ。") },
     enemySays(L(
       "Grr... lights on, cameras straight, poses fixed. The forest of parents and children awaits. You'll get lost there!",
       "Grr... luces encendidas, cámaras derechas, poses arregladas. El bosque de padres e hijos te espera. ¡Ahí te perderás!",
       "ぐぬぬ…光もカメラもポーズも元通り。次は親子の森だ。そこで迷子になるがいい！",
     )),
   ],
+  notes: bossNotes,
 };
 
 export const sceneVillage: RegionDef = {

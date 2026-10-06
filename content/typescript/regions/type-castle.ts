@@ -1,4 +1,4 @@
-import type { LessonDef, RegionDef, SnippetCheck } from "../../../lib/content/types.ts";
+import type { LessonDef, NoteBlock, NoteDef, RegionDef, SnippetCheck, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
 import { enemySays, say } from "../../rust/helpers.ts";
 
@@ -17,6 +17,91 @@ const typeIs = (code: string, actual: string, expected: string): SnippetCheck =>
   compiles: true,
 });
 
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example; the validator type-checks it and checks `output` against the runner. */
+const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code, output, caption });
+/** An example that type-checks (verified) and prints nothing worth showing. */
+const ok = (code: string, caption?: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: true } });
+/** An example that must NOT type-check (verified too). */
+const bad = (code: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: false } });
+/** An example that type-checks, then crashes at runtime with a message containing `throws`. */
+const crash = (code: string, throws: string, caption: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: true, throws } });
+/** A type example: the checker proves that `actual` is exactly `expected` (players see only `code`). */
+const proof = (code: string, actual: string, expected: string, caption?: Text): NoteBlock => ({ t: "code", code, caption, check: typeIs(code, actual, expected) });
+
+const shapesNotes: NoteDef[] = [
+  note("inference-literals", L("Inference, literals and satisfies", "Inferencia, literales y satisfies", "型推論・リテラル・satisfies"),
+    p(
+      "TypeScript reads your code BEFORE it runs and gives every value a type. You can write one yourself, like let lives: number = 3, but most of the time TS INFERS it from the first value. From then on the variable keeps that type, and putting a different kind of value in it is error TS2322.",
+      "TypeScript lee tu código ANTES de ejecutarlo y le da un tipo a cada valor. Puedes escribirlo tú, como let lives: number = 3, pero casi siempre TS lo INFIERE a partir del primer valor. Desde ahí la variable conserva ese tipo, y meterle otro tipo de valor es el error TS2322.",
+      "TypeScript は実行する前にコードを読み、すべての値に型をつける。let lives: number = 3 のように自分で書けるけど、たいていは最初の値から推論される。それ以降その型のままで、別の種類の値を入れると TS2322 エラーだよ。",
+    ),
+    p(
+      "let and const infer differently. A const can never change, so TS keeps the exact LITERAL type: const speed = 30 has type 30. A let may be reassigned later, so TS WIDENS it to the general type: number. A variable labeled with a literal type accepts only that exact value.",
+      "let y const infieren distinto. Un const nunca cambia, así que TS conserva el tipo LITERAL exacto: const speed = 30 tiene tipo 30. Un let puede reasignarse, así que TS lo AMPLÍA al tipo general: number. Una variable etiquetada con un tipo literal solo acepta ese valor exacto.",
+      "let と const は推論が違う。const は変わらないので、ぴったりのリテラル型のまま：const speed = 30 の型は 30。let は再代入できるので、一般的な型 number に広げられる。リテラル型をつけた変数は、その値しか受け付けないよ。",
+    ),
+    proof(c("const speed = 30;", "let pace = 30;"), "[typeof speed, typeof pace]", "[30, number]",
+      L("const keeps the literal 30; let widens to number", "const conserva el literal 30; let lo amplía a number", "const はリテラル 30、let は number に広がる")),
+    p(
+      "Three ways to relate a value to a type: a : label REPLACES the inferred type with the declared one; as FORCES it and can hide mistakes; satisfies CHECKS that the value fits the type but KEEPS the precise inferred type, so you can still use what is specific about each key.",
+      "Tres formas de relacionar un valor con un tipo: una etiqueta : REEMPLAZA el tipo inferido por el declarado; as lo FUERZA y puede esconder errores; satisfies COMPRUEBA que el valor encaja en el tipo pero CONSERVA el tipo inferido preciso, así que puedes seguir usando lo específico de cada clave.",
+      "値と型の関係づけは3通り。: の注釈は推論された型を宣言した型で置き換える。as は無理やり変えてミスを隠すこともある。satisfies は型に合うか確かめつつ、推論された細かい型を残すので、各キーの具体的な型をそのまま使えるよ。",
+    ),
+    ex(c("const sizes = { small: 8, large: [16, 24] } satisfies Record<string, number | number[]>;", "console.log(sizes.small.toFixed(1));"), "8.0",
+      L("Checked against the Record, but small stays a number", "Comprobado contra el Record, pero small sigue siendo number", "Record で確認しつつ small は number のまま")),
+    bad(c("const sizes: Record<string, number | number[]> = { small: 8, large: [16, 24] };", "console.log(sizes.small.toFixed(1));"),
+      L("With a : label, small is number | number[]", "Con una etiqueta :, small es number | number[]", ": の注釈だと small は number | number[]")),
+  ),
+  note("object-shapes", L("Object shapes: ? and readonly", "Formas de objetos: ? y readonly", "オブジェクトの形：? と readonly"),
+    p(
+      "An interface (or a type alias) describes the shape of an object: which keys it has and the type of each one. A value labeled with that shape must have every required key, with a value of the right type.",
+      "Una interface (o un alias type) describe la forma de un objeto: qué claves tiene y el tipo de cada una. Un valor etiquetado con esa forma debe tener todas las claves obligatorias, con un valor del tipo correcto.",
+      "interface（や type エイリアス）はオブジェクトの形を表す。どんなキーがあり、それぞれの型は何か。その形をつけた値は、必須のキーを正しい型の値ですべて持つ必要があるよ。",
+    ),
+    p(
+      "A ? after the key name makes it OPTIONAL: the key may be missing. Its type then quietly includes undefined, and reading a missing key gives undefined. Before doing math with it, give it a fallback, for example with ?? which replaces null or undefined.",
+      "Un ? después del nombre de la clave la vuelve OPCIONAL: la clave puede faltar. Su tipo incluye entonces undefined en silencio, y leer una clave que falta da undefined. Antes de hacer cuentas con ella, dale un valor de respaldo, por ejemplo con ??, que reemplaza null o undefined.",
+      "キー名のあとの ? はそのキーを省略可能にする。キーがなくてもよく、型にはこっそり undefined が加わり、ないキーを読むと undefined。計算に使う前に、null や undefined を置き換える ?? などで代わりの値を決めよう。",
+    ),
+    ex(c("interface Pet { name: string; age?: number }", 'const rex: Pet = { name: "Rex" };', "console.log(rex.age, rex.age ?? 0);"), "undefined 0",
+      L("age may be missing; ?? supplies a fallback", "age puede faltar; ?? da un valor de respaldo", "age はないかも。?? で代わりの値")),
+    bad(c("interface Pet { name: string; age?: number }", "function double(p: Pet) { return p.age * 2; }"),
+      L("Does not type-check: age is possibly undefined (TS18048)", "No pasa: age puede ser undefined (TS18048)", "型エラー：age は undefined かも（TS18048）")),
+    p(
+      "readonly before a key means it can be set when the object is created, but never assigned again afterwards: an assignment is error TS2540. It protects values that must not change, like ids. It is checked by TypeScript only; it does not freeze the object at runtime.",
+      "readonly delante de una clave significa que se puede poner al crear el objeto, pero nunca volver a asignar después: una asignación es el error TS2540. Protege valores que no deben cambiar, como los ids. Solo lo comprueba TypeScript; no congela el objeto en ejecución.",
+      "キーの前の readonly は、作るときには入れられるが、あとで代入できないという意味。代入すると TS2540 エラー。id のように変わってはいけない値を守る。チェックするのは TypeScript だけで、実行時にオブジェクトを凍らせるわけではないよ。",
+    ),
+    bad(c("interface Card { readonly code: string }", 'const card: Card = { code: "A1" };', 'card.code = "B2";'),
+      L("Does not type-check: code is readonly", "No pasa: code es readonly", "型エラー：code は readonly")),
+  ),
+  note("structural-typing", L("Structural typing and extra keys", "Tipado estructural y claves de más", "構造的型付けと余分なキー"),
+    p(
+      "TypeScript compares SHAPES, not names. A value fits a type when it has all the keys the type requires, with the right types. It does not matter where the value came from or what it was called. Having extra keys is fine, because the code that uses the type only touches the keys it knows.",
+      "TypeScript compara FORMAS, no nombres. Un valor encaja en un tipo cuando tiene todas las claves que el tipo exige, con los tipos correctos. No importa de dónde vino el valor ni cómo se llamaba. Tener claves de más está bien, porque el código que usa el tipo solo toca las claves que conoce.",
+      "TypeScript が比べるのは名前ではなく形。型が求めるキーを正しい型で全部持っていれば、その値は合格。どこから来た値か、何という名前かは関係ない。余分なキーがあってもいい。型を使うコードは知っているキーしか触らないからね。",
+    ),
+    ex(c("interface Named { name: string }", 'function greet(n: Named) { return "hi " + n.name; }', 'const robot = { name: "R2", model: 7 };', "console.log(greet(robot));"), "hi R2",
+      L("robot has name, so it fits Named; model is ignored", "robot tiene name, así que encaja; model se ignora", "robot は name を持つので合格。model は無視")),
+    p(
+      "There is one exception: the excess property check. When you write a FRESH object literal right where a type is expected, TS also rejects keys the type does not have (TS2353). An unknown key typed directly into a literal is usually a typo, like nmae instead of name, and this check catches it.",
+      "Hay una excepción: el chequeo de propiedades de más. Cuando escribes un literal de objeto NUEVO justo donde se espera un tipo, TS también rechaza las claves que el tipo no tiene (TS2353). Una clave desconocida escrita directo en un literal suele ser un error de tipeo, como nmae en vez de name, y este chequeo lo detecta.",
+      "例外が1つある。余分なプロパティのチェックだ。型が求められる場所に直接オブジェクトリテラルを書くと、型にないキーも拒否される（TS2353）。リテラルに直接書いた知らないキーは、name を nmae と書くような打ち間違いが多いからだよ。",
+    ),
+    bad(c("interface Named { name: string }", 'function greet(n: Named) { return "hi " + n.name; }', 'greet({ name: "R2", model: 7 });'),
+      L("Does not type-check: model in a fresh literal", "No pasa: model en un literal nuevo", "型エラー：リテラルに直接書いた model")),
+    p(
+      "Rule to remember: a value stored in a variable first may carry extra keys; a literal written directly into the call or the label may not. If the extra key is intended, add it to the type, or build the object in a variable before passing it.",
+      "Regla para recordar: un valor guardado antes en una variable puede llevar claves de más; un literal escrito directo en la llamada o la etiqueta, no. Si la clave extra es intencional, agrégala al tipo o arma el objeto en una variable antes de pasarlo.",
+      "覚えるルール：先に変数に入れた値なら余分なキーがあってもいい。呼び出しや注釈に直接書いたリテラルはダメ。わざと足したキーなら、型に加えるか、変数に入れてから渡そう。",
+    ),
+  ),
+];
+
 const shapesLesson: LessonDef = {
   slug: "shapes-and-inference",
   title: L("The shape guard", "El guardián de formas", "かたちの門番"),
@@ -25,6 +110,7 @@ const shapesLesson: LessonDef = {
   xp: 70,
   enemy: "typescript/undefined-ghost",
   enemyName: L("LOOSE GHOST", "FANTASMA SUELTO", "ゆるゆるゴースト"),
+  notes: shapesNotes,
   beats: [
     say(L(
       "Welcome to the Type Castle! TypeScript adds TYPES: labels that say what shape a value must have.",
@@ -61,6 +147,8 @@ const shapesLesson: LessonDef = {
       options: [YES, L("No: hp is a number", "No: hp es number", "いいえ：hp は number")],
       answer: 1,
       check: { compiles: false },
+      hint: L("No type is written, but TS still gives hp a type from its first value. Does a string fit that type?", "No hay tipo escrito, pero TS igual le da a hp un tipo según su primer valor. ¿Cabe un string en ese tipo?", "型は書いていないが、TS は最初の値から hp に型をつける。その型に文字列は入る？"),
+      note: "inference-literals",
       explain: L(
         "No label written, but TS INFERRED number from 10. A string doesn't fit (TS2322).",
         "No hay etiqueta, pero TS INFIRIÓ number a partir de 10. Un string no cabe (TS2322).",
@@ -79,6 +167,8 @@ const shapesLesson: LessonDef = {
       code: c("interface Hero { name: string; title___: string }", 'const h: Hero = { name: "Ada" };', "console.log(h.title);"),
       answer: "?",
       check: { compiles: true, stdout: "undefined" },
+      hint: L("h has no title. Which one-character mark after a key name says that the key may be missing?", "h no tiene title. ¿Qué marca de un carácter tras el nombre de una clave dice que puede faltar?", "h には title がない。キー名のあとにつけて「なくてもいい」を表す1文字の印は？"),
+      note: "object-shapes",
       explain: L(
         "title?: string means the key may be missing; reading it then gives undefined.",
         "title?: string significa que la clave puede faltar; leerla da undefined.",
@@ -93,6 +183,8 @@ const shapesLesson: LessonDef = {
       options: [YES, NO],
       answer: 1,
       check: { compiles: false },
+      hint: L("Look at the word before id. What does it allow, and forbid, after the object is created?", "Mira la palabra delante de id. ¿Qué permite, y qué prohíbe, después de crear el objeto?", "id の前の言葉を見よう。オブジェクトを作ったあと、何を許し、何を禁じる？"),
+      note: "object-shapes",
       explain: L(
         "id is readonly, so assigning it is error TS2540.",
         "id es readonly, así que asignarlo es el error TS2540.",
@@ -117,6 +209,8 @@ const shapesLesson: LessonDef = {
       answer: 0,
       output: "5",
       check: { compiles: true, stdout: "5" },
+      hint: L("Types compare shapes. v is a variable, not a fresh literal: does it have every key Point needs?", "Los tipos comparan formas. v es una variable, no un literal nuevo: ¿tiene todas las claves que pide Point?", "型は形で比べる。v はリテラルではなく変数。Point が求めるキーを全部持っている？"),
+      note: "structural-typing",
       explain: L(
         "v has x and y, so it fits Point. An extra z in a variable is allowed.",
         "v tiene x e y, así que encaja en Point. Una z de más en una variable está permitida.",
@@ -136,6 +230,8 @@ const shapesLesson: LessonDef = {
       options: [YES, L("No: excess property z", "No: propiedad z de más", "いいえ：余分なプロパティ z")],
       answer: 1,
       check: { compiles: false },
+      hint: L("This time the object is written directly in the call. What extra check do fresh literals get?", "Esta vez el objeto se escribe directo en la llamada. ¿Qué chequeo extra reciben los literales nuevos?", "今回はオブジェクトを呼び出しに直接書いている。直接書いたリテラルだけの追加チェックは？"),
+      note: "structural-typing",
       explain: L(
         "A FRESH literal gets an excess property check: z is probably a typo (TS2353).",
         "Un literal NUEVO pasa por el chequeo de propiedades de más: z probablemente es un error (TS2353).",
@@ -151,6 +247,8 @@ const shapesLesson: LessonDef = {
       options: [YES, L("No: y is number", "No: y es number", "いいえ：y は number")],
       answer: 1,
       check: { compiles: false },
+      hint: L("y is declared with let. Does TS infer the literal type 5 for it, or something wider?", "y se declara con let. ¿TS le infiere el tipo literal 5 o algo más amplio?", "y は let で宣言されている。TS はリテラル型 5 と推論する？もっと広い型？"),
+      note: "inference-literals",
       explain: L(
         "let y can change, so TS widens it to number. Only const x = 5 keeps the literal type 5.",
         "let y puede cambiar, así que TS lo amplía a number. Solo const x = 5 conserva el tipo literal 5.",
@@ -172,6 +270,8 @@ const shapesLesson: LessonDef = {
       options: ["satisfies", "as", "extends"],
       answer: 0,
       check: { compiles: true, stdout: "#F00", wrongFail: true },
+      hint: L("You want the value checked against the Record while keeping each key's precise inferred type.", "Quieres comprobar el valor contra el Record sin perder el tipo inferido preciso de cada clave.", "Record で値を確かめつつ、各キーの細かい推論型は残したい。"),
+      note: "inference-literals",
       explain: L(
         "With as, red becomes string | number[] and toUpperCase fails. satisfies keeps red: string.",
         "Con as, red pasa a string | number[] y toUpperCase falla. satisfies mantiene red: string.",
@@ -205,6 +305,8 @@ const shapesLesson: LessonDef = {
         String.raw`i\s*\.\s*qty\s*[!=]==?\s*undefined`,
         String.raw`price\s*:\s*3\s*,\s*qty\s*:\s*1`,
       ],
+      hint: L("qty has a ? so it can be missing, and a number times undefined is NaN. Give it a fallback.", "qty tiene un ?, así que puede faltar, y un número por undefined da NaN. Dale un valor de respaldo.", "qty は ? つきでないかもしれず、数値×undefined は NaN。代わりの値を用意しよう。"),
+      note: "object-shapes",
       explain: L(
         "qty is optional, so it can be undefined and 3 * undefined is NaN. tsc warns too: TS18048. Use i.qty ?? 1.",
         "qty es opcional: puede ser undefined y 3 * undefined da NaN. tsc también avisa: TS18048. Usa i.qty ?? 1.",
@@ -214,6 +316,73 @@ const shapesLesson: LessonDef = {
   ],
 };
 
+const unionsNotes: NoteDef[] = [
+  note("narrowing", L("Unions and narrowing", "Uniones y estrechamiento", "ユニオン型と絞り込み"),
+    p(
+      "A union type like string | boolean means the value is ONE of those types, and TS doesn't know which. Until you check, it only lets you use what EVERY member has. Calling a string method on a value that might be a boolean is error TS2339.",
+      "Un tipo unión como string | boolean significa que el valor es UNO de esos tipos, y TS no sabe cuál. Hasta que lo compruebes, solo te deja usar lo que tienen TODOS los miembros. Llamar a un método de string sobre un valor que podría ser boolean es el error TS2339.",
+      "string | boolean のようなユニオン型は、値がそのどれか1つという意味で、TS にはどれか分からない。確かめるまでは、全メンバーが持つものしか使えない。boolean かもしれない値に文字列のメソッドを呼ぶと TS2339 エラーだよ。",
+    ),
+    bad("function shout(v: string | boolean) { return v.toUpperCase(); }",
+      L("Does not type-check: v might be a boolean", "No pasa: v podría ser boolean", "型エラー：v は boolean かも")),
+    p(
+      "NARROWING is how you find out. Inside if (typeof v === \"boolean\"), TS knows v is a boolean; after that branch returns, only string is left. typeof gives a string such as \"string\", \"number\", \"boolean\", \"object\" or \"undefined\". For objects, \"key\" in obj narrows to the members that have that key.",
+      "El ESTRECHAMIENTO es cómo lo averiguas. Dentro de if (typeof v === \"boolean\"), TS sabe que v es boolean; después de que esa rama retorna, solo queda string. typeof da un string como \"string\", \"number\", \"boolean\", \"object\" o \"undefined\". Con objetos, \"clave\" in obj estrecha a los miembros que tienen esa clave.",
+      "それを確かめるのが絞り込み。if (typeof v === \"boolean\") の中では v は boolean。その分岐が return したあとは string だけが残る。typeof は \"string\"・\"number\"・\"boolean\"・\"object\"・\"undefined\" などの文字列を返す。オブジェクトなら \"キー\" in obj で、そのキーを持つメンバーに絞り込めるよ。",
+    ),
+    ex(c("function describe(v: string | boolean) {", '  if (typeof v === "boolean") return v ? "on" : "off";', "  return v.toUpperCase();", "}", 'console.log(describe(true), describe("ok"));'), "on OK",
+      L("Each branch sees a narrower type", "Cada rama ve un tipo más estrecho", "分岐ごとに型が絞られる")),
+    ex(c("type Car = { drive: () => string };", "type Boat = { sail: () => string };", 'function go(v: Car | Boat) { return "sail" in v ? v.sail() : v.drive(); }', 'console.log(go({ drive: () => "vroom" }));'), "vroom",
+      L("in checks for a key and narrows to that member", "in busca una clave y estrecha a ese miembro", "in はキーを調べてそのメンバーに絞る")),
+    p(
+      "Careful with truthiness: if (n) also narrows away undefined, but it throws out 0, \"\" and false too, because they are falsy. For an optional number, 0 is a real value, so compare with undefined explicitly: n !== undefined.",
+      "Cuidado con la veracidad: if (n) también descarta undefined, pero además descarta 0, \"\" y false, porque son falsy. Con un número opcional, 0 es un valor real, así que compara con undefined de forma explícita: n !== undefined.",
+      "真偽値での判定に注意。if (n) は undefined を落とすけど、0・\"\"・false も falsy なので一緒に落とす。省略可能な数値なら 0 も本物の値。undefined とはっきり比べよう：n !== undefined。",
+    ),
+    ex(c("function show(n?: number) {", '  return n ? "n=" + n : "none";', "}", "console.log(show(0));"), "none",
+      L("Bug: 0 is falsy, so it is treated as missing", "Bug: 0 es falsy y se trata como si faltara", "バグ：0 は falsy なので「ない」扱い")),
+  ),
+  note("literal-unions", L("Literal unions and exhaustive switch", "Uniones literales y switch exhaustivo", "リテラル型ユニオンと網羅チェック"),
+    p(
+      "A literal type is a single exact value used as a type: \"small\" as a type means only that string. A union of literals, like \"s\" | \"m\" | \"l\", works as a menu: those exact strings are accepted and any other string is rejected before the code runs.",
+      "Un tipo literal es un único valor exacto usado como tipo: \"small\" como tipo significa solo ese string. Una unión de literales, como \"s\" | \"m\" | \"l\", funciona como un menú: se aceptan esos strings exactos y cualquier otro se rechaza antes de ejecutar.",
+      "リテラル型は、1つのぴったりの値を型として使うもの。型としての \"small\" はその文字列だけ。\"s\" | \"m\" | \"l\" のようなリテラルのユニオン型はメニューで、その文字列だけが通り、ほかは実行前に拒否されるよ。",
+    ),
+    bad(c('type Size = "s" | "m" | "l";', 'const pick: Size = "xl";'),
+      L("Does not type-check: xl is not on the menu", "No pasa: xl no está en el menú", "型エラー：xl はメニューにない")),
+    p(
+      "A DISCRIMINATED union gives each object member a tag key with a literal value, like kind: \"cat\" or kind: \"fish\". A switch on that tag narrows the value to the matching member in each case, so its own keys become available there.",
+      "Una unión DISCRIMINADA da a cada miembro objeto una clave etiqueta con un valor literal, como kind: \"cat\" o kind: \"fish\". Un switch sobre esa etiqueta estrecha el valor al miembro que coincide en cada case, así que sus claves propias quedan disponibles ahí.",
+      "判別可能なユニオン型では、各メンバーに kind: \"cat\" や kind: \"fish\" のようなリテラル値のタグキーをつける。そのタグで switch すると、各 case で値が対応するメンバーに絞られ、そのメンバーのキーが使えるよ。",
+    ),
+    p(
+      "To make sure no case is forgotten, assign the value to a variable of type never in default. never is the type with no values: if every case is handled, nothing is left and the assignment is fine; if a member is missing, it reaches default and the assignment is an error.",
+      "Para asegurarte de no olvidar ningún caso, asigna el valor a una variable de tipo never en default. never es el tipo sin valores: si cada caso está cubierto, no queda nada y la asignación es válida; si falta un miembro, llega a default y la asignación es un error.",
+      "case の書き忘れを防ぐには、default で値を never 型の変数に代入する。never は値が1つもない型。全 case を処理していれば何も残らず代入はOK。メンバーが抜けていると default に届き、代入がエラーになるよ。",
+    ),
+    ex(c('type Pet = { kind: "cat"; lives: number } | { kind: "fish"; fins: number };', "function count(p: Pet): number {", "  switch (p.kind) {", '    case "cat": return p.lives;', '    case "fish": return p.fins;', "    default: { const none: never = p; return none; }", "  }", "}", 'console.log(count({ kind: "fish", fins: 2 }));'), "2",
+      L("Every member handled, so default gets never", "Todos los miembros cubiertos: a default llega never", "全メンバー処理済みなので default は never")),
+  ),
+  note("unknown-guards", L("unknown, any and type guards", "unknown, any y type guards", "unknown・any・型ガード"),
+    p(
+      "any switches the checker OFF for a value: every use is allowed, so mistakes slip through and crash at runtime. unknown is the safe version of \"could be anything\": you can store any value in it, but you cannot use it until you narrow it (error TS18046). Prefer unknown.",
+      "any APAGA el verificador para un valor: todo uso está permitido, así que los errores se cuelan y revientan en ejecución. unknown es la versión segura de \"puede ser cualquier cosa\": puedes guardar cualquier valor, pero no usarlo hasta estrecharlo (error TS18046). Prefiere unknown.",
+      "any はその値のチェックを切ってしまう。何でも許されるので、ミスがすり抜けて実行時にクラッシュする。unknown は「何でもありうる」の安全版。どんな値も入れられるが、絞り込むまで使えない（TS18046）。unknown を使おう。",
+    ),
+    crash(c("const loose: any = 5;", "console.log(loose.toUpperCase());"), "TypeError",
+      L("any type-checks, then crashes at runtime", "any pasa el chequeo y luego revienta", "any は型チェックを通り、実行時にクラッシュ")),
+    bad(c("function size(v: unknown) { return v.toFixed(2); }"),
+      L("Does not type-check: narrow unknown first", "No pasa: primero estrecha unknown", "型エラー：先に unknown を絞り込む")),
+    p(
+      "A custom TYPE GUARD is a function whose return type is written v is SomeType. It returns a boolean, and when it returns true, TS narrows the argument to SomeType in that branch. TS trusts your check, so make the body test exactly what the name promises.",
+      "Un TYPE GUARD propio es una función cuyo tipo de retorno se escribe v is AlgúnTipo. Devuelve un boolean y, cuando devuelve true, TS estrecha el argumento a AlgúnTipo en esa rama. TS confía en tu comprobación, así que haz que el cuerpo verifique justo lo que promete el nombre.",
+      "自作の型ガードは、戻り値の型を v is 型 と書いた関数。真偽値を返し、true のときその分岐で引数がその型に絞られる。TS はあなたのチェックを信じるので、関数の中身は名前どおりのことを正しく調べよう。",
+    ),
+    ex(c("function isNumber(v: unknown): v is number {", '  return typeof v === "number";', "}", "const input: unknown = 21;", "if (isNumber(input)) console.log(input * 2);"), "42",
+      L("After the guard returns true, input is a number", "Tras el guard en true, input es number", "ガードが true なら input は number")),
+  ),
+];
+
 const unionsLesson: LessonDef = {
   slug: "unions-and-narrowing",
   title: L("Two-faced values", "Valores de dos caras", "ふたつの顔を持つ値"),
@@ -222,6 +391,7 @@ const unionsLesson: LessonDef = {
   xp: 75,
   enemy: "typescript/any-shifter",
   enemyName: L("MASK SHIFTER", "CAMBIAFORMAS", "仮面シフター"),
+  notes: unionsNotes,
   beats: [
     say(L(
       "A union type string | number means one OR the other. Until you check which, you may only use what BOTH have.",
@@ -246,6 +416,8 @@ const unionsLesson: LessonDef = {
       options: [YES, L("No: number has no length", "No: number no tiene length", "いいえ：number に length はない")],
       answer: 1,
       check: { compiles: false },
+      hint: L("Before narrowing, you may only use what every member of the union has. Do numbers have length?", "Antes de estrechar, solo puedes usar lo que tienen todos los miembros de la unión. ¿Los números tienen length?", "絞り込む前は、ユニオン型の全メンバーが持つものしか使えない。number に length はある？"),
+      note: "narrowing",
       explain: L(
         "x might be a number, and numbers have no .length (TS2339). Narrow first.",
         "x podría ser un number, y los números no tienen .length (TS2339). Primero estrecha el tipo.",
@@ -267,6 +439,8 @@ const unionsLesson: LessonDef = {
       options: ['"string"', '"number"', '"text"'],
       answer: 0,
       check: { compiles: true, stdout: "3 7", wrongFail: true },
+      hint: L("Inside the if, x.length is used. Compare typeof with the name of the type that has a length.", "Dentro del if se usa x.length. Compara typeof con el nombre del tipo que tiene length.", "if の中で x.length を使う。typeof を、length を持つ型の名前と比べよう。"),
+      note: "narrowing",
       explain: L(
         "Inside if (typeof x === \"string\") TS knows x is a string, so .length is allowed.",
         "Dentro de if (typeof x === \"string\") TS sabe que x es string, así que .length está permitido.",
@@ -286,6 +460,8 @@ const unionsLesson: LessonDef = {
       options: [YES, NO],
       answer: 1,
       check: { compiles: false },
+      hint: L("Dir is a union of exact strings. Is the assigned string one of them?", "Dir es una unión de strings exactos. ¿El string asignado es uno de ellos?", "Dir はぴったりの文字列のユニオン型。代入した文字列はその中にある？"),
+      note: "literal-unions",
       explain: L(
         "\"left\" is not on the menu: only \"up\" or \"down\" fit Dir.",
         "\"left\" no está en el menú: solo \"up\" o \"down\" encajan en Dir.",
@@ -306,6 +482,8 @@ const unionsLesson: LessonDef = {
       options: ["in", "of", "instanceof"],
       answer: 0,
       check: { compiles: true, stdout: "flap", wrongFail: true },
+      hint: L("You need an operator that tests whether a key exists in an object, so TS can tell Fish from Bird.", "Necesitas un operador que compruebe si una clave existe en un objeto, para que TS distinga Fish de Bird.", "オブジェクトにキーがあるかを調べる演算子が必要。それで TS は Fish と Bird を見分ける。"),
+      note: "narrowing",
       explain: L(
         "\"swim\" in p checks for the key, and TS narrows p to Fish in that branch.",
         "\"swim\" in p comprueba si existe la clave, y TS estrecha p a Fish en esa rama.",
@@ -336,6 +514,8 @@ const unionsLesson: LessonDef = {
       options: [YES, L("No: \"tri\" is not handled", "No: falta \"tri\"", "いいえ：\"tri\" が未処理")],
       answer: 1,
       check: { compiles: false },
+      hint: L("List the kinds in the union, then the cases in the switch. Does any kind reach default?", "Enumera los kind de la unión y luego los case del switch. ¿Algún kind llega a default?", "ユニオン型の kind と switch の case を並べよう。default に届く kind はある？"),
+      note: "literal-unions",
       explain: L(
         "The tri shape reaches default, and it can't be assigned to never. The checker found the missing case.",
         "La forma tri llega a default y no se puede asignar a never. El verificador encontró el caso faltante.",
@@ -355,6 +535,8 @@ const unionsLesson: LessonDef = {
       options: [YES, L("No: narrow x first", "No: primero estrecha x", "いいえ：先に x を絞り込む")],
       answer: 1,
       check: { compiles: false },
+      hint: L("x is unknown, not any. What does TS require before you can use an unknown value?", "x es unknown, no any. ¿Qué exige TS antes de poder usar un valor unknown?", "x は any ではなく unknown。unknown の値を使う前に TS は何を求める？"),
+      note: "unknown-guards",
       explain: L(
         "With unknown you must narrow before use (TS18046). With any it compiles, and bugs slip through.",
         "Con unknown debes estrechar antes de usar (TS18046). Con any compila, y los bugs se cuelan.",
@@ -373,6 +555,8 @@ const unionsLesson: LessonDef = {
       ),
       answer: "is",
       check: { compiles: true, stdout: "HI" },
+      hint: L("A type guard's return type reads like a sentence about x. Which short word links x and string?", "El tipo de retorno de un type guard se lee como una frase sobre x. ¿Qué palabra corta une x y string?", "型ガードの戻り値の型は x についての文のように読む。x と string をつなぐ短い言葉は？"),
+      note: "unknown-guards",
       explain: L(
         "x is string tells TS: when this returns true, treat x as a string.",
         "x is string le dice a TS: cuando esto devuelve true, trata x como string.",
@@ -404,6 +588,8 @@ const unionsLesson: LessonDef = {
         String.raw`count\s*!=\s*null`,
         String.raw`typeof\s+count\s*===?\s*["']number["']`,
       ],
+      hint: L("Which values count as falsy? A truthiness check throws out more than just undefined.", "¿Qué valores cuentan como falsy? Una comprobación de veracidad descarta más que solo undefined.", "falsy になる値はどれ？真偽値でのチェックは undefined 以外も落としてしまう。"),
+      note: "narrowing",
       explain: L(
         "Truthiness narrowing drops 0 too, since 0 is falsy. Check count !== undefined instead.",
         "Estrechar por verdad también descarta 0, porque 0 es falsy. Comprueba count !== undefined.",
@@ -413,6 +599,76 @@ const unionsLesson: LessonDef = {
   ],
 };
 
+const genericsNotes: NoteDef[] = [
+  note("generic-params", L("Type parameters <T>", "Parámetros de tipo <T>", "型パラメータ <T>"),
+    p(
+      "Some functions work the same for any type, like \"give me the last item of a list\". A generic type parameter <T> lets you write it once while keeping the link between input and output: T is a blank that is filled in again on every call.",
+      "Algunas funciones trabajan igual con cualquier tipo, como \"dame el último ítem de una lista\". Un parámetro de tipo genérico <T> te deja escribirla una vez sin perder el vínculo entre entrada y salida: T es un hueco que se vuelve a llenar en cada llamada.",
+      "「リストの最後の要素をくれ」のように、どんな型でも同じように働く関数がある。型パラメータ <T> を使えば一度書くだけで、入力と出力のつながりも保てる。T は呼ぶたびに埋め直される空欄だよ。",
+    ),
+    proof(c("function last<T>(items: T[]): T | undefined {", "  return items[items.length - 1];", "}", 'const w = last(["a", "b"]);'), "typeof w", "string | undefined",
+      L("T is inferred as string, so w is string | undefined", "T se infiere como string: w es string | undefined", "T は string と推論され、w は string | undefined")),
+    p(
+      "Usually you don't write T yourself: TS INFERS it from the arguments. Passing a string[] makes T = string for that call, and every T in the signature becomes string, including the return type. You can also fill it explicitly: last<number>([1, 2]).",
+      "Normalmente no escribes T tú: TS lo INFIERE a partir de los argumentos. Pasar un string[] hace T = string en esa llamada, y cada T de la firma pasa a ser string, incluido el tipo de retorno. También puedes llenarlo de forma explícita: last<number>([1, 2]).",
+      "ふつう T は自分で書かない。TS が引数から推論する。string[] を渡すとその呼び出しでは T = string になり、戻り値も含めてシグネチャの T がすべて string になる。last<number>([1, 2]) と明示もできるよ。",
+    ),
+    p(
+      "A type parameter can have a DEFAULT, written <T = boolean>. When you use the type without angle brackets, the default fills the blank, and the value must then match it. Why not just use any? Because any breaks the link: the result would be any, and the checker could no longer help.",
+      "Un parámetro de tipo puede tener un valor POR DEFECTO, escrito <T = boolean>. Cuando usas el tipo sin los signos < >, el default llena el hueco, y el valor debe coincidir con él. ¿Por qué no usar any? Porque any rompe el vínculo: el resultado sería any y el verificador ya no podría ayudar.",
+      "型パラメータには <T = boolean> のように既定値をつけられる。< > なしで型を使うと既定値が空欄を埋め、値はそれに合う必要がある。any ではダメな理由は、つながりが切れるから。結果も any になり、チェッカーが助けられなくなるよ。",
+    ),
+    ok(c("type Wrap<T = boolean> = { value: T };", "const yes: Wrap = { value: true };", "const label: Wrap<string> = { value: \"ok\" };")),
+    bad(c("type Wrap<T = boolean> = { value: T };", 'const nope: Wrap = { value: "ok" };'),
+      L("Does not type-check: Wrap means Wrap<boolean>", "No pasa: Wrap significa Wrap<boolean>", "型エラー：Wrap は Wrap<boolean> のこと")),
+  ),
+  note("constraints", L("Constraints: T extends ...", "Restricciones: T extends ...", "制約：T extends ..."),
+    p(
+      "Inside a generic function, T could be ANY type: a string, a number, an object. So TS only lets you use what every possible type has, which is almost nothing. Reading a key such as .name on a bare T is error TS2339.",
+      "Dentro de una función genérica, T podría ser CUALQUIER tipo: un string, un número, un objeto. Así que TS solo te deja usar lo que tiene todo tipo posible, que es casi nada. Leer una clave como .name sobre un T sin restricción es el error TS2339.",
+      "ジェネリック関数の中の T は、文字列でも数値でもオブジェクトでも、どんな型でもありうる。だから TS は、あらゆる型が持つもの、つまりほぼ何も使わせない。制約のない T で .name を読むと TS2339 エラーだよ。",
+    ),
+    bad("function tag<T>(x: T) { return x.name; }",
+      L("Does not type-check: T may have no name", "No pasa: T puede no tener name", "型エラー：T に name がないかも")),
+    p(
+      "A CONSTRAINT, written T extends Shape, limits what callers may pass to types that have at least Shape's members. In exchange, inside the function you may use those members. Read extends here as \"must have at least\".",
+      "Una RESTRICCIÓN, escrita T extends Forma, limita lo que se puede pasar a tipos que tengan al menos los miembros de Forma. A cambio, dentro de la función puedes usar esos miembros. Lee extends aquí como \"debe tener al menos\".",
+      "制約 T extends Shape は、渡せる型を「少なくとも Shape のメンバーを持つ型」に限る。そのかわり、関数の中でそのメンバーを使える。ここの extends は「最低限これを持つ」と読もう。",
+    ),
+    ex(c("function tag<T extends { name: string }>(x: T) {", '  return x.name + "!";', "}", 'console.log(tag({ name: "Kai", age: 9 }));'), "Kai!",
+      L("Any value with a name fits, extra keys included", "Encaja cualquier valor con name, aunque tenga más claves", "name があれば合格。余分なキーもOK")),
+    p(
+      "A call with a value that lacks the required member is rejected at the call site (TS2345), before anything runs. Tip: constrain by the members you actually use, not by a concrete type, so every value that has them can come in.",
+      "Una llamada con un valor al que le falta el miembro exigido se rechaza en el lugar de la llamada (TS2345), antes de ejecutar nada. Consejo: restringe por los miembros que de verdad usas, no por un tipo concreto, para que entre todo valor que los tenga.",
+      "必要なメンバーがない値で呼ぶと、何かが動く前に呼び出し側で拒否される（TS2345）。コツ：具体的な型ではなく、実際に使うメンバーで制約しよう。それを持つ値ならどれでも入れられるよ。",
+    ),
+    bad(c("function tag<T extends { name: string }>(x: T) {", '  return x.name + "!";', "}", "tag(true);"),
+      L("Does not type-check: true has no name", "No pasa: true no tiene name", "型エラー：true に name はない")),
+  ),
+  note("keyof-indexed", L("keyof and T[K]", "keyof y T[K]", "keyof と T[K]"),
+    p(
+      "keyof T is the union of T's key names, as literal types. For { x: number; y: number }, keyof gives \"x\" | \"y\". It updates by itself when the type changes, so it is a safe list of the keys that really exist.",
+      "keyof T es la unión de los nombres de las claves de T, como tipos literales. Para { x: number; y: number }, keyof da \"x\" | \"y\". Se actualiza solo cuando cambia el tipo, así que es una lista segura de las claves que de verdad existen.",
+      "keyof T は T のキー名をリテラル型にしたユニオン型。{ x: number; y: number } なら \"x\" | \"y\"。型が変わると自動で変わるので、本当にあるキーの安全な一覧になるよ。",
+    ),
+    proof(c("type Pos = { x: number; y: number };", "type PosKey = keyof Pos;"), "PosKey", '"x" | "y"'),
+    p(
+      "An INDEXED ACCESS type, T[\"key\"], reads the type stored under a key, just like obj[\"key\"] reads a value. Combined in a generic function, K extends keyof T accepts only real key names, and T[K] gives the exact type of the value under that key.",
+      "Un tipo de ACCESO INDEXADO, T[\"clave\"], lee el tipo guardado en una clave, igual que obj[\"clave\"] lee un valor. Combinados en una función genérica, K extends keyof T solo acepta nombres de claves reales, y T[K] da el tipo exacto del valor en esa clave.",
+      "インデックスアクセス型 T[\"key\"] は、obj[\"key\"] が値を読むのと同じように、キーに入っている型を読む。ジェネリック関数で組み合わせると、K extends keyof T は本当のキー名だけを受け付け、T[K] はそのキーの値のぴったりの型になるよ。",
+    ),
+    ex(c("function read<T, K extends keyof T>(obj: T, key: K): T[K] {", "  return obj[key];", "}", 'console.log(read({ city: "Oslo", zip: 150 }, "zip"));'), "150",
+      L("Only city or zip are accepted as the key", "Solo se acepta city o zip como clave", "キーに使えるのは city か zip だけ")),
+    p(
+      "Common mistake: obj.key with a dot looks for a key literally NAMED key. To use the value held by a variable, write obj[key] with brackets. A typo in a key name is caught too: a string that is not in keyof T does not fit K.",
+      "Error común: obj.key con punto busca una clave LLAMADA literalmente key. Para usar el valor que guarda una variable, escribe obj[key] con corchetes. Un error de tipeo en el nombre de una clave también se detecta: un string que no está en keyof T no encaja en K.",
+      "よくあるミス：ドットの obj.key は、key という名前のキーそのものを探す。変数に入った値を使うなら角かっこで obj[key]。キー名の打ち間違いも見つかる。keyof T にない文字列は K に合わないからね。",
+    ),
+    bad(c("function get<T>(o: T, key: keyof T) {", "  return o.key;", "}"),
+      L("Does not type-check: T has no key literally named key", "No pasa: T no tiene una clave llamada key", "型エラー：T に key という名前のキーはない")),
+  ),
+];
+
 const genericsLesson: LessonDef = {
   slug: "generic-chest",
   title: L("The shape-shifting chest", "El cofre cambiante", "形を変える宝箱"),
@@ -421,6 +677,7 @@ const genericsLesson: LessonDef = {
   xp: 75,
   enemy: "slime",
   enemyName: L("SHAPE SLIME", "SLIME AMORFO", "かたちスライム"),
+  notes: genericsNotes,
   beats: [
     say(L(
       "A generic <T> is a type PARAMETER: a blank the caller fills in. One chest that takes the shape of what goes in.",
@@ -446,6 +703,8 @@ const genericsLesson: LessonDef = {
       options: ["number | undefined", "number", "T", "any"],
       answer: 0,
       check: typeIs(c("function first<T>(xs: T[]): T | undefined {", "  return xs[0];", "}", "const n = first([1, 2]);"), "typeof n", "number | undefined"),
+      hint: L("T is filled in from the argument. Replace every T in the return type with that type.", "T se llena a partir del argumento. Reemplaza cada T del tipo de retorno por ese tipo.", "T は引数から埋まる。戻り値の型の T をすべてその型に置き換えよう。"),
+      note: "generic-params",
       explain: L(
         "TS infers T = number from [1, 2], so the return type T | undefined becomes number | undefined.",
         "TS infiere T = number desde [1, 2], así que el retorno T | undefined queda number | undefined.",
@@ -459,6 +718,8 @@ const genericsLesson: LessonDef = {
       options: [YES, L("No: T may have no length", "No: T puede no tener length", "いいえ：T に length がないかも")],
       answer: 1,
       check: { compiles: false },
+      hint: L("Without a constraint, T could be any type at all. Does every type have a length?", "Sin restricción, T podría ser cualquier tipo. ¿Todo tipo tiene length?", "制約がなければ T はどんな型でもありうる。すべての型に length はある？"),
+      note: "constraints",
       explain: L(
         "T could be anything, even a number. TS can't promise .length exists (TS2339).",
         "T podría ser cualquier cosa, hasta un número. TS no puede asegurar que exista .length (TS2339).",
@@ -477,6 +738,8 @@ const genericsLesson: LessonDef = {
       options: ["{ length: number }", "number", "string[]"],
       answer: 0,
       check: { compiles: true, stdout: "3 2", wrongFail: true },
+      hint: L("The calls pass a string and an array. Which constraint describes only the member both of them share?", "Las llamadas pasan un string y un array. ¿Qué restricción describe solo el miembro que ambos comparten?", "呼び出しでは文字列と配列を渡す。両方に共通するメンバーだけを表す制約は？"),
+      note: "constraints",
       explain: L(
         "{ length: number } accepts strings AND arrays. string[] would reject \"abc\"; number has no length.",
         "{ length: number } acepta strings Y arrays. string[] rechazaría \"abc\"; number no tiene length.",
@@ -491,6 +754,8 @@ const genericsLesson: LessonDef = {
       options: [YES, NO],
       answer: 1,
       check: { compiles: false },
+      hint: L("The constraint requires a length key. Does the value passed in have one?", "La restricción exige una clave length. ¿El valor que se pasa tiene una?", "制約は length キーを求めている。渡した値はそれを持っている？"),
+      note: "constraints",
       explain: L(
         "5 has no length, so it doesn't fit the keyhole (TS2345).",
         "5 no tiene length, así que no entra por la cerradura (TS2345).",
@@ -515,6 +780,8 @@ const genericsLesson: LessonDef = {
       options: ["keyof T", "string", "T"],
       answer: 0,
       check: { compiles: true, stdout: "7", wrongFail: true },
+      hint: L("key must be one of obj's real key names. Which type operator gives the union of a type's keys?", "key debe ser uno de los nombres de clave reales de obj. ¿Qué operador de tipos da la unión de las claves?", "key は obj の本当のキー名のどれか。型のキーのユニオン型を作る型演算子は？"),
+      note: "keyof-indexed",
       explain: L(
         "K extends keyof T means key must be one of obj's keys, so obj[key] is safe and typed T[K].",
         "K extends keyof T obliga a que key sea una clave de obj: obj[key] es seguro y tiene tipo T[K].",
@@ -534,6 +801,8 @@ const genericsLesson: LessonDef = {
       options: [YES, L("No: \"mp\" is not a key", "No: \"mp\" no es clave", "いいえ：\"mp\" はキーじゃない")],
       answer: 1,
       check: { compiles: false },
+      hint: L("List the keys of the object passed in. Is the string given as the key among them?", "Enumera las claves del objeto que se pasa. ¿El string dado como clave está entre ellas?", "渡したオブジェクトのキーを並べよう。key に渡した文字列はその中にある？"),
+      note: "keyof-indexed",
       explain: L(
         "keyof { hp: number } is just \"hp\". The typo \"mp\" is caught before running.",
         "keyof { hp: number } es solo \"hp\". El error \"mp\" se detecta antes de ejecutar.",
@@ -547,6 +816,8 @@ const genericsLesson: LessonDef = {
       options: ["number", '"hp"', "string"],
       answer: 0,
       check: typeIs(c("type Hero = { name: string; hp: number };", 'type HP = Hero["hp"];'), "HP", "number"),
+      hint: L("Hero[\"hp\"] reads the type stored under a key, the same way obj[\"hp\"] reads a value.", "Hero[\"hp\"] lee el tipo guardado en una clave, igual que obj[\"hp\"] lee un valor.", "Hero[\"hp\"] は、obj[\"hp\"] が値を読むようにキーの型を読む。"),
+      note: "keyof-indexed",
       explain: L(
         "Indexed access Hero[\"hp\"] reads the type stored under the key hp: number.",
         "El acceso indexado Hero[\"hp\"] lee el tipo guardado en la clave hp: number.",
@@ -560,6 +831,8 @@ const genericsLesson: LessonDef = {
       options: [YES, L("No: T defaults to string", "No: T por defecto es string", "いいえ：T の既定は string")],
       answer: 1,
       check: { compiles: false },
+      hint: L("Res is used without <...>. What does T become then, and does the value fit it?", "Res se usa sin <...>. ¿Qué pasa a ser T entonces, y el valor encaja?", "Res を <...> なしで使っている。そのとき T は何になり、値は合う？"),
+      note: "generic-params",
       explain: L(
         "Res without <...> uses the default T = string, and 1 is not a string.",
         "Res sin <...> usa el valor por defecto T = string, y 1 no es string.",
@@ -585,6 +858,8 @@ const genericsLesson: LessonDef = {
       ),
       expect: "names: Ada,Bo",
       fallback: [String.raw`i\s*\[\s*key\s*\]`],
+      hint: L("i.key reads a key literally named key. How do you read the key whose name is stored in a variable?", "i.key lee una clave llamada literalmente key. ¿Cómo lees la clave cuyo nombre está en una variable?", "i.key は key という名前のキーを読む。変数に入った名前のキーを読むには？"),
+      note: "keyof-indexed",
       explain: L(
         "i.key looks for a key literally named \"key\". i[key] uses the variable's value, \"name\".",
         "i.key busca una clave llamada literalmente \"key\". i[key] usa el valor de la variable, \"name\".",
@@ -594,6 +869,86 @@ const genericsLesson: LessonDef = {
   ],
 };
 
+const transformsNotes: NoteDef[] = [
+  note("utility-types", L("Partial, Pick, Omit and Record", "Partial, Pick, Omit y Record", "Partial・Pick・Omit・Record"),
+    p(
+      "Utility types are built-in tools that take a type and return a reshaped one. Partial<T> makes every key optional, handy for updates that change only some fields. Required<T> does the opposite, and Readonly<T> marks every key readonly.",
+      "Los tipos utilitarios son herramientas incluidas que reciben un tipo y devuelven otro remodelado. Partial<T> vuelve opcional cada clave, útil para actualizaciones que cambian solo algunos campos. Required<T> hace lo contrario y Readonly<T> marca cada clave como readonly.",
+      "ユーティリティ型は、型を受け取って形を変えた型を返す標準の道具。Partial<T> は全キーを省略可能にし、一部だけ変える更新に便利。Required<T> はその逆、Readonly<T> は全キーを readonly にするよ。",
+    ),
+    proof(c("type Song = { title: string; secs: number };", "type Draft = Partial<Song>;"), "Draft", "{ title?: string; secs?: number }",
+      L("Same keys, all optional", "Mismas claves, todas opcionales", "同じキーで全部省略可能")),
+    p(
+      "Pick<T, K> KEEPS only the keys listed in K; Omit<T, K> REMOVES them and keeps the rest. K is a union of key names, like \"title\" | \"secs\". The result is a normal object type, so a fresh literal with a key that was cut away still gets the excess property error.",
+      "Pick<T, K> CONSERVA solo las claves listadas en K; Omit<T, K> las QUITA y conserva el resto. K es una unión de nombres de claves, como \"title\" | \"secs\". El resultado es un tipo de objeto normal, así que un literal nuevo con una clave recortada sigue dando el error de propiedad de más.",
+      "Pick<T, K> は K に挙げたキーだけを残し、Omit<T, K> はそれを取り除いて残りを保つ。K は \"title\" | \"secs\" のようなキー名のユニオン型。結果は普通のオブジェクト型なので、切り取ったキーをリテラルに書くと余分なプロパティのエラーになるよ。",
+    ),
+    proof(c("type Song = { title: string; secs: number; year: number };", 'type Card = Pick<Song, "title">;', 'type Short = Omit<Song, "year">;'), "[Card, Short]", "[{ title: string }, { title: string; secs: number }]",
+      L("Pick keeps the listed keys; Omit drops them", "Pick conserva las claves listadas; Omit las quita", "Pick は残し、Omit は取り除く")),
+    p(
+      "Record<K, V> builds an object type whose keys are K, each holding a V. Every key of K is REQUIRED, so leaving one out is an error (TS2741). With a broad K like string, it describes a dictionary with any keys.",
+      "Record<K, V> crea un tipo de objeto cuyas claves son K, cada una con un V. Cada clave de K es OBLIGATORIA, así que omitir una es un error (TS2741). Con un K amplio como string, describe un diccionario con cualquier clave.",
+      "Record<K, V> は、キーが K で、それぞれに V が入るオブジェクト型を作る。K のキーはすべて必須なので、1つでも抜けるとエラー（TS2741）。K が string のように広いと、どんなキーでもいい辞書を表すよ。",
+    ),
+    p(
+      "When you write such helpers yourself, loop over an array of keys with for...of, which gives the items. for...in gives the array's INDEXES as strings, \"0\", \"1\", which are not the keys you meant.",
+      "Cuando escribas estas ayudas tú mismo, recorre un array de claves con for...of, que da los ítems. for...in da los ÍNDICES del array como strings, \"0\", \"1\", que no son las claves que querías.",
+      "こういう道具を自分で書くときは、キーの配列を for...of で回そう。for...of は要素を返す。for...in は配列の添字を文字列 \"0\"、\"1\" で返すので、欲しいキーではないよ。",
+    ),
+    ex(c('const keys = ["x", "y"];', 'for (const k in keys) console.log("in:", k);', 'for (const k of keys) console.log("of:", k);'), "in: 0\nin: 1\nof: x\nof: y",
+      L("for...in walks indexes; for...of walks items", "for...in recorre índices; for...of recorre ítems", "for...in は添字、for...of は要素")),
+  ),
+  note("typeof-types", L("typeof: from a value to a type", "typeof: de un valor a un tipo", "typeof：値から型へ"),
+    p(
+      "Values and types live in two separate worlds. A function or an object is a VALUE. Places such as after a : or inside < > expect a TYPE. Writing a value's name there is error TS2749: it refers to a value, but is being used as a type.",
+      "Los valores y los tipos viven en dos mundos separados. Una función o un objeto es un VALOR. Lugares como después de : o dentro de < > esperan un TIPO. Escribir ahí el nombre de un valor es el error TS2749: se refiere a un valor, pero se usa como tipo.",
+      "値と型は別々の世界にいる。関数やオブジェクトは値。: のあとや < > の中は型を書く場所。そこに値の名前を書くと TS2749 エラー：値を指しているのに型として使われている、と言われるよ。",
+    ),
+    p(
+      "typeof in a TYPE position turns a value into its type: type Config = typeof config. This lets the value be the single source of truth, so the type follows automatically when the value changes.",
+      "typeof en una posición de TIPO convierte un valor en su tipo: type Config = typeof config. Así el valor es la única fuente de verdad, y el tipo lo sigue solo cuando el valor cambia.",
+      "型の位置に書いた typeof は値をその型に変える：type Config = typeof config。値がただ1つの正解になり、値が変われば型も自動でついてくるよ。",
+    ),
+    proof(c('const config = { port: 80, host: "local" };', "type Config = typeof config;"), "Config", "{ port: number; host: string }"),
+    p(
+      "ReturnType<F> reads the return type of a function TYPE. Since a function you declared is a value, combine the two: ReturnType<typeof makeUser>. Passing the bare function name is the TS2749 error again.",
+      "ReturnType<F> lee el tipo de retorno de un TIPO función. Como una función que declaraste es un valor, combina ambos: ReturnType<typeof makeUser>. Pasar el nombre de la función solo es otra vez el error TS2749.",
+      "ReturnType<F> は関数の型から戻り値の型を読む。宣言した関数は値なので、2つを組み合わせる：ReturnType<typeof makeUser>。関数名だけを渡すと、また TS2749 エラーだよ。",
+    ),
+    proof(c('function makeUser() { return { name: "Io", admin: false }; }', "type User = ReturnType<typeof makeUser>;"), "User", "{ name: string; admin: boolean }"),
+    p(
+      "Don't confuse it with the runtime typeof. In an expression, typeof runs while the program runs and gives a string like \"number\". In a type position it exists only for the checker. Same word, two jobs.",
+      "No lo confundas con el typeof de ejecución. En una expresión, typeof se ejecuta con el programa y da un string como \"number\". En una posición de tipo solo existe para el verificador. Misma palabra, dos trabajos.",
+      "実行時の typeof と混同しないで。式の中の typeof はプログラム実行中に動き、\"number\" のような文字列を返す。型の位置ではチェッカーのためだけにある。同じ言葉で2つの仕事だよ。",
+    ),
+    ex(c("const qty = 5;", "console.log(typeof qty);"), "number",
+      L("typeof in an expression runs and gives a string", "typeof en una expresión se ejecuta y da un string", "式の typeof は実行されて文字列を返す")),
+  ),
+  note("mapped-conditional", L("Mapped and conditional types", "Tipos mapeados y condicionales", "マップ型と条件型"),
+    p(
+      "A MAPPED type walks over the keys of another type and builds a new object type: { [K in keyof T]: X } keeps every key K of T and gives each one the type X. Inside, T[K] is the original type of that key, so you can keep it or wrap it.",
+      "Un tipo MAPEADO recorre las claves de otro tipo y crea un tipo de objeto nuevo: { [K in keyof T]: X } conserva cada clave K de T y le da a cada una el tipo X. Dentro, T[K] es el tipo original de esa clave, así que puedes conservarlo o envolverlo.",
+      "マップ型は別の型のキーを順に回って、新しいオブジェクト型を作る。{ [K in keyof T]: X } は T の各キー K を残し、それぞれの型を X にする。中で T[K] を使えば元の型を残したり包んだりできるよ。",
+    ),
+    proof(c("type Nullable<T> = { [K in keyof T]: T[K] | null };", "type R = Nullable<{ id: number }>;"), "R", "{ id: number | null }",
+      L("Same key, original type plus null", "Misma clave, el tipo original más null", "同じキーで、元の型に null を足す")),
+    p(
+      "A CONDITIONAL type is an if for types: T extends U ? X : Y. Read extends as \"is assignable to\": if T fits U, the result is X, otherwise Y. When T is a bare type parameter and receives a union, the condition runs on EACH member separately and the results are joined in a union.",
+      "Un tipo CONDICIONAL es un if para tipos: T extends U ? X : Y. Lee extends como \"es asignable a\": si T encaja en U, el resultado es X, si no, Y. Cuando T es un parámetro de tipo suelto y recibe una unión, la condición se aplica a CADA miembro por separado y los resultados se juntan en una unión.",
+      "条件型は型の if 文：T extends U ? X : Y。extends は「代入できる」と読む。T が U に合えば X、合わなければ Y。T がむき出しの型パラメータでユニオン型を受け取ると、各メンバーに別々に適用され、結果がユニオン型にまとまるよ。",
+    ),
+    proof(c('type Kind<T> = T extends number ? "num" : "other";', "type A = Kind<42>;", "type U = Kind<number | boolean>;"), "[A, U]", '["num", "num" | "other"]',
+      L("A union is distributed member by member", "Una unión se distribuye miembro a miembro", "ユニオン型はメンバーごとに分配される")),
+    p(
+      "Inside the extends pattern, infer X declares a new type variable that captures the matching piece, which you can use in the true branch. It is how built-in helpers like ReturnType are written.",
+      "Dentro del patrón de extends, infer X declara una variable de tipo nueva que captura la parte que coincide, y puedes usarla en la rama verdadera. Así se escriben ayudas incluidas como ReturnType.",
+      "extends のパターンの中で infer X と書くと、合った部分をつかまえる新しい型変数ができ、true の分岐で使える。ReturnType のような標準の道具もこう書かれているよ。",
+    ),
+    proof(c("type FirstArg<F> = F extends (arg: infer A) => unknown ? A : never;", "type P = FirstArg<(s: string) => void>;"), "P", "string",
+      L("infer A captures the parameter type", "infer A captura el tipo del parámetro", "infer A が引数の型をつかまえる")),
+  ),
+];
+
 const transformsLesson: LessonDef = {
   slug: "type-transformers",
   title: L("The type forge", "La forja de tipos", "型の鍛冶場"),
@@ -602,6 +957,7 @@ const transformsLesson: LessonDef = {
   xp: 80,
   enemy: "golem",
   enemyName: L("FORGE GOLEM", "GÓLEM FORJA", "鍛冶ゴーレム"),
+  notes: transformsNotes,
   beats: [
     say(L(
       "Utility types are forges: put a type in, get a reshaped type out. Partial, Pick and Omit are built in.",
@@ -627,6 +983,8 @@ const transformsLesson: LessonDef = {
       options: [L("Yes", "Sí", "はい"), L("No: name is missing", "No: falta name", "いいえ：name がない")],
       answer: 0,
       check: { compiles: true },
+      hint: L("What does Partial do to each key of Hero? Then check whether the value still needs name.", "¿Qué hace Partial con cada clave de Hero? Luego mira si el valor todavía necesita name.", "Partial は Hero の各キーをどうする？そのうえで値に name が必要か考えよう。"),
+      note: "utility-types",
       explain: L(
         "Partial makes every key optional, so { hp: 5 } alone is fine.",
         "Partial vuelve opcional cada clave, así que { hp: 5 } solo está bien.",
@@ -640,6 +998,8 @@ const transformsLesson: LessonDef = {
       options: [YES, L("No: hp was cut away", "No: hp fue recortado", "いいえ：hp は切り取られた")],
       answer: 1,
       check: { compiles: false },
+      hint: L("Pick keeps only the keys you list. Is an extra key allowed in a fresh literal?", "Pick conserva solo las claves que listas. ¿Se permite una clave de más en un literal nuevo?", "Pick は挙げたキーだけを残す。直接書いたリテラルに余分なキーは許される？"),
+      note: "utility-types",
       explain: L(
         "Pick<Hero, \"name\"> has only name. The extra hp in a fresh literal is TS2353.",
         "Pick<Hero, \"name\"> solo tiene name. El hp de más en un literal nuevo es TS2353.",
@@ -653,6 +1013,8 @@ const transformsLesson: LessonDef = {
       options: ["Omit", "Pick", "Partial"],
       answer: 0,
       check: { compiles: true, stdout: "Ada", wrongFail: true },
+      hint: L("You want every key of Hero except hp. Which utility removes the keys you list?", "Quieres todas las claves de Hero menos hp. ¿Qué utilidad quita las claves que listas?", "hp 以外の Hero のキーが欲しい。挙げたキーを取り除くユーティリティは？"),
+      note: "utility-types",
       explain: L(
         "Omit<T, K> removes the keys K. Pick would KEEP only hp; Partial takes no key list.",
         "Omit<T, K> quita las claves K. Pick CONSERVARÍA solo hp; Partial no recibe lista de claves.",
@@ -667,6 +1029,8 @@ const transformsLesson: LessonDef = {
       options: [YES, L("No: key is missing", "No: falta key", "いいえ：key がない")],
       answer: 1,
       check: { compiles: false },
+      hint: L("Record needs a value for every key in its key union. Count the keys that were given.", "Record necesita un valor para cada clave de su unión de claves. Cuenta las claves que se dieron.", "Record はキーのユニオン型の全キーに値が必要。書かれたキーを数えよう。"),
+      note: "utility-types",
       explain: L(
         "Record<K, V> requires EVERY key in K. key is missing (TS2741).",
         "Record<K, V> exige TODAS las claves de K. Falta key (TS2741).",
@@ -684,6 +1048,8 @@ const transformsLesson: LessonDef = {
       code: c("function make() { return { id: 1 }; }", "type M = ReturnType<___ make>;", "const m: M = { id: 7 };", "console.log(m.id);"),
       answer: "typeof",
       check: { compiles: true, stdout: "7" },
+      hint: L("ReturnType needs a function TYPE, but make is a value. Which keyword turns a value into its type?", "ReturnType necesita un TIPO función, pero make es un valor. ¿Qué palabra clave convierte un valor en su tipo?", "ReturnType は関数の型が必要だが make は値。値を型に変えるキーワードは？"),
+      note: "typeof-types",
       explain: L(
         "make is a value. typeof make gives its type; without it TS says TS2749.",
         "make es un valor. typeof make da su tipo; sin él TS da el error TS2749.",
@@ -703,6 +1069,8 @@ const transformsLesson: LessonDef = {
       options: ["{ a: boolean; b: boolean }", "{ a: string; b: number }", "boolean"],
       answer: 0,
       check: typeIs(c("type Flags<T> = { [K in keyof T]: boolean };", "type F = Flags<{ a: string; b: number }>;"), "F", "{ a: boolean; b: boolean }"),
+      hint: L("A mapped type keeps the keys of T. Look at the type written after the colon for each key.", "Un tipo mapeado conserva las claves de T. Mira el tipo escrito tras los dos puntos para cada clave.", "マップ型は T のキーを残す。各キーのコロンのあとに書かれた型を見よう。"),
+      note: "mapped-conditional",
       explain: L(
         "Same keys a and b, but every value type is replaced by boolean.",
         "Mismas claves a y b, pero cada tipo de valor se reemplaza por boolean.",
@@ -721,6 +1089,8 @@ const transformsLesson: LessonDef = {
       options: ['"yes" | "no"', '"no"', '"yes"'],
       answer: 0,
       check: typeIs(c('type IsStr<T> = T extends string ? "yes" : "no";', "type B = IsStr<string | number>;"), "B", '"yes" | "no"'),
+      hint: L("A conditional on a bare T that receives a union runs once per member. Evaluate it for each one.", "Un condicional sobre un T suelto que recibe una unión se aplica una vez por miembro. Evalúalo para cada uno.", "むき出しの T の条件型にユニオン型を渡すと、メンバーごとに1回ずつ動く。それぞれ計算しよう。"),
+      note: "mapped-conditional",
       explain: L(
         "It distributes: IsStr<string> | IsStr<number> = \"yes\" | \"no\".",
         "Se distribuye: IsStr<string> | IsStr<number> = \"yes\" | \"no\".",
@@ -733,6 +1103,8 @@ const transformsLesson: LessonDef = {
       code: c("type ElementOf<T> = T extends (___ U)[] ? U : never;", "const x: ElementOf<string[]> = \"gem\";", "console.log(x);"),
       answer: "infer",
       check: { compiles: true, stdout: "gem" },
+      hint: L("You need the keyword that captures a type from inside the pattern so the true branch can use it.", "Necesitas la palabra clave que captura un tipo dentro del patrón para usarlo en la rama verdadera.", "パターンの中の型をつかまえて true の分岐で使うためのキーワードが必要だよ。"),
+      note: "mapped-conditional",
       explain: L(
         "infer U names a type found inside the pattern, so ElementOf<string[]> is string.",
         "infer U nombra un tipo encontrado dentro del patrón: ElementOf<string[]> es string.",
@@ -766,6 +1138,8 @@ const transformsLesson: LessonDef = {
         String.raw`for\s*\(\s*(const|let)\s+k\s+of\s+keys\s*\)`,
         String.raw`keys\s*\.\s*forEach\s*\(`,
       ],
+      hint: L("for...in over an array gives its indexes, not its items. Which loop walks the items themselves?", "for...in sobre un array da sus índices, no sus ítems. ¿Qué bucle recorre los ítems mismos?", "配列への for...in は要素ではなく添字を返す。要素そのものを回るループは？"),
+      note: "utility-types",
       explain: L(
         "for...in walks the array's INDEXES \"0\", \"1\". for...of walks the keys themselves. tsc flags it too: TS7053.",
         "for...in recorre los ÍNDICES \"0\", \"1\". for...of recorre las claves mismas. tsc también avisa: TS7053.",
@@ -775,6 +1149,64 @@ const transformsLesson: LessonDef = {
   ],
 };
 
+const titanNotes: NoteDef[] = [
+  note("recap-precise-types", L("Recap: brands, patterns, as const", "Repaso: marcas, patrones, as const", "復習：ブランド・パターン・as const"),
+    p(
+      "A BRAND, T & { __brand: B }, makes a type that a plain T cannot fill, even though at runtime it is the same value. You create branded values on purpose in one place, so ids or units cannot be mixed up by accident.",
+      "Una MARCA, T & { __brand: B }, crea un tipo que un T simple no puede llenar, aunque en ejecución sea el mismo valor. Los valores marcados se crean a propósito en un solo lugar, para que ids o unidades no se mezclen por accidente.",
+      "ブランド T & { __brand: B } は、実行時には同じ値でも、ただの T では埋められない型を作る。ブランドつきの値は1か所でわざと作るので、id や単位をうっかり混ぜられなくなるよ。",
+    ),
+    bad(c('type Meters = number & { __unit: "m" };', "function walk(d: Meters) {}", "walk(5);"),
+      L("Does not type-check: a plain number has no brand", "No pasa: un número simple no tiene marca", "型エラー：ただの数値にブランドはない")),
+    p(
+      "A template literal type describes a string PATTERN, like `id-${number}`: only strings of that form fit. Object literals widen their keys (kind: \"ok\" becomes kind: string) because keys can change later; as const keeps the exact literal types and makes them readonly.",
+      "Un tipo template literal describe un PATRÓN de string, como `id-${number}`: solo encajan strings con esa forma. Los literales de objeto amplían sus claves (kind: \"ok\" pasa a kind: string) porque pueden cambiar; as const conserva los tipos literales exactos y los vuelve readonly.",
+      "テンプレートリテラル型は `id-${number}` のような文字列のパターンを表し、その形の文字列だけが合う。オブジェクトリテラルのキーはあとで変わりうるので広がる（kind: \"ok\" は kind: string に）。as const ならぴったりのリテラル型のまま readonly になるよ。",
+    ),
+    bad(c("type Code = `id-${number}`;", 'const k: Code = "id-x";'),
+      L("Does not type-check: x is not a number", "No pasa: x no es un número", "型エラー：x は数値じゃない")),
+    ok(c('const status = { kind: "ok" } as const;', 'const s: { kind: "ok" | "err" } = status;'),
+      L("as const keeps kind as the literal \"ok\"", "as const conserva kind como el literal \"ok\"", "as const で kind はリテラル \"ok\" のまま")),
+  ),
+  note("recap-strict-checks", L("Recap: as, satisfies, strict", "Repaso: as, satisfies, strict", "復習：as・satisfies・strict"),
+    p(
+      "as is an assertion: it tells TS \"trust me\" and changes nothing at runtime. It is refused when the two types don't overlap at all (TS2352). satisfies never lies: the value must really fit, with every required key present.",
+      "as es una aserción: le dice a TS \"confía en mí\" y no cambia nada en ejecución. Se rechaza cuando los dos tipos no se solapan en absoluto (TS2352). satisfies nunca miente: el valor debe encajar de verdad, con todas las claves obligatorias presentes.",
+      "as はアサーションで「信じて」と TS に伝えるだけ。実行時には何も変えない。2つの型がまったく重ならないと拒否される（TS2352）。satisfies はうそをつかない。必須のキーが全部そろい、本当に合っている必要があるよ。",
+    ),
+    bad("const flag = true as string;",
+      L("Does not type-check: boolean and string don't overlap", "No pasa: boolean y string no se solapan", "型エラー：boolean と string は重ならない")),
+    p(
+      "Strict mode adds two classic traps. for...in gives each key as a plain string, which can't index an object with known keys (TS7053). And the error in catch (e) has type unknown, so narrow it, for example with e instanceof Error, before reading e.message.",
+      "El modo strict agrega dos trampas clásicas. for...in da cada clave como un string cualquiera, que no puede indexar un objeto con claves conocidas (TS7053). Y el error de catch (e) es de tipo unknown, así que estréchalo, por ejemplo con e instanceof Error, antes de leer e.message.",
+      "strict モードには定番の罠が2つある。for...in のキーはただの string で、キーが決まったオブジェクトを引けない（TS7053）。catch (e) の e は unknown なので、e.message を読む前に e instanceof Error などで絞り込もう。",
+    ),
+    ex(c("function safeParse(s: string) {", "  try { return JSON.parse(s); }", '  catch (e) { return e instanceof Error ? "bad input" : "?"; }', "}", 'console.log(safeParse("{"));'), "bad input",
+      L("Narrow the unknown error before using it", "Estrecha el error unknown antes de usarlo", "unknown のエラーは絞り込んでから使う")),
+  ),
+  note("recap-conditional", L("Recap: infer and distribution", "Repaso: infer y distribución", "復習：infer と分配"),
+    p(
+      "infer captures a piece of a type inside a conditional pattern: T extends Set<infer V> ? V : T pulls out what a Set holds. A conditional on a bare T distributes over a union, member by member; wrapping both sides in [ ] turns that off and tests the whole union at once.",
+      "infer captura una parte de un tipo dentro de un patrón condicional: T extends Set<infer V> ? V : T saca lo que contiene un Set. Un condicional sobre un T suelto se distribuye sobre una unión, miembro a miembro; envolver ambos lados en [ ] lo desactiva y prueba la unión entera de una vez.",
+      "infer は条件型のパターンの中で型の一部をつかまえる。T extends Set<infer V> ? V : T は Set の中身を取り出す。むき出しの T の条件型はユニオン型にメンバーごとに分配される。両側を [ ] で包むと分配が止まり、ユニオン全体をまとめて調べるよ。",
+    ),
+    proof(c("type Inner<T> = T extends Set<infer V> ? V : T;", "type X = Inner<Set<boolean>>;"), "X", "boolean"),
+    proof(c('type AllNum<T> = [T] extends [number] ? "yes" : "no";', "type Z = AllNum<number | boolean>;"), "Z", '"no"',
+      L("Wrapped in [ ], the union is tested as a whole", "Envuelta en [ ], la unión se prueba entera", "[ ] で包むとユニオン全体で判定")),
+  ),
+  note("recap-function-types", L("Recap: parameter types", "Repaso: tipos de parámetros", "復習：引数の型"),
+    p(
+      "When a function is stored where a function type is expected, it will be called with whatever that type promises. So a function that accepts a NARROWER parameter is unsafe: a Square-only function cannot stand in for one that may receive any Shape. Accepting a WIDER parameter is fine.",
+      "Cuando una función se guarda donde se espera un tipo función, se la llamará con lo que ese tipo promete. Por eso una función que acepta un parámetro más ESTRECHO es insegura: una función solo para Square no puede reemplazar a una que puede recibir cualquier Shape. Aceptar uno más AMPLIO está bien.",
+      "関数型が求められる場所に関数を入れると、その型が約束するものを渡されて呼ばれる。だから、より狭い引数しか受け取らない関数は危ない。Square 専用の関数は、どんな Shape も来うる関数の代わりにはなれない。より広い引数ならOKだよ。",
+    ),
+    ex(c("type Shape = { area: number };", "type Square = { area: number; side: number };", "type OnSquare = (s: Square) => number;", "const f: OnSquare = (s: Shape) => s.area;", "console.log(f({ area: 4, side: 2 }));"), "4",
+      L("Safe: a function for any Shape handles a Square", "Seguro: una función para cualquier Shape sirve con Square", "安全：どの Shape でも扱える関数は Square も扱える")),
+    bad(c("type Shape = { area: number };", "type Square = { area: number; side: number };", "type OnShape = (s: Shape) => number;", "const g: OnShape = (s: Square) => s.side;"),
+      L("Unsafe: callers may pass a Shape with no side", "Inseguro: pueden pasar un Shape sin side", "危険：side のない Shape が来るかも")),
+  ),
+];
+
 const titan: LessonDef = {
   slug: "type-titan",
   title: L("BOSS: Type Titan", "JEFE: Titán de Tipos", "ボス：型の巨人"),
@@ -783,6 +1215,7 @@ const titan: LessonDef = {
   xp: 190,
   enemy: "dragon",
   enemyName: L("TYPE TITAN", "TITÁN DE TIPOS", "型の巨人"),
+  notes: titanNotes,
   beats: [
     enemySays(L(
       "I am the Type Titan. Every value that enters my castle is checked. Will YOUR code type-check?",
@@ -794,6 +1227,8 @@ const titan: LessonDef = {
       code: c("type Brand<T, B> = T & { __brand: B };", 'type UserId = Brand<string, "UserId">;', "function load(id: UserId) {}", 'load("abc");'),
       options: [YES, NO], answer: 1,
       check: { compiles: false },
+      hint: L("UserId is a string plus a brand. Does a plain string literal carry that brand?", "UserId es un string más una marca. ¿Un literal de string simple lleva esa marca?", "UserId は string にブランドを足した型。ただの文字列リテラルにブランドはある？"),
+      note: "recap-precise-types",
       explain: L("A plain string lacks the brand, so it can't pass as a UserId.", "Un string simple no tiene la marca: no pasa como UserId.", "ただの string にはブランドがないので UserId にならない。"),
     },
     {
@@ -801,6 +1236,8 @@ const titan: LessonDef = {
       code: c('type Route = `/${"users" | "posts"}/${number}`;', 'const bad: Route = "/teams/1";'),
       options: [YES, NO], answer: 1,
       check: { compiles: false },
+      hint: L("The pattern allows only certain words in its first segment. Compare the string with the pattern.", "El patrón solo permite ciertas palabras en su primer segmento. Compara el string con el patrón.", "パターンの最初の部分に入れる言葉は決まっている。文字列とパターンを比べよう。"),
+      note: "recap-precise-types",
       explain: L("Template literal types check the text: teams isn't allowed.", "Los tipos template literal revisan el texto: teams no está permitido.", "テンプレートリテラル型は文字列を検査する。teams は不可。"),
     },
     {
@@ -808,6 +1245,8 @@ const titan: LessonDef = {
       code: c("type MyAwaited<T> = T extends Promise<infer U> ? U : T;", "type N = MyAwaited<Promise<number>>;"),
       options: ["number", "Promise<number>", "unknown"], answer: 0,
       check: typeIs(c("type MyAwaited<T> = T extends Promise<infer U> ? U : T;", "type N = MyAwaited<Promise<number>>;"), "N", "number"),
+      hint: L("Promise<number> matches the pattern Promise<infer U>. What does U capture?", "Promise<number> coincide con el patrón Promise<infer U>. ¿Qué captura U?", "Promise<number> はパターン Promise<infer U> に合う。U がつかまえるのは？"),
+      note: "recap-conditional",
       explain: L("infer U captures what the Promise holds: number.", "infer U captura lo que contiene la Promise: number.", "infer U が Promise の中身 number を取り出す。"),
     },
     {
@@ -815,6 +1254,8 @@ const titan: LessonDef = {
       code: 'let s = "a" as number;',
       options: [YES, NO], answer: 1,
       check: { compiles: false },
+      hint: L("as is refused when the two types don't overlap at all. Can a string ever be a number?", "as se rechaza cuando los dos tipos no se solapan en absoluto. ¿Un string puede ser alguna vez un number?", "2つの型がまったく重ならないと as は拒否される。string が number になることはある？"),
+      note: "recap-strict-checks",
       explain: L("string and number don't overlap, so as refuses (TS2352).", "string y number no se solapan: as se niega (TS2352).", "string と number は重ならないので as は拒否（TS2352）。"),
     },
     {
@@ -822,6 +1263,8 @@ const titan: LessonDef = {
       code: c('const o = { kind: "circle" };', 'type S = { kind: "circle" | "square" };', "const s: S = o;"),
       options: [YES, NO], answer: 1,
       check: { compiles: false },
+      hint: L("o is declared without as const. What type does TS infer for o.kind?", "o se declara sin as const. ¿Qué tipo infiere TS para o.kind?", "o は as const なしで宣言されている。TS は o.kind をどんな型と推論する？"),
+      note: "recap-precise-types",
       explain: L("o.kind was widened to string. Add as const to keep \"circle\".", "o.kind se amplió a string. Agrega as const para conservar \"circle\".", "o.kind は string に広がった。as const で \"circle\" を保とう。"),
     },
     {
@@ -829,6 +1272,8 @@ const titan: LessonDef = {
       code: "const p = { x: 1 } satisfies { x: number; y: number };",
       options: [YES, NO], answer: 1,
       check: { compiles: false },
+      hint: L("satisfies requires every key of the type. Compare the keys of the value with the type's keys.", "satisfies exige todas las claves del tipo. Compara las claves del valor con las del tipo.", "satisfies は型の全キーを求める。値のキーと型のキーを比べよう。"),
+      note: "recap-strict-checks",
       explain: L("y is missing, so it doesn't satisfy the type (TS1360).", "Falta y: no satisface el tipo (TS1360).", "y がないので型を満たさない（TS1360）。"),
     },
     {
@@ -836,6 +1281,8 @@ const titan: LessonDef = {
       code: c("const obj = { a: 1, b: 2 };", "for (const k in obj) {", "  console.log(obj[k]);", "}"),
       options: [YES, NO], answer: 1,
       check: { compiles: false },
+      hint: L("What type does k get from for...in? Can a value of that type index obj under strict?", "¿Qué tipo recibe k de for...in? ¿Un valor de ese tipo puede indexar obj en strict?", "for...in の k はどんな型？strict でその型の値で obj を引ける？"),
+      note: "recap-strict-checks",
       explain: L("for...in gives k: string, and a plain string can't index obj (TS7053).", "for...in da k: string, y un string cualquiera no indexa obj (TS7053).", "for...in の k は string。普通の string では obj を引けない（TS7053）。"),
     },
     {
@@ -843,6 +1290,8 @@ const titan: LessonDef = {
       code: c("function parse(text: string) {", "  try { return JSON.parse(text); }", "  catch (err) { return err.message; }", "}"),
       options: [YES, NO], answer: 1,
       check: { compiles: false },
+      hint: L("Under strict, what type does a catch variable have? Can you read .message on it directly?", "En strict, ¿qué tipo tiene la variable de catch? ¿Puedes leer .message directamente?", "strict では catch の変数はどんな型？そのまま .message を読める？"),
+      note: "recap-strict-checks",
       explain: L("Under strict, err is unknown: narrow it with instanceof Error first.", "En strict, err es unknown: estréchalo antes con instanceof Error.", "strict では err は unknown。先に instanceof Error で絞り込もう。"),
     },
     {
@@ -850,6 +1299,8 @@ const titan: LessonDef = {
       code: c('type IsStr<T> = [T] extends [string] ? "yes" : "no";', "type B = IsStr<string | number>;"),
       options: ['"no"', '"yes" | "no"', '"yes"'], answer: 0,
       check: typeIs(c('type IsStr<T> = [T] extends [string] ? "yes" : "no";', "type B = IsStr<string | number>;"), "B", '"no"'),
+      hint: L("T is wrapped in [ ], so the union is not split. Is the whole union string | number a string?", "T está envuelto en [ ], así que la unión no se divide. ¿La unión entera string | number es un string?", "T は [ ] で包まれ、ユニオン型は分かれない。string | number 全体は string？"),
+      note: "recap-conditional",
       explain: L("Wrapping T in [ ] stops distribution: the whole union isn't a string.", "Envolver T en [ ] detiene la distribución: la unión entera no es string.", "T を [ ] で包むと分配されない。ユニオン全体は string じゃない。"),
     },
     {
@@ -862,6 +1313,8 @@ const titan: LessonDef = {
       ),
       options: [YES, NO], answer: 1,
       check: { compiles: false },
+      hint: L("handle may be called with any Animal. Can a function that needs a Dog handle every Animal?", "handle puede llamarse con cualquier Animal. ¿Una función que necesita un Dog sirve para todo Animal?", "handle はどの Animal でも呼ばれうる。Dog が必要な関数で全 Animal を扱える？"),
+      note: "recap-function-types",
       explain: L("A Handler must accept ANY Animal; a Dog-only function can't (parameters are contravariant).", "Un Handler debe aceptar CUALQUIER Animal; una función solo para Dog no puede (parámetros contravariantes).", "Handler はどの Animal も受け取る必要がある。Dog 専用関数はダメ（引数は反変）。"),
     },
     enemySays(L(

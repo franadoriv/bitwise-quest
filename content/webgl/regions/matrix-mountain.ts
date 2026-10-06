@@ -1,4 +1,4 @@
-import type { Beat, LessonDef, RegionDef, Text } from "../../../lib/content/types.ts";
+import type { Beat, LessonDef, NoteBlock, NoteDef, RegionDef, Text } from "../../../lib/content/types.ts";
 import { L } from "../../../lib/i18n/text.ts";
 
 // REGION 3 · MATRIX MOUNTAIN  (matrices and transforms, projection and depth, normals and lighting,
@@ -14,6 +14,86 @@ const YES = L("Yes", "Sí", "はい");
 const NO_TSC = L("No: tsc stops it", "No: tsc lo detiene", "いいえ：tsc が止める");
 const GL = "declare const gl: WebGL2RenderingContext;\n";
 
+// Guidebook notes: long explanations players can reopen from any question (📖).
+// Examples use names and values different from the questions so they never give an answer away.
+const note = (id: string, title: Text, ...blocks: NoteBlock[]): NoteDef => ({ id, title, blocks });
+const p = (en: string, es: string, ja: string): NoteBlock => ({ t: "p", text: L(en, es, ja) });
+/** A runnable example; the validator checks `output` against the real runner. */
+const ex = (code: string, output: string, caption?: Text): NoteBlock => ({ t: "code", code, output, caption });
+/** A WebGL API example: no GPU in the runner, so it is only type-checked (tsc --strict). */
+const api = (code: string, caption?: Text): NoteBlock => ({ t: "code", code, caption, check: { compiles: true } });
+
+const matricesNotes: NoteDef[] = [
+  note("mat4-layout", L("A 4×4 matrix, column by column", "Una matriz 4×4, columna a columna", "4×4 行列を列ごとに"),
+    p(
+      "A 4×4 matrix is a table of 16 numbers that can move, turn and scale points all at once. In JS and WebGL it is stored as a flat list of 16 numbers, usually a Float32Array. The identity matrix has 1 on the diagonal and 0 everywhere else: multiplying by it changes nothing, like multiplying a number by 1.",
+      "Una matriz 4×4 es una tabla de 16 números que puede mover, girar y escalar puntos de una vez. En JS y WebGL se guarda como una lista plana de 16 números, casi siempre un Float32Array. La matriz identidad tiene 1 en la diagonal y 0 en el resto: multiplicar por ella no cambia nada, como multiplicar un número por 1.",
+      "4×4 行列は、点の移動・回転・拡大をまとめて行う 16 個の数の表。JS と WebGL では 16 個の数を 1 列に並べて保存する（たいてい Float32Array）。単位行列は対角が 1、ほかは 0。かけても何も変わらない。数に 1 をかけるのと同じだ。",
+    ),
+    p(
+      "WebGL uses column-major order: the list holds the first column (4 numbers), then the second, the third and the fourth. The cell in column c and row r is at index c × 4 + r. So the diagonal sits at indices 0, 5, 10 and 15, and the last column, which holds the translation, is at indices 12 to 15.",
+      "WebGL usa orden column-major: la lista guarda la primera columna (4 números), luego la segunda, la tercera y la cuarta. La celda de la columna c y la fila r está en el índice c × 4 + r. Así, la diagonal queda en los índices 0, 5, 10 y 15, y la última columna, que guarda la traslación, en los índices 12 a 15.",
+      "WebGL は列優先：リストには 1 列目（4 個）、次に 2 列目、3 列目、4 列目が入る。c 列 r 行のマスは c × 4 + r 番。だから対角は 0, 5, 10, 15 番、平行移動を持つ最後の列は 12〜15 番になる。",
+    ),
+    ex("const at = (col: number, row: number) => col * 4 + row;\nconst S = [2,0,0,0, 0,2,0,0, 0,0,2,0, 0,0,0,1];\nconsole.log(S[at(1, 1)], at(3, 2), at(0, 3));", "2 14 3",
+      L("A scale-by-2 matrix and the index formula", "Una matriz que escala por 2 y la fórmula del índice", "2 倍に拡大する行列と番号の式")),
+    p(
+      "Math books often write matrices row by row, with the translation in the right column. That column is the same in both layouts; what changes is where its numbers land in the flat list. Writing tx at index 3 (row-major thinking) instead of 12 is the classic bug: the point doesn't move, and w gets corrupted instead.",
+      "Los libros de matemáticas suelen escribir las matrices fila a fila, con la traslación en la columna derecha. Esa columna es la misma en ambos formatos; lo que cambia es dónde caen sus números en la lista plana. Escribir tx en el índice 3 (pensando en row-major) en vez del 12 es el error clásico: el punto no se mueve y en cambio se estropea w.",
+      "数学の本では行列を行ごとに書き、平行移動は右の列にある。その列はどちらの並びでも同じで、変わるのは 1 列のリストのどこに入るか。tx を 12 番でなく 3 番（行優先の考え方）に書くのが定番のバグ。点は動かず、かわりに w がこわれる。",
+    ),
+    p(
+      "uniformMatrix4fv(location, transpose, data) sends the 16 numbers to a mat4 in the shader. The transpose argument would flip rows and columns, but WebGL1 only allows false (true is an error), and WebGL2 code keeps it false by convention. The rule: build your arrays column-major and never ask WebGL to transpose.",
+      "uniformMatrix4fv(location, transpose, data) envía los 16 números a un mat4 del shader. El argumento transpose invertiría filas y columnas, pero WebGL1 solo permite false (true da error), y el código WebGL2 lo deja en false por convención. La regla: arma tus arrays en column-major y nunca pidas a WebGL que transponga.",
+      "uniformMatrix4fv(location, transpose, data) は 16 個の数をシェーダーの mat4 に送る。transpose は行と列を入れかえる引数だが、WebGL1 では false しか使えない（true はエラー）。WebGL2 でも慣習で false。ルール：配列を列優先で作り、WebGL に転置させない。",
+    ),
+  ),
+  note("transform-order", L("Order matters: inner first", "El orden importa: primero lo interno", "順番が大事：内側が先"),
+    p(
+      "Moving, turning and scaling don't commute: doing them in a different order gives a different result. Scale a point and then move it, and the move isn't scaled. Move it first and then scale it, and the move gets scaled too, so the point ends up farther away.",
+      "Mover, girar y escalar no conmutan: hacerlos en otro orden da otro resultado. Si escalas un punto y luego lo mueves, el movimiento no se escala. Si primero lo mueves y luego lo escalas, el movimiento también se escala y el punto termina más lejos.",
+      "移動・回転・拡大は順番を入れかえられない。順番が変わると結果も変わる。拡大してから移動すると、移動の量は拡大されない。先に移動してから拡大すると移動の量も拡大され、点はもっと遠くへ行く。",
+    ),
+    ex("const up = (y: number) => y + 1;\nconst triple = (y: number) => y * 3;\nconsole.log(up(triple(2)), triple(up(2)));", "7 9",
+      L("Same two steps, two orders, two answers", "Los mismos dos pasos, dos órdenes, dos resultados", "同じ 2 つの操作、順番がちがえば答えもちがう")),
+    p(
+      "Matrix products read like nested function calls. In P * V * M * pos, the matrix written closest to the point acts first, exactly like the innermost call in P(V(M(pos))). You read the code right to left to follow what happens to the point.",
+      "Los productos de matrices se leen como llamadas a funciones anidadas. En P * V * M * pos, la matriz escrita más cerca del punto actúa primero, igual que la llamada más interna en P(V(M(pos))). Lees el código de derecha a izquierda para seguir qué le pasa al punto.",
+      "行列のかけ算は入れ子の関数呼び出しのように読む。P * V * M * pos では点に一番近い行列が先に効く。P(V(M(pos))) の一番内側の呼び出しと同じだ。点に何が起きるかは右から左へ読む。",
+    ),
+    ex('const steps: string[] = [];\nconst run = (name: string, v: number) => { steps.push(name); return v; };\nrun("outer", run("middle", run("inner", 0)));\nconsole.log(steps.join(", "));', "inner, middle, outer",
+      L("The innermost call runs first", "La llamada más interna corre primero", "一番内側の呼び出しが先に動く")),
+    p(
+      "The usual pipeline: the model matrix places the object in the world, the view matrix moves the world so the camera sits at the origin looking down -z, and the projection matrix adds perspective. Common mistake: multiplying in reading order and wondering why the object orbits the camera instead of spinning in place.",
+      "El pipeline habitual: la matriz model coloca el objeto en el mundo, la view mueve el mundo para que la cámara quede en el origen mirando hacia -z, y la projection agrega perspectiva. Error común: multiplicar en orden de lectura y no entender por qué el objeto orbita la cámara en vez de girar en su lugar.",
+      "ふつうの流れ：model 行列で物を世界に置き、view 行列でカメラが原点から -z を向くように世界を動かし、projection 行列で遠近感をつける。よくあるミス：読む順にかけてしまい、物がその場で回らずカメラのまわりを回ってしまう。",
+    ),
+  ),
+  note("w-and-rotation", L("w, directions and rotation", "w, direcciones y rotación", "w と方向と回転"),
+    p(
+      "A 4×4 matrix works on 4 numbers: x, y, z and w. The translation in the last column is multiplied by w before it's added. Points use w = 1, so they move. Directions such as normals, velocities or arrows use w = 0, so translation can't touch them: a direction has no position to move.",
+      "Una matriz 4×4 trabaja con 4 números: x, y, z y w. La traslación de la última columna se multiplica por w antes de sumarse. Los puntos usan w = 1, así que se mueven. Las direcciones, como normales, velocidades o flechas, usan w = 0, así que la traslación no las toca: una dirección no tiene posición que mover.",
+      "4×4 行列は x, y, z, w の 4 つの数に効く。最後の列の平行移動は w をかけてから足される。点は w = 1 なので動く。法線・速度・矢印などの方向は w = 0 なので平行移動されない。方向には動かす位置がないからだ。",
+    ),
+    ex("const ty = 4;\nconst move = (y: number, w: number) => y + ty * w;\nconsole.log(move(3, 1), move(3, 0));", "7 3",
+      L("The same y as a point (w = 1) and a direction (w = 0)", "El mismo y como punto (w = 1) y como dirección (w = 0)", "同じ y を点（w = 1）と方向（w = 0）で")),
+    p(
+      "Rotation by angle a uses cos and sin: x' = x cos a − y sin a, y' = x sin a + y cos a. A positive angle turns counter-clockwise. Turning (0, 1) by 90° gives (−1, 0): up becomes left.",
+      "La rotación por un ángulo a usa cos y sin: x' = x cos a − y sin a, y' = x sin a + y cos a. Un ángulo positivo gira en sentido antihorario. Girar (0, 1) 90° da (−1, 0): arriba pasa a ser izquierda.",
+      "角度 a の回転は cos と sin を使う：x' = x cos a − y sin a、y' = x sin a + y cos a。正の角度は反時計回り。(0, 1) を 90° 回すと (−1, 0)、上が左になる。",
+    ),
+    ex('const rot = (x: number, y: number, a: number) =>\n  [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a)];\nconsole.log(rot(0, 1, Math.PI / 2).map((n) => n.toFixed(2)).join(","));', "-1.00,0.00",
+      L("Up turns into left", "Arriba se vuelve izquierda", "上が左になる")),
+    p(
+      "Floats can't store π exactly, so Math.cos(Math.PI / 2) is a tiny number like 6e-17 instead of 0. That's why results are printed with toFixed: it rounds away the leftover error. Never compare floats with === after trigonometry; round or check that the difference is small.",
+      "Los floats no guardan π exacto, así que Math.cos(Math.PI / 2) es un número diminuto como 6e-17 en vez de 0. Por eso los resultados se imprimen con toFixed: redondea el error sobrante. Nunca compares floats con === después de trigonometría; redondea o revisa que la diferencia sea pequeña.",
+      "float は π をぴったり保存できないので、Math.cos(Math.PI / 2) は 0 でなく 6e-17 のような小さな数になる。だから結果は toFixed で表示し、残った誤差を丸める。三角関数のあとで float を === でくらべないこと。丸めるか、差が小さいかを調べよう。",
+    ),
+    ex("console.log(Math.cos(Math.PI / 2));", "6.123233995736766e-17",
+      L("Almost zero, but not quite", "Casi cero, pero no del todo", "ほぼ 0 だけど 0 ではない")),
+  ),
+];
+
 // ─── 3.1 The order of spells: matrices and transforms ──────────────────────
 const matrices: LessonDef = {
   slug: "matrices-and-transforms",
@@ -23,6 +103,7 @@ const matrices: LessonDef = {
   xp: 75,
   enemy: "webgl/shader-goblin",
   enemyName: L("ORDER GOBLIN", "DUENDE DEL ORDEN", "ジュンバンゴブリン"),
+  notes: matricesNotes,
   beats: [
     say(L(
       "Welcome to Matrix Mountain! A 4×4 MATRIX is a magic key: 16 numbers that move, turn and scale a point in one go.",
@@ -46,6 +127,8 @@ const matrices: LessonDef = {
       answer: 0,
       output: "4",
       check: { compiles: true, stdout: "4" },
+      hint: L("Check what the identity holds at each of the four indices being added.", "Revisa qué guarda la identidad en cada uno de los cuatro índices que se suman.", "足している 4 つの番号に、単位行列は何を持っている？"),
+      note: "mat4-layout",
       explain: L("The identity has 1 on the diagonal (indices 0, 5, 10, 15) and 0 elsewhere: 1+1+1+1.", "La identidad tiene 1 en la diagonal (índices 0, 5, 10, 15) y 0 en el resto: 1+1+1+1.", "単位行列は対角（0, 5, 10, 15 番）が 1、ほかは 0。1+1+1+1 だよ。"),
       win: [{ t: "print", text: "4" }],
     },
@@ -61,6 +144,8 @@ const matrices: LessonDef = {
       options: ["12", "3", "15"],
       answer: 0,
       check: { compiles: true, stdout: "5" },
+      hint: L("Column-major: four numbers per column. Where does the last column begin?", "Column-major: cuatro números por columna. ¿Dónde empieza la última columna?", "列優先：1 列に 4 個。最後の列は何番から始まる？"),
+      note: "mat4-layout",
       explain: L("Column-major: column 4 starts at index 12, so tx is T[12]. Index 3 is where a row-major layout would put it.", "Column-major: la columna 4 empieza en el índice 12, así que tx es T[12]. El 3 sería en row-major.", "列優先では 4 列目が 12 番から始まるので tx は T[12]。3 番は行優先の場合だよ。"),
       win: [{ t: "print", text: "5" }],
     },
@@ -77,6 +162,8 @@ const matrices: LessonDef = {
       answer: 0,
       output: "12 22",
       check: { compiles: true, stdout: "12 22" },
+      hint: L("Work from the innermost call outward, one step at a time.", "Trabaja desde la llamada más interna hacia afuera, paso a paso.", "一番内側の呼び出しから外へ、1 つずつ計算しよう。"),
+      note: "transform-order",
       explain: L("T(S(1)) scales first: 1*2+10 = 12. S(T(1)) moves first: (1+10)*2 = 22. Swapping keys changes the result.", "T(S(1)) escala primero: 1*2+10 = 12. S(T(1)) mueve primero: (1+10)*2 = 22. Cambiar el orden cambia el resultado.", "T(S(1)) は先に拡大：1*2+10 = 12。S(T(1)) は先に移動：(1+10)*2 = 22。順番で結果が変わる。"),
       setup: [{ t: "item", kind: "key", holder: "hero" }],
       win: [{ t: "print", text: "12 22" }, { t: "shake" }],
@@ -89,6 +176,8 @@ const matrices: LessonDef = {
       answer: 0,
       output: "model > view > projection",
       check: { compiles: true, stdout: "model > view > projection" },
+      hint: L("Each function logs when it runs. Which call must finish before the others can?", "Cada función anota cuando corre. ¿Qué llamada debe terminar antes que las demás?", "各関数は動いたときに記録する。ほかより先に終わるべき呼び出しは？"),
+      note: "transform-order",
       explain: L("Like P * V * M * pos, the innermost call runs first: the model places the object, view moves it in front of the camera.", "Como P * V * M * pos, la llamada más interna corre primero: model coloca el objeto, view lo pone ante la cámara.", "P * V * M * pos と同じく内側が先。model で物を置き、view でカメラの前へ運ぶよ。"),
       win: [{ t: "print", text: "model > view > projection" }],
     },
@@ -105,6 +194,8 @@ const matrices: LessonDef = {
       answer: 0,
       output: "6 1",
       check: { compiles: true, stdout: "6 1" },
+      hint: L("The move is tx × w. Work it out for w = 1 and for w = 0.", "El movimiento es tx × w. Calcúlalo para w = 1 y para w = 0.", "移動量は tx × w。w = 1 と w = 0 で計算しよう。"),
+      note: "w-and-rotation",
       explain: L("Translation is multiplied by w. A point (w = 1) moves to 6; a direction (w = 0) stays 1, as a normal or arrow should.", "La traslación se multiplica por w. Un punto (w = 1) va a 6; una dirección (w = 0) queda en 1, como debe una normal.", "平行移動は w 倍される。点（w = 1）は 6 へ、方向（w = 0）は 1 のまま。法線などはこれでいい。"),
       win: [{ t: "print", text: "6 1" }],
     },
@@ -116,6 +207,8 @@ const matrices: LessonDef = {
       answer: 0,
       output: "0.00,1.00",
       check: { compiles: true, stdout: "0.00,1.00" },
+      hint: L("Plug in cos 90° = 0 and sin 90° = 1. toFixed hides the tiny float error.", "Usa cos 90° = 0 y sin 90° = 1. toFixed oculta el pequeño error del float.", "cos 90° = 0、sin 90° = 1 を入れよう。小さな誤差は toFixed が隠す。"),
+      note: "w-and-rotation",
       explain: L("A quarter turn counter-clockwise sends +x to +y. toFixed hides the tiny float error in cos(90°).", "Un cuarto de vuelta antihorario lleva +x a +y. toFixed oculta el pequeño error de cos(90°).", "反時計回りに 90° 回すと +x は +y へ。cos(90°) の小さな誤差は toFixed で隠すよ。"),
       win: [{ t: "print", text: "0.00,1.00" }],
     },
@@ -130,6 +223,8 @@ const matrices: LessonDef = {
       code: GL + "declare const loc: WebGLUniformLocation | null;\nconst model = new Float32Array(16);\ngl.uniformMatrix4fv(loc, ___, model);",
       answer: "false",
       check: { compiles: true },
+      hint: L("The array is already column-major. Should WebGL swap rows and columns?", "El array ya está en column-major. ¿Debe WebGL intercambiar filas y columnas?", "配列はもう列優先。WebGL に行と列を入れかえさせる？"),
+      note: "mat4-layout",
       explain: L("WebGL1 requires false here (true is an error). Build your arrays column-major and always pass false.", "WebGL1 exige false aquí (true da error). Arma tus arrays en column-major y pasa siempre false.", "WebGL1 ではここは false 必須（true はエラー）。配列を列優先で作り、いつも false を渡そう。"),
     },
     {
@@ -139,10 +234,99 @@ const matrices: LessonDef = {
       solution: "function translation(tx: number, ty: number, tz: number): number[] {\n  return [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, tx, ty, tz, 1];\n}\nfunction transformPoint(m: number[], [x, y, z]: number[]): number[] {\n  return [\n    m[0] * x + m[4] * y + m[8] * z + m[12],\n    m[1] * x + m[5] * y + m[9] * z + m[13],\n    m[2] * x + m[6] * y + m[10] * z + m[14],\n  ];\n}\nconsole.log(\"(\" + transformPoint(translation(5, 0, 0), [1, 2, 3]).join(\", \") + \")\");\n",
       expect: "(6, 2, 3)",
       fallback: String.raw`0\s*,\s*0\s*,\s*1\s*,\s*0\s*,\s*tx\s*,\s*ty\s*,\s*tz\s*,\s*1`,
+      hint: L("transformPoint reads the move from m[12], m[13] and m[14]. Where did translation() put it?", "transformPoint lee el movimiento de m[12], m[13] y m[14]. ¿Dónde lo puso translation()?", "transformPoint は移動量を m[12], m[13], m[14] から読む。translation() はどこに置いた？"),
+      note: "mat4-layout",
       explain: L("The starter wrote tx ty tz row-major. In column-major they go at indices 12, 13, 14: [..., tx, ty, tz, 1].", "El starter puso tx ty tz en row-major. En column-major van en los índices 12, 13, 14: [..., tx, ty, tz, 1].", "最初のコードは tx ty tz を行優先で置いていた。列優先では 12, 13, 14 番：[..., tx, ty, tz, 1]。"),
     },
   ],
 };
+
+const projectionNotes: NoteDef[] = [
+  note("perspective", L("Perspective: divide by w", "Perspectiva: dividir entre w", "遠近法：w で割る"),
+    p(
+      "Far things look smaller. A perspective matrix makes that happen in two steps. First it copies each point's distance from the camera into w. Then, after the vertex shader, the GPU divides x, y and z by w. A point twice as far away gets divided by twice as much, so it lands closer to the center of the screen.",
+      "Lo lejano se ve más chico. Una matriz de perspectiva lo logra en dos pasos. Primero copia en w la distancia de cada punto a la cámara. Luego, después del vertex shader, la GPU divide x, y y z entre w. Un punto al doble de distancia se divide por el doble, así que cae más cerca del centro de la pantalla.",
+      "遠い物は小さく見える。透視投影の行列はそれを 2 段階で行う。まず各点のカメラからの距離を w に写す。次に頂点シェーダーのあと、GPU が x, y, z を w で割る。2 倍遠い点は 2 倍の数で割られるので、画面の中心に近づく。",
+    ),
+    ex("const ndc = (x: number, w: number) => x / w;\nconsole.log(ndc(4, 1), ndc(4, 2), ndc(4, 8));", "4 2 0.5",
+      L("The same x, farther and farther away", "El mismo x, cada vez más lejos", "同じ x をだんだん遠くに")),
+    p(
+      "What the vertex shader outputs in gl_Position is called clip space. After the divide you get normalized device coordinates (NDC): anything with x, y and z between −1 and 1 is on screen, and the rest is clipped away. The divide is automatic; you never write it yourself in the shader.",
+      "Lo que el vertex shader devuelve en gl_Position se llama clip space. Tras la división obtienes coordenadas normalizadas de dispositivo (NDC): todo lo que tenga x, y y z entre −1 y 1 está en pantalla, y el resto se recorta. La división es automática; nunca la escribes tú en el shader.",
+      "頂点シェーダーが gl_Position に出す値をクリップ空間という。割ったあとが正規化デバイス座標（NDC）で、x, y, z が −1〜1 なら画面の中、それ以外は切りとられる。割り算は自動で、シェーダーに自分で書くことはない。",
+    ),
+    p(
+      "The field of view sets the zoom. The matrix uses f = 1 / tan(fov / 2): a narrow fov gives a big f, which spreads points apart (zoom in). Element 0 is f / aspect, where aspect is width ÷ height. On a wide canvas x is squeezed so that circles stay round instead of stretching sideways.",
+      "El campo de visión fija el zoom. La matriz usa f = 1 / tan(fov / 2): un fov estrecho da un f grande, que separa los puntos (acerca). El elemento 0 es f / aspect, donde aspect es ancho ÷ alto. En un canvas ancho, x se comprime para que los círculos sigan redondos en vez de estirarse a los lados.",
+      "視野角（fov）がズームを決める。行列は f = 1 / tan(fov / 2) を使う。fov がせまいと f が大きくなり、点が広がる（ズームイン）。0 番の要素は f / aspect（aspect = 幅 ÷ 高さ）。横長のキャンバスでは x を縮めて、円が横にのびずに丸いままになる。",
+    ),
+    ex("const f = (deg: number) => 1 / Math.tan((deg * Math.PI) / 180 / 2);\nconsole.log(f(60).toFixed(3), (f(60) / 1.5).toFixed(3));", "1.732 1.155",
+      L("fov 60°: f, then f / aspect for a 3:2 canvas", "fov 60°: f, y f / aspect para un canvas 3:2", "fov 60°：f と、3:2 のキャンバスの f / aspect")),
+  ),
+  note("depth-test", L("The depth test: closer wins", "El depth test: gana el más cercano", "深度テスト：近い方が勝つ"),
+    p(
+      "Without help, the GPU paints triangles in the order you draw them, so whatever comes last covers everything before it, even if it's behind. The depth buffer fixes that: it stores, for every pixel, the depth of the closest thing drawn there so far.",
+      "Sin ayuda, la GPU pinta los triángulos en el orden en que los dibujas, así que lo último tapa todo lo anterior, aunque esté detrás. El buffer de profundidad lo arregla: guarda, para cada píxel, la profundidad de lo más cercano dibujado ahí hasta ahora.",
+      "何もしないと GPU は描いた順に三角形をぬるので、最後の物が前の物を全部かくす。後ろにあってもだ。深度バッファで解決：ピクセルごとに、そこまでに描いた一番近い物の深度を保存する。",
+    ),
+    p(
+      "With the depth test enabled, each new pixel's depth is compared with the stored one using the depth function. The default is LESS: the new pixel is kept only if its depth is smaller, meaning closer. If it passes, both the color and the stored depth are updated; if not, it's thrown away. Draw order no longer decides; distance does.",
+      "Con el depth test activado, la profundidad de cada píxel nuevo se compara con la guardada usando la función de profundidad. La predeterminada es LESS: el píxel nuevo se queda solo si su profundidad es menor, o sea, más cerca. Si pasa, se actualizan el color y la profundidad guardada; si no, se descarta. Ya no decide el orden de dibujo, sino la distancia.",
+      "深度テストをオンにすると、新しいピクセルの深度を保存済みの深度と深度関数でくらべる。既定は LESS：深度が小さい（近い）ときだけ残す。通れば色と深度を更新し、通らなければ捨てる。描く順番ではなく距離で決まるようになる。",
+    ),
+    ex('let best = 1;\nlet winner = "none";\nconst paint = (name: string, z: number) => { if (z < best) { best = z; winner = name; } };\npaint("moon", 0.9);\npaint("bird", 0.2);\npaint("cloud", 0.5);\nconsole.log(winner);', "bird",
+      L("LESS keeps the smallest depth, whatever the order", "LESS conserva la menor profundidad, sin importar el orden", "順番に関係なく LESS は一番小さい深度を残す")),
+    p(
+      "The depth buffer must be reset at the start of every frame, just like the color. gl.clear takes a bit mask, so you combine the color bit and the depth bit with |. Common mistake: clearing only the color. Last frame's depths stay, and new pixels that are farther than old ones are rejected, leaving holes.",
+      "El buffer de profundidad debe reiniciarse al empezar cada frame, igual que el color. gl.clear recibe una máscara de bits, así que combinas el bit de color y el de profundidad con |. Error común: limpiar solo el color. Las profundidades del frame anterior se quedan y los píxeles nuevos más lejanos que los viejos se rechazan, dejando huecos.",
+      "深度バッファも色と同じく毎フレームの始めにリセットする。gl.clear はビットマスクを受けとるので、色のビットと深度のビットを | でまとめる。よくあるミス：色だけ消すこと。前のフレームの深度が残り、古い物より遠い新しいピクセルが捨てられて穴があく。",
+    ),
+    api("declare const gl: WebGL2RenderingContext;\ngl.depthFunc(gl.LEQUAL);\ngl.clearDepth(1.0);\ngl.clearColor(0, 0, 0.2, 1);",
+      L("Other depth settings: compare rule and clear value", "Otros ajustes: regla de comparación y valor al limpiar", "ほかの深度設定：くらべ方と消すときの値")),
+  ),
+  note("depth-precision", L("Depth precision and z-fighting", "Precisión de profundidad y z-fighting", "深度の精度とZファイティング"),
+    p(
+      "The depth buffer stores each depth as a whole number, often with 16 or 24 bits, so there is a limited number of steps between the near and far planes. When two surfaces are so close that they fall on the same step, the test can't tell which is in front, and they flicker as the camera moves. That's z-fighting.",
+      "El buffer de profundidad guarda cada profundidad como un número entero, a menudo de 16 o 24 bits, así que hay una cantidad limitada de pasos entre los planos near y far. Cuando dos superficies están tan cerca que caen en el mismo paso, el test no sabe cuál está delante y parpadean al moverse la cámara. Eso es z-fighting.",
+      "深度バッファは深度を 16 や 24 ビットの整数で保存するので、near と far の間の段階の数には限りがある。2 つの面が近すぎて同じ段階に入ると、どちらが前かわからず、カメラが動くとチラチラする。これがZファイティング。",
+    ),
+    p(
+      "The steps are not spread evenly. Perspective depth follows 1/z, so most of the precision is packed right in front of the near plane. With a tiny near value, almost the whole range is used up in the first few units, leaving very few steps for everything farther away.",
+      "Los pasos no se reparten parejos. La profundidad en perspectiva sigue a 1/z, así que casi toda la precisión se concentra justo delante del plano near. Con un near diminuto, casi todo el rango se gasta en las primeras unidades y quedan muy pocos pasos para todo lo que está más lejos.",
+      "段階は均等には並ばない。透視の深度は 1/z に従うので、精度のほとんどが near 面のすぐ前に集まる。near がとても小さいと、最初の数単位で範囲をほぼ使いきり、遠くの物にはわずかな段階しか残らない。",
+    ),
+    ex("const depth = (z: number, n: number, f: number) => (1 / n - 1 / z) / (1 / n - 1 / f);\nconsole.log(depth(10, 0.1, 100).toFixed(4), depth(10, 1, 100).toFixed(4));", "0.9910 0.9091",
+      L("At distance 10, near 0.1 has already used 99% of the range", "A distancia 10, near 0.1 ya gastó el 99% del rango", "距離 10 で near 0.1 はもう範囲の 99% を使っている")),
+    p(
+      "Rule to remember: push the near plane as far out as your scene allows. Moving it from 0.01 to 1 helps far more than moving the far plane in. Also avoid modeling two surfaces in the same place, such as a decal glued exactly on a wall; nudge one slightly forward instead.",
+      "Regla para recordar: aleja el plano near todo lo que tu escena permita. Pasarlo de 0.01 a 1 ayuda mucho más que acercar el far. Evita también modelar dos superficies en el mismo lugar, como una calcomanía pegada exacto sobre un muro; adelanta una un poquito.",
+      "覚えておくルール：near 面はシーンが許すかぎり遠くに置く。0.01 から 1 にするほうが、far を近づけるよりずっと効く。また、壁にぴったり貼ったデカールのように 2 つの面を同じ場所に作らないこと。片方を少し前に出そう。",
+    ),
+  ),
+  note("blending", L("Blending transparent things", "Mezclar cosas transparentes", "透明な物のブレンド"),
+    p(
+      "Blending mixes the new color (source) with the color already on screen (destination). The classic recipe uses the source alpha a as a weight: result = src × a + dst × (1 − a). With a = 1 you see only the new color, with a = 0 only what was behind, and anything between is a mix.",
+      "El blending mezcla el color nuevo (source) con el que ya está en pantalla (destination). La receta clásica usa el alfa del source, a, como peso: resultado = src × a + dst × (1 − a). Con a = 1 ves solo el color nuevo, con a = 0 solo lo de atrás, y cualquier valor intermedio es una mezcla.",
+      "ブレンドは新しい色（ソース）と画面にある色（デスティネーション）をまぜる。定番はソースのアルファ a を重みにする：結果 = src × a + dst × (1 − a)。a = 1 なら新しい色だけ、a = 0 なら奥の色だけ、その間はまざった色。",
+    ),
+    ex("const mix = (s: number, d: number, a: number) => Math.round(s * a + d * (1 - a));\nconsole.log(mix(0, 200, 0.25), mix(100, 100, 0.9));", "150 100",
+      L("25% black over 200; mixing a color with itself", "25% de negro sobre 200; un color mezclado consigo mismo", "200 の上に 25% の黒、同じ色どうしのまぜ")),
+    p(
+      "In WebGL you turn blending on with gl.enable(gl.BLEND) and pick the two weights with blendFunc(srcFactor, dstFactor). The first factor multiplies the new color and the second multiplies the old one. The names describe the weight: SRC_ALPHA means a, ONE means 1, and the ONE_MINUS_ versions mean 1 minus that value.",
+      "En WebGL activas el blending con gl.enable(gl.BLEND) y eliges los dos pesos con blendFunc(srcFactor, dstFactor). El primer factor multiplica el color nuevo y el segundo el viejo. Los nombres describen el peso: SRC_ALPHA es a, ONE es 1, y las versiones ONE_MINUS_ son 1 menos ese valor.",
+      "WebGL では gl.enable(gl.BLEND) でブレンドをオンにし、blendFunc(srcFactor, dstFactor) で 2 つの重みを選ぶ。1 つ目は新しい色に、2 つ目は古い色にかける。名前が重みを表す：SRC_ALPHA は a、ONE は 1、ONE_MINUS_ がつくと「1 − その値」。",
+    ),
+    api("declare const gl: WebGL2RenderingContext;\n// additive glow: new color + old color\ngl.enable(gl.BLEND);\ngl.blendFunc(gl.ONE, gl.ONE);",
+      L("A different recipe: additive light", "Otra receta: luz aditiva", "別のレシピ：光を足す加算ブレンド")),
+    p(
+      "Blending depends on what is already on screen, so order matters. Draw all opaque objects first, with depth writes on. Then draw transparent ones sorted from far to near, so each layer blends over everything behind it. Common mistake: drawing a near glass pane first; the depth test then hides what should show through it.",
+      "El blending depende de lo que ya está en pantalla, así que el orden importa. Dibuja primero todos los objetos opacos, con escritura de profundidad. Luego los transparentes ordenados de lejos a cerca, para que cada capa se mezcle sobre todo lo de atrás. Error común: dibujar primero un vidrio cercano; el depth test oculta luego lo que debería verse a través.",
+      "ブレンドは画面にすでにある色しだいなので、順番が大事。まず不透明な物を全部、深度を書きこみながら描く。次に透明な物を遠い順に描き、各層が奥のすべてにまざるようにする。よくあるミス：手前のガラスを先に描くこと。深度テストで、すけて見えるはずの物がかくれてしまう。",
+    ),
+    ex('const see = [{ n: "ice", z: 3 }, { n: "smoke", z: 8 }, { n: "bubble", z: 1 }];\nconsole.log(see.sort((a, b) => b.z - a.z).map((o) => o.n).join(" > "));', "smoke > ice > bubble",
+      L("Transparent objects, farthest (biggest z) first", "Objetos transparentes, el más lejano (z mayor) primero", "透明な物は遠い（z が大きい）順に")),
+  ),
+];
 
 // ─── 3.2 Near and far: projection, depth and blending ──────────────────────
 const projection: LessonDef = {
@@ -153,6 +337,7 @@ const projection: LessonDef = {
   xp: 75,
   enemy: "webgl/z-fighting",
   enemyName: L("Z-FIGHTER", "Z-FIGHTER", "Zファイター"),
+  notes: projectionNotes,
   beats: [
     say(L(
       "A PERSPECTIVE matrix stores distance in w. Then the GPU divides x, y and z by w: far things shrink toward the center.",
@@ -176,6 +361,8 @@ const projection: LessonDef = {
       answer: 0,
       output: "1,2,3",
       check: { compiles: true, stdout: "1,2,3" },
+      hint: L("Divide each of the first three numbers by the fourth one, w.", "Divide cada uno de los tres primeros números entre el cuarto, w.", "最初の 3 つの数を、4 つ目の w でそれぞれ割ろう。"),
+      note: "perspective",
       explain: L("The perspective divide: x, y and z are each divided by w = 2, giving normalized device coordinates.", "La división de perspectiva: x, y, z se dividen entre w = 2 y dan coordenadas normalizadas (NDC).", "透視除算で x, y, z をそれぞれ w = 2 で割り、正規化デバイス座標（NDC）になるよ。"),
       win: [{ t: "print", text: "1,2,3" }],
     },
@@ -187,6 +374,8 @@ const projection: LessonDef = {
       answer: 0,
       output: "1.000 0.500",
       check: { compiles: true, stdout: "1.000 0.500" },
+      hint: L("Half of 90° is 45°, and tan 45° is 1. Then divide f by the aspect.", "La mitad de 90° es 45°, y tan 45° es 1. Luego divide f entre el aspect.", "90° の半分は 45°、tan 45° は 1。そのあと f を aspect で割る。"),
+      note: "perspective",
       explain: L("Element 0 is f / aspect, with f = 1 / tan(fov / 2). A wider canvas (aspect 2) squeezes x so circles stay round.", "El elemento 0 es f / aspect, con f = 1 / tan(fov / 2). Un canvas más ancho (aspect 2) comprime x.", "0 番は f / aspect（f = 1 / tan(fov / 2)）。横長（aspect 2）なら x を縮めて円を丸く保つ。"),
     },
     say(L(
@@ -201,6 +390,8 @@ const projection: LessonDef = {
       options: ["DEPTH_TEST", "Z_BUFFER", "DEPTH_CHECK"],
       answer: 0,
       check: { compiles: true, wrongFail: true },
+      hint: L("Only real WebGL constants type-check. WebGL calls this feature a test.", "Solo las constantes reales de WebGL pasan el chequeo de tipos. WebGL llama test a esta función.", "型チェックを通るのは本物の WebGL 定数だけ。WebGL はこの機能を「テスト」と呼ぶ。"),
+      note: "depth-test",
       explain: L("gl.enable(gl.DEPTH_TEST) turns it on. gl.Z_BUFFER and gl.DEPTH_CHECK don't exist: TS2339.", "gl.enable(gl.DEPTH_TEST) lo activa. gl.Z_BUFFER y gl.DEPTH_CHECK no existen: TS2339.", "gl.enable(gl.DEPTH_TEST) でオン。gl.Z_BUFFER や gl.DEPTH_CHECK は存在しない（TS2339）。"),
     },
     {
@@ -211,6 +402,8 @@ const projection: LessonDef = {
       answer: 0,
       output: "rock",
       check: { compiles: true, stdout: "rock" },
+      hint: L("With LESS, a new pixel wins only if its z is smaller than the stored one.", "Con LESS, un píxel nuevo gana solo si su z es menor que la guardada.", "LESS では、新しいピクセルは z が保存済みより小さいときだけ勝つ。"),
+      note: "depth-test",
       explain: L("The tree is drawn later but is farther (0.7 > 0.3), so the LESS test rejects it. Closer wins, not later.", "El árbol se dibuja después pero está más lejos (0.7 > 0.3): el test LESS lo rechaza. Gana el más cercano.", "木は後に描いたけど遠い（0.7 > 0.3）ので LESS テストで捨てられる。勝つのは近い方だよ。"),
       setup: [{ t: "enter", actor: "ally" }, { t: "tag", actor: "hero", text: "rock 0.3" }, { t: "tag", actor: "ally", text: "tree 0.7" }],
       win: [{ t: "dead", actor: "ally" }, { t: "print", text: "rock" }],
@@ -221,6 +414,8 @@ const projection: LessonDef = {
       code: GL + "gl.clear(gl.COLOR_BUFFER_BIT | gl.___);",
       answer: "DEPTH_BUFFER_BIT",
       check: { compiles: true },
+      hint: L("Follow the pattern of COLOR_BUFFER_BIT, but for the other buffer.", "Sigue el patrón de COLOR_BUFFER_BIT, pero para el otro buffer.", "COLOR_BUFFER_BIT と同じ形で、もう 1 つのバッファの名前を。"),
+      note: "depth-test",
       explain: L("Old depths from the last frame would hide new pixels. Clear both bits each frame.", "Las profundidades del cuadro anterior ocultarían píxeles nuevos. Limpia ambos bits en cada cuadro.", "前のフレームの深度が残ると新しいピクセルが隠れる。毎フレーム両方のビットを消そう。"),
     },
     say(L(
@@ -236,6 +431,8 @@ const projection: LessonDef = {
       answer: 0,
       output: "true false",
       check: { compiles: true, stdout: "true false" },
+      hint: L("Precision is packed near the near plane. Which near leaves fewer steps far away?", "La precisión se concentra cerca del plano near. ¿Qué near deja menos pasos a lo lejos?", "精度は near 面の近くに集まる。遠くの段階が少なくなるのはどちらの near？"),
+      note: "depth-precision",
       explain: L("With near 0.01 the walls at 100 and 100.5 get the same depth: z-fighting. With near 1 they separate.", "Con near 0.01 los muros a 100 y 100.5 reciben la misma profundidad: z-fighting. Con near 1 se separan.", "near 0.01 だと 100 と 100.5 の壁が同じ深度になりZファイティング。near 1 なら分かれる。"),
       win: [{ t: "shake" }, { t: "print", text: "true false" }],
     },
@@ -252,6 +449,8 @@ const projection: LessonDef = {
       answer: 0,
       output: "128",
       check: { compiles: true, stdout: "128" },
+      hint: L("Compute s × a + d × (1 − a), then round to the nearest integer.", "Calcula s × a + d × (1 − a) y redondea al entero más cercano.", "s × a + d × (1 − a) を計算し、一番近い整数に丸めよう。"),
+      note: "blending",
       explain: L("Half of 255 plus half of 0 is 127.5, rounded to 128: a half-transparent layer.", "La mitad de 255 más la mitad de 0 es 127.5, redondeado a 128: una capa semitransparente.", "255 の半分と 0 の半分で 127.5、丸めて 128。半透明の重なりだよ。"),
     },
     {
@@ -260,6 +459,8 @@ const projection: LessonDef = {
       code: GL + "gl.enable(gl.BLEND);\ngl.blendFunc(gl.SRC_ALPHA, gl.___);",
       answer: "ONE_MINUS_SRC_ALPHA",
       check: { compiles: true },
+      hint: L("The color behind must get the weight 1 − a. The factor names spell that out.", "El color de atrás debe recibir el peso 1 − a. Los nombres de los factores lo dicen tal cual.", "奥の色には重み 1 − a が必要。係数の名前がそのまま表している。"),
+      note: "blending",
       explain: L("SRC_ALPHA weighs the new color by a; ONE_MINUS_SRC_ALPHA weighs what's behind by 1 − a.", "SRC_ALPHA pondera el color nuevo por a; ONE_MINUS_SRC_ALPHA pondera lo de atrás por 1 − a.", "SRC_ALPHA は新しい色に a を、ONE_MINUS_SRC_ALPHA は奥の色に 1 − a をかけるよ。"),
     },
     {
@@ -270,6 +471,8 @@ const projection: LessonDef = {
       answer: 0,
       output: "wall > mist > glass",
       check: { compiles: true, stdout: "wall > mist > glass" },
+      hint: L("Opaque objects come first. Then sort the rest by z, biggest first.", "Primero los opacos. Luego ordena el resto por z, de mayor a menor.", "不透明な物が先。残りは z の大きい順に並べる。"),
+      note: "blending",
       explain: L("Opaque first, then transparent sorted far to near (bigger z first), so each layer blends over what's behind it.", "Primero lo opaco, luego lo transparente de lejos a cerca (z mayor primero): cada capa se mezcla con lo de atrás.", "不透明が先、透明は遠い順（z が大きい順）。それぞれが奥の色と正しく混ざるよ。"),
     },
     {
@@ -279,10 +482,78 @@ const projection: LessonDef = {
       solution: "type RGB = [number, number, number];\nfunction blend(src: RGB, dst: RGB, a: number): RGB {\n  return src.map((s, i) => Math.round(s * a + dst[i] * (1 - a))) as RGB;\n}\nconsole.log(\"blend: \" + blend([255, 0, 0], [0, 0, 255], 0.75).join(\",\"));\n",
       expect: "blend: 191,0,64",
       fallback: [String.raw`s\s*\*\s*a\s*\+\s*dst\[i\]\s*\*\s*\(\s*1\s*-\s*a\s*\)`, String.raw`dst\[i\]\s*\*\s*\(\s*1\s*-\s*a\s*\)\s*\+\s*s\s*\*\s*a`],
+      hint: L("Which color should get the weight a: the new one (src) or the one behind (dst)?", "¿Qué color debe recibir el peso a: el nuevo (src) o el de atrás (dst)?", "重み a をかけるのはどっち？新しい色（src）か奥の色（dst）か。"),
+      note: "blending",
       explain: L("The weights were swapped. SRC_ALPHA, ONE_MINUS_SRC_ALPHA means s × a + dst × (1 − a): 75% red on top.", "Los pesos estaban invertidos. SRC_ALPHA, ONE_MINUS_SRC_ALPHA es s × a + dst × (1 − a): 75% de rojo encima.", "重みが逆だった。SRC_ALPHA, ONE_MINUS_SRC_ALPHA は s × a + dst × (1 − a)。赤が 75% 上にのる。"),
     },
   ],
 };
+
+const lightingNotes: NoteDef[] = [
+  note("dot-lambert", L("Dot product and Lambert light", "Producto punto y luz Lambert", "内積とランバート照明"),
+    p(
+      "The dot product of two vectors multiplies them part by part and adds the results: a.x × b.x + a.y × b.y + a.z × b.z. When both vectors have length 1, the dot product equals the cosine of the angle between them: 1 when they point the same way, 0 when they are at a right angle, −1 when they are opposite.",
+      "El producto punto de dos vectores los multiplica parte por parte y suma los resultados: a.x × b.x + a.y × b.y + a.z × b.z. Si los dos vectores miden 1, el producto punto es igual al coseno del ángulo entre ellos: 1 si apuntan igual, 0 si forman ángulo recto, −1 si son opuestos.",
+      "2 つのベクトルの内積は、成分ごとにかけて足したもの：a.x × b.x + a.y × b.y + a.z × b.z。どちらも長さ 1 なら、内積は 2 つの間の角度の cos と同じ。同じ向きで 1、直角で 0、逆向きで −1。",
+    ),
+    ex("const dot = (a: number[], b: number[]) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];\nconsole.log(dot([0, 0, 1], [0, 0.6, 0.8]), dot([0, 0, 1], [0, 0.8, -0.6]));", "0.8 -0.6",
+      L("A tilted light, and one coming from behind", "Una luz inclinada y otra que viene de atrás", "ななめの光と、後ろから来る光")),
+    p(
+      "Lambert lighting says a surface is brightest when it faces the light head-on and gets dimmer as it tilts away: brightness = dot(N, L), where N is the normal and L points toward the light. At 60° the cosine is 0.5, so the face gets half the light; at 45° it gets about 0.71.",
+      "La luz Lambert dice que una superficie brilla más cuando mira la luz de frente y se oscurece al inclinarse: brillo = dot(N, L), donde N es la normal y L apunta hacia la luz. A 60° el coseno es 0.5, así que la cara recibe la mitad de la luz; a 45° recibe cerca de 0.71.",
+      "ランバート照明では、面は光に正面から向くと一番明るく、かたむくほど暗くなる：明るさ = dot(N, L)。N は法線、L は光の方向。60° なら cos は 0.5 で光は半分、45° なら約 0.71。",
+    ),
+    ex("console.log(Math.cos(0).toFixed(2), Math.cos(Math.PI / 4).toFixed(2));", "1.00 0.71",
+      L("Facing the light, and tilted 45°", "De frente a la luz e inclinada 45°", "光に正面、45° かたむけた場合")),
+    p(
+      "When the light is behind the face, the dot product is negative, and negative light would darken other light sources added to it. So we clamp: max(dot(N, L), 0). Real scenes also add a small ambient term, so faces in shadow are dim instead of pure black: light = ambient + (1 − ambient) × max(dot, 0).",
+      "Cuando la luz está detrás de la cara, el producto punto es negativo, y la luz negativa oscurecería otras luces que se le sumen. Por eso se recorta: max(dot(N, L), 0). Las escenas reales suman además un pequeño término ambiente, para que las caras en sombra queden tenues en vez de negras: luz = ambiente + (1 − ambiente) × max(dot, 0).",
+      "光が面の後ろにあると内積はマイナスになり、マイナスの光はほかの光を暗くしてしまう。だから max(dot(N, L), 0) で切る。実際のシーンでは小さな環境光も足し、影の面が真っ黒でなく暗めになるようにする：光 = 環境光 + (1 − 環境光) × max(dot, 0)。",
+    ),
+    ex("const shade = (d: number) => 0.1 + 0.9 * Math.max(d, 0);\nconsole.log(shade(0.8).toFixed(2), shade(-0.6).toFixed(2));", "0.82 0.10",
+      L("Ambient 0.1: the back face keeps a little light", "Ambiente 0.1: la cara trasera conserva algo de luz", "環境光 0.1：裏の面にも少し光が残る")),
+  ),
+  note("cross-normals", L("Normals from the cross product", "Normales con el producto cruz", "外積で法線を求める"),
+    p(
+      "A face normal is an arrow sticking straight out of a triangle. You get it from two edges of the triangle with the cross product: a × b gives a vector perpendicular to both a and b. Then you normalize it to length 1.",
+      "La normal de una cara es una flecha que sale recta de un triángulo. Se obtiene a partir de dos aristas del triángulo con el producto cruz: a × b da un vector perpendicular a a y a b. Luego lo normalizas a largo 1.",
+      "面の法線は三角形からまっすぐ出る矢印。三角形の 2 つの辺から外積で求める：a × b は a にも b にも垂直なベクトルになる。そのあと長さ 1 に正規化する。",
+    ),
+    p(
+      "Unlike multiplying numbers, the order of a cross product matters: b × a points exactly opposite to a × b. A handy rule: x × y = z, y × z = x, z × x = y, and swapping either pair flips the sign. That's why triangle winding decides which way its normal faces.",
+      "A diferencia de multiplicar números, el orden del producto cruz importa: b × a apunta exactamente al revés que a × b. Una regla útil: x × y = z, y × z = x, z × x = y, y si cambias el orden de cualquier par, cambia el signo. Por eso el winding del triángulo decide hacia dónde mira su normal.",
+      "数のかけ算とちがい、外積は順番が大事：b × a は a × b のちょうど逆を向く。便利なルール：x × y = z、y × z = x、z × x = y。どのペアも入れかえると符号が反転する。だから三角形の巻き方向で法線の向きが決まる。",
+    ),
+    ex('const cross = (a: number[], b: number[]) =>\n  [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];\nconsole.log(cross([0, 1, 0], [0, 0, 1]).join(","), cross([0, 0, 1], [0, 1, 0]).join(","));', "1,0,0 -1,0,0",
+      L("y × z = +x, but z × y = −x", "y × z = +x, pero z × y = −x", "y × z = +x、でも z × y = −x")),
+    p(
+      "Common mistake: building a mesh with mixed winding. Half its normals point inward, so those faces light up when the light is behind them and go dark when it's in front. Keep every triangle counter-clockwise when seen from outside.",
+      "Error común: armar una malla con winding mezclado. La mitad de sus normales apunta hacia adentro, así que esas caras se iluminan cuando la luz está detrás y se oscurecen cuando está delante. Mantén cada triángulo en sentido antihorario visto desde afuera.",
+      "よくあるミス：巻き方向がばらばらなメッシュを作ること。法線の半分が内側を向き、その面は光が後ろにあると明るく、前にあると暗くなる。外から見て、どの三角形も反時計回りにそろえよう。",
+    ),
+  ),
+  note("normalize", L("Normalizing: length 1", "Normalizar: largo 1", "正規化：長さを 1 に"),
+    p(
+      "The dot product equals the cosine only for vectors of length 1. If a vector is longer, the result is scaled by its length: a light vector of length 2 makes the face look twice as bright. Normalizing keeps the direction and sets the length to 1: divide each part by the length.",
+      "El producto punto es igual al coseno solo para vectores de largo 1. Si un vector es más largo, el resultado se escala por su largo: un vector de luz de largo 2 hace que la cara se vea el doble de brillante. Normalizar mantiene la dirección y pone el largo en 1: divide cada parte por el largo.",
+      "内積が cos と同じになるのは長さ 1 のベクトルだけ。長いベクトルだと結果も長さの倍になり、長さ 2 の光のベクトルなら面が 2 倍明るく見える。正規化は向きはそのままで長さを 1 にすること：各成分を長さで割る。",
+    ),
+    p(
+      "The length of a vector comes from the Pythagorean theorem: the square root of x² + y² + z². In JS, Math.hypot(x, y, z) computes it in one call. A 6-8-10 triangle, like the 3-4-5 one, gives a whole-number length, which makes it handy for checking your math.",
+      "El largo de un vector sale del teorema de Pitágoras: la raíz cuadrada de x² + y² + z². En JS, Math.hypot(x, y, z) lo calcula en una llamada. Un triángulo 6-8-10, como el 3-4-5, da un largo entero, útil para comprobar tus cuentas.",
+      "ベクトルの長さはピタゴラスの定理で求める：x² + y² + z² の平方根。JS では Math.hypot(x, y, z) 1 回で計算できる。6-8-10 の三角形は 3-4-5 と同じく長さが整数になるので、計算の確認に便利。",
+    ),
+    ex('const v = [0, 6, 8];\nconst len = Math.hypot(...v);\nconsole.log(len, v.map((n) => n / len).join(","));', "10 0,0.6,0.8",
+      L("Divide by the length to get a unit vector", "Divide por el largo para obtener un vector unitario", "長さで割ると単位ベクトルになる")),
+    p(
+      "Normals are stored per vertex, and the GPU blends them across the triangle for each pixel. A blend of two unit vectors is shorter than 1 unless they point the same way, so the light gets dimmer in the middle of faces. That's why fragment shaders call normalize() on the normal again before lighting.",
+      "Las normales se guardan por vértice, y la GPU las mezcla a lo largo del triángulo para cada píxel. Una mezcla de dos vectores unitarios mide menos de 1, salvo que apunten igual, así que la luz se apaga en el medio de las caras. Por eso los fragment shaders vuelven a llamar normalize() sobre la normal antes de iluminar.",
+      "法線は頂点ごとに保存され、GPU がピクセルごとに三角形の上でまぜる。2 つの単位ベクトルをまぜると、同じ向きでないかぎり長さは 1 より短くなり、面の中央で光が暗くなる。だからフラグメントシェーダーでは照明の前にもう一度 normalize() を呼ぶ。",
+    ),
+    ex("const lerp = (a: number[], b: number[], t: number) => a.map((v, i) => v + (b[i] - v) * t);\nconst m = lerp([0, 0, 1], [0, 1, 0], 0.25);\nconsole.log(Math.hypot(...m).toFixed(3));", "0.791",
+      L("A quarter of the way between two unit normals", "A un cuarto del camino entre dos normales unitarias", "2 つの単位法線の 4 分の 1 の位置")),
+  ),
+];
 
 // ─── 3.3 Facing the sun: normals and lighting ──────────────────────────────
 const lighting: LessonDef = {
@@ -293,6 +564,7 @@ const lighting: LessonDef = {
   xp: 80,
   enemy: "webgl/black-screen",
   enemyName: L("SHADOW VOID", "VACÍO SOMBRÍO", "カゲノヤミ"),
+  notes: lightingNotes,
   beats: [
     say(L(
       "A NORMAL is an arrow of length 1 that sticks straight out of a surface. It tells the light which way the face looks.",
@@ -317,6 +589,8 @@ const lighting: LessonDef = {
       answer: 0,
       output: "1 0 -1",
       check: { compiles: true, stdout: "1 0 -1" },
+      hint: L("Multiply part by part and add. Same way, sideways, then opposite.", "Multiplica parte por parte y suma. Mismo sentido, de lado y luego opuesto.", "成分ごとにかけて足す。同じ向き、真横、そして逆向き。"),
+      note: "dot-lambert",
       explain: L("For unit vectors, dot = cos of the angle: same way 1, sideways 0, opposite -1.", "Con vectores unitarios, dot = coseno del ángulo: mismo sentido 1, de lado 0, opuesto -1.", "単位ベクトルなら dot は角度の cos。同じ向き 1、真横 0、逆向き -1。"),
       win: [{ t: "print", text: "1 0 -1" }],
     },
@@ -333,6 +607,8 @@ const lighting: LessonDef = {
       answer: 0,
       output: "0",
       check: { compiles: true, stdout: "0" },
+      hint: L("Math.max returns the larger of its two arguments.", "Math.max devuelve el mayor de sus dos argumentos.", "Math.max は 2 つの引数の大きいほうを返す。"),
+      note: "dot-lambert",
       explain: L("max(…, 0) clamps the negative dot. Without it, faces in shadow would subtract light.", "max(…, 0) recorta el dot negativo. Sin él, las caras en sombra restarían luz.", "max(…, 0) でマイナスの dot を 0 に切る。ないと影の面が光を引いてしまう。"),
     },
     {
@@ -343,6 +619,8 @@ const lighting: LessonDef = {
       answer: 0,
       output: "0.50",
       check: { compiles: true, stdout: "0.50" },
+      hint: L("Picture an equilateral triangle cut in half: cos 60° is a simple fraction.", "Imagina un triángulo equilátero partido a la mitad: cos 60° es una fracción simple.", "正三角形を半分に切った形を思い浮かべよう。cos 60° はかんたんな分数。"),
+      note: "dot-lambert",
       explain: L("dot of unit vectors is cos(angle), and cos 60° = 0.5: the face gets half the light.", "El dot de unitarios es cos(ángulo), y cos 60° = 0.5: la cara recibe la mitad de la luz.", "単位ベクトルの dot は cos(角度)。cos 60° = 0.5 なので光は半分だよ。"),
     },
     say(L(
@@ -358,6 +636,8 @@ const lighting: LessonDef = {
       answer: 0,
       output: "0,0,1 0,0,-1",
       check: { compiles: true, stdout: "0,0,1 0,0,-1" },
+      hint: L("Work out the first call; then recall what swapping a cross product's inputs does.", "Calcula la primera llamada; luego recuerda qué pasa al invertir las entradas del producto cruz.", "最初の呼び出しを計算し、外積の入力を入れかえると何が起きるか思い出そう。"),
+      note: "cross-normals",
       explain: L("x × y = +z, but y × x = -z. The order of the edges (the winding) decides which way the face points.", "x × y = +z, pero y × x = -z. El orden de las aristas (el winding) decide hacia dónde mira la cara.", "x × y = +z、y × x = -z。辺の順番（巻き方向）で面の向きが決まるよ。"),
       win: [{ t: "print", text: "0,0,1 0,0,-1" }],
     },
@@ -374,6 +654,8 @@ const lighting: LessonDef = {
       answer: 0,
       output: "5 0.60,0.80,0.00",
       check: { compiles: true, stdout: "5 0.60,0.80,0.00" },
+      hint: L("Remember the 3-4-5 right triangle. Then divide each part by the length.", "Recuerda el triángulo rectángulo 3-4-5. Luego divide cada parte por el largo.", "3-4-5 の直角三角形を思い出そう。そのあと各成分を長さで割る。"),
+      note: "normalize",
       explain: L("hypot(3, 4, 0) = 5 (3-4-5 triangle). Dividing by 5 keeps the direction with length 1.", "hypot(3, 4, 0) = 5 (triángulo 3-4-5). Dividir entre 5 mantiene la dirección con largo 1.", "hypot(3, 4, 0) = 5（3-4-5 の三角形）。5 で割ると向きはそのまま長さ 1 になる。"),
     },
     {
@@ -384,6 +666,8 @@ const lighting: LessonDef = {
       answer: 0,
       output: "0.707",
       check: { compiles: true, stdout: "0.707" },
+      hint: L("mid is (0.5, 0.5, 0). Its length is the square root of 0.25 + 0.25.", "mid es (0.5, 0.5, 0). Su largo es la raíz cuadrada de 0.25 + 0.25.", "mid は (0.5, 0.5, 0)。長さは 0.25 + 0.25 の平方根。"),
+      note: "normalize",
       explain: L("Interpolated normals get SHORTER than 1. That's why the fragment shader normalizes them again.", "Las normales interpoladas quedan más CORTAS que 1. Por eso el fragment shader las normaliza otra vez.", "補間された法線は 1 より短くなる。だからフラグメントシェーダーで正規化し直すんだ。"),
     },
     {
@@ -394,6 +678,8 @@ const lighting: LessonDef = {
       answer: 0,
       output: "0.2 1",
       check: { compiles: true, stdout: "0.2 1" },
+      hint: L("max(d, 0) is 0 for a face turned away, so only the constant part remains.", "max(d, 0) es 0 para una cara de espaldas, así que solo queda la parte constante.", "背を向けた面では max(d, 0) が 0 なので、定数の部分だけが残る。"),
+      note: "dot-lambert",
       explain: L("The AMBIENT term keeps faces turned away from going pure black; the rest of the light comes from Lambert.", "El término AMBIENTE evita que las caras de espaldas queden negras; el resto de la luz viene de Lambert.", "環境光の項で、背を向けた面も真っ黒にならない。残りの光はランバートから来るよ。"),
     },
     {
@@ -403,10 +689,79 @@ const lighting: LessonDef = {
       solution: "type V3 = [number, number, number];\nconst dot = (a: V3, b: V3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];\nconst normalize = (v: V3): V3 => {\n  const l = Math.hypot(...v);\n  return [v[0] / l, v[1] / l, v[2] / l];\n};\nfunction lambert(normal: V3, toLight: V3): number {\n  return Math.max(dot(normalize(normal), normalize(toLight)), 0);\n}\nconsole.log(\"light \" + lambert([0, 1, 0], [0, 2, 0]).toFixed(2));\n",
       expect: "light 1.00",
       fallback: [String.raw`normalize\s*\(\s*toLight\s*\)`, String.raw`Math\.hypot\s*\(\s*\.\.\.\s*toLight\s*\)`, String.raw`Math\.hypot\s*\(\s*toLight\[0\]`],
+      hint: L("Lambert needs both vectors of length 1. How long is the light vector here?", "Lambert necesita ambos vectores de largo 1. ¿Cuánto mide aquí el vector de luz?", "ランバートは両方が長さ 1 であることが必要。ここの光のベクトルの長さは？"),
+      note: "normalize",
       explain: L("The light vector had length 2, so the face looked twice as bright. Normalize it before the dot.", "El vector de luz medía 2, así que la cara brillaba el doble. Normalízalo antes del dot.", "光のベクトルの長さが 2 で、明るさが2倍になっていた。dot の前に正規化しよう。"),
     },
   ],
 };
+
+const performanceNotes: NoteDef[] = [
+  note("framebuffers", L("Framebuffers: drawing into a texture", "Framebuffers: dibujar en una textura", "フレームバッファ：テクスチャに描く"),
+    p(
+      "Normally every draw call paints the canvas. A framebuffer object redirects drawing into a texture you attach to it. Later you can use that texture like any other: blur it, add glow, compare depths for shadows, or read pixel colors to find out which object is under the mouse.",
+      "Normalmente cada draw call pinta el canvas. Un objeto framebuffer redirige el dibujo hacia una textura que le adjuntas. Después puedes usar esa textura como cualquier otra: desenfocarla, darle brillo, comparar profundidades para sombras o leer colores de píxeles para saber qué objeto está bajo el mouse.",
+      "ふつう描画呼び出しはキャンバスにぬる。フレームバッファオブジェクトは、接続したテクスチャへ描画を向けかえる。そのテクスチャはほかと同じように使える：ぼかす、光らせる、影のために深度をくらべる、ピクセルの色を読んでマウスの下の物を調べる。",
+    ),
+    api("declare const gl: WebGL2RenderingContext;\ndeclare const glowTex: WebGLTexture;\nconst glowFb = gl.createFramebuffer();\ngl.bindFramebuffer(gl.FRAMEBUFFER, glowFb);\ngl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, glowTex, 0);",
+      L("Attach a texture as the color target", "Adjunta una textura como destino de color", "テクスチャを色の出力先として接続")),
+    p(
+      "Like buffers, framebuffers follow bind-then-act: while one is bound to FRAMEBUFFER, all drawing goes into it. To draw on the canvas again you bind null, which means the default framebuffer that belongs to the canvas. In TypeScript the parameter is WebGLFramebuffer | null, so undefined is rejected.",
+      "Como los buffers, los framebuffers siguen el patrón enlazar y actuar: mientras uno esté enlazado a FRAMEBUFFER, todo el dibujo va ahí. Para volver a dibujar en el canvas enlazas null, que significa el framebuffer por defecto del canvas. En TypeScript el parámetro es WebGLFramebuffer | null, así que undefined se rechaza.",
+      "バッファと同じく、フレームバッファも「バインドしてから操作」。FRAMEBUFFER にバインドしている間は描画が全部そこへ行く。キャンバスにもどすには null をバインドする。これはキャンバスの標準フレームバッファという意味。TypeScript の引数の型は WebGLFramebuffer | null なので、undefined は通らない。",
+    ),
+    p(
+      "Not every combination of attachments is valid: wrong formats or mismatched sizes make the framebuffer incomplete, and drawing into it fails. After setting it up, call checkFramebufferStatus(gl.FRAMEBUFFER) once and compare the result with gl.FRAMEBUFFER_COMPLETE. Do it at setup time, not every frame.",
+      "No toda combinación de adjuntos es válida: formatos incorrectos o tamaños que no coinciden dejan el framebuffer incompleto, y dibujar en él falla. Después de configurarlo, llama una vez a checkFramebufferStatus(gl.FRAMEBUFFER) y compara el resultado con gl.FRAMEBUFFER_COMPLETE. Hazlo al configurar, no en cada frame.",
+      "接続の組み合わせがいつも正しいとはかぎらない。形式がちがったり大きさがそろっていなかったりするとフレームバッファは不完全になり、描画が失敗する。準備のあと checkFramebufferStatus(gl.FRAMEBUFFER) を一度呼び、gl.FRAMEBUFFER_COMPLETE とくらべよう。毎フレームではなく準備のときに。",
+    ),
+  ),
+  note("draw-calls", L("Draw calls and instancing", "Draw calls e instancing", "描画呼び出しとインスタンシング"),
+    p(
+      "Each draw call costs CPU time: the browser validates state and talks to the driver before the GPU does anything. A thousand small draws can be slower than one big one, even with the same triangles. So performance work in WebGL is often about drawing more with fewer calls.",
+      "Cada draw call cuesta tiempo de CPU: el navegador valida el estado y habla con el driver antes de que la GPU haga algo. Mil draws chicos pueden ser más lentos que uno grande, aunque tengan los mismos triángulos. Por eso optimizar en WebGL suele ser dibujar más con menos llamadas.",
+      "描画呼び出しには CPU の時間がかかる。GPU が動く前に、ブラウザが状態を確認しドライバーとやりとりするからだ。三角形が同じでも、小さな描画 1000 回は大きな 1 回より遅くなりうる。だから WebGL の高速化は、少ない呼び出しでたくさん描く工夫が多い。",
+    ),
+    p(
+      "Instancing draws many copies of one mesh in a single call, such as drawArraysInstanced or drawElementsInstanced, core in WebGL2. Objects can share one instanced draw when they use the same geometry and the same material, so the number of calls equals the number of unique combinations.",
+      "El instancing dibuja muchas copias de una malla en una sola llamada, como drawArraysInstanced o drawElementsInstanced, nativas en WebGL2. Los objetos pueden compartir un draw instanciado cuando usan la misma geometría y el mismo material, así que la cantidad de llamadas es igual a la de combinaciones únicas.",
+      "インスタンシングは 1 つのメッシュのコピーを 1 回の呼び出しでたくさん描く。drawArraysInstanced や drawElementsInstanced がそれで、WebGL2 では標準。同じジオメトリと同じマテリアルを使う物は 1 回のインスタンス描画にまとめられるので、呼び出しの数はユニークな組み合わせの数になる。",
+    ),
+    ex('const items = ["bush", "bush", "lamp", "bush", "lamp", "well"];\nconsole.log(items.length, new Set(items).size);', "6 3",
+      L("6 objects, 3 unique kinds: 3 instanced draws", "6 objetos, 3 tipos únicos: 3 draws instanciados", "6 個の物、3 種類：インスタンス描画は 3 回")),
+    p(
+      "Each copy needs its own data, such as a position or a mat4. vertexAttribDivisor(loc, n) makes an attribute advance once every n instances instead of once per vertex; the default 0 means per vertex. A mat4 per instance is 16 floats, 64 bytes, which is cheap next to a separate draw call.",
+      "Cada copia necesita sus propios datos, como una posición o un mat4. vertexAttribDivisor(loc, n) hace que un attribute avance una vez cada n instancias en vez de una vez por vértice; el 0 por defecto significa por vértice. Un mat4 por instancia son 16 floats, 64 bytes, barato frente a un draw call aparte.",
+      "コピーごとに位置や mat4 などのデータが必要。vertexAttribDivisor(loc, n) で、アトリビュートが頂点ごとではなく n インスタンスごとに 1 回進む。既定の 0 は頂点ごと。インスタンスごとの mat4 は float 16 個で 64 バイト。別の描画呼び出しよりずっと安い。",
+    ),
+    ex('const tints = ["red", "blue"];\nconst tintFor = (instance: number, divisor: number) => tints[Math.floor(instance / divisor)];\nconsole.log(tintFor(0, 2), tintFor(1, 2), tintFor(2, 2));', "red red blue",
+      L("Divisor 2: each tint is shared by two instances", "Divisor 2: cada tinte lo comparten dos instancias", "divisor 2：1 つの色を 2 インスタンスで共有")),
+    p(
+      "Some calls make the CPU wait for the GPU to finish all queued work, which wastes the time both could spend in parallel. getError and readPixels are the usual suspects. Use them while debugging, then remove them from the per-frame loop. Instanced calls also don't exist on a WebGL1 context without an extension.",
+      "Algunas llamadas hacen que la CPU espere a que la GPU termine todo el trabajo en cola, lo que desperdicia el tiempo que ambas podrían usar en paralelo. getError y readPixels son las sospechosas habituales. Úsalas al depurar y luego quítalas del bucle de cada frame. Las llamadas instanciadas tampoco existen en un contexto WebGL1 sin extensión.",
+      "CPU に GPU の仕事が全部終わるまで待たせる呼び出しがあり、2 つが並んで働けた時間をむだにする。よくあるのは getError と readPixels。デバッグ中だけ使い、毎フレームのループからは外そう。また WebGL1 のコンテキストには、拡張なしではインスタンス描画の呼び出しがない。",
+    ),
+  ),
+  note("context-loss", L("Losing and restoring the context", "Perder y recuperar el contexto", "コンテキストの消失と復元"),
+    p(
+      "The browser can take the GPU away from your page at any time: a driver crash, too many tabs using WebGL, or a laptop switching graphics cards. When that happens, the context is lost and every buffer, texture, shader and program you created is gone. Calls keep running but do nothing.",
+      "El navegador puede quitarle la GPU a tu página en cualquier momento: un fallo del driver, demasiadas pestañas usando WebGL o una laptop que cambia de tarjeta gráfica. Cuando pasa, el contexto se pierde y cada buffer, textura, shader y programa que creaste desaparece. Las llamadas siguen corriendo pero no hacen nada.",
+      "ブラウザはいつでもページから GPU を取り上げることがある：ドライバーの故障、WebGL を使うタブが多すぎる、ノート PC がグラフィックカードを切りかえる、など。そうなるとコンテキストは失われ、作ったバッファ・テクスチャ・シェーダー・プログラムは全部消える。呼び出しは動き続けるが何もしない。",
+    ),
+    p(
+      "The canvas fires webglcontextlost. Call preventDefault() on that event to tell the browser you can handle a restore; without it, the context never comes back. Later webglcontextrestored fires, and you must rebuild everything from scratch, so keep your setup code in a function you can call again.",
+      "El canvas dispara webglcontextlost. Llama a preventDefault() en ese evento para decirle al navegador que puedes manejar la restauración; sin eso, el contexto nunca vuelve. Más tarde se dispara webglcontextrestored y debes reconstruir todo desde cero, así que guarda tu código de preparación en una función que puedas volver a llamar.",
+      "キャンバスは webglcontextlost を発生させる。そのイベントで preventDefault() を呼ぶと、復元に対応できるとブラウザに伝わる。呼ばないとコンテキストはもどらない。あとで webglcontextrestored が来たら全部を一から作り直すので、準備のコードはもう一度呼べる関数にしておこう。",
+    ),
+    api('declare const canvas: HTMLCanvasElement;\ndeclare function setupScene(): void;\ncanvas.addEventListener("webglcontextlost", (e) => {\n  e.preventDefault();\n});\ncanvas.addEventListener("webglcontextrestored", () => {\n  setupScene();\n});',
+      L("Allow the restore, then rebuild everything", "Permite la restauración y reconstruye todo", "復元を許可して、全部作り直す")),
+    p(
+      "In TypeScript, the listener for these events on a canvas receives a plain Event, because the DOM types don't map them to WebGLContextEvent. Every Event has preventDefault, so that compiles. To read the extra statusMessage property, cast the event to the specific WebGL event type first; otherwise tsc reports TS2339.",
+      "En TypeScript, el listener de estos eventos en un canvas recibe un Event común, porque los tipos del DOM no los asocian con WebGLContextEvent. Todo Event tiene preventDefault, así que eso compila. Para leer la propiedad extra statusMessage, primero convierte el evento al tipo específico de WebGL; si no, tsc da TS2339.",
+      "TypeScript では、キャンバスでのこのイベントのリスナーはただの Event を受けとる。DOM の型がこれを WebGLContextEvent に結びつけていないからだ。preventDefault はどの Event にもあるのでコンパイルできる。追加の statusMessage を読むには、まず WebGL 用のイベント型に変換しよう。しないと tsc が TS2339 を出す。",
+    ),
+  ),
+];
 
 // ─── 3.4 The forge and the courier: framebuffers, performance, context loss
 const performance: LessonDef = {
@@ -417,6 +772,7 @@ const performance: LessonDef = {
   xp: 85,
   enemy: "webgl/black-screen",
   enemyName: L("LOST CONTEXT", "CONTEXTO PERDIDO", "ロストコンテキスト"),
+  notes: performanceNotes,
   beats: [
     say(L(
       "A FRAMEBUFFER lets you paint into a texture instead of the screen: blur, glow, shadow maps and mouse picking.",
@@ -440,6 +796,8 @@ const performance: LessonDef = {
       options: ["null", "undefined"],
       answer: 0,
       check: { compiles: true, wrongFail: true },
+      hint: L("The parameter type is WebGLFramebuffer | null. Which option fits that type?", "El tipo del parámetro es WebGLFramebuffer | null. ¿Qué opción encaja en ese tipo?", "引数の型は WebGLFramebuffer | null。その型に合う選択肢は？"),
+      note: "framebuffers",
       explain: L("Binding null returns to the default framebuffer, the canvas. undefined is not allowed (TS2345).", "Enlazar null vuelve al framebuffer por defecto, el canvas. undefined no se permite (TS2345).", "null をバインドすると標準のフレームバッファ（キャンバス）にもどる。undefined は型エラー（TS2345）。"),
     },
     {
@@ -448,6 +806,8 @@ const performance: LessonDef = {
       code: GL + 'if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.___) {\n  console.log("framebuffer incomplete");\n}',
       answer: "FRAMEBUFFER_COMPLETE",
       check: { compiles: true },
+      hint: L("You want the status that means every attachment is valid and ready.", "Buscas el estado que significa que todos los adjuntos son válidos y están listos.", "ほしいのは、接続が全部正しく準備できたという状態。"),
+      note: "framebuffers",
       explain: L("checkFramebufferStatus returns FRAMEBUFFER_COMPLETE when the attachments are valid. Check once after setup.", "checkFramebufferStatus devuelve FRAMEBUFFER_COMPLETE si los adjuntos son válidos. Revísalo una vez al configurar.", "接続が正しければ checkFramebufferStatus は FRAMEBUFFER_COMPLETE を返す。準備のあと一度だけ確認しよう。"),
     },
     say(L(
@@ -463,6 +823,8 @@ const performance: LessonDef = {
       answer: 0,
       output: "2",
       check: { compiles: true, stdout: "2" },
+      hint: L("A Set drops duplicates. How many different names are in the list?", "Un Set descarta duplicados. ¿Cuántos nombres distintos hay en la lista?", "Set は重複を消す。リストにちがう名前はいくつある？"),
+      note: "draw-calls",
       explain: L("A Set keeps unique values: tree and rock. One instanced draw per type gives 2 calls instead of 5.", "Un Set guarda valores únicos: tree y rock. Una llamada instanciada por tipo da 2 en vez de 5.", "Set は重複を消して tree と rock だけ残す。種類ごとに1回なら 5 回ではなく 2 回だよ。"),
       win: [{ t: "print", text: "2" }],
     },
@@ -474,6 +836,8 @@ const performance: LessonDef = {
       answer: 0,
       output: "30 20",
       check: { compiles: true, stdout: "30 20" },
+      hint: L("Divisor 1 indexes by the instance number; divisor 0 by the vertex number.", "Divisor 1 usa el número de instancia como índice; divisor 0, el número de vértice.", "divisor 1 はインスタンス番号で、divisor 0 は頂点番号で読む。"),
+      note: "draw-calls",
       explain: L("vertexAttribDivisor(loc, 1) advances the attribute once per INSTANCE; divisor 0 (default) advances per vertex.", "vertexAttribDivisor(loc, 1) avanza el atributo una vez por INSTANCIA; divisor 0 (por defecto) avanza por vértice.", "vertexAttribDivisor(loc, 1) は属性をインスタンスごとに進める。divisor 0（標準）は頂点ごと。"),
     },
     {
@@ -483,6 +847,8 @@ const performance: LessonDef = {
       options: [YES, NO_TSC],
       answer: 1,
       check: { compiles: false },
+      hint: L("Look at the context type. Was instancing part of WebGL1 itself?", "Mira el tipo del contexto. ¿El instancing era parte del propio WebGL1?", "コンテキストの型を見よう。インスタンス描画は WebGL1 そのものにあった？"),
+      note: "draw-calls",
       explain: L("TS2339: WebGL1 has no drawArraysInstanced. It's core in WebGL2; WebGL1 needs the ANGLE_instanced_arrays extension.", "TS2339: WebGL1 no tiene drawArraysInstanced. Es parte de WebGL2; WebGL1 necesita la extensión ANGLE_instanced_arrays.", "TS2339：WebGL1 に drawArraysInstanced はない。WebGL2 では標準、WebGL1 は ANGLE_instanced_arrays 拡張が必要。"),
       win: [{ t: "shake" }],
     },
@@ -494,6 +860,8 @@ const performance: LessonDef = {
       answer: 0,
       output: "64000",
       check: { compiles: true, stdout: "64000" },
+      hint: L("Multiply instances × floats per mat4 × bytes per float.", "Multiplica instancias × floats por mat4 × bytes por float.", "インスタンス数 × mat4 の float 数 × 1 つのバイト数。"),
+      note: "draw-calls",
       explain: L("A mat4 is 16 floats of 4 bytes = 64 bytes. 1000 instances need 64000 bytes: tiny compared to 1000 draw calls.", "Un mat4 son 16 floats de 4 bytes = 64 bytes. 1000 instancias ocupan 64000 bytes: poco frente a 1000 draw calls.", "mat4 は 4 バイトの float が 16 個で 64 バイト。1000 個で 64000 バイト。1000 回の描画より安い。"),
     },
     {
@@ -503,6 +871,8 @@ const performance: LessonDef = {
       options: ["getError", "flush", "isContextLost"],
       answer: 0,
       check: { compiles: true },
+      hint: L("Look for the call that makes the CPU wait until the GPU has finished.", "Busca la llamada que hace que la CPU espere hasta que la GPU termine.", "GPU が終わるまで CPU を待たせる呼び出しを探そう。"),
+      note: "draw-calls",
       explain: L("getError forces the CPU to wait for the GPU. Use it while debugging, not in the production loop.", "getError obliga a la CPU a esperar a la GPU. Úsalo al depurar, no en el bucle de producción.", "getError は CPU に GPU を待たせる。デバッグ中だけ使い、本番のループでは呼ばないで。"),
     },
     say(L(
@@ -528,6 +898,8 @@ const performance: LessonDef = {
       options: [YES, NO_TSC],
       answer: 1,
       check: { compiles: false },
+      hint: L("What type does TypeScript give e here? Does that type have statusMessage?", "¿Qué tipo le da TypeScript a e aquí? ¿Ese tipo tiene statusMessage?", "ここで TypeScript は e にどんな型をつける？その型に statusMessage はある？"),
+      note: "context-loss",
       explain: L("TS2339: on a canvas this listener gets a plain Event. Cast it, e as WebGLContextEvent, to read statusMessage.", "TS2339: en un canvas este listener recibe un Event común. Conviértelo, e as WebGLContextEvent, para leer statusMessage.", "TS2339：キャンバスのこのリスナーはただの Event を受け取る。e as WebGLContextEvent にして statusMessage を読もう。"),
     },
     {
@@ -537,6 +909,8 @@ const performance: LessonDef = {
       options: ["WebGLContextEvent", "Event", "MouseEvent"],
       answer: 0,
       check: { compiles: true, wrongFail: true },
+      hint: L("Only one of these types is specific to WebGL and carries statusMessage.", "Solo uno de estos tipos es propio de WebGL y trae statusMessage.", "WebGL 専用で statusMessage を持つ型は 1 つだけ。"),
+      note: "context-loss",
       explain: L("WebGLContextEvent has statusMessage; Event and MouseEvent don't (TS2339). preventDefault() lets the context come back.", "WebGLContextEvent tiene statusMessage; Event y MouseEvent no (TS2339). preventDefault() deja que el contexto vuelva.", "statusMessage を持つのは WebGLContextEvent だけ（ほかは TS2339）。preventDefault() で復元できるようになる。"),
     },
     {
@@ -546,10 +920,57 @@ const performance: LessonDef = {
       solution: 'type Obj = { geometry: string; material: string };\nconst objs: Obj[] = [\n  { geometry: "tree", material: "bark" },\n  { geometry: "tree", material: "bark" },\n  { geometry: "tree", material: "bark" },\n  { geometry: "rock", material: "stone" },\n  { geometry: "rock", material: "stone" },\n];\nfunction drawCalls(list: Obj[]): number {\n  return new Set(list.map((o) => o.geometry + "|" + o.material)).size;\n}\nconsole.log("draw calls: " + drawCalls(objs));\n',
       expect: "draw calls: 2",
       fallback: [String.raw`new\s+Set\s*\(`, String.raw`\.filter\s*\(`],
+      hint: L("Objects share a draw only if geometry and material both match. Count unique pairs.", "Los objetos comparten draw solo si coinciden geometría y material. Cuenta los pares únicos.", "ジオメトリとマテリアルが両方同じなら 1 回にまとまる。ユニークな組を数えよう。"),
+      note: "draw-calls",
       explain: L("Objects sharing geometry AND material can be one instanced draw. Count the unique pairs with a Set.", "Los objetos que comparten geometría Y material pueden ser un solo draw instanciado. Cuenta los pares únicos con un Set.", "ジオメトリとマテリアルが同じ物は1回のインスタンス描画にできる。Set でユニークな組を数えよう。"),
     },
   ],
 };
+
+const bossNotes: NoteDef[] = [
+  note("recap-transforms", L("Recap: matrices and order", "Repaso: matrices y orden", "復習：行列と順番"),
+    p(
+      "WebGL matrices are column-major: cell (column c, row r) sits at index c × 4 + r, so the translation tx, ty, tz is at indices 12, 13 and 14. Translation is multiplied by w: points (w = 1) move, directions (w = 0) don't.",
+      "Las matrices de WebGL son column-major: la celda (columna c, fila r) está en el índice c × 4 + r, así que la traslación tx, ty, tz va en los índices 12, 13 y 14. La traslación se multiplica por w: los puntos (w = 1) se mueven y las direcciones (w = 0) no.",
+      "WebGL の行列は列優先：c 列 r 行のマスは c × 4 + r 番なので、平行移動 tx, ty, tz は 12, 13, 14 番。平行移動は w 倍される：点（w = 1）は動き、方向（w = 0）は動かない。",
+    ),
+    p(
+      "Transforms don't commute. In P * V * M * pos the matrix nearest the point acts first, just like the innermost call in nested functions: model, then view, then projection.",
+      "Las transformaciones no conmutan. En P * V * M * pos actúa primero la matriz más cercana al punto, igual que la llamada más interna en funciones anidadas: model, luego view, luego projection.",
+      "変換は順番を入れかえられない。P * V * M * pos では点に一番近い行列が先に効く。入れ子の関数の一番内側と同じで、model、view、projection の順。",
+    ),
+    ex("const half = (v: number) => v / 2;\nconst minus = (v: number) => v - 6;\nconsole.log(half(minus(10)), minus(half(10)));", "2 -1",
+      L("Swap the order, change the result", "Cambia el orden, cambia el resultado", "順番を入れかえると結果が変わる")),
+  ),
+  note("recap-depth-blend", L("Recap: perspective, depth, blending", "Repaso: perspectiva, profundidad, mezcla", "復習：遠近・深度・ブレンド"),
+    p(
+      "After the vertex shader, the GPU divides x, y and z by w: that's the perspective divide, and its results in −1..1 are on screen. The depth test (enabled with gl.enable) keeps the closest pixel instead of the last one drawn.",
+      "Después del vertex shader, la GPU divide x, y y z entre w: es la división de perspectiva, y sus resultados en −1..1 están en pantalla. El depth test (activado con gl.enable) conserva el píxel más cercano en vez del último dibujado.",
+      "頂点シェーダーのあと、GPU は x, y, z を w で割る。これが透視除算で、−1..1 に入れば画面の中。深度テスト（gl.enable でオン）は最後に描いたピクセルではなく一番近いピクセルを残す。",
+    ),
+    p(
+      "Alpha blending is src × a + dst × (1 − a): the new color weighted by its alpha, plus what was behind weighted by the rest.",
+      "El blending alfa es src × a + dst × (1 − a): el color nuevo pesado por su alfa, más lo de atrás pesado por el resto.",
+      "アルファブレンドは src × a + dst × (1 − a)。新しい色にそのアルファをかけ、奥の色に残りをかけて足す。",
+    ),
+    ex('const mix = (s: number, d: number, a: number) => Math.round(s * a + d * (1 - a));\nconsole.log([8, 4, 2].map((c) => c / 4).join(","), mix(40, 240, 0.5));', "2,1,0.5 140",
+      L("A divide by w = 4, and a 50% blend", "Una división entre w = 4 y una mezcla al 50%", "w = 4 での割り算と 50% のブレンド")),
+  ),
+  note("recap-light-speed", L("Recap: light, instancing, context", "Repaso: luz, instancing, contexto", "復習：光・インスタンス・コンテキスト"),
+    p(
+      "Lambert brightness is max(dot(N, L), 0) with both vectors of length 1: a face turned away from the light gets 0, never negative light.",
+      "El brillo Lambert es max(dot(N, L), 0) con ambos vectores de largo 1: una cara de espaldas a la luz recibe 0, nunca luz negativa.",
+      "ランバートの明るさは max(dot(N, L), 0)（どちらも長さ 1）。光に背を向けた面は 0 で、マイナスの光にはならない。",
+    ),
+    p(
+      "Objects with the same geometry and material can share one instanced draw call, so the count of calls is the count of unique kinds. When the context is lost, preventDefault() on the event (every Event has it) allows a restore, after which you rebuild all GPU resources.",
+      "Los objetos con la misma geometría y material pueden compartir un draw call instanciado, así que la cantidad de llamadas es la de tipos únicos. Cuando se pierde el contexto, preventDefault() en el evento (todo Event lo tiene) permite restaurarlo, y luego reconstruyes todos los recursos de la GPU.",
+      "同じジオメトリとマテリアルの物は 1 回のインスタンス描画にまとめられるので、呼び出しの数はユニークな種類の数。コンテキストが失われたら、イベントで preventDefault()（どの Event にもある）を呼ぶと復元でき、そのあと GPU の資源を全部作り直す。",
+    ),
+    ex('const dot = (a: number[], b: number[]) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];\nconst kinds = new Set(["fern", "fern", "stone"]);\nconsole.log(Math.max(dot([1, 0, 0], [0.6, 0.8, 0]), 0), kinds.size);', "0.6 2",
+      L("A Lambert value and an instanced call count", "Un valor Lambert y un conteo de draws instanciados", "ランバートの値とインスタンス描画の回数")),
+  ),
+];
 
 // ─── 3.5 Boss: Matrix Titan ────────────────────────────────────────────────
 const boss: LessonDef = {
@@ -560,22 +981,23 @@ const boss: LessonDef = {
   xp: 190,
   enemy: "golem",
   enemyName: L("MATRIX TITAN", "TITÁN MATRIZ", "マトリクスタイタン"),
+  notes: bossNotes,
   beats: [
     enemySays(L(
       "I AM THE MATRIX TITAN. I swap your keys, steal your depth and blow out your lights. Can you keep the scene alive?",
       "SOY EL TITÁN MATRIZ. Cambio tus llaves, robo tu profundidad y apago tus luces. ¿Podrás mantener viva la escena?",
       "我はマトリクスタイタン。カギを入れかえ、深度を奪い、光を消す。シーンを守りきれるか？",
     )),
-    { kind: "predict", time: 15, prompt: PRINT, code: "const T = (p: number) => p + 3;\nconst S = (p: number) => p * 4;\nconsole.log(T(S(1)), S(T(1)));", options: ["7 16", "16 7", "7 7"], answer: 0, output: "7 16", check: { compiles: true, stdout: "7 16" }, explain: L("Inner first: 1*4+3 = 7, then (1+3)*4 = 16.", "Primero lo interno: 1*4+3 = 7 y (1+3)*4 = 16.", "内側が先：1*4+3 = 7、(1+3)*4 = 16。") },
-    { kind: "pick", time: 12, prompt: L("Where is ty?", "¿Dónde está ty?", "ty はどこ？"), code: "const ty = 7;\nconst T = [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,ty,0,1];\nconsole.log(T[___]);", options: ["13", "7", "4"], answer: 0, check: { compiles: true, stdout: "7" }, explain: L("Column-major: tx ty tz are at 12, 13, 14.", "Column-major: tx ty tz van en 12, 13, 14.", "列優先：tx ty tz は 12, 13, 14 番。") },
-    { kind: "predict", time: 12, prompt: L("Direction (w = 0) after tx = 5", "Dirección (w = 0) tras tx = 5", "方向（w = 0）に tx = 5"), code: "const tx = 5;\nconst apply = (x: number, w: number) => x + tx * w;\nconsole.log(apply(2, 0));", options: ["2", "7", "10"], answer: 0, output: "2", check: { compiles: true, stdout: "2" }, explain: L("w = 0 cancels translation: directions never move.", "w = 0 anula la traslación: las direcciones no se mueven.", "w = 0 で平行移動は消える。方向は動かない。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: "const clip = [3, -3, 0, 3];\nconsole.log(clip.slice(0, 2).map((c) => c / clip[3]).join(\",\"));", options: ["1,-1", "3,-3", "9,-9"], answer: 0, output: "1,-1", check: { compiles: true, stdout: "1,-1" }, explain: L("Divide by w = 3: the point lands on a corner of NDC.", "Divide entre w = 3: el punto cae en una esquina de NDC.", "w = 3 で割ると NDC の角に来る。") },
-    { kind: "predict", time: 12, prompt: PRINT, code: "const blend = (s: number, d: number, a: number) => Math.round(s * a + d * (1 - a));\nconsole.log(blend(200, 100, 0.25));", options: ["125", "175", "150"], answer: 0, output: "125", check: { compiles: true, stdout: "125" }, explain: L("200 × 0.25 + 100 × 0.75 = 50 + 75 = 125.", "200 × 0.25 + 100 × 0.75 = 50 + 75 = 125.", "200 × 0.25 + 100 × 0.75 = 50 + 75 = 125。") },
-    { kind: "type", time: 12, prompt: L("Closer pixels must win", "Deben ganar los más cercanos", "近いピクセルを勝たせよう"), code: GL + "gl.___(gl.DEPTH_TEST);", answer: "enable", check: { compiles: true }, explain: L("gl.enable turns on the depth test.", "gl.enable activa el depth test.", "gl.enable で深度テストをオン。") },
-    { kind: "predict", time: 15, prompt: L("Lambert, light from below", "Lambert, luz desde abajo", "ランバート、光が下から"), code: "const dot = (a: number[], b: number[]) => a.reduce((s, v, i) => s + v * b[i], 0);\nconsole.log(Math.max(dot([0, 1, 0], [0, -1, 0]), 0));", options: ["0", "-1", "1"], answer: 0, output: "0", check: { compiles: true, stdout: "0" }, explain: L("dot is -1, clamped to 0: no negative light.", "dot es -1, recortado a 0: sin luz negativa.", "dot は -1、0 に切られる。") },
-    { kind: "predict", time: 12, prompt: L("Draw calls for 1000 identical rocks, instanced", "Draw calls de 1000 rocas iguales, instanciadas", "同じ岩 1000 個、インスタンスなら？"), code: 'const rocks = new Array<string>(1000).fill("rock");\nconsole.log(new Set(rocks).size);', options: ["1", "1000", "0"], answer: 0, output: "1", check: { compiles: true, stdout: "1" }, explain: L("One mesh type, one instanced draw call.", "Un tipo de malla, un draw call instanciado.", "1 種類なら 1 回のインスタンス描画。") },
-    { kind: "predict", time: 15, prompt: COMPILES, code: 'declare const canvas: HTMLCanvasElement;\ncanvas.addEventListener("webglcontextlost", (e) => {\n  e.preventDefault();\n});', options: [YES, NO_TSC], answer: 0, check: { compiles: true }, explain: L("Every Event has preventDefault: this allows a restore.", "Todo Event tiene preventDefault: así se permite restaurar.", "どの Event にも preventDefault がある。これで復元できる。") },
-    { kind: "order", time: 20, prompt: L("Model, then view, then projection", "Model, luego view, luego projection", "model → view → projection の順に"), lines: ["let p = 1;", "p = p * 2; // model", "p = p - 5; // view", "p = p * 10; // projection", "console.log(p);"], check: { compiles: true, stdout: "-30" }, explain: L("The point meets model first and projection last: ((1×2)−5)×10 = −30.", "El punto pasa primero por model y al final por projection: ((1×2)−5)×10 = −30.", "点は model が最初、projection が最後：((1×2)−5)×10 = −30。") },
+    { kind: "predict", time: 15, prompt: PRINT, code: "const T = (p: number) => p + 3;\nconst S = (p: number) => p * 4;\nconsole.log(T(S(1)), S(T(1)));", options: ["7 16", "16 7", "7 7"], answer: 0, output: "7 16", check: { compiles: true, stdout: "7 16" }, hint: L("Start with the innermost call and work outward.", "Empieza por la llamada más interna y avanza hacia afuera.", "一番内側の呼び出しから外へ計算しよう。"), note: "recap-transforms", explain: L("Inner first: 1*4+3 = 7, then (1+3)*4 = 16.", "Primero lo interno: 1*4+3 = 7 y (1+3)*4 = 16.", "内側が先：1*4+3 = 7、(1+3)*4 = 16。") },
+    { kind: "pick", time: 12, prompt: L("Where is ty?", "¿Dónde está ty?", "ty はどこ？"), code: "const ty = 7;\nconst T = [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,ty,0,1];\nconsole.log(T[___]);", options: ["13", "7", "4"], answer: 0, check: { compiles: true, stdout: "7" }, hint: L("Index = column × 4 + row. The translation is column 3, and ty is row 1.", "Índice = columna × 4 + fila. La traslación es la columna 3, y ty es la fila 1.", "番号 = 列 × 4 + 行。平行移動は 3 列目、ty は 1 行目。"), note: "recap-transforms", explain: L("Column-major: tx ty tz are at 12, 13, 14.", "Column-major: tx ty tz van en 12, 13, 14.", "列優先：tx ty tz は 12, 13, 14 番。") },
+    { kind: "predict", time: 12, prompt: L("Direction (w = 0) after tx = 5", "Dirección (w = 0) tras tx = 5", "方向（w = 0）に tx = 5"), code: "const tx = 5;\nconst apply = (x: number, w: number) => x + tx * w;\nconsole.log(apply(2, 0));", options: ["2", "7", "10"], answer: 0, output: "2", check: { compiles: true, stdout: "2" }, hint: L("Translation is multiplied by w. What is tx × 0?", "La traslación se multiplica por w. ¿Cuánto es tx × 0?", "平行移動は w 倍される。tx × 0 はいくつ？"), note: "recap-transforms", explain: L("w = 0 cancels translation: directions never move.", "w = 0 anula la traslación: las direcciones no se mueven.", "w = 0 で平行移動は消える。方向は動かない。") },
+    { kind: "predict", time: 12, prompt: PRINT, code: "const clip = [3, -3, 0, 3];\nconsole.log(clip.slice(0, 2).map((c) => c / clip[3]).join(\",\"));", options: ["1,-1", "3,-3", "9,-9"], answer: 0, output: "1,-1", check: { compiles: true, stdout: "1,-1" }, hint: L("Divide x and y by the last number, w.", "Divide x e y entre el último número, w.", "x と y を最後の数 w で割ろう。"), note: "recap-depth-blend", explain: L("Divide by w = 3: the point lands on a corner of NDC.", "Divide entre w = 3: el punto cae en una esquina de NDC.", "w = 3 で割ると NDC の角に来る。") },
+    { kind: "predict", time: 12, prompt: PRINT, code: "const blend = (s: number, d: number, a: number) => Math.round(s * a + d * (1 - a));\nconsole.log(blend(200, 100, 0.25));", options: ["125", "175", "150"], answer: 0, output: "125", check: { compiles: true, stdout: "125" }, hint: L("Use src × a + dst × (1 − a) with a = 0.25.", "Usa src × a + dst × (1 − a) con a = 0.25.", "a = 0.25 で src × a + dst × (1 − a)。"), note: "recap-depth-blend", explain: L("200 × 0.25 + 100 × 0.75 = 50 + 75 = 125.", "200 × 0.25 + 100 × 0.75 = 50 + 75 = 125.", "200 × 0.25 + 100 × 0.75 = 50 + 75 = 125。") },
+    { kind: "type", time: 12, prompt: L("Closer pixels must win", "Deben ganar los más cercanos", "近いピクセルを勝たせよう"), code: GL + "gl.___(gl.DEPTH_TEST);", answer: "enable", check: { compiles: true }, hint: L("Features like DEPTH_TEST are switched on and off with a pair of calls.", "Funciones como DEPTH_TEST se encienden y apagan con un par de llamadas.", "DEPTH_TEST のような機能は、対になった 2 つの呼び出しでオン・オフする。"), note: "recap-depth-blend", explain: L("gl.enable turns on the depth test.", "gl.enable activa el depth test.", "gl.enable で深度テストをオン。") },
+    { kind: "predict", time: 15, prompt: L("Lambert, light from below", "Lambert, luz desde abajo", "ランバート、光が下から"), code: "const dot = (a: number[], b: number[]) => a.reduce((s, v, i) => s + v * b[i], 0);\nconsole.log(Math.max(dot([0, 1, 0], [0, -1, 0]), 0));", options: ["0", "-1", "1"], answer: 0, output: "0", check: { compiles: true, stdout: "0" }, hint: L("Work out the dot, then remember Lambert never gives negative light.", "Calcula el dot y recuerda que Lambert nunca da luz negativa.", "内積を計算し、ランバートはマイナスの光を出さないことを思い出そう。"), note: "recap-light-speed", explain: L("dot is -1, clamped to 0: no negative light.", "dot es -1, recortado a 0: sin luz negativa.", "dot は -1、0 に切られる。") },
+    { kind: "predict", time: 12, prompt: L("Draw calls for 1000 identical rocks, instanced", "Draw calls de 1000 rocas iguales, instanciadas", "同じ岩 1000 個、インスタンスなら？"), code: 'const rocks = new Array<string>(1000).fill("rock");\nconsole.log(new Set(rocks).size);', options: ["1", "1000", "0"], answer: 0, output: "1", check: { compiles: true, stdout: "1" }, hint: L("How many unique values does the Set keep?", "¿Cuántos valores únicos guarda el Set?", "Set に残るユニークな値はいくつ？"), note: "recap-light-speed", explain: L("One mesh type, one instanced draw call.", "Un tipo de malla, un draw call instanciado.", "1 種類なら 1 回のインスタンス描画。") },
+    { kind: "predict", time: 15, prompt: COMPILES, code: 'declare const canvas: HTMLCanvasElement;\ncanvas.addEventListener("webglcontextlost", (e) => {\n  e.preventDefault();\n});', options: [YES, NO_TSC], answer: 0, check: { compiles: true }, hint: L("Check which method the code calls, and whether a plain Event has it.", "Mira qué método llama el código y si un Event común lo tiene.", "コードが呼ぶメソッドと、ただの Event にそれがあるかを確認しよう。"), note: "recap-light-speed", explain: L("Every Event has preventDefault: this allows a restore.", "Todo Event tiene preventDefault: así se permite restaurar.", "どの Event にも preventDefault がある。これで復元できる。") },
+    { kind: "order", time: 20, prompt: L("Model, then view, then projection", "Model, luego view, luego projection", "model → view → projection の順に"), lines: ["let p = 1;", "p = p * 2; // model", "p = p - 5; // view", "p = p * 10; // projection", "console.log(p);"], check: { compiles: true, stdout: "-30" }, hint: L("Model touches the point first and projection last; the print comes at the end.", "Model toca el punto primero y projection al final; el print va al último.", "点に最初にふれるのは model、最後は projection。表示は一番最後。"), note: "recap-transforms", explain: L("The point meets model first and projection last: ((1×2)−5)×10 = −30.", "El punto pasa primero por model y al final por projection: ((1×2)−5)×10 = −30.", "点は model が最初、projection が最後：((1×2)−5)×10 = −30。") },
     enemySays(L(
       "Impossible... my keys in order, my depths sorted, my lights clamped. The GPU is yours, painter of Shadera.",
       "Imposible... mis llaves en orden, mis profundidades ordenadas, mis luces recortadas. La GPU es tuya, pintor de Shadera.",
