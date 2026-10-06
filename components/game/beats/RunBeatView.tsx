@@ -7,7 +7,8 @@ import { sfx } from "@/lib/sfx";
 import { Highlight } from "../CodeBlock";
 import type { BeatCtx } from "./types";
 import { useI18n } from "@/components/ui/I18n";
-import { BROWSER_RUNNERS, runInBrowser } from "@/lib/runners/browser";
+import { BROWSER_RUNNERS, runInBrowser, runPythonInBrowser, warmPython } from "@/lib/runners/browser";
+import type { RunResult } from "@/lib/runners/types";
 
 const offlinePass = (fallback: string | string[] | undefined, code: string) =>
   (Array.isArray(fallback) ? fallback : fallback ? [fallback] : []).some((re) => new RegExp(re).test(code));
@@ -26,6 +27,8 @@ export function RunBeatView({ beat, ctx }: { beat: RunBeat; ctx: BeatCtx }) {
   const solvedRef = useRef(false);
 
   useEffect(() => { setCode(beat.starter); setResult(null); solvedRef.current = false; }, [beat]);
+  // Python boots CPython in the browser: start loading it as soon as the exercise appears.
+  useEffect(() => { if (ctx.runner === "py-browser") warmPython(); }, [ctx.runner]);
 
   const run = async () => {
     if (running || ctx.busy || solvedRef.current) return;
@@ -37,8 +40,11 @@ export function RunBeatView({ beat, ctx }: { beat: RunBeat; ctx: BeatCtx }) {
     const beep = setInterval(() => sfx.blip(Math.floor(Math.random() * 8)), 260);
     let res: Result;
     try {
-      let data: { ok: boolean; stdout: string; stderr: string; available: boolean };
-      if (ctx.runner && BROWSER_RUNNERS.has(ctx.runner)) {
+      let data: RunResult;
+      if (ctx.runner === "py-browser") {
+        // Python (CPython in WebAssembly) runs in a Web Worker in the player's own browser.
+        data = await runPythonInBrowser(code);
+      } else if (ctx.runner && BROWSER_RUNNERS.has(ctx.runner)) {
         // JS/TS runs in a Web Worker in the player's own browser: no server involved.
         data = await runInBrowser(code, { jsx: ctx.lang === "tsx" });
       } else {
@@ -52,7 +58,7 @@ export function RunBeatView({ beat, ctx }: { beat: RunBeat; ctx: BeatCtx }) {
       }
       if (!data.available) {
         res = { kind: offlinePass(beat.fallback, code) ? "offline-ok" : "offline-bad", stdout: "", stderr: "" };
-      } else if (!data.ok) res = { kind: ctx.runner === "rust-playground" || /^SyntaxError/.test(data.stderr) ? "compile" : "runtime", stdout: data.stdout, stderr: data.stderr };
+      } else if (!data.ok) res = { kind: (data.phase ?? (/^SyntaxError/.test(data.stderr) ? "compile" : "runtime")) === "compile" ? "compile" : "runtime", stdout: data.stdout, stderr: data.stderr };
       else res = { kind: data.stdout.includes(beat.expect) ? "ok" : "output", stdout: data.stdout, stderr: "" };
     } catch (e) {
       res = (e as Result)?.kind === "busy" ? (e as Result) : { kind: offlinePass(beat.fallback, code) ? "offline-ok" : "offline-bad", stdout: "", stderr: "" };

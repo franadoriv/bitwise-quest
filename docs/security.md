@@ -1,10 +1,10 @@
 # Security and abuse protection
 
-Bitwise Quest is a public game with two API endpoints, and one of them (`/api/run`) forwards code to an external compiler service. This document explains how the backend protects itself and that upstream from flooding, cost abuse, cross-site use, oversized payloads, header spoofing, XSS and clickjacking, and what you still need to add in front of it in production.
+Bitwise Quest is a public game with two API endpoints, and one of them (`/api/run`) forwards code to external compiler services. This document explains how the backend protects itself and those upstreams from flooding, cost abuse, cross-site use, oversized payloads, header spoofing, XSS and clickjacking, and what you still need to add in front of it in production.
 
 The server is stateless: content is served from memory (`lib/repo.ts`), there is no database, and the server never receives or stores player saves. The only mutable server state is the abuse-protection counters and the run cache described below.
 
-**Player code never runs on the server.** Rust snippets are forwarded to an external sandbox (the public Rust Playground); JS/TS/React snippets run in a Web Worker in the player's own browser and never reach the server. See [Player code execution](#player-code-execution).
+**Player code never runs on the server.** Rust, Go, C++ and C# snippets are forwarded to external sandboxes (the public Rust Playground, the official Go Playground and Compiler Explorer); JS/TS/React and Python snippets run in a Web Worker in the player's own browser and never reach the server. See [Player code execution](#player-code-execution).
 
 ## Map
 
@@ -15,10 +15,11 @@ The server is stateless: content is served from memory (`lib/repo.ts`), there is
 | Quotas | `lib/security/policies.ts` | `LIMITS` table and the process-wide `guards` singletons |
 | Code runner endpoint | `app/api/run/route.ts` | Every guard applies; the most expensive endpoint |
 | Review endpoint | `app/api/review-play/route.ts` | Origin, rate limit, body cap, strict validation |
-| Upstream adapter | `lib/runners/rust-playground.ts` | Timeout, no redirects, response cap, shape check |
-| Browser runner | `lib/runners/browser.ts`, `js-worker.ts`, `js-core.ts`, `ids.ts` | JS/TS runs in a disposable Web Worker in the player's browser, 3 s hard timeout |
+| Upstream adapters | `lib/runners/rust-playground.ts`, `go-playground.ts`, `godbolt.ts`, `http.ts` | Timeout, no redirects, response cap, shape check, output cleanup |
+| Browser runners | `lib/runners/browser.ts`, `js-worker.ts`, `js-core.ts`, `py-worker.ts`, `py-core.ts`, `ids.ts` | JS/TS runs in a disposable Web Worker (3 s hard timeout); Python in a reusable Pyodide worker (5 s limit, recreated when stuck) |
+| Python runtime | `scripts/copy-pyodide.mjs`, `public/pyodide/<version>/` | Self-hosted Pyodide files, no third-party CDN |
 | Page proxy | `proxy.ts` | Per-request nonce CSP and page rate limit |
-| Static headers | `next.config.ts` | Security headers on every response, `poweredByHeader: false` |
+| Static headers | `next.config.ts` | Security headers on every response, immutable caching for `/pyodide/*`, `poweredByHeader: false` |
 | Client | `components/game/beats/RunBeatView.tsx` | Treats 429/503 as "busy, retry in N s", no penalty |
 | Tests | `tests/security.test.ts` | Unit tests of the primitives and guards (`npm test`) |
 
@@ -118,13 +119,13 @@ Body: `{ "language": string, "code": string }`. Checks, in order:
 | 5 | `language` matches `^[a-z0-9-]{1,32}$` | 400 `invalid_language` |
 | 6 | `code` is a non-blank string | 400 `invalid_code` |
 | 7 | `code` ≤ 10,000 chars, ≤ 400 lines, no NUL | 413 `code_too_large` |
-| 8 | The language exists, is `active` and has a **server** runner (packs with a browser runner such as `js-browser` are refused) | 404 `unknown_language` |
+| 8 | The language exists, is `active` and has a **server** runner (packs with a browser runner such as `js-browser` or `py-browser` are refused) | 404 `unknown_language` |
 | 9 | Runner disabled (`BITWISE_RUNNER=off`) | 200 `{ ok: false, available: false }`: the client validates offline |
 | 10 | Result cache (SHA-256 of language + code) | 200 with `x-cache: hit`, no upstream call, no global quota used |
 | 11 | Global token bucket (60/min) | 503 `busy` + `Retry-After` |
 | 12 | One compile in flight per client | 429 `one_at_a_time` + `Retry-After: 2` |
 | 13 | Four compiles in flight in total (fail fast) | 503 `busy` + `Retry-After: 5` |
-| 14 | Upstream call; output truncated to 8,000 chars each | 200 `{ ok, stdout, stderr, available }` |
+| 14 | Upstream call; output truncated to 8,000 chars each | 200 `{ ok, stdout, stderr, available, phase? }` |
 
 Only results with `available: true` are cached, so an upstream outage is never cached. Many players submit the same correct solutions, so the cache absorbs most repeated traffic without calling the upstream.
 
@@ -158,39 +159,74 @@ Keys that do not resolve to a question beat (or point to a `run` beat) are skipp
 | 503 | `busy` | Instance-wide quota or concurrency cap; honor `Retry-After` |
 | 500 | `internal` | Unexpected error, no details |
 
-## Upstream runner (`lib/runners/rust-playground.ts`)
+## Upstream runners (server runners)
 
-- **Only the player's snippet** is sent to the public Rust Playground, with fixed compile options. No identifiers, IPs, cookies or saves.
-- **15 s timeout** (`AbortSignal.timeout(15_000)`), so a slow upstream cannot hold a concurrency slot forever.
+Every server runner is registered in `lib/runners/index.ts` and reached only through `POST /api/run`, so all of them share the guards, quotas, concurrency caps and result cache above.
+
+| Runner | File | Third party and endpoint | What is sent |
+| --- | --- | --- | --- |
+| `rust-playground` | `lib/runners/rust-playground.ts` | Public Rust Playground, `https://play.rust-lang.org/execute` | The snippet plus fixed options (stable channel, debug, edition 2021, binary crate) |
+| `go-playground` | `lib/runners/go-playground.ts` | Official Go Playground, `https://go.dev/_/compile` | The snippet as `body`, with `version=2` and `withVet=false` (form-encoded) |
+| `godbolt-cpp` | `lib/runners/godbolt.ts` | Compiler Explorer, `https://godbolt.org/api/compiler/g142/compile` | The snippet as `source`, with g++ 14 and `-std=c++20 -O1`, execution enabled, empty stdin and arguments, `allowStoreCodeDebug: false` |
+| `godbolt-csharp` | `lib/runners/godbolt.ts` | Compiler Explorer, `https://godbolt.org/api/compiler/dotnet100csharpcoreclr/compile` | The snippet as `source`, with .NET 10 (CoreCLR), execution enabled, empty stdin and arguments, `allowStoreCodeDebug: false` |
+
+Common rules (the Go, C++ and C# runners use `postJson` in `lib/runners/http.ts`; the Rust runner applies the same rules inline):
+
+- **Only the player's snippet** and fixed compiler options are sent. No identifiers, IPs, cookies or saves. Requests carry a fixed `User-Agent: bitwise-quest (learning game)`. Each third party's own terms and privacy policy apply to what it receives; review them before enabling a new sandbox.
+- **Timeout**: 15 s (20 s for Compiler Explorer, which compiles and runs in one call), so a slow upstream cannot hold a concurrency slot forever.
 - **No redirects** (`redirect: "error"`).
 - **Response size cap**: a body longer than 1,000,000 characters is discarded.
-- **Shape check**: `success` must be a boolean; `stdout`/`stderr` are coerced to strings and cargo noise is stripped from `stderr`.
-- **Errors are reported as unavailable** (`available: false`) with empty output. Timeouts, network errors, non-2xx statuses and bad shapes never leak details to the client.
+- **Shape check**: the reply must have the expected fields (`success` boolean for Rust, `Errors` string for Go, numeric `code` for Compiler Explorer); everything else is coerced to strings.
+- **Output cleanup**: ANSI escape codes and build-tool noise (cargo, MSBuild, `Compiler returned:` lines) are removed, and sandbox paths are renamed to `prog.go`, `main.cpp` or `Program.cs`, so no upstream file system details reach the player. Each failure is tagged `phase: "compile"` or `phase: "runtime"`.
+- **Errors are reported as unavailable** (`available: false`) with empty output. Timeouts, network errors, non-2xx statuses, oversized or malformed bodies and bad shapes never leak details to the client, and unavailable results are never cached.
 - **Kill switch**: `BITWISE_RUNNER=off` disables every external call; `run` beats are then validated locally with their `fallback` regex.
+
+The content validator (`scripts/remote-run.ts`) calls the same Go, C++ and C# runners at authoring time with the repository's own snippets, a small fixed parallelism and a local result cache (see [testing.md](testing.md)).
 
 ## Player code execution
 
 | Pack runner | Where the code runs | Server role |
 | --- | --- | --- |
 | `rust-playground` (server runner) | The public Rust Playground's sandbox | `/api/run` forwards the snippet with every guard above; nothing is executed locally |
+| `go-playground` (server runner) | The official Go Playground's sandbox | Same as above |
+| `godbolt-cpp`, `godbolt-csharp` (server runners) | Compiler Explorer's sandbox | Same as above |
 | `js-browser` (browser runner) | A Web Worker in the player's own browser | None. The code is never sent to the server, and `/api/run` refuses these packs (`getRunner` in `lib/repo.ts` returns `null` for ids in `BROWSER_RUNNER_IDS`) |
+| `py-browser` (browser runner) | Pyodide (CPython in WebAssembly) in a Web Worker in the player's own browser | Serves the static Pyodide files only; the code is never sent to the server and `/api/run` refuses these packs |
 
-Rule: **never execute player code in the server process** (no `eval`, `new Function`, `vm`, child processes or in-process interpreters on player input). A new language uses an external sandbox behind `/api/run` or a browser runner. The content validator (`scripts/validate-content.ts`) does run TS/TSX snippets in Node, but only the repository's own content, at authoring time, never player input.
+Rule: **never execute player code in the server process** (no `eval`, `new Function`, `vm`, child processes or in-process interpreters on player input). A new language uses an external sandbox behind `/api/run` or a browser runner. The content validator (`scripts/validate-content.ts`) does run TS/TSX snippets and Python (Pyodide) in Node, but only the repository's own content, at authoring time, never player input.
 
 ### The JS/TS worker
 
 `lib/runners/browser.ts` runs each snippet in a fresh module worker created from `lib/runners/js-worker.ts`:
 
-- **Isolation.** The worker is a separate thread with no DOM: player code cannot read or change the page, the game state or the save (`localStorage` does not exist in workers). It only sees the `console`, timer and `require` shims the core passes in, plus the standard worker globals. `import` statements resolve only `react` and `react-dom/server`.
+- **Isolation.** The worker is a separate thread with no DOM: player code cannot read or change the page, the game state or the save (`localStorage` does not exist in workers). It only sees the `console`, timer and `require` shims the core passes in, plus the standard worker globals. `import` statements resolve only `react`, `react-dom/server` and, for snippets that import it, `three` (loaded lazily from the game's own bundle).
 - **Disposable.** One worker per run; it is terminated as soon as the result arrives.
 - **Hard timeout.** If no result arrives within **3 s** the page calls `worker.terminate()`, which stops even an infinite synchronous loop, and the beat shows "it crashed while running" with `Timed out after 3 s (infinite loop?)`. Inside the worker, timers still pending after 2.5 s are cleared and the run fails.
 - **Bounded output.** stdout and stderr together are capped at about 8,000 characters.
 - **Fails closed to offline mode.** If the worker cannot be created, the result is `available: false` and the beat is checked with its `fallback` regex.
 - **Self-reported results.** The verdict is computed in the player's browser, like all progress, which already lives on the client. Nothing server-side trusts it.
 
+### The Python worker
+
+`lib/runners/browser.ts` runs Python in one long-lived module worker created from `lib/runners/py-worker.ts`, which loads Pyodide from `/pyodide/<version>/pyodide.mjs` on the game's own origin:
+
+- **Isolation.** Same thread boundary as the JS worker: no DOM, no access to the page, the game state or the save. The harness in `lib/runners/py-core.ts` gives every run fresh globals, so one snippet's variables do not leak into the next.
+- **Reused, then discarded when stuck.** Loading CPython takes a few seconds, so the worker is warmed when a Python exercise opens and reused between runs. The **5 s** limit starts once the interpreter is ready; on timeout the page terminates the worker (stopping an infinite loop) and the next run creates a new one.
+- **Bounded output.** stdout and stderr are capped at about 20,000 characters each by the harness.
+- **Fails closed to offline mode.** If the worker or the runtime cannot load, the result is `available: false` and the beat is checked with its `fallback` regex.
+- **Limitations.** No threads, no network from the standard library and no `input()`; lessons are written around them.
+
+Review point (a consideration, not a known vulnerability): Pyodide exposes a bridge to the worker's JavaScript globals, so, as with the JS worker, a player's own snippet could reach worker APIs such as `fetch`. It runs only in that player's browser with their own privileges; content shipped in this repository must never do it.
+
+### Self-hosted Pyodide
+
+- **No third-party CDN.** `scripts/copy-pyodide.mjs` (run on `postinstall`, `predev` and `prebuild`) copies five files from the pinned `pyodide` npm package (`pyodide.mjs`, `pyodide.asm.mjs`, `pyodide.asm.wasm`, `python_stdlib.zip`, `pyodide-lock.json`) to `public/pyodide/<version>/`, which is gitignored. The browser loads the runtime only from the game's origin, so the page keeps `connect-src 'self'` and no external script source is needed. `PYODIDE_VERSION` in `lib/runners/py-core.ts` must match `package.json` (`tests/runners.test.ts` checks it).
+- **Caching.** `next.config.ts` serves `/pyodide/*` with `Cache-Control: public, max-age=31536000, immutable` (on top of the static security headers); the path contains the version, so an upgrade changes the URL.
+- **Proxy exclusion.** The `proxy.ts` matcher skips `pyodide/`, so these static files (about 12 MB on first load) do not consume the page rate limit and are served without the per-request CSP, like other static assets. As with the JS worker script, the worker's own CSP comes from its script response, which is what lets Pyodide compile WebAssembly inside the worker without loosening the page CSP.
+
 ### The worker script and the CSP
 
-The worker script is bundled as a static asset under `/_next/static/`, which the `proxy.ts` matcher skips, so it is served **without the page CSP** (it still gets the static headers from `next.config.ts`). A dedicated worker's CSP comes from its own script response, not from the page, so:
+The worker scripts are bundled as static assets under `/_next/static/`, which the `proxy.ts` matcher skips, so it is served **without the page CSP** (it still gets the static headers from `next.config.ts`). A dedicated worker's CSP comes from its own script response, not from the page, so:
 
 - the page keeps a strict CSP with no `'unsafe-eval'` in production, and only allows starting workers from `'self'` and `blob:` (`worker-src`);
 - inside the worker, `executeJs` can compile the player's code with `new Function`, which the page CSP would block.
@@ -216,13 +252,13 @@ Runs before every page request.
 | `img-src` | `'self' data: blob:` | Sprites and generated images |
 | `font-src`, `media-src` | `'self'` | |
 | `connect-src` | `'self'` | The browser only talks to this site (plus `ws:`/`wss:` in development for hot reload) |
-| `worker-src` | `'self' blob:` | Lets the page start the JS/TS runner worker from this origin (see [Player code execution](#player-code-execution)) |
+| `worker-src` | `'self' blob:` | Lets the page start the JS/TS and Python runner workers from this origin (see [Player code execution](#player-code-execution)) |
 | `object-src` | `'none'` | No plugins |
 | `base-uri`, `form-action` | `'self'` | No base hijacking or off-site form posts |
 | `frame-ancestors` | `'none'` | Cannot be framed (clickjacking) |
 | `upgrade-insecure-requests` | production only | |
 
-- **Matcher**: the proxy skips `api` routes (they enforce their own, stricter quotas), static assets (`_next/static`, `_next/image`, `favicon.ico`, `icon.svg`) and prefetch requests (`next-router-prefetch` or `purpose: prefetch`), so navigation prefetching does not consume the page quota.
+- **Matcher**: the proxy skips `api` routes (they enforce their own, stricter quotas), static assets (`_next/static`, `_next/image`, `pyodide/`, `favicon.ico`, `icon.svg`) and prefetch requests (`next-router-prefetch` or `purpose: prefetch`), so navigation prefetching does not consume the page quota.
 
 ## Security headers (`next.config.ts`)
 
@@ -250,8 +286,9 @@ Set on every response (pages, API and static files):
 | --- | --- |
 | API flooding | Per-client token buckets on every endpoint and on pages; uniform 429 with `Retry-After` |
 | Upstream cost abuse (using the game as a free compiler) | Per-client and instance-wide quotas on `/api/run`, 1 compile in flight per client, 4 in total, result cache, code size limits, origin check, `BITWISE_RUNNER=off` kill switch |
-| Remote code execution through player snippets | Player code never runs in the server process: Rust goes to an external sandbox, JS/TS runs in a Web Worker in the player's browser; `/api/run` refuses browser-runner packs |
-| A player's snippet freezing the page | The JS/TS worker runs off the main thread and is terminated after 3 s; one disposable worker per run |
+| Remote code execution through player snippets | Player code never runs in the server process: Rust, Go, C++ and C# go to external sandboxes, JS/TS and Python run in a Web Worker in the player's browser; `/api/run` refuses browser-runner packs |
+| A player's snippet freezing the page | Both workers run off the main thread; the JS/TS worker is terminated after 3 s (one disposable worker per run), the Python worker after 5 s and recreated |
+| Third-party script supply chain for the Python runtime | Pyodide is copied from the pinned npm package and served from the game's own origin; no CDN |
 | CSRF / cross-site use of the API | `assertSameOrigin` (required `Origin`, host match or allowlist, `Sec-Fetch-Site`); JSON-only bodies; no auth cookies or sessions to ride |
 | Oversized payloads / JSON bombs | Content-type check, byte cap before and while reading (stream cancelled), strict UTF-8, small schemas with `onlyKeys`, length/line/count limits |
 | Spoofing client IPs via headers | `clientKey` reads `X-Forwarded-For` from the right with a configured number of trusted hops; invalid values fall back to `anonymous`; global quotas apply regardless |
@@ -259,7 +296,7 @@ Set on every response (pages, API and static files):
 | Clickjacking | `frame-ancestors 'none'` and `X-Frame-Options: DENY` |
 | Information leakage | Stable error codes only, upstream failures reported as unavailable, `cache-control: no-store`, no `X-Powered-By`, strict `Referrer-Policy`; no player code or IPs in logs |
 | Memory exhaustion via many keys | LRU caps on token buckets (10,000 keys) and the cache (500 entries); per-key concurrency entries deleted when idle |
-| Slowloris / slow upstream | Fail-fast semaphores (no queues), 15 s upstream timeout, body byte cap |
+| Slowloris / slow upstream | Fail-fast semaphores (no queues), 15 s upstream timeout (20 s for Compiler Explorer), body byte cap |
 
 ## Known limits / what to add in production
 
@@ -275,11 +312,11 @@ Set on every response (pages, API and static files):
 | --- | --- | --- |
 | `BITWISE_TRUSTED_PROXY_HOPS` | `1` | Number of reverse proxies appending to `X-Forwarded-For`; `0` when exposed directly |
 | `BITWISE_ALLOWED_ORIGINS` | empty | Extra origins (comma separated, full origins such as `https://example.test`) allowed to call the API |
-| `BITWISE_RUNNER` | on | `off` disables all calls to the external compiler |
+| `BITWISE_RUNNER` | on | `off` disables all calls to the external compilers (Rust Playground, Go Playground, Compiler Explorer); browser runners are unaffected |
 
 ## Tests
 
-`npm test` runs `tests/security.test.ts` together with the save, JS runner and music tests. `tests/js-runner.test.ts` checks that runtime and syntax errors are returned instead of thrown and that pending timers time out. The security tests cover:
+`npm test` runs `tests/security.test.ts` together with the save, JS runner, runners (Pyodide version sync, Python harness, snippet wrapper, highlighter) and music tests. `tests/js-runner.test.ts` checks that runtime and syntax errors are returned instead of thrown and that pending timers time out. The security tests cover:
 
 - Token bucket: burst, denial with the right `Retry-After`, independent clients, refill over time, and the RateLimit headers.
 - Token bucket memory cap: 10,000 distinct keys with `maxKeys: 100` keep only 100.
@@ -317,7 +354,9 @@ curl -i -X POST http://localhost:3000/api/run \
 | `code` with 401 lines or 10,001 characters | 413 `code_too_large` |
 | `"language":"cobol"` | 404 `unknown_language` |
 | `/api/review-play` with 13 keys or a key without `#<n>` | 400 `invalid_keys` |
-| `/api/review-play` with `"lang":"go"` (not active) | 404 `unknown_language` |
+| `/api/review-play` with `"lang":"zig"` (not active) | 404 `unknown_language` |
+| `/api/run` with `"language":"python"` or `"typescript"` (browser runner) | 404 `unknown_language` |
+| `GET /pyodide/<version>/pyodide.mjs` | 200 with `Cache-Control: public, max-age=31536000, immutable`, no page rate limit |
 | 9 quick `/api/run` calls from one client | the 9th gets 429 `rate_limited` with `Retry-After` and `RateLimit-*` headers |
 | Two concurrent `/api/run` calls from one client (different code) | one gets 429 `one_at_a_time` |
 | The same valid snippet twice | the second has `x-cache: hit` |

@@ -3,7 +3,12 @@ import { L } from "../lib/i18n/text.ts";
 import { rust } from "./rust/index.ts";
 import { typescript } from "./typescript/index.ts";
 import { react } from "./react/index.ts";
-import { planet as goPlanet } from "./go/planet.ts";
+import { webgl } from "./webgl/index.ts";
+import { threejs } from "./threejs/index.ts";
+import { python } from "./python/index.ts";
+import { csharp } from "./csharp/index.ts";
+import { go } from "./go/index.ts";
+import { cpp } from "./cpp/index.ts";
 import { planet as zigPlanet } from "./zig/planet.ts";
 import { planet as haskellPlanet } from "./haskell/planet.ts";
 
@@ -14,7 +19,12 @@ export const LANGUAGE_PACKS: LanguagePack[] = [
   rust,
   typescript,
   react,
-  soon("go", "GO", L("Simple concurrency with goroutines", "Concurrencia simple con goroutines", "goroutine でシンプルな並行処理"), "#0099db", goPlanet),
+  webgl,
+  threejs,
+  python,
+  csharp,
+  go,
+  cpp,
   soon("zig", "ZIG", L("Full control, no hidden magic", "Control total, sin magia oculta", "完全な制御、隠れた魔法なし"), "#feae34", zigPlanet),
   soon("haskell", "HASKELL", L("Pure functional with powerful types", "Funcional puro y tipos poderosos", "強力な型を持つ純粋関数型"), "#8a6fd1", haskellPlanet),
 ];

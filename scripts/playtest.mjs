@@ -65,6 +65,7 @@ page.on("pageerror", (e) => errors.push(e.message));
 let lastBeat = "";
 page.on("crash", () => { console.log(`✗ page crashed (last beat: ${lastBeat})`); process.exit(1); });
 page.on("console", (m) => { if (m.type() === "error") errors.push(m.text().slice(0, 300)); });
+page.on("worker", (w) => { if (process.env.PLAYTEST_DEBUG) console.log("worker started:", w.url()); });
 await page.goto(BASE + path);
 const sleep = (ms) => page.waitForTimeout(ms);
 let n = 0;

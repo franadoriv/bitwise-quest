@@ -8,6 +8,8 @@ import { PACK_SPRITES } from "../content/sprites.ts";
 import type { CodeLang } from "../lib/content/types.ts";
 import { executeJs } from "../lib/runners/js-core.ts";
 import { typecheck } from "./ts-check.ts";
+import { wrapSnippet } from "./snippet-wrap.ts";
+import { runAll, VERIFIABLE_LANGS } from "./remote-run.ts";
 
 const VERIFY = process.argv.includes("--verify");
 const ONLY = process.argv.find((a) => a.startsWith("--lang="))?.slice(7);
@@ -85,9 +87,7 @@ const slots = (code: string) => code.split("___").length - 1;
 function buildProgram(code: string, check: SnippetCheck, fill?: string) {
   if (check.program) return check.program;
   const body = fill != null ? code.replace("___", fill) : code;
-  if (LANG !== "rust") return body; // TS/JS snippets run as module bodies
-  if (/\bfn\s+main\s*\(/.test(body)) return `#![allow(unused)]\n${body}`;
-  return `#![allow(unused)]\nfn main() {\n${body.split("\n").map((l) => "    " + l).join("\n")}\n}\n`;
+  return wrapSnippet(LANG, body);
 }
 
 function checkBeat(where: string, b: Beat, pack: LanguagePack) {
@@ -236,7 +236,8 @@ async function verifyTs(tsJobs: Job[]) {
   console.log(`Type-checking ${tsJobs.length} TypeScript snippets (tsc --strict) and running them...`);
   const React = await import("react");
   const ReactDOMServer = await import("react-dom/server");
-  const modules = { react: React, "react-dom/server": ReactDOMServer };
+  const modules: Record<string, unknown> = { react: React, "react-dom/server": ReactDOMServer };
+  if (tsJobs.some((j) => /\bfrom\s*["']three["']/.test(j.program))) modules.three = await import("three");
   const diags = typecheck(tsJobs.map((j, i) => ({ id: `s${i}`, code: j.program, tsx: j.lang === "tsx" })));
   for (const [i, job] of tsJobs.entries()) {
     const d = diags.get(`s${i}`) ?? [];
@@ -266,10 +267,40 @@ async function verifyTs(tsJobs: Job[]) {
   }
 }
 
+/** Go, C++, C# (public sandboxes, cached) and Python (Pyodide in Node): same judging rules for all. */
+async function verifyRunner(lang: CodeLang, list: Job[]) {
+  if (!list.length) return;
+  console.log(`Verifying ${list.length} ${lang} snippets...`);
+  const results = await runAll(lang, list.map((j) => j.program));
+  for (const [i, job] of list.entries()) {
+    const r = results[i];
+    if (!r.available) { warn(job.where, "runner unavailable"); continue; }
+    const compiled = r.ok || r.phase === "runtime";
+    const firstErr = r.stderr.split("\n").find((l) => /error|Error/.test(l)) ?? r.stderr.split("\n")[0];
+    if (job.contains?.startsWith("\u0000NOT:")) {
+      if (r.ok && r.stdout.includes(job.contains.slice(5))) err(job.where, "starter already produces the expected output");
+    } else if (compiled !== job.compiles) {
+      err(job.where, job.compiles ? `expected to compile but failed: ${firstErr}` : "expected a compile error but it compiled");
+    } else if (!compiled) {
+      continue;
+    } else if (job.throws != null) {
+      if (r.ok || !r.stderr.includes(job.throws)) err(job.where, `expected a runtime error containing ${JSON.stringify(job.throws)}, got ${r.ok ? "no error" : JSON.stringify(r.stderr.slice(0, 160))}`);
+    } else if (!r.ok) {
+      err(job.where, `runtime error: ${firstErr}`);
+    } else if (job.stdout != null && r.stdout.trim() !== job.stdout.trim()) {
+      err(job.where, `stdout ${JSON.stringify(r.stdout.trim())} ≠ expected ${JSON.stringify(job.stdout)}`);
+    } else if (job.contains && !r.stdout.includes(job.contains)) {
+      err(job.where, `stdout ${JSON.stringify(r.stdout.trim())} does not contain ${JSON.stringify(job.contains)}`);
+    }
+  }
+}
+
 async function verify() {
-  await verifyTs(jobs.filter((j) => j.lang !== "rust"));
+  await verifyTs(jobs.filter((j) => j.lang === "ts" || j.lang === "tsx"));
+  for (const lang of VERIFIABLE_LANGS) await verifyRunner(lang, jobs.filter((j) => j.lang === lang));
   const rustJobs = jobs.filter((j) => j.lang === "rust");
   jobs.splice(0, jobs.length, ...rustJobs);
+  if (!jobs.length) return;
   console.log(`Verifying ${jobs.length} snippets with the Rust Playground...`);
   let i = 0;
   const worker = async () => {

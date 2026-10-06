@@ -20,18 +20,18 @@ LanguagePack            content/<lang>/index.ts
 | --- | --- | --- |
 | `slug` | string | English, kebab-case, unique across all packs. Routes are `/play/<slug>/...` and the save keys progress by it |
 | `parent` | string? | Set only on **moons**: the slug of the planet the moon orbits (see [Planets and moons](#planets-and-moons)) |
-| `codeLang` | `"rust"` \| `"ts"` \| `"tsx"` | Language of the code in the pack (see [`codeLang`](#codelang-the-language-of-the-code)). When omitted it is `"rust"` for the `rust` pack and `"ts"` for every other pack, so always set it explicitly |
+| `codeLang` | `"rust"` \| `"ts"` \| `"tsx"` \| `"go"` \| `"python"` \| `"cpp"` \| `"csharp"` | Language of the code in the pack (see [`codeLang`](#codelang-the-language-of-the-code)). When omitted it is `"rust"` for the `rust` pack and `"ts"` for every other pack, so always set it explicitly |
 | `name` | string | Short upper-case label (`"RUST"`, `"TS/JS"`, `"REACT"`) |
 | `tagline` | `L(...)` | Budget 60 |
 | `color` | `#rrggbb` | Cartridge color |
 | `status` | `"active"` \| `"soon"` | `soon` shows the planet or moon locked; its routes answer 404 |
-| `runner` | string? | Runner id: `"rust-playground"` (server) or `"js-browser"` (the player's browser). See [adding-a-language.md](adding-a-language.md#choosing-a-runner) |
+| `runner` | string? | Runner id: `"rust-playground"`, `"go-playground"`, `"godbolt-cpp"`, `"godbolt-csharp"` (server) or `"js-browser"`, `"py-browser"` (the player's browser). See [adding-a-language.md](adding-a-language.md#choosing-a-runner) |
 | `planet` | `PlanetDef` | The planet (or moon) in the galaxy |
 | `regions`, `topics`, `exams` | | As below |
 
 ## Planets and moons
 
-A **planet** is a programming language. A **moon** is a framework of that language: React is a moon of the TypeScript/JavaScript planet, and future moons could be WebGL, three.js or Babylon.js. A moon is a regular `LanguagePack` with `parent: "<planet slug>"`:
+A **planet** is a programming language. A **moon** is a framework of that language: React, WebGL and three.js are moons of the TypeScript/JavaScript planet, and a future moon could be Babylon.js. A moon is a regular `LanguagePack` with `parent: "<planet slug>"`:
 
 - **Same structure as a planet pack:** `planet` (a `PlanetDef`: name, story, its own guide, colors, bugs), regions, topics and exams. Moon sprites are namespaced by the moon slug (`react/guide`).
 - **Its own progress:** saves key progress by pack slug, so a moon's lessons, exams and reviews are stored under the moon's slug, separate from its planet.
@@ -44,8 +44,14 @@ A **planet** is a programming language. A **moon** is a framework of that langua
 | Rust | planet | `rust` | Oxide | Ferro | `rust` | `rust-playground` | `content/rust/` |
 | TypeScript / JavaScript | planet | `typescript` | Scriptara | Tyto (owl) | `ts` | `js-browser` | `content/typescript/` |
 | React | moon of `typescript` | `react` | Reactia | Orbi (atom) | `tsx` | `js-browser` | `content/react/` |
+| WebGL | moon of `typescript` | `webgl` | Shadera | Trix (hello-triangle) | `ts` | `js-browser` | `content/webgl/` |
+| three.js | moon of `typescript` | `threejs` | Scenara | Polly (low-poly cube) | `ts` | `js-browser` | `content/threejs/` |
+| Python | planet | `python` | Serpentia | Pippa (snake) | `python` | `py-browser` | `content/python/` |
+| C# | planet | `csharp` | Sharpholm | Hashi (fox) | `csharp` | `godbolt-csharp` | `content/csharp/` |
+| Go | planet | `go` | Concurra | Gopi (tunnel digger) | `go` | `go-playground` | `content/go/` |
+| C++ | planet | `cpp` | Velocis | Vecta (steel knight) | `cpp` | `godbolt-cpp` | `content/cpp/` |
 
-Scriptara and Reactia are registered in `content/index.ts` with `status: "soon"` while their content is written.
+All of these are registered in `content/index.ts`; Zig and Haskell remain `soon` placeholders. The newer packs are still being written, with region plans based on the notes in [`docs/research/`](research/).
 
 ## `codeLang`: the language of the code
 
@@ -56,6 +62,8 @@ Scriptara and Reactia are registered in `content/index.ts` with `status: "soon"`
 | Highlighting (`lib/syntax.ts`) | Rust grammar (macros, lifetimes) | TypeScript tokenizer: template literals, `$` identifiers, `n` bigint suffix, TS keywords and utility types | Same TypeScript tokenizer; JSX tags render as punctuation and identifiers (capitalized component names color as types) |
 | JSX | no | no | yes (`.tsx` for the type checker, the JSX transform in the runner) |
 | Validator (`content:verify`) | Snippets wrapped in `fn main`, run on the Rust Playground | Module bodies, type-checked with `tsc --strict`, run with the JS runner core | Same as `ts`, with JSX |
+
+`go`, `python`, `cpp` and `csharp` have their own grammars and lexers in `lib/syntax.ts` (comments, strings, and preprocessor lines or decorators highlighted as macros); their validator rules are in [Go, C++, C# and Python packs](#go-c-c-and-python-packs).
 
 `codeLang` is what the lesson engine passes to the highlighter as `ctx.lang`, so a grammar in `GRAMMARS` is keyed by `codeLang`, not by pack slug.
 
@@ -127,6 +135,11 @@ The guide is the voice of the planet: it speaks every `dialog` with `speaker: "m
 | Rust | Oxide | Ferro (crab sensei) | `rust/mite`, `rust/dangler`, `rust/cog-golem`, `rust/borrow-dragon` | `content/rust/index.ts`, `content/rust/sprites.ts` |
 | TypeScript / JavaScript | Scriptara | Tyto (wise owl of type safety) | `typescript/undefined-ghost`, `typescript/nan-gremlin`, `typescript/callback-spaghetti`, `typescript/any-shifter` | `content/typescript/planet.ts`, `content/typescript/sprites.ts` |
 | React (moon of Scriptara) | Reactia | Orbi (little atom who calms renders) | `react/rerender-tornado`, `react/stale-closure`, `react/key-twins` | `content/react/planet.ts`, `content/react/sprites.ts` |
+| WebGL (moon of Scriptara) | Shadera | Trix (hello-triangle of the pipeline) | `webgl/black-screen`, `webgl/z-fighting`, `webgl/shader-goblin` | `content/webgl/planet.ts`, `content/webgl/sprites.ts` |
+| three.js (moon of Scriptara) | Scenara | Polly (low-poly cube who frames scenes) | `threejs/leak-blob`, `threejs/lost-wanderer`, `threejs/gimbal-knot` | `content/threejs/planet.ts`, `content/threejs/sprites.ts` |
+| Python | Serpentia | Pippa (gentle snake of readable code) | `python/indent-gremlin`, `python/mutable-mimic`, `python/none-ghost`, `python/keyerror-key` | `content/python/planet.ts`, `content/python/sprites.ts` |
+| C# | Sharpholm | Hashi (keen fox of the managed realm) | `csharp/nullref-ghost`, `csharp/deadlock-hourglass`, `csharp/boxing-mimic`, `csharp/dispose-leak` | `content/csharp/planet.ts`, `content/csharp/sprites.ts` |
+| C++ | Velocis | Vecta (swift steel knight of control) | `cpp/segfault-skull`, `cpp/dangling-wraith`, `cpp/leak-slime`, `cpp/ub-imp` | `content/cpp/planet.ts`, `content/cpp/sprites.ts` |
 | Go | Concurra | Gopi (cheerful tunnel digger) | `go/nil-blob`, `go/deadlock-snail`, `go/race-twins` | `content/go/planet.ts`, `content/go/sprites.ts` |
 | Zig | Comptia | Iggi (iguana forge engineer) | `zig/leak-jelly`, `zig/undefined-imp`, `zig/overflow-spark` | `content/zig/planet.ts`, `content/zig/sprites.ts` |
 | Haskell | Lambdara | Lambo (wise owl of pure functions) | `haskell/thunk-pile`, `haskell/bottom-wraith`, `haskell/partial-moth` | `content/haskell/planet.ts`, `content/haskell/sprites.ts` |
@@ -217,15 +230,15 @@ The `say(text)` and `enemySays(text)` helpers in `content/<lang>/helpers.ts` bui
 | Field | Meaning |
 | --- | --- |
 | `program` | Full program that replaces the beat's code entirely. Use it when the snippet alone is not a valid program |
-| `compiles` | Whether it must compile (Rust) or type-check (TS/TSX) |
+| `compiles` | Whether it must compile (Rust, Go, C++, C#), type-check (TS/TSX) or have no `SyntaxError` (Python) |
 | `stdout` | Exact expected output, trimmed on both sides |
-| `throws` | TS/TSX only: the program type-checks but must throw at runtime; text the error must contain (e.g. `"TypeError"`) |
+| `throws` | All languages except Rust: the program compiles (type-checks) but must fail at runtime; text the error must contain (e.g. `"TypeError"`, `"KeyError"`, `"nil map"`) |
 | `wrongFail` | `pick` only: also prove that every wrong option fails |
 
 Common rules:
 
 - In `pick` and `type`, `___` is filled with the correct answer (for `pick`, the English text of the option). `order` joins `lines` in the correct order.
-- `check.wrongFail: true` (`pick` only, ignored when `check.program` is set) also builds the program with each wrong option and requires each one **not** to compile (Rust) or **not** to type-check (TS/TSX), to avoid ambiguous distractors. Don't use it when a distractor compiles but is semantically worse; explain that in `explain`.
+- `check.wrongFail: true` (`pick` only, ignored when `check.program` is set) also builds the program with each wrong option and requires each one **not** to compile (Rust, Go, C++, C#; for Python, to raise a `SyntaxError`) or **not** to type-check (TS/TSX), to avoid ambiguous distractors. Don't use it when a distractor compiles but is semantically worse; explain that in `explain`.
 
 ### Rust packs
 
@@ -235,12 +248,27 @@ Common rules:
 
 ### TS and TSX packs (`codeLang: "ts"` or `"tsx"`)
 
-- **Snippets are module bodies.** There is no `main` wrapper: the code (with `___` filled) is used as is. Top-level `await` works. `import` is allowed only for the modules the runner provides: `react` and `react-dom/server`.
+- **Snippets are module bodies.** There is no `main` wrapper: the code (with `___` filled) is used as is. Top-level `await` works. `import` is allowed only for the modules the runner provides: `react`, `react-dom/server` and `three` (loaded only for snippets that import it; math and scene graph only, no GPU or DOM, as used by the WebGL and three.js moons).
 - **`check.compiles` means "type-checks"** with the real TypeScript compiler in strict mode (`scripts/ts-check.ts`: `strict`, target ES2022, `lib` ES2022 + DOM, `jsx: react`, bundler module resolution, `esModuleInterop`, unused locals/parameters allowed). All snippets are checked in one batch program as files of a virtual `.snippets/` folder (nothing is written to disk; the folder is gitignored).
 - **`check.stdout` runs the program** with the same runner core the game uses (`lib/runners/js-core.ts`), so the expected output is exactly what the player sees. Values are formatted like Node's `console.log` for short outputs (`[ 1, 2 ]`, `{ a: 1 }`, `Map(1) { 'k' => 1 }`, nested objects beyond depth 2 as `[Object]`).
 - **`check.throws`** proves a runtime error: the program must type-check, then fail at runtime with a message containing the given text (`"TypeError"`, `"ReferenceError"`, `"Cannot read properties of undefined"`). Use it for "what happens?" questions whose answer is a crash.
 - A runtime error when no `throws` is set is reported as an error, so `check.stdout` claims must run cleanly.
 - `compiles: false` claims only need the type error; the program is not run.
+
+### Go, C++, C# and Python packs
+
+These packs are verified by the same runners the game uses: Go on the official Go Playground, C++ (g++ 14, `-std=c++20 -O1`) and C# (.NET 10) on Compiler Explorer, and Python in Pyodide (CPython 3.14 compiled to WebAssembly), which `content:verify` loads inside Node. Remote results are cached in `.snippets/cache-<lang>.json` (gitignored), so re-running the validator only sends new or changed programs.
+
+- **Short snippets are completed for you** (`scripts/snippet-wrap.ts`); players only see the snippet:
+  - Go: without `package main`, the code is placed in `func main() { ... }` (unless it already declares `func main()`) and, unless it has its own `import`, the standard packages it uses (`fmt.`, `strings.`, `errors.`, `sort.`, `sync.`, `time.`, `strconv.`, `slices.`, `maps.`, `context.`, `math.`, `os.`, `unicode.`, `bytes.`, `atomic.`, `cmp.`, `runtime.`, `utf8.`, `fs.`, `io.`) are imported. Remember that unused variables and imports are compile errors in Go.
+  - C++: without `#include`, common standard headers are added (`iostream`, `string`, `vector`, `map`, `unordered_map`, `memory`, `algorithm`, `optional`, `variant`, `ranges`...); without `int main(`, the code is placed in `int main() { ... }`. There is no `using namespace std;`: write `std::`.
+  - C#: missing `using System;`, `System.Collections.Generic`, `System.Linq`, `System.Text` and `System.Threading.Tasks` are added on top. Top-level statements work; declare types after the statements.
+  - Python: used as is.
+- **`check.compiles`** means the program compiles (Go, C++, C#) or has no `SyntaxError` (Python).
+- **`check.stdout`** must match the program's output exactly (trimmed), so outputs must be deterministic: no map/`Dictionary`/`HashSet`/`set` iteration order, no timing, no addresses, nothing undefined or unspecified in C++.
+- **`check.throws`** proves a runtime failure: it compiles, then crashes with stderr containing the given text: a Go panic message (`"assignment to entry in nil map"`, `"index out of range"`, `"all goroutines are asleep"`), a C# exception (`"System.NullReferenceException"`, `"KeyNotFoundException"`), a Python exception (`"KeyError"`, `"ZeroDivisionError"`) or a C++ exception (`"std::out_of_range"`). Never claim the output of C++ undefined behavior: ask "is this UB?" with a check that only compiles.
+- **Python in the browser has no threads** (`threading.Thread.start()` raises `RuntimeError: can't start new thread`) and no network or `input()`. `asyncio.run(...)` works. Code runs as `main.py`, so tracebacks read `File "main.py", line N`.
+- `run` beats send the full program as written: a Go `starter`/`solution` needs `package main` and `func main()`, C++ needs its `#include`s and `int main()`, C# its `using`s.
 
 ### `run` beats
 
@@ -248,7 +276,7 @@ Common rules:
 - `starter` is run too and must **not** already print `expect` (otherwise there is nothing to fix). A TS/TSX starter that does not type-check is accepted as broken without running it.
 - `fallback` is a regex source, or an array of them, used when the runner is unavailable or `BITWISE_RUNNER=off`. Any match passes. No fallback may match `starter`, and at least one must match `solution`. List every alternative valid fix.
 - A `run` beat without `solution` produces a warning (it cannot be verified).
-- In the game, TS/TSX `run` beats execute in the player's browser (see [architecture.md](architecture.md#code-execution)). Types are stripped, not checked, there, so a player's fix is judged by its output; keep the `expect` tied to behavior.
+- In the game, TS/TSX and Python `run` beats execute in the player's browser; Rust, Go, C++ and C# go through `/api/run` to the same sandboxes the validator uses (see [architecture.md](architecture.md#code-execution)). Types are stripped, not checked, there, so a player's fix is judged by its output; keep the `expect` tied to behavior.
 
 ### Writing snippets for the JS runner
 

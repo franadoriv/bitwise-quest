@@ -17,7 +17,11 @@ const nextConfig: NextConfig = {
   devIndicators: false,
   poweredByHeader: false,
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      // Self-hosted Python runtime: versioned path, so it can be cached forever.
+      { source: "/pyodide/:path*", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] },
+    ];
   },
 };
 

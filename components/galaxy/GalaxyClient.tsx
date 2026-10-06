@@ -103,11 +103,12 @@ function Galaxy({ planets }: { planets: PlanetEntry[] }) {
                   key={m.language.slug}
                   className={`btn small ${m.language.status === "active" ? "good" : ""}`}
                   onClick={(e) => land(e.currentTarget, m.language)}
-                  title={tx(m.language.planet.story)}
-                  style={{ display: "flex", alignItems: "center", gap: 6 }}
+                  title={`${tx(m.language.planet.name)}: ${tx(m.language.planet.story)}`}
+                  style={{ display: "flex", alignItems: "center", gap: 6, ...(cur.moons.length > 2 ? { padding: "6px 8px" } : {}) }}
                 >
                   <Sprite name={m.language.planet.guide.sprite} size={18} />
-                  {tx(m.language.planet.name)} · {m.language.name}
+                  {/* With many moons, chips show only the framework name to stay on one row. */}
+                  {cur.moons.length > 2 ? m.language.name : `${tx(m.language.planet.name)} · ${m.language.name}`}
                   {m.language.status === "active" ? ` · ${doneIn(m)}/${m.lessonSlugs.length}` : ` · ${t("common.soon")}`}
                 </button>
               ))}

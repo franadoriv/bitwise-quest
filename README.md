@@ -6,7 +6,7 @@
 
 **A retro arcade game for learning programming languages by playing.**
 NES/Game Boy pixel art, constant feedback and a world that reacts to your code.
-Playable now: **Rust** (planet Oxide), **TypeScript/JavaScript** (planet Scriptara) and its **React** moon (Reactia).
+Playable now: **Rust**, **TypeScript/JavaScript** (with **React**, **WebGL** and **three.js** moons), **Python**, **Go**, **C++** and **C#**.
 
 [![CI](https://github.com/franadoriv/bitwise-quest/actions/workflows/ci.yml/badge.svg)](https://github.com/franadoriv/bitwise-quest/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
@@ -24,7 +24,7 @@ Playable now: **Rust** (planet Oxide), **TypeScript/JavaScript** (planet Scripta
 
 Bitwise Quest teaches hard concepts such as ownership, lifetimes and concurrency to people who have **never** seen the language. It shows each idea first as a playable metaphor and only then asks for code. A variable is a label above a character. A *move* sends the sword flying to a new owner. A `&` borrow is a ghost copy that goes and comes back.
 
-Every language is a **planet** with its own guide, bugs and story: Rust is **Oxide**, a world of iron and gears where Ferro, an old crab sensei, trains new guardians. Frameworks are **moons** that orbit their language's planet: React is **Reactia**, a moon of the TypeScript/JavaScript planet **Scriptara**, each with a guide of its own. Every correct answer hits the lesson's bug with particles, combos and chiptune sound. Every mistake comes with an explanation from the planet's guide, and that question comes back at the end. Players who already know the language can jump straight to the **entry exam**, which simulates the technical screening real companies run.
+Every language is a **planet** with its own guide, bugs and story: Rust is **Oxide**, a world of iron and gears where Ferro, an old crab sensei, trains new guardians. Frameworks are **moons** that orbit their language's planet: React (**Reactia**), WebGL (**Shadera**) and three.js (**Scenara**) orbit the TypeScript/JavaScript planet **Scriptara**, each with a guide of its own. Python is **Serpentia**, Go is **Concurra**, C++ is **Velocis** and C# is **Sharpholm**. Every correct answer hits the lesson's bug with particles, combos and chiptune sound. Every mistake comes with an explanation from the planet's guide, and that question comes back at the end. Players who already know the language can jump straight to the **entry exam**, which simulates the technical screening real companies run.
 
 ## Languages
 
@@ -39,6 +39,10 @@ The whole game, UI and every piece of content, is available in **English**, **Es
 | ![Galaxy: planet Oxide](docs/screenshots/galaxy.png) | ![Galaxy: planet Scriptara with its React moon](docs/screenshots/galaxy-ts.png) |
 | **Planet Scriptara (TS/JS)** | **Moon Reactia (React), run in the browser** |
 | ![TypeScript lesson](docs/screenshots/lesson-ts.png) | ![React exercise rendered in a Web Worker](docs/screenshots/lesson-react.png) |
+| **Planet Serpentia: real Python in your browser** | **Planet Concurra (Go)** |
+| ![Python async exercise run with CPython in WebAssembly](docs/screenshots/lesson-python.png) | ![Go panic and recover exercise on the Go Playground](docs/screenshots/lesson-go.png) |
+| **Planet Velocis (C++20)** | **Planet Sharpholm (C#, .NET 10)** |
+| ![C++ move semantics exercise](docs/screenshots/lesson-cpp.png) | ![C# records exercise](docs/screenshots/lesson-csharp.png) |
 | **Planet map** | **Code controls the world** |
 | ![Low poly map](docs/screenshots/map.png) | ![Ownership lesson](docs/screenshots/lesson-act.png) |
 | **Mistakes teach** | **Real compiler** |
@@ -64,7 +68,7 @@ Each lesson is a series of challenges that take a few seconds each and follow th
 | Predict | Guesses what the code prints or whether it compiles |
 | Type | Types the token, with character-by-character feedback |
 | Order | Builds the program line by line |
-| Run | Fixes a real program and runs it: Rust with the official compiler, JS/TS/React right in the browser |
+| Run | Fixes a real program and runs it: Rust and Go on their official playgrounds, C++ and C# on Compiler Explorer, JS/TS/React/three.js and Python right in the browser |
 
 ## Features
 
@@ -77,8 +81,8 @@ Each lesson is a series of challenges that take a few seconds each and follow th
 - **Three languages:** English, Español and 日本語 for both UI and content, switchable in-game.
 - **16:9 frame** that scales with the window, with a portrait layout for mobile.
 - **Three palettes:** Orange, Game Boy and NES.
-- **Verified content:** every claim about the compiler is actually compiled before it ships; TypeScript and React claims are type-checked with `tsc --strict` and run with the game's own runner.
-- **JS/TS runs in your browser:** TypeScript and React exercises execute in a sandboxed Web Worker on the player's machine, with a hard timeout; the server never runs player code.
+- **Verified content:** every claim about the compiler is actually compiled or run before it ships: Rust and Go on their official playgrounds, C++ and C# on Compiler Explorer, Python in CPython (WebAssembly), and TypeScript, React, WebGL and three.js with `tsc --strict` plus the game's own runner.
+- **JS/TS and Python run in your browser:** TypeScript, React, three.js and Python exercises execute in a sandboxed Web Worker on the player's machine, with a hard timeout (Python is CPython compiled to WebAssembly, served by the game itself); the server never runs player code.
 
 ## Planets and moons
 
@@ -87,11 +91,16 @@ Each lesson is a series of challenges that take a few seconds each and follow th
 | **Oxide** | Planet | Rust | Ferro, a crab sensei | Official Rust Playground | Playable |
 | **Scriptara** | Planet | TypeScript / JavaScript | Tyto, a wise owl | In the browser (Web Worker) | Playable: 5 regions + entry exams |
 | **Reactia** | Moon of Scriptara | React | Orbi, a little atom | In the browser (Web Worker) | Playable: 4 regions + entry exams |
-| **Concurra** | Planet | Go | Gopi | | Under construction |
+| **Shadera** | Moon of Scriptara | WebGL | Trix, a hello-triangle | In the browser (pure math, API type-checked) | Playable: 3 regions + entry exams |
+| **Scenara** | Moon of Scriptara | three.js | Polly, a low-poly cube | In the browser (three's math and scene graph) | Playable: 3 regions + entry exams |
+| **Serpentia** | Planet | Python | Pippa, a gentle snake | In the browser (CPython in WebAssembly) | Playable: 4 regions + entry exams |
+| **Concurra** | Planet | Go | Gopi, a tunnel digger | Official Go Playground | Playable: 4 regions + entry exams |
+| **Velocis** | Planet | C++20 | Vecta, a steel knight | Compiler Explorer (g++ 14) | Playable: 4 regions + entry exams |
+| **Sharpholm** | Planet | C# | Hashi, a keen fox | Compiler Explorer (.NET 10) | Playable: 4 regions + entry exams |
 | **Comptia** | Planet | Zig | Iggi | | Under construction |
 | **Lambdara** | Planet | Haskell | Lambo | | Under construction |
 
-Future moons could cover frameworks and libraries such as WebGL, three.js or Babylon.js.
+Future moons could cover more frameworks, such as Babylon.js, Vue or Django.
 
 ## Rust content
 
@@ -115,6 +124,21 @@ Future moons could cover frameworks and libraries such as WebGL, three.js or Bab
 | Senior Rust Developer | 15 from a bank of 30 | 75% | 50 s |
 <!-- content-table:end -->
 
+## Other worlds
+
+| World | Regions | Lessons | Lesson questions | Entry exams (draws / bank) |
+| --- | --- | --- | --- | --- |
+| Scriptara (TS/JS) | Value Village · Closure Forest · Prototype Peaks · Type Castle · Event Loop Tower | 24 | 213 | 12/22 · 14/24 · 15/26 |
+| Reactia (React) | JSX Village · State Forest · Effect Peaks · Render Tower | 19 | 168 | 12/22 · 14/24 · 15/26 |
+| Shadera (WebGL) | Pipeline Village · Buffer Forest · Matrix Mountain | 14 | 134 | 12/22 · 14/24 · 15/26 |
+| Scenara (three.js) | Scene Village · Graph Forest · Loop Tower | 13 | 119 | 12/22 · 14/24 · 15/26 |
+| Serpentia (Python) | Name Village · Collection Forest · Function Peaks · Object Tower | 19 | 190 | 12/22 · 14/24 · 15/26 |
+| Concurra (Go) | Gopher Village · Slice Forest · Interface Castle · Channel Tower | 20 | 222 | 12/22 · 14/24 · 15/26 |
+| Velocis (C++) | Value Village · Lifetime Forest · Polymorph Castle · Template Tower | 20 | 227 | 12/22 · 14/24 · 15/26 |
+| Sharpholm (C#) | Value Village · Class Forest · Linq Peaks · Task Tower | 19 | 194 | 12/22 · 14/24 · 15/26 |
+
+Every claim in every world is checked by `npm run content:verify` against the real toolchain: 2,600+ snippets in total. The curricula and exam designs come from research into what companies assess, in [`docs/research/`](docs/research/).
+
 ## Getting started
 
 Requirements: Node 22.18 or newer (the validator, playtest and test scripts run TypeScript files directly with Node). There is no database to set up: the server reads content straight from the language packs in memory.
@@ -136,10 +160,10 @@ Open <http://localhost:3000>, press **START**, pick a memory card slot, name you
 | `npm run content:verify` | Also compiles every claim against the real compiler (TS/TSX: `tsc --strict` plus the game's runner) |
 | `npm run playtest -- <path>` | A bot plays a lesson in headless Chrome and saves screenshots |
 | `npm run typecheck` | Type checking |
-| `npm test` | Unit tests of the save system (codec, migrations, progress rules), the backend abuse protection (rate limits, origin checks, body limits), the JS/TS runner and the music |
+| `npm test` | Unit tests of the save system (codec, migrations, progress rules), the backend abuse protection (rate limits, origin checks, body limits), the JS/TS and Python runners, the snippet wrapper, the highlighter and the music |
 | `npm run e2e` | End-to-end memory card test in headless Chrome (with `npm run dev` running) |
 
-> Rust code challenges send the player's snippet to the public Rust Playground (`play.rust-lang.org`). With `BITWISE_RUNNER=off` no external call is made and validation is done locally. JS/TS/React challenges run in a Web Worker in the player's own browser and never reach the server. The server is stateless and writes nothing to disk; player saves live in the browser's localStorage.
+> Rust and Go code challenges send the player's snippet to their official public playgrounds (`play.rust-lang.org`, `go.dev`), and C++ and C# challenges to Compiler Explorer (`godbolt.org`). Only the snippet is sent, through the same quotas and cache. With `BITWISE_RUNNER=off` no external call is made and validation is done locally. JS/TS/React/three.js and Python challenges run in a Web Worker in the player's own browser and never reach the server. The server is stateless and writes nothing to disk; player saves live in the browser's localStorage.
 
 > The API is protected against abuse: same-origin checks, per-client and global rate limits, concurrency caps, bounded JSON bodies, strict validation, a per-request nonce Content-Security-Policy and security headers. See [`docs/security.md`](docs/security.md).
 
