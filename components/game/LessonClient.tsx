@@ -1,20 +1,14 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import dynamic from "next/dynamic";
 import type { LessonPlay } from "@/lib/repo";
-import { useI18n } from "@/components/ui/I18n";
 import { RequireSave } from "@/components/save/SaveProvider";
 import { dueReviews, isUnlocked, type WorldContent } from "@/lib/save/progress";
 import type { SaveData } from "@/lib/save/schema";
+import { Preloader } from "./Preloader";
 
-function Loading() {
-  const { t } = useI18n();
-  return <div className="pixel blink" style={{ display: "grid", placeItems: "center", height: "100%", fontSize: 12 }}>{t("lesson.loading")}</div>;
-}
-
-// The game relies on browser-only APIs (audio, GSAP layout, random shuffles), so skip SSR.
-const LessonGame = dynamic(() => import("./LessonGame").then((m) => m.LessonGame), { ssr: false, loading: () => <Loading /> });
+// The game relies on browser-only APIs (audio, GSAP layout, random shuffles), so it is loaded on the
+// client by the Preloader, together with any runtime the challenges need (Python, three.js).
 
 /** Lessons and exams: the server sends the play; the save decides whether it is unlocked. */
 export function LessonClient({ play, world }: { play: LessonPlay; world?: WorldContent }) {
@@ -26,7 +20,7 @@ function Guarded({ play, world, save }: { play: LessonPlay; world?: WorldContent
   const locked = play.mode !== "exam" && !!world && !isUnlocked(world, save.langs[play.languageSlug], play.slug);
   useEffect(() => { if (locked) router.replace(`/play/${play.languageSlug}`); }, [locked, router, play.languageSlug]);
   if (locked) return null;
-  return <LessonGame play={play} world={world} />;
+  return <Preloader play={play}>{(Game) => <Game play={play} world={world} />}</Preloader>;
 }
 
 /** Review: due keys come from the save, beats from the server. */
@@ -46,5 +40,5 @@ function Review({ lang, save }: { lang: string; save: SaveData }) {
     // load once per visit
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lang]);
-  return play ? <LessonGame play={play} /> : <Loading />;
+  return <Preloader play={play}>{(Game) => (play ? <Game play={play} /> : null)}</Preloader>;
 }
