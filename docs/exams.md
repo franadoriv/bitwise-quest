@@ -31,10 +31,11 @@ ownership: { name: L("Ownership and moves", "Ownership y move", "所有権とム
 | `passPct` | number | 1–100 |
 | `secondsPerQuestion` | number | Base time per question |
 | `questions` | `ExamQuestion[]` | The bank |
+| `codeCount`, `traceCount`, `debugCount` | number? | Coding, trace and debug items drawn per attempt (default 1 each when the bank has any); they replace regular questions in `count` and come last |
 
 ## Writing questions
 
-Allowed kinds: `pick`, `predict`, `type` and `order`. Each question has a `topic` and a `difficulty`. All prose is `L(en, es, ja)`; code is English and language-neutral.
+Allowed kinds: `pick`, `predict`, `type` and `order`, plus the written-test formats `code` (coding task, `content/<lang>/tasks.ts`), `trace` and `debug` (`content/<lang>/trace-debug.ts`); see [content-model.md](content-model.md#coding-tasks-kind-code). Each question has a `topic` and a `difficulty`. All prose is `L(en, es, ja)`; code is English and language-neutral.
 
 ```ts
 {

@@ -5,6 +5,7 @@ import {
   cacheFetchTask, callbacksTask, escapeTask, findByTask, fullMessagesTask, permitTask, queryTask, rackTask,
   requireParamsTask, restActionTask, transactionTask, validatesTask,
 } from "./tasks.ts";
+import { juniorTraceDebug, midTraceDebug, seniorTraceDebug } from "./trace-debug.ts";
 
 // Entry exams that simulate company technical screenings for Ruby on Rails roles.
 // Topic mix, bank sizes and question ideas follow docs/research/rails-curriculum.md (entry exams) and
@@ -74,6 +75,7 @@ export const exams: ExamDef[] = [
     secondsPerQuestion: 30,
     codeCount: 1,
     questions: [
+      ...juniorTraceDebug,
       permitTask,
       findByTask,
       fullMessagesTask,
@@ -371,6 +373,7 @@ puts tableize("BookClub")`,
     secondsPerQuestion: 40,
     codeCount: 2,
     questions: [
+      ...midTraceDebug,
       callbacksTask,
       queryTask,
       escapeTask,
@@ -700,6 +703,7 @@ puts tableize("BookClub")`,
     secondsPerQuestion: 50,
     codeCount: 2,
     questions: [
+      ...seniorTraceDebug,
       cacheFetchTask,
       transactionTask,
       rackTask,

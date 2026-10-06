@@ -4,6 +4,7 @@ import {
   compressTask, countVowelsTask, digitSumTask, evalExprTask, finalBalanceTask, fizzBuzzTask, groupByLengthTask,
   parseAgeTask, parseAllTask, rpnTask, statsMonoidTask, wordFreqTask,
 } from "./tasks.ts";
+import { juniorTraceDebug, midTraceDebug, seniorTraceDebug } from "./trace-debug.ts";
 
 // Entry exams that simulate company screenings for Haskell roles.
 // Topics, levels and bank sizes follow docs/research/haskell-curriculum.md ("Entry exams") and
@@ -34,6 +35,7 @@ export const exams: ExamDef[] = [
     secondsPerQuestion: 30,
     codeCount: 1,
     questions: [
+      ...juniorTraceDebug,
       countVowelsTask, digitSumTask, fizzBuzzTask, compressTask,
       // basics
       {
@@ -366,6 +368,7 @@ export const exams: ExamDef[] = [
     secondsPerQuestion: 40,
     codeCount: 2,
     questions: [
+      ...midTraceDebug,
       wordFreqTask, parseAgeTask, finalBalanceTask, evalExprTask,
       // currying
       {
@@ -751,6 +754,7 @@ export const exams: ExamDef[] = [
     secondsPerQuestion: 50,
     codeCount: 2,
     questions: [
+      ...seniorTraceDebug,
       statsMonoidTask, parseAllTask, groupByLengthTask, rpnTask,
       // laziness
       {

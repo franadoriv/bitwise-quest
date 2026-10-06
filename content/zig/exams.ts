@@ -4,6 +4,7 @@ import {
   dupAllTask, gradeTask, joinWithTask, maxValueTask, mostFrequentTask, palindromeTask, parsePortTask, ringTask, shapeAreaTask,
   sumDigitsTask, sumIntFieldsTask, walletTask,
 } from "./tasks.ts";
+import { juniorTraceDebug, midTraceDebug, seniorTraceDebug } from "./trace-debug.ts";
 
 // Entry exams that simulate company screenings for Zig roles.
 // Topics, levels and bank sizes follow docs/research/zig-curriculum.md ("Entry exams") and
@@ -47,6 +48,7 @@ export const exams: ExamDef[] = [
     secondsPerQuestion: 30,
     codeCount: 1,
     questions: [
+      ...juniorTraceDebug,
       maxValueTask, palindromeTask, sumDigitsTask, gradeTask,
       // basics
       {
@@ -373,6 +375,7 @@ export const exams: ExamDef[] = [
     secondsPerQuestion: 40,
     codeCount: 2,
     questions: [
+      ...midTraceDebug,
       joinWithTask, mostFrequentTask, walletTask, shapeAreaTask,
       // integers
       {
@@ -848,6 +851,7 @@ export const exams: ExamDef[] = [
     secondsPerQuestion: 50,
     codeCount: 2,
     questions: [
+      ...seniorTraceDebug,
       ringTask, dupAllTask, parsePortTask, sumIntFieldsTask,
       // safety
       {

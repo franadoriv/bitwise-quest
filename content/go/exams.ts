@@ -14,6 +14,7 @@ import {
   topLetterTask,
   withdrawTask,
 } from "./tasks.ts";
+import { juniorTraceDebug, midTraceDebug, seniorTraceDebug } from "./trace-debug.ts";
 
 // Entry exams that simulate company screenings for Go backend roles.
 // Topics, levels and bank sizes follow docs/research/go-curriculum.md ("Entry exams") and
@@ -88,6 +89,7 @@ export const exams: ExamDef[] = [
     secondsPerQuestion: 30,
     codeCount: 1,
     questions: [
+      ...juniorTraceDebug,
       reverseWordsTask,
       secondLargestTask,
       topLetterTask,
@@ -375,6 +377,7 @@ export const exams: ExamDef[] = [
     secondsPerQuestion: 40,
     codeCount: 2,
     questions: [
+      ...midTraceDebug,
       dedupeTask,
       stackTask,
       topKTask,
@@ -777,6 +780,7 @@ export const exams: ExamDef[] = [
     secondsPerQuestion: 50,
     codeCount: 2,
     questions: [
+      ...seniorTraceDebug,
       parallelMapTask,
       mergeIntervalsTask,
       pipelineTask,

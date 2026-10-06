@@ -4,6 +4,7 @@ import {
   accountTask, clampAllTask, countWordsTask, joinAllTask, linkedListTask, lruCacheTask, palindromeTask,
   parallelSumTask, reverseWordsTask, scopedCounterTask, sortByLengthTask, sumCsvTask,
 } from "./tasks.ts";
+import { juniorTraceDebug, midTraceDebug, seniorTraceDebug } from "./trace-debug.ts";
 
 // Entry exams that simulate company screenings for C++ roles (game studios, systems, trading firms).
 // Topics, levels and bank sizes follow docs/research/cpp-curriculum.md ("Entry exam") and
@@ -59,6 +60,7 @@ export const exams: ExamDef[] = [
     secondsPerQuestion: 30,
     codeCount: 1,
     questions: [
+      ...juniorTraceDebug,
       // coding tasks (docs/research/coding-tasks-and-written-tests.md)
       reverseWordsTask, clampAllTask, palindromeTask, accountTask,
       // basics
@@ -387,6 +389,7 @@ export const exams: ExamDef[] = [
     secondsPerQuestion: 40,
     codeCount: 2,
     questions: [
+      ...midTraceDebug,
       // coding tasks (docs/research/coding-tasks-and-written-tests.md)
       countWordsTask, scopedCounterTask, sortByLengthTask, linkedListTask,
       // move
@@ -808,6 +811,7 @@ export const exams: ExamDef[] = [
     secondsPerQuestion: 50,
     codeCount: 2,
     questions: [
+      ...seniorTraceDebug,
       // coding tasks (docs/research/coding-tasks-and-written-tests.md)
       lruCacheTask, joinAllTask, sumCsvTask, parallelSumTask,
       // move

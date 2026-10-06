@@ -234,6 +234,8 @@ export interface DebugBeat extends BeatBase {
   code: string;
   /** 1-based line of the bug (the line a reviewer would point at). */
   bugLine: number;
+  /** Other lines that are also a fair answer (where an equally correct fix can go). */
+  alsoLines?: number[];
   /** The fixed code: the validator proves it passes every test. Never sent to players. */
   solution?: string;
   tests: CodeTest[];

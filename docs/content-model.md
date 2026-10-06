@@ -189,6 +189,9 @@ Common fields (`BeatBase`): `setup` (effects before the beat; if present, the sc
 | `type` | Type the token for `___` | `code` with exactly one `___`, exact `answer`, `explain` |
 | `order` | Order lines | `lines` in the correct order (unique after `trim`), `explain` |
 | `run` | Edit and run real code | `starter` (broken), `solution`, `expect` (stdout substring), `fallback` (offline regex or list of regexes), `explain`, `prompt` (70) |
+| `code` | Implement a task judged by tests | See [Coding tasks](#coding-tasks-kind-code) |
+| `trace` | Fill a trace table by dry-running code | See [Trace tables and debugging tasks](#trace-tables-kind-trace-and-debugging-tasks-kind-debug) |
+| `debug` | Tap the buggy line, then fix it | See [Trace tables and debugging tasks](#trace-tables-kind-trace-and-debugging-tasks-kind-debug) |
 
 Question prompts (`pick`, `predict`, `type`, `order`) have a budget of 60, `explain` of 160.
 
@@ -332,6 +335,39 @@ A coding task asks the player to implement something from a brief. The engine ap
 **Region bosses.** Add the task near the end of the boss, before its closing dialog; never insert it between existing questions, because reviews key on beat index. Failing runs never cost a heart, the boss timer only removes the speed bonus, and a solved task is worth three questions.
 
 **What the validator proves** (`content:verify`, on the real toolchain): the solution passes every test; the starter does not; each near miss fails at least one test. It warns when a task has no `nearMiss`.
+
+## Trace tables (`kind: "trace"`) and debugging tasks (`kind: "debug"`)
+
+Two written-test formats that hiring is moving to (see `docs/research/coding-tasks-and-written-tests.md`). Both live in exam banks, in `content/<lang>/trace-debug.ts`, spread at the top of each exam's `questions`.
+
+**Trace table.** The player dry-runs `code` and fills the value of each column at each row, as on paper (Japan's FE exam, IGCSE). Nothing runs at play time; the answers are static content.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `prompt` | `Text` | Short title (budget 70) |
+| `brief` | `Text?` | What a row means, if the default rule is not enough (budget 200) |
+| `code` | string | 3–12 lines, shown with line numbers |
+| `columns` | string[] | 1–4 variables or expressions |
+| `rows` | `TraceRow[]` | 2–8 rows: `label` (a moment: `"i = 2"` or `L("after the loop", ...)`), `cells` (each value exactly as the language prints it), `given?` (column indexes shown filled). At least 3 cells to fill |
+| `verify` | string | Validator only, never sent: `code` instrumented to print one line per row, cells joined by `" \| "`. Short snippets are completed like `check` programs |
+| `explain` | `Text` | Budget 160 |
+
+Cells are compared trimmed with inner spaces collapsed (`lib/coding/trace.ts`), and each cell is judged on its own, so one slip never cascades. In exams one check is final; in lessons the player can fix the red cells (only the first miss costs).
+
+**Debugging task.** `code` fails the case described in `brief`. The player first taps the buggy line (`bugLine`), then fixes the code, which is judged by `tests` exactly like a coding task (same harness, same server path with hidden tests), so any correct fix passes. Tapping the wrong line halves the points, shows the right line and still lets the player fix it.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `prompt`, `brief` | `Text` | Title (70) and the symptom on a concrete case (400) |
+| `code` | string | The buggy player file; it must fail at least one test |
+| `bugLine` | number | 1-based line a reviewer would point at; the `solution` must change it |
+| `alsoLines` | number[]? | Other lines that are also a fair answer, when an equally correct fix can go there |
+| `solution`, `nearMiss`, `tests`, `mode` | | As for coding tasks |
+| `explain` | `Text` | What was wrong and why the fix works (160) |
+
+**Exams.** `traceCount` and `debugCount` (default 1 each when the bank has any) set how many each attempt draws, after the regular questions and before the coding tasks. Default times: trace 90 s + 15 s per row; debug 6 minutes (`ide`) or 7 (`paper`). Points weight: coding ×3, debug and trace ×2.
+
+**What the validator proves.** For a trace: the structure (columns, rows, cells, `given`) and that `verify` prints exactly the rows on the real toolchain. For a debug task: `bugLine` is in range, not blank and changed by the solution; the solution passes every test; the buggy code and each near miss fail at least one. `--only=task` scopes `content:verify` to coding, trace and debug items.
 
 ## Lesson notes and hints
 

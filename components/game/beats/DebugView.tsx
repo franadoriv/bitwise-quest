@@ -12,14 +12,16 @@ import type { BeatCtx } from "./types";
 /**
  * Debugging task, in two steps: tap the buggy line (as in a code review), then fix the code. The fix
  * is judged by the tests like a coding task, so any correct fix passes. Missing the line halves the
- * points; the right line is then shown and the fix can still be made.
+ * points (some bugs accept more than one line: `alsoLines`); the right line is then shown and the fix
+ * can still be made.
  */
 export function DebugView({ beat, ctx, task, exam }: { beat: DebugBeat; ctx: BeatCtx; task: TaskRef | null; exam: boolean }) {
   const { t, tx } = useI18n();
   const [picked, setPicked] = useState<number | null>(null);
   const box = useRef<HTMLDivElement>(null);
   const lines = beat.code.split("\n");
-  const found = picked === beat.bugLine;
+  const fair = (n: number) => n === beat.bugLine || !!beat.alsoLines?.includes(n);
+  const found = picked != null && fair(picked);
 
   useEffect(() => { setPicked(null); }, [beat]);
 
@@ -32,7 +34,7 @@ export function DebugView({ beat, ctx, task, exam }: { beat: DebugBeat; ctx: Bea
   const pick = (n: number, el: HTMLElement) => {
     if (picked != null || ctx.busy) return;
     setPicked(n);
-    if (n === beat.bugLine) { sfx.correct(0); fx.burst(el, { count: 10 }); }
+    if (fair(n)) { sfx.correct(0); fx.burst(el, { count: 10 }); }
     else { sfx.wrong(); fx.shake(box.current, 6); ctx.discount?.(0.5); }
   };
 

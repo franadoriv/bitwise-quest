@@ -122,7 +122,7 @@ Body: `{ "language": string, "code": string, "task"?: { "scope": "lesson" | "exa
 | 6 | `code` is a non-blank string | 400 `invalid_code` |
 | 7 | `code` ≤ 10,000 chars, ≤ 400 lines, no NUL | 413 `code_too_large` |
 | 8 | The language exists, is `active` and has a **server** runner (packs with a browser runner such as `js-browser` or `py-browser` are refused) | 404 `unknown_language` |
-| 8b | `task` (optional): plain object with only `scope` (`lesson`/`exam`), `slug` (`^[a-z0-9-]{1,64}$`) and an integer `index` 0–500, naming an existing coding task of that pack | 400 `invalid_task` / 404 `unknown_task` |
+| 8b | `task` (optional): plain object with only `scope` (`lesson`/`exam`), `slug` (`^[a-z0-9-]{1,64}$`) and an integer `index` 0–500, naming an existing coding task or debugging task of that pack | 400 `invalid_task` / 404 `unknown_task` |
 | 9 | Runner disabled (`BITWISE_RUNNER=off`) | 200 `{ ok: false, available: false }`: the client validates offline |
 | 10 | Result cache (SHA-256 of language + task + code) | 200 with `x-cache: hit`, no upstream call, no global quota used |
 | 11 | Global token bucket (60/min) | 503 `busy` + `Retry-After` |

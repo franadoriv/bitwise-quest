@@ -210,6 +210,9 @@ function checkBeat(where: string, b: Beat, pack: LanguagePack) {
       if (hidden === b.tests.length) err(where, "show at least 1 test as an example (not hidden)");
       if (!Number.isInteger(b.bugLine) || b.bugLine < 1 || b.bugLine > lines.length) { err(where, `bugLine ${b.bugLine} is not a line of the code (1-${lines.length})`); break; }
       if (!lines[b.bugLine - 1].trim()) err(where, `bugLine ${b.bugLine} is blank`);
+      (b.alsoLines ?? []).forEach((n) => {
+        if (!Number.isInteger(n) || n < 1 || n > lines.length || n === b.bugLine || !lines[n - 1].trim()) err(where, `alsoLines: ${n} is not another non-blank line of the code`);
+      });
       if (!b.solution) { err(where, "a debug task needs the fixed `solution`"); break; }
       const fixed = b.solution.split("\n");
       // The reference fix must change the line the player is asked to tap.

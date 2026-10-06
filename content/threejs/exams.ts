@@ -1,6 +1,7 @@
 import type { ExamDef } from "../../lib/content/types.ts";
 import { L } from "../../lib/i18n/text.ts";
 import { juniorTasks, midTasks, seniorTasks } from "./tasks.ts";
+import { juniorTraceDebug, midTraceDebug, seniorTraceDebug } from "./trace-debug.ts";
 
 // Entry exams that simulate company screenings for three.js roles.
 // Topics, levels and bank sizes follow docs/research/webgl-threejs-curriculum.md ("Entry exams" → three.js moon)
@@ -32,6 +33,7 @@ export const exams: ExamDef[] = [
     secondsPerQuestion: 30,
     codeCount: 1,
     questions: [
+      ...juniorTraceDebug,
       ...juniorTasks,
       // scene_basics ×3
       {
@@ -278,6 +280,7 @@ export const exams: ExamDef[] = [
     secondsPerQuestion: 40,
     codeCount: 2,
     questions: [
+      ...midTraceDebug,
       ...midTasks,
       // cameras ×2
       {
@@ -542,6 +545,7 @@ export const exams: ExamDef[] = [
     secondsPerQuestion: 50,
     codeCount: 2,
     questions: [
+      ...seniorTraceDebug,
       ...seniorTasks,
       // rotations ×3
       {

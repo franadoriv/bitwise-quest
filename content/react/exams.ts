@@ -1,6 +1,7 @@
 import type { ExamDef } from "../../lib/content/types.ts";
 import { L } from "../../lib/i18n/text.ts";
 import { juniorTasks, midTasks, seniorTasks } from "./tasks.ts";
+import { juniorTraceDebug, midTraceDebug, seniorTraceDebug } from "./trace-debug.ts";
 
 // Entry exams that simulate company technical screenings for React roles.
 // Topic mix, bank sizes and question ideas follow docs/research/typescript-react-curriculum.md
@@ -45,6 +46,7 @@ export const exams: ExamDef[] = [
     secondsPerQuestion: 30,
     codeCount: 1,
     questions: [
+      ...juniorTraceDebug,
       ...juniorTasks,
       // jsx
       {
@@ -310,6 +312,7 @@ export const exams: ExamDef[] = [
     secondsPerQuestion: 40,
     codeCount: 2,
     questions: [
+      ...midTraceDebug,
       ...midTasks,
       // state
       {
@@ -605,6 +608,7 @@ export const exams: ExamDef[] = [
     secondsPerQuestion: 50,
     codeCount: 2,
     questions: [
+      ...seniorTraceDebug,
       ...seniorTasks,
       // rendering
       {

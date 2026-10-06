@@ -4,6 +4,7 @@ import {
   bankAccountTask, capitalizeWordsTask, chunkTask, emitterTask, fizzBuzzTask, getPathTask, groupByTask,
   makeTallyTask, promiseAllTask, rateLimiterTask, retryTask, sumEvenTask,
 } from "./tasks.ts";
+import { juniorTraceDebug, midTraceDebug, seniorTraceDebug } from "./trace-debug.ts";
 
 // Entry exams that simulate company screenings for JavaScript/TypeScript roles.
 // Topics, levels and bank sizes follow docs/research/typescript-react-curriculum.md ("Entry exams")
@@ -34,6 +35,7 @@ export const exams: ExamDef[] = [
     passPct: 70,
     secondsPerQuestion: 30,
     questions: [
+      ...juniorTraceDebug,
       capitalizeWordsTask, sumEvenTask, makeTallyTask, fizzBuzzTask,
       // values
       {
@@ -303,6 +305,7 @@ export const exams: ExamDef[] = [
     passPct: 70,
     secondsPerQuestion: 40,
     questions: [
+      ...midTraceDebug,
       groupByTask, retryTask, chunkTask, bankAccountTask,
       // closures
       {
@@ -646,6 +649,7 @@ export const exams: ExamDef[] = [
     passPct: 75,
     secondsPerQuestion: 50,
     questions: [
+      ...seniorTraceDebug,
       rateLimiterTask, promiseAllTask, getPathTask, emitterTask,
       // event_loop
       {

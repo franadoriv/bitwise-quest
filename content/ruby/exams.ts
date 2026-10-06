@@ -4,6 +4,7 @@ import {
   composeTask, describeEventTask, fizzbuzzTask, historyTask, letterCountsTask, parseQueryTask,
   playlistTask, secondLargestTask, settingsTask, titleCaseTask, validateTask, wordsByLengthTask,
 } from "./tasks.ts";
+import { juniorTraceDebug, midTraceDebug, seniorTraceDebug } from "./trace-debug.ts";
 
 // Entry exams that simulate company screenings for Ruby roles (core Ruby; Rails is its own moon).
 // Topics, levels and bank sizes follow docs/research/ruby-curriculum.md ("Entry exams") and
@@ -31,6 +32,7 @@ export const exams: ExamDef[] = [
     secondsPerQuestion: 30,
     codeCount: 1,
     questions: [
+      ...juniorTraceDebug,
       titleCaseTask,
       letterCountsTask,
       secondLargestTask,
@@ -301,6 +303,7 @@ export const exams: ExamDef[] = [
     secondsPerQuestion: 40,
     codeCount: 2,
     questions: [
+      ...midTraceDebug,
       wordsByLengthTask,
       composeTask,
       playlistTask,
@@ -661,6 +664,7 @@ export const exams: ExamDef[] = [
     secondsPerQuestion: 50,
     codeCount: 2,
     questions: [
+      ...seniorTraceDebug,
       settingsTask,
       historyTask,
       validateTask,

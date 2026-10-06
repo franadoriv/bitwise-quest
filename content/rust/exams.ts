@@ -4,6 +4,7 @@ import {
   collatzTask, initialsTask, largestTask, longestWordTask, parallelSumTask, parseAgeTask, parseKvTask,
   rleTask, sumEvensTask, sumLinesTask, tokensTask, wordFreqTask,
 } from "./tasks.ts";
+import { juniorTraceDebug, midTraceDebug, seniorTraceDebug } from "./trace-debug.ts";
 
 // Entry exams that simulate company technical screenings for Rust roles.
 // Topic and format choices are grounded in docs/research/rust-hiring-assessments.md.
@@ -38,6 +39,7 @@ export const exams: ExamDef[] = [
     passPct: 70,
     secondsPerQuestion: 30,
     questions: [
+      ...juniorTraceDebug,
       longestWordTask,
       sumEvensTask,
       parseAgeTask,
@@ -311,6 +313,7 @@ export const exams: ExamDef[] = [
     passPct: 70,
     secondsPerQuestion: 40,
     questions: [
+      ...midTraceDebug,
       wordFreqTask,
       parseKvTask,
       rleTask,
@@ -597,6 +600,7 @@ export const exams: ExamDef[] = [
     passPct: 75,
     secondsPerQuestion: 50,
     questions: [
+      ...seniorTraceDebug,
       sumLinesTask,
       tokensTask,
       parallelSumTask,
