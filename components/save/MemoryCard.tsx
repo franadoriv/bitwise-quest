@@ -10,11 +10,14 @@ import { levelFromXp } from "@/lib/game-rules";
 import { fx } from "@/lib/fx";
 import type { Text } from "@/lib/i18n/text";
 import type { MessageKey } from "@/lib/i18n/messages";
-import { SaveError } from "@/lib/save/migrate";
+import { SaveError, migrate } from "@/lib/save/migrate";
 import { NAME_MAX, SLOT_COUNT, newSave, type SaveData } from "@/lib/save/schema";
-import { deleteSlot, exportSlot, listSlots, readSaveFile, writeSlot, type SlotEntry } from "@/lib/save/store";
+import { deleteSlot, downloadSave, getStorageScope, listLegacySlots, listSlots, readSaveFile, writeSlot, type SlotEntry } from "@/lib/save/store";
+import { readSetting } from "@/lib/cloud/storage";
 import { music, sfx } from "@/lib/sfx";
 import { useSave } from "./SaveProvider";
+import { CloudControls } from "./CloudControls";
+import { useCloud } from "./CloudProvider";
 
 export interface PlanetBadge { slug: string; name: Text; guideSprite: string; color: string }
 
@@ -33,15 +36,20 @@ export function MemoryCard({ planets }: { planets: PlanetBadge[] }) {
   const router = useRouter();
   const next = useSearchParams().get("next");
   const { load } = useSave();
+  const { conflicts } = useCloud();
   const [slots, setSlots] = useState<SlotEntry[]>([]);
+  const [legacy, setLegacy] = useState<SlotEntry[]>([]);
   const [cursor, setCursor] = useState(0);
   const [modal, setModal] = useState<Modal | null>(null);
   const [name, setName] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
-  const cols = portrait ? 3 : 5;
+  const cols = portrait ? 1 : 3;
 
-  const refresh = useCallback(async () => setSlots(await listSlots()), []);
+  const refresh = useCallback(async () => {
+    setSlots(await listSlots());
+    setLegacy(getStorageScope() ? [] : await listLegacySlots());
+  }, []);
   useEffect(() => {
     void refresh();
     music.play("card");
@@ -56,6 +64,8 @@ export function MemoryCard({ planets }: { planets: PlanetBadge[] }) {
 
   const used = slots.filter((s) => s.save).length;
   const current = slots[cursor];
+  const account = getStorageScope();
+  const backup = current && account ? readSetting(`bwq:cloud:${account}:backup:${current.slot}`) : null;
   const planetOf = (save: SaveData) => planets.find((p) => p.slug === save.lastLang) ?? null;
   const fmtDate = (ms: number) => new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "short" }).format(ms);
   const fmtTime = (ms: number) => { const m = Math.floor(ms / 60000); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`; };
@@ -71,6 +81,7 @@ export function MemoryCard({ planets }: { planets: PlanetBadge[] }) {
     const s = slots[i];
     if (!s || modal) return;
     setCursor(i);
+    if (!s.save && s.error) { setModal({ kind: "message", text: t("card.errCorrupt") }); return; }
     if (s.save) void go(s.slot);
     else { sfx.select(); setName(""); setModal({ kind: "name", slot: s.slot }); }
   };
@@ -98,7 +109,7 @@ export function MemoryCard({ planets }: { planets: PlanetBadge[] }) {
 
   const pickTarget = async (s: SlotEntry) => {
     if (modal?.kind !== "pick") return;
-    if (s.save) { sfx.wrong(); setModal({ kind: "overwrite", slot: s.slot, name: s.save.player.name, incoming: modal.incoming }); return; }
+    if (s.save || s.error) { sfx.wrong(); setModal({ kind: "overwrite", slot: s.slot, name: s.save?.player.name ?? t("card.corrupt"), incoming: modal.incoming }); return; }
     await importInto(s.slot, modal.incoming);
   };
 
@@ -115,6 +126,7 @@ export function MemoryCard({ planets }: { planets: PlanetBadge[] }) {
   // keyboard: arrows move, Enter acts, Escape closes
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (conflicts.length || (e.target instanceof HTMLElement && e.target.closest(".cloud-toolbar"))) return;
       if (modal) { if (e.key === "Escape") setModal(null); return; }
       const d = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: cols, ArrowUp: -cols }[e.key];
       if (d) { e.preventDefault(); setCursor((c) => Math.min(SLOT_COUNT - 1, Math.max(0, c + d))); sfx.blip(); }
@@ -140,6 +152,8 @@ export function MemoryCard({ planets }: { planets: PlanetBadge[] }) {
         <Settings />
       </header>
 
+      <CloudControls />
+
       {picking && (
         <div className="pixel blink-soft" style={{ textAlign: "center", fontSize: 11, color: "var(--gold)", padding: "0 16px 6px" }}>
           {t("card.pickSlot", { name: modal.incoming.player.name })} · <span style={{ color: "var(--p2)" }}>{t("card.pickSlotHint")}</span>
@@ -147,8 +161,8 @@ export function MemoryCard({ planets }: { planets: PlanetBadge[] }) {
         </div>
       )}
 
-      <main className="scroll" style={{ flex: 1, minHeight: 0, padding: "6px 16px 12px" }}>
-        <div ref={gridRef} style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 10 }}>
+      <main className="scroll" style={{ flex: 1, minHeight: 0, padding: portrait ? "12px 20px" : "36px 32px", display: "grid", alignContent: legacy.length ? "start" : "center", gap: 24 }}>
+        <div ref={gridRef} className="memory-slots" style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 18, width: "100%", maxWidth: 1000, margin: "0 auto" }}>
           {slots.map((s, i) => {
             const sel = i === cursor;
             const p = s.save ? planetOf(s.save) : null;
@@ -160,7 +174,7 @@ export function MemoryCard({ planets }: { planets: PlanetBadge[] }) {
                 onClick={() => (picking ? void pickTarget(s) : act(i))}
                 aria-label={`Slot ${s.slot}`}
                 style={{
-                  padding: 10, textAlign: "left", minHeight: portrait ? 118 : 132, cursor: "pointer",
+                  padding: portrait ? 14 : 20, textAlign: "left", minHeight: portrait ? 148 : 280, cursor: "pointer",
                   background: s.save ? "var(--p3)" : "var(--p1)", color: s.save ? "var(--p0)" : "var(--p2)",
                   outline: sel ? "4px solid var(--gold)" : picking ? `3px dashed ${s.save ? "var(--red)" : "var(--good)"}` : "none", outlineOffset: 4,
                   display: "flex", flexDirection: "column", gap: 6,
@@ -168,11 +182,11 @@ export function MemoryCard({ planets }: { planets: PlanetBadge[] }) {
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <span className="pixel" style={{ fontSize: 10 }}>{String(s.slot).padStart(2, "0")}</span>
-                  {s.save && <Sprite name={p?.guideSprite ?? "hero"} size={30} />}
+                  {s.save && <Sprite name={p?.guideSprite ?? "hero"} size={portrait ? 40 : 72} />}
                 </div>
                 {s.save ? (
                   <>
-                    <span className="pixel" style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.save.player.name}</span>
+                    <span className="pixel" style={{ fontSize: portrait ? 12 : 16, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.save.player.name}</span>
                     <span className="pixel" style={{ fontSize: 9 }}>{t("card.level", { n: levelFromXp(s.save.stats.xp) })} · {p ? tx(p.name) : "—"}</span>
                     <span style={{ fontSize: 14 }}>{t("card.played", { time: fmtTime(s.save.player.playMs) })}</span>
                     <span style={{ fontSize: 13, opacity: 0.75 }}>{fmtDate(s.save.player.updatedAt)}</span>
@@ -186,14 +200,32 @@ export function MemoryCard({ planets }: { planets: PlanetBadge[] }) {
             );
           })}
         </div>
+        {legacy.length > 0 && <section className="box dark legacy-saves">
+          <h2 className="pixel">{t("card.legacyTitle")}</h2><p>{t("card.legacyHint")}</p>
+          <div className="legacy-save-list">{legacy.map((entry) => <button key={entry.slot} className="btn small" disabled={!entry.save}
+            onClick={() => entry.save && void downloadSave(entry.save)}>
+            {t("card.export")} {String(entry.slot).padStart(2, "0")} · {entry.save?.player.name ?? t("card.corrupt")}
+          </button>)}</div>
+        </section>}
       </main>
 
       {!picking && current && (
         <footer style={{ display: "flex", gap: 8, padding: "8px 16px 14px", justifyContent: "center", flexWrap: "wrap" }}>
+          {backup && <button className="btn" onClick={() => {
+            try { setModal({ kind: "pick", incoming: migrate(JSON.parse(backup)) }); }
+            catch { setModal({ kind: "message", text: t("card.errCorrupt") }); }
+          }}>{t("cloud.recovery")}</button>}
           {current.save ? (
             <>
               <button className="btn primary" onClick={() => act()}>{t("card.continue")}</button>
-              <button className="btn" onClick={async () => { await exportSlot(current.slot); sfx.coin(); fx.float(gridRef.current?.children[cursor] ?? null, t("card.exported"), "var(--good)"); }}>⇩ {t("card.export")}</button>
+              <button className="btn" onClick={async () => {
+                if (!current.save) return;
+                try {
+                  // Export the displayed snapshot, even if background sync changes the stored slot.
+                  await downloadSave(current.save);
+                  sfx.coin(); fx.float(gridRef.current?.children[cursor] ?? null, t("card.exported"), "var(--good)");
+                } catch { setModal({ kind: "message", text: t("card.errCorrupt") }); }
+              }}>⇩ {t("card.export")}</button>
               <button className="btn danger" onClick={() => { sfx.wrong(); setModal({ kind: "delete", slot: current.slot, name: current.save!.player.name }); }}>{t("card.delete")}</button>
             </>
           ) : current.error ? (
@@ -235,7 +267,7 @@ export function MemoryCard({ planets }: { planets: PlanetBadge[] }) {
                 <p style={{ fontSize: 19 }}>{t("card.deleteWarn", { name: modal.name, slot: modal.slot })}</p>
                 <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
                   <button className="btn" onClick={() => setModal(null)}>{t("card.cancel")}</button>
-                  <button className="btn danger" onClick={() => { deleteSlot(modal.slot); sfx.drop(); setModal(null); }}>{t("card.delete")}</button>
+                  <button className="btn danger" onClick={() => { void deleteSlot(modal.slot); sfx.drop(); setModal(null); }}>{t("card.delete")}</button>
                 </div>
               </>
             )}

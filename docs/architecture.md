@@ -54,12 +54,12 @@ The split is strict:
 | **Server** | Content only: planets, regions, lessons, topics, exams. Stateless with respect to players | `content/index.ts` (`LANGUAGE_PACKS`), `lib/repo.ts`, `app/**/page.tsx`, `app/api/*` |
 | **Client** | All player progress: XP, coins, streak, stars, mastery, reviews, exam results, landings, play time | `lib/save/*`, `components/save/*`, localStorage `bwq:slot:<n>` |
 
-The server never receives or stores a save. Pages send content to client components; the client combines it with the active save through the pure functions in `lib/save/progress.ts` (`worldState`, `completeLesson`, `completeExam`...) and autosaves with `useSave().commit()`. Every screen that needs a player is wrapped in `RequireSave`, which redirects to `/saves` when no slot is loaded. Full details in [save-system.md](save-system.md).
+The Vercel server never receives or stores a save. Pages send content to client components; the client combines it with the active save through the pure functions in `lib/save/progress.ts` (`worldState`, `completeLesson`, `completeExam`...) and autosaves with `useSave().commit()`. Optional cloud saves go directly from the browser to Supabase; [cloud-saves.md](cloud-saves.md) covers authentication, revisions and recovery. Every screen that needs a player is wrapped in `RequireSave`, which redirects to `/saves` when no slot is loaded. Full details in [save-system.md](save-system.md).
 
 ## Screen flow
 
 ```
-/  Title ──PRESS START──▶ /saves  Memory card (15 slots: new game, continue, import/export)
+/  Title ──PRESS START──▶ /saves  Local/cloud choice, then memory card (3 slots, import/export)
                                │ choose a slot
                                ▼
                          /galaxy  Choose a planet (3D galaxy + planet card) ──LAND──▶ /play/<lang>  Planet map
@@ -133,7 +133,7 @@ Full details in [i18n.md](i18n.md).
 
 ## Content serving (no database)
 
-There is no database. `lib/repo.ts` imports `LANGUAGE_PACKS` from `content/index.ts` and indexes it once, at module load, into in-memory maps (packs by slug, lessons by language and slug). Every read is computed from that immutable data, so:
+The app server has no database. Optional cloud saves connect from the browser directly to Supabase; see [cloud-saves.md](cloud-saves.md). `lib/repo.ts` imports `LANGUAGE_PACKS` from `content/index.ts` and indexes it once, at module load, into in-memory maps (packs by slug, lessons by language and slug). Every read is computed from that immutable data, so:
 
 - **The server is stateless.** It writes nothing to disk and keeps no player data; any number of instances can serve the same build.
 - **Content changes ship with the build.** Editing `content/` and restarting (or rebuilding) is all it takes; there is nothing to seed, migrate or reset.

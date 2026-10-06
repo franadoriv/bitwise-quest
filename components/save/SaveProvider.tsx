@@ -3,7 +3,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { usePathname, useRouter } from "next/navigation";
 import { addPlayTime } from "@/lib/save/progress";
 import type { SaveData } from "@/lib/save/schema";
-import { getActiveSlot, readSlot, setActiveSlot, writeSlot } from "@/lib/save/store";
+import { getActiveSlot, getStorageScope, readSlot, setActiveSlot, writeSlot } from "@/lib/save/store";
+import { useCloud } from "./CloudProvider";
 
 interface Ctx {
   ready: boolean;
@@ -19,30 +20,41 @@ interface Ctx {
 const SaveCtx = createContext<Ctx | null>(null);
 
 export function SaveProvider({ children }: { children: React.ReactNode }) {
+  const { ready: cloudReady } = useCloud();
   const [state, setState] = useState<{ ready: boolean; slot: number | null; save: SaveData | null }>({ ready: false, slot: null, save: null });
   const [saving, setSaving] = useState(false);
   const saveRef = useRef<SaveData | null>(null);
   saveRef.current = state.save;
 
   const load = useCallback(async (slot: number) => {
-    const save = await readSlot(slot).catch(() => null);
+    const scope = getStorageScope();
+    const save = await readSlot(slot, scope).catch(() => null);
+    if (scope !== getStorageScope()) return;
     setActiveSlot(save ? slot : null);
     setState({ ready: true, slot: save ? slot : null, save });
   }, []);
 
   useEffect(() => {
-    const slot = getActiveSlot();
-    if (slot) void load(slot);
-    else setState({ ready: true, slot: null, save: null });
-  }, [load]);
+    if (!cloudReady) return;
+    const refresh = () => {
+      const slot = getActiveSlot();
+      if (slot) void load(slot);
+      else setState({ ready: true, slot: null, save: null });
+    };
+    refresh();
+    window.addEventListener("bwq:scope", refresh);
+    window.addEventListener("bwq:cloud-pulled", refresh);
+    return () => { window.removeEventListener("bwq:scope", refresh); window.removeEventListener("bwq:cloud-pulled", refresh); };
+  }, [cloudReady, load]);
 
   const commit = useCallback(async (next: SaveData) => {
     const slot = getActiveSlot();
+    const scope = getStorageScope();
     setState((s) => ({ ...s, save: next }));
     if (!slot) return;
     setSaving(true);
     try {
-      await writeSlot(slot, next);
+      await writeSlot(slot, next, scope);
     } finally {
       setTimeout(() => setSaving(false), 600);
     }

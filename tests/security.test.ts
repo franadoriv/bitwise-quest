@@ -1,6 +1,14 @@
 // Run: npm test
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { supabaseOrigin } from "../lib/cloud/model.ts";
+
+test("cloud CSP accepts only a sanitized HTTPS Supabase project origin", () => {
+  assert.equal(supabaseOrigin("https://project.supabase.co/path"), "https://project.supabase.co");
+  for (const value of [undefined, "http://project.supabase.co", "https://evil.example", "https://project.supabase.co.evil.example", "https://user@project.supabase.co", "https://project.supabase.co:444", "https://project.supabase.co; unsafe"]) {
+    assert.equal(supabaseOrigin(value), null);
+  }
+});
 import { KeyedConcurrency, Semaphore, TokenBucket, TtlCache } from "../lib/security/limits.ts";
 import { HttpError, assertSameOrigin, clientKey, onlyKeys, rateLimitHeaders, readJson } from "../lib/security/http.ts";
 

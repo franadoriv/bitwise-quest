@@ -7,7 +7,9 @@
 // - Any change to this shape bumps SAVE_VERSION and adds a migration in migrate.ts.
 
 export const SAVE_VERSION = 2;
-export const SLOT_COUNT = 15;
+export const SLOT_COUNT = 3;
+/** Old devices keep their former slots available for export; we never delete those saves. */
+export const LEGACY_SLOT_COUNT = 15;
 export const NAME_MAX = 12;
 
 export interface LessonRecord {

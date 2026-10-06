@@ -23,6 +23,7 @@ await page.goto(BASE + "/");
 await page.waitForTimeout(1500);
 await step("title", async () => {});
 await step("memory-card", async () => { await page.locator("text=PRESS START").click(); await page.waitForURL("**/saves"); });
+await step("choose-local-save", async () => { await page.locator('[data-option="local"]').click(); await slot(1).waitFor(); });
 await step("name-entry", async () => { await slot(1).click(); });
 await step("galaxy", async () => {
   await page.locator('input[aria-label="YOUR NAME"]').fill("Ada");
