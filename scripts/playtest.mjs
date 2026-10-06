@@ -134,6 +134,16 @@ for (let step = 0; step < 200 && !finished; step++) {
         await sleep(220);
       }
       await once("order"); await sleep(2600);
+    } else if (beat.kind === "code") {
+      // Coding task: type the reference solution, then run the tests (or submit, on paper).
+      await page.locator(`textarea[aria-label="${M["run.editor"]}"]`).fill(beat.solution ?? beat.starter);
+      const go = page.locator("main button.btn.primary", { hasText: new RegExp(`${esc(M["task.run"].replace("▶ ", ""))}|${esc(M["task.submit"])}`) });
+      await go.click();
+      await page.waitForSelector(`text=/${[M["task.allPass"], M["task.offline"], M["task.compileError"]].map((x) => esc(x.replace(/[!！]$/, ""))).join("|")}|${esc(M["task.passed"].split(" ")[1] ?? "TESTS")}/`, { timeout: 45000 }).catch(() => {});
+      if (!seen.has("code")) { seen.add("code"); await shot("code"); }
+      const offline = page.locator("button", { hasText: M["task.continue"] });
+      if (await offline.count()) await offline.click();
+      await sleep(2800);
     } else if (beat.kind === "run") {
       await page.locator(`textarea[aria-label="${M["run.editor"]}"]`).fill(beat.solution ?? beat.starter);
       await page.locator("button", { hasText: M["run.run"].replace("▶ ", "") }).click();

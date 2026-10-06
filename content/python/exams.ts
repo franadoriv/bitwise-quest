@@ -1,5 +1,6 @@
 import type { ExamDef } from "../../lib/content/types.ts";
 import { L } from "../../lib/i18n/text.ts";
+import { countVowelsTask, flattenTask, topWordsTask } from "./tasks.ts";
 
 // Entry exams that simulate company screenings for Python roles (backend, data, automation).
 // Topics, levels and bank sizes follow docs/research/python-curriculum.md ("Entry exam") and
@@ -29,6 +30,7 @@ export const exams: ExamDef[] = [
     passPct: 70,
     secondsPerQuestion: 30,
     questions: [
+      countVowelsTask,
       // values
       {
         topic: "values", difficulty: 1, kind: "predict", prompt: PRINTS,
@@ -296,6 +298,7 @@ export const exams: ExamDef[] = [
     passPct: 70,
     secondsPerQuestion: 40,
     questions: [
+      topWordsTask,
       // mutability
       {
         topic: "mutability", difficulty: 2, kind: "predict", prompt: PRINTS,
@@ -587,6 +590,7 @@ export const exams: ExamDef[] = [
     passPct: 75,
     secondsPerQuestion: 50,
     questions: [
+      flattenTask,
       // inheritance
       {
         topic: "inheritance", difficulty: 3, kind: "predict", prompt: PRINTS,

@@ -150,8 +150,46 @@ export interface RunBeat extends BeatBase {
   explain: Text;
 }
 
-export type Beat = DialogBeat | ActBeat | PickBeat | PredictBeat | OrderBeat | TypeBeat | RunBeat;
-export type QuestionBeat = PickBeat | PredictBeat | OrderBeat | TypeBeat | RunBeat;
+/** One test of a coding task: code that prints the result of a call, and the exact expected output. */
+export interface CodeTest {
+  /** Statement(s) in the pack's language that print one result, e.g. Python `print(top_words("a b a", 1))`. */
+  run: string;
+  /** Exact output of `run` for a correct solution (compared trimmed). */
+  expect: string;
+  /** Hidden tests only report pass/fail; with a server runner they never reach the player's browser. */
+  hidden?: boolean;
+}
+
+/**
+ * Coding task: the player implements something from a brief; hidden and visible tests are appended by
+ * the engine and run on the real toolchain, so ANY implementation that produces the right results
+ * passes. Used in exams (company-style coding rounds) and as region-boss mini projects.
+ */
+export interface CodeTaskBeat extends BeatBase {
+  kind: "code";
+  /** Short task title. */
+  prompt: Text;
+  /** The task statement: what to implement, inputs, outputs, edge cases to consider. */
+  brief: Text;
+  /** Code the editor starts with: signatures and an empty body (never already passing). */
+  starter: string;
+  /** Reference solution: the validator proves it passes every test. Never sent to players. */
+  solution?: string;
+  tests: CodeTest[];
+  /** Plausible wrong solutions; each must fail at least one test (validator only, never sent). */
+  nearMiss?: string[];
+  /**
+   * "ide" (default): highlighted editor, run the tests as often as you like, then submit.
+   * "paper": written-test style for exams: plain editor, no paste, no runs before the single submission.
+   */
+  mode?: "ide" | "paper";
+  /** Set by the server for players: how many hidden tests exist (their code is not sent). */
+  hiddenCount?: number;
+  explain: Text;
+}
+
+export type Beat = DialogBeat | ActBeat | PickBeat | PredictBeat | OrderBeat | TypeBeat | RunBeat | CodeTaskBeat;
+export type QuestionBeat = PickBeat | PredictBeat | OrderBeat | TypeBeat | RunBeat | CodeTaskBeat;
 
 export function isQuestion(b: Beat): b is QuestionBeat {
   return b.kind !== "dialog" && b.kind !== "act";
@@ -201,7 +239,7 @@ export interface RegionDef {
 export type ExamLevel = "junior" | "mid" | "senior";
 
 /** Exam questions are regular beats tagged with a topic from the pack's `topics`. */
-export type ExamQuestion = (PickBeat | PredictBeat | TypeBeat | OrderBeat) & { topic: string; difficulty?: 1 | 2 | 3 };
+export type ExamQuestion = (PickBeat | PredictBeat | TypeBeat | OrderBeat | CodeTaskBeat) & { topic: string; difficulty?: 1 | 2 | 3 };
 
 export interface ExamDef {
   slug: string;
@@ -215,6 +253,8 @@ export interface ExamDef {
   passPct: number;
   secondsPerQuestion: number;
   questions: ExamQuestion[];
+  /** Coding tasks drawn per attempt from the bank's `code` questions (default 1 when the bank has any). */
+  codeCount?: number;
 }
 
 export interface TopicDef {

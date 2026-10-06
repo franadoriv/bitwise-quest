@@ -13,6 +13,8 @@ export interface BeatCtx {
   solved(at?: Element | null): void;
   /** Something small and good happened (a correct char, a placed line...). */
   tick(at?: Element | null): void;
+  /** Move on without scoring or recording the beat (e.g. a coding task whose runner is unreachable). */
+  skip?(): void;
   stage: StageHandle | null;
   print(text: string): void;
   busy: boolean;

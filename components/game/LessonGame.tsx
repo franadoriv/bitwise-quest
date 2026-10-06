@@ -26,6 +26,7 @@ import { ChoiceBeatView } from "./beats/PickBeatView";
 import { TypeBeatView } from "./beats/TypeBeatView";
 import { OrderBeatView } from "./beats/OrderBeatView";
 import { RunBeatView } from "./beats/RunBeatView";
+import { CodeTaskView } from "./beats/CodeTaskView";
 import type { BeatCtx } from "./beats/types";
 
 type QueueItem = PlayBeat & { retry: number; key: string };
@@ -150,7 +151,8 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
       if (failed.current) return;
       const left = Math.max(0, 1 - (Date.now() - beatStart.current) / limit);
       setTimeLeft(left);
-      if (left <= 0 && (boss || placement) && !failed.current) onWrong(null);
+      // Running out of time is a hit in bosses and a miss in exams; a boss's coding task only loses its speed bonus.
+      if (left <= 0 && (placement || (boss && beat?.kind !== "code")) && !failed.current) onWrong(null);
     }, 100);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -269,7 +271,8 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
       const speed = limit && !usedNote ? Math.max(0, 1 - (Date.now() - beatStart.current) / limit) : 0;
       const tierKey: MessageKey = speed > 0.66 ? "lesson.perfect" : speed > 0.33 ? "lesson.great" : "lesson.nice";
       const tier = t(tierKey);
-      const points = questionPoints({ speed, combo: newCombo, mode, usedNote });
+      // A coding task is a mini project: worth three questions.
+      const points = questionPoints({ speed, combo: newCombo, mode, usedNote }) * (beat.kind === "code" ? 3 : 1);
       setCombo(newCombo);
       stats.current.maxCombo = Math.max(stats.current.maxCombo, newCombo);
       stats.current.correct++;
@@ -340,6 +343,11 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
     wrong: onWrong,
     solved: (at) => void onSolved(at),
     tick: (at) => { sfx.coin(); if (at) fx.burst(at, { count: 6, spread: 30 }); setScore((s) => s + 5); },
+    skip: () => {
+      if (phaseRef.current !== "play") return;
+      setPhase("anim");
+      void next();
+    },
     stage: stage.current,
     print,
     busy: phase !== "play",
@@ -448,6 +456,14 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
               {beat.kind === "type" && <TypeBeatView beat={beat} ctx={ctx} />}
               {beat.kind === "order" && <OrderBeatView beat={beat} ctx={ctx} seed={seed} />}
               {beat.kind === "run" && <RunBeatView beat={beat} ctx={ctx} />}
+              {beat.kind === "code" && (
+                <CodeTaskView
+                  beat={beat}
+                  ctx={ctx}
+                  exam={placement}
+                  task={current.index < 0 ? null : placement ? { scope: "exam", slug: play.slug, index: current.index } : { scope: "lesson", slug: current.lesson, index: current.index }}
+                />
+              )}
             </>
           )}
         </div>

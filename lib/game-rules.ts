@@ -32,6 +32,7 @@ interface TimedBeat { kind: string; time?: number; code?: string; lines?: string
 export function questionSeconds(beat: TimedBeat): number {
   if (beat.time) return beat.time;
   if (beat.kind === "run") return 120;
+  if (beat.kind === "code") return 300;
   const lines = (beat.code ?? beat.lines?.join("\n") ?? "").split("\n").filter((l) => l.trim()).length;
   const base = beat.kind === "order" ? 14 : beat.kind === "type" ? 16 : beat.kind === "predict" ? 14 : 12;
   const perLine = beat.kind === "order" ? 3 : 2;

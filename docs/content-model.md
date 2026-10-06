@@ -302,6 +302,37 @@ The runner (`lib/runners/js-core.ts`) compiles TS/TSX with sucrase and runs it i
 - **React renders are static.** Render with `renderToStaticMarkup` from `react-dom/server` and print the HTML string. Effects (`useEffect`, `useLayoutEffect`) never run, event handlers are never called and state never updates after the first render; test that logic as plain functions with `console.log`.
 - **React 19 static-render quirks.** `javascript:` URLs are replaced by a URL that throws; a component that suspends inside `<Suspense>` renders the fallback and one without a boundary throws; `ref` is a regular prop; `<Context value>` works as a provider. Prove each such claim with `check.stdout` rather than from memory.
 
+## Coding tasks (`kind: "code"`)
+
+A coding task asks the player to implement something from a brief. The engine appends the task's tests to the player's code and runs them on the real toolchain, so **any implementation that produces the right results passes**. Tasks appear in exam banks (company-style coding rounds) and as mini projects at the end of region bosses.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `prompt` | `Text` | Short title (budget 70) |
+| `brief` | `Text` | The statement: what to implement, inputs, outputs, edge cases (budget 600) |
+| `starter` | string | What the editor starts with: signatures and an empty body. It must not pass every test |
+| `solution` | string | Reference solution. The validator proves it passes every test. Never sent to players |
+| `tests` | `CodeTest[]` | At least 3, with at least 1 visible and 1 hidden. `run` is code in the pack's language that prints one result (Python `print(f(1))`, Go `fmt.Println(F(1))`, C# `Console.WriteLine(K.F(1));`, Haskell `print (f 1)`...); `expect` is its exact output |
+| `nearMiss` | string[] | Plausible wrong solutions (the classic mistakes for the task). Each must fail at least one test, which proves the tests catch them. Never sent to players |
+| `mode` | `"ide"` \| `"paper"` | `ide` (default): highlighted editor, run the tests as often as you like. `paper` (exams only): written-test style with a plain editor, paste blocked, no runs before the single submission, and one "proofread" chance after a compile error |
+| `hint`, `note` | | As for every question (lesson tasks need a hint; exams hide help) |
+| `explain` | `Text` | Shown after a miss (budget 160) |
+
+**How the player's file looks.** The harness (`lib/coding/harness.ts`) adds a driver after the player's code (before it for C#, after the `using` lines). The player's file therefore holds only declarations, never `main`:
+
+- Go: `package main` and `import "fmt"` in the starter; the driver is `func main()` and keeps `fmt` used.
+- Rust, C++, Zig, Haskell: functions only; the driver is `main` (C++ adds `#include <iostream>`, Zig needs `const std = @import("std");` in the starter).
+- C#: `using` lines and types (e.g. `static class Solution`); the tests are top-level statements.
+- Python, Ruby, JS/TS: definitions; the tests run after them.
+
+**Where tests run.** For server runners, `/api/run` receives a `task` reference and appends the tests on the server, so hidden tests stay there. For browser runners (JS/TS, Python) the program is built in the player's browser. See [security.md](security.md#post-apirun).
+
+**Exams.** `ExamDef.codeCount` (default 1 when the bank has tasks) sets how many tasks each attempt draws, after the regular questions. A task's time defaults to 8 minutes (`ide`) or 10 (`paper`) unless `time` is set. In exams a task is correct when every test passes. Giving up, or a paper submission that fails, is a miss.
+
+**Region bosses.** Add the task near the end of the boss, before its closing dialog; never insert it between existing questions, because reviews key on beat index. Failing runs never cost a heart, the boss timer only removes the speed bonus, and a solved task is worth three questions.
+
+**What the validator proves** (`content:verify`, on the real toolchain): the solution passes every test; the starter does not; each near miss fails at least one test. It warns when a task has no `nearMiss`.
+
 ## Lesson notes and hints
 
 Every lesson carries help for a player who is stuck, so a hard question never leaves them without a way back to the explanation:
