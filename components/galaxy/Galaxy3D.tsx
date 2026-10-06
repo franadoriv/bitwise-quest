@@ -9,7 +9,7 @@ export interface PlanetMesh {
   /** Decorative moons. */
   moons?: number;
   /** Framework moons (playable): bigger, colored, orbit first. */
-  frameworkMoons?: { color: string; locked: boolean; shape?: MoonShape }[];
+  frameworkMoons?: { color: string; locked: boolean; shape?: MoonShape; label?: string }[];
   locked: boolean;
 }
 
@@ -119,9 +119,22 @@ function planetGroup(p: PlanetMesh): THREE.Group {
   return g;
 }
 
-export function Galaxy3D({ planets, selected, onSelect, onSwipe, landing }: { planets: PlanetMesh[]; selected: number; onSelect(i: number): void; onSwipe?(dir: 1 | -1): void; landing?: Landing | null }) {
+export function Galaxy3D({ planets, selected, selectedMoon = null, onSelect, onSwipe, landing }: {
+  planets: PlanetMesh[];
+  selected: number;
+  /** Framework moon of the selected planet that is in focus (null: the planet itself). */
+  selectedMoon?: number | null;
+  /** A planet (and maybe one of its framework moons) was tapped. */
+  onSelect(i: number, moon?: number): void;
+  onSwipe?(dir: 1 | -1): void;
+  landing?: Landing | null;
+}) {
   const host = useRef<HTMLDivElement>(null);
   const labels = useRef<(HTMLDivElement | null)[]>([]);
+  const moonLabels = useRef<(HTMLDivElement | null)[]>([]);
+  const view = useRef({ planet: selected, moon: selectedMoon });
+  view.current = { planet: selected, moon: selectedMoon };
+  const moonFocusRef = useRef<(moon: number | null) => void>(() => {});
   const focusRef = useRef<(i: number) => void>(() => {});
   const landRef = useRef<(l: Landing) => void>(() => {});
   const onSelectRef = useRef(onSelect);
@@ -169,16 +182,24 @@ export function Galaxy3D({ planets, selected, onSelect, onSwipe, landing }: { pl
     const ro = new ResizeObserver(resize);
     ro.observe(el);
 
+    // The focus point glides toward the selected planet, or follows the selected moon on its orbit.
     const focus = posOf(selected).clone();
+    const focusTarget = new THREE.Vector3();
     focusRef.current = (i) => {
-      const p = posOf(i);
-      gsap.to(focus, { x: p.x, y: p.y, z: p.z, duration: 1, ease: "power2.inOut" });
       gsap.fromTo(groups[i].scale, { x: 0.8, y: 0.8, z: 0.8 }, { x: 1, y: 1, z: 1, duration: 0.6, ease: "back.out(3)" });
     };
+    const moonOf = (planet: number, moon: number | null | undefined) =>
+      moon == null ? null : groups[planet]?.children.find((c) => c.name === "moon" && c.userData.framework === moon) ?? null;
 
     // Camera rig: distance and height from the focus, field of view and a sideways drag offset.
     const cam = { dist: 10.5, lift: 1.6, fov: 40, drag: 0, landing: false };
     let landTarget: THREE.Object3D | null = null;
+    moonFocusRef.current = (moon) => {
+      // Get closer to a moon so its shape reads; back out to the whole system for the planet.
+      gsap.to(cam, moon == null ? { dist: 10.5, lift: 1.6, duration: 0.8, ease: "power2.inOut" } : { dist: 5.2, lift: 0.9, duration: 0.8, ease: "power2.inOut" });
+      const target = moonOf(view.current.planet, moon);
+      if (target) gsap.fromTo(target.scale, { x: 0.6, y: 0.6, z: 0.6 }, { x: 1, y: 1, z: 1, duration: 0.5, ease: "back.out(3)" });
+    };
     landRef.current = (l) => {
       const g = groups[l.planet];
       landTarget = l.moon == null ? g : (g.children.find((c) => c.name === "moon" && c.userData.framework === l.moon) ?? g);
@@ -189,14 +210,20 @@ export function Galaxy3D({ planets, selected, onSelect, onSwipe, landing }: { pl
 
     const ray = new THREE.Raycaster();
     const ndc = new THREE.Vector2();
-    const pick = (e: PointerEvent) => {
+    /** What is under the pointer: a planet index (-1 for nothing) and, if hit, its framework moon. */
+    const pickAt = (e: PointerEvent): { planet: number; moon?: number } => {
       const r = el.getBoundingClientRect();
       ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
       ray.setFromCamera(ndc, camera);
       let o: THREE.Object3D | null = ray.intersectObjects(groups, true)[0]?.object ?? null;
-      while (o && o.userData.index === undefined) o = o.parent;
-      return o ? (o.userData.index as number) : -1;
+      let moon: number | undefined;
+      while (o && o.userData.index === undefined) {
+        if (o.name === "moon" && typeof o.userData.framework === "number") moon = o.userData.framework as number;
+        o = o.parent;
+      }
+      return o ? { planet: o.userData.index as number, moon } : { planet: -1 };
     };
+    const pick = (e: PointerEvent) => pickAt(e).planet;
     // Tap a planet to select it; swipe (or drag with the mouse) to move through the galaxy.
     let down: { x: number; y: number } | null = null;
     const onDown = (e: PointerEvent) => { down = { x: e.clientX, y: e.clientY }; };
@@ -215,8 +242,8 @@ export function Galaxy3D({ planets, selected, onSelect, onSwipe, landing }: { pl
       gsap.to(cam, { drag: 0, duration: 0.35, ease: "power2.out" });
       if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) onSwipeRef.current?.(dx < 0 ? 1 : -1);
       else if (Math.abs(dx) < 8 && Math.abs(dy) < 8) {
-        const i = pick(e);
-        if (i >= 0) onSelectRef.current(i);
+        const hit = pickAt(e);
+        if (hit.planet >= 0) onSelectRef.current(hit.planet, hit.moon);
       }
     };
     const onCancel = () => { down = null; gsap.to(cam, { drag: 0, duration: 0.35 }); };
@@ -247,6 +274,11 @@ export function Galaxy3D({ planets, selected, onSelect, onSwipe, landing }: { pl
         // Follow the target (moons keep orbiting) while diving in.
         landTarget.getWorldPosition(tmp);
         focus.lerp(tmp, 0.25);
+      } else {
+        const moonObj = moonOf(view.current.planet, view.current.moon);
+        if (moonObj) moonObj.getWorldPosition(focusTarget);
+        else focusTarget.copy(posOf(view.current.planet));
+        focus.lerp(focusTarget, moonObj ? 0.12 : 0.06);
       }
       if (camera.fov !== cam.fov) { camera.fov = cam.fov; camera.updateProjectionMatrix(); }
       const sway = cam.landing ? 0 : Math.sin(t * 0.2) * 0.8;
@@ -260,6 +292,17 @@ export function Galaxy3D({ planets, selected, onSelect, onSwipe, landing }: { pl
         tmp.copy(g.position).setY(g.position.y + 3.4).project(camera);
         lab.style.transform = `translate(-50%, -100%) translate(${((tmp.x + 1) / 2) * w}px, ${Math.max(28, ((1 - tmp.y) / 2) * h)}px)`;
         lab.style.opacity = !cam.landing && tmp.z < 1 && Math.abs(tmp.x) < 1.15 ? "1" : "0";
+      });
+      // Name tags over the selected planet's framework moons.
+      moonLabels.current.forEach((lab, m) => {
+        if (!lab) return;
+        const obj = moonOf(view.current.planet, m);
+        if (!obj || cam.landing) { lab.style.opacity = "0"; return; }
+        obj.getWorldPosition(tmp);
+        tmp.y += 1.15;
+        tmp.project(camera);
+        lab.style.transform = `translate(-50%, -100%) translate(${((tmp.x + 1) / 2) * w}px, ${((1 - tmp.y) / 2) * h}px)`;
+        lab.style.opacity = tmp.z < 1 && Math.abs(tmp.x) < 1.1 && Math.abs(tmp.y) < 1.1 ? "1" : "0";
       });
       raf = requestAnimationFrame(tick);
     };
@@ -292,6 +335,12 @@ export function Galaxy3D({ planets, selected, onSelect, onSwipe, landing }: { pl
     if (landing) landRef.current(landing);
   }, [landing]);
 
+  const firstMoon = useRef(true);
+  useEffect(() => {
+    if (firstMoon.current) { firstMoon.current = false; return; }
+    moonFocusRef.current(selectedMoon);
+  }, [selectedMoon, selected]);
+
   return (
     <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden" }}>
       {/* touch-action none: swipes and taps go to the galaxy, not to browser scrolling or zoom */}
@@ -304,6 +353,16 @@ export function Galaxy3D({ planets, selected, onSelect, onSwipe, landing }: { pl
           style={{ position: "absolute", left: 0, top: 0, pointerEvents: "none", fontSize: 10, whiteSpace: "nowrap", padding: "4px 6px", background: i === selected ? "var(--gold)" : "var(--p0)", color: i === selected ? "var(--p0)" : "var(--p3)", boxShadow: "0 0 0 2px var(--p0)" }}
         >
           {p.locked ? "🔒 " : ""}{p.label}
+        </div>
+      ))}
+      {(planets[selected]?.frameworkMoons ?? []).map((m, i) => (
+        <div
+          key={`moon-${selected}-${i}`}
+          ref={(e) => { moonLabels.current[i] = e; }}
+          className="pixel"
+          style={{ position: "absolute", left: 0, top: 0, pointerEvents: "none", fontSize: 8, whiteSpace: "nowrap", padding: "3px 5px", opacity: 0, background: i === selectedMoon ? "var(--gold)" : "var(--p0)", color: i === selectedMoon ? "var(--p0)" : "var(--good)", boxShadow: "0 0 0 2px var(--p0)" }}
+        >
+          {m.label}
         </div>
       ))}
     </div>
