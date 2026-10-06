@@ -108,3 +108,19 @@ test("coding tasks: the harness wraps the player's code and reads each test back
   const wrong = parseTaskResults(`${MARK}0\n3\n${MARK}1\n4\n${MARK}end`, tests);
   assert.deepEqual(wrong.results.map((r) => r.pass), [false, true]);
 });
+
+test("trace tables: cells are judged one by one, loosely spaced, given cells skipped", async () => {
+  const { judgeTrace, traceStdout } = await import("../lib/coding/trace.ts");
+  const rows = [
+    { label: "i = 0", cells: ["0", "[1, 2]"], given: [0] },
+    { label: "i = 1", cells: ["1", "[1, 2, 3]"] },
+  ];
+  assert.equal(traceStdout(rows), "0 | [1, 2]\n1 | [1, 2, 3]");
+  const ok = judgeTrace(rows, [["", " [1,  2] "], ["1", "[1, 2, 3]"]]);
+  assert.equal(ok.all, true); // " [1,  2] " is trimmed and its double space collapsed
+  const r = judgeTrace(rows, [["", "[1, 2]"], ["1", "[1, 2, 4]"]]);
+  assert.deepEqual(r.cells, [[true, true], [true, false]]);
+  assert.equal(r.right, 2);
+  assert.equal(r.total, 3);
+  assert.equal(judgeTrace(rows, [["x", "[1, 2]"], [" 1 ", "[1, 2, 3]"]]).all, true);
+});

@@ -188,6 +188,7 @@ body::after {
 }
 
 .blink-soft { animation: blinkSoft 1.2s steps(2) infinite; }
+.debug-line:hover, .debug-line:focus-visible { background: var(--p1) !important; outline: none; }
 @keyframes blinkSoft { 50% { filter: brightness(1.35); transform: translateY(-2px); } }
 
 /* Beat panels: prompt on top, code left, controls right when there is horizontal room */

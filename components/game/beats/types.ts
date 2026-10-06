@@ -15,6 +15,8 @@ export interface BeatCtx {
   tick(at?: Element | null): void;
   /** Move on without scoring or recording the beat (e.g. a coding task whose runner is unreachable). */
   skip?(): void;
+  /** Scale this beat's points (e.g. 0.5 when a debug task's buggy line was missed). */
+  discount?(factor: number): void;
   stage: StageHandle | null;
   print(text: string): void;
   busy: boolean;

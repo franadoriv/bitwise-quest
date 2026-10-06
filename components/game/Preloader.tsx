@@ -23,7 +23,7 @@ const READY_MS = 800;
 /** Heavy runtimes a play needs before its challenges can run in the browser. */
 export function runtimeNeeds(play: LessonPlay) {
   const runs = play.beats.map((b) => b.beat).filter((b) => b.kind === "run");
-  const tasks = play.beats.some((b) => b.beat.kind === "code");
+  const tasks = play.beats.some((b) => b.beat.kind === "code" || b.beat.kind === "debug");
   return {
     python: play.runner === "py-browser" && (runs.length > 0 || tasks),
     three: play.runner === "js-browser" && runs.some((b) => b.kind === "run" && /\bfrom\s*["']three["']/.test(b.starter)),

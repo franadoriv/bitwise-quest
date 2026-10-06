@@ -134,13 +134,41 @@ for (let step = 0; step < 200 && !finished; step++) {
         await sleep(220);
       }
       await once("order"); await sleep(2600);
-    } else if (beat.kind === "code") {
+    } else if (beat.kind === "trace") {
+      // Trace table: fill every blank cell (a deliberate slip first with --mistakes), then check.
+      for (const [ri, r] of beat.rows.entries()) {
+        for (const [ci, v] of r.cells.entries()) {
+          if (r.given?.includes(ci)) continue;
+          const slip = mistakesLeft > 0 && ri === beat.rows.length - 1 && ci === r.cells.length - 1;
+          await page.locator(`input[aria-label="${M["trace.cell"].replace("{row}", String(ri + 1)).replace("{col}", beat.columns[ci])}"]`).fill(slip ? `${v}0` : v);
+        }
+      }
+      await once("trace");
+      const check = page.locator("main button.btn.primary", { hasText: M["trace.check"] });
+      await check.click();
+      if (mistakesLeft > 0) {
+        mistakesLeft--;
+        await sleep(900); await once("trace-wrong");
+        const last = beat.rows.length - 1, col = beat.columns.length - 1;
+        await page.locator(`input[aria-label="${M["trace.cell"].replace("{row}", String(last + 1)).replace("{col}", beat.columns[col])}"]`).fill(beat.rows[last].cells[col]).catch(() => {});
+        await check.click({ timeout: 1500 }).catch(() => {});
+      }
+      await sleep(2800);
+    } else if (beat.kind === "debug" && !(await page.locator(`textarea[aria-label="${M["run.editor"]}"]`).count())) {
+      // Debug, step 1: tap the buggy line (the wrong one first with --mistakes).
+      await once("debug");
+      const line = mistakesLeft > 0 ? (beat.bugLine === 1 ? 2 : 1) : beat.bugLine;
+      if (mistakesLeft > 0) mistakesLeft--;
+      await page.locator(`button[aria-label="${M["debug.line"].replace("{n}", String(line))}"]`).click();
+      await sleep(900);
+    } else if (beat.kind === "code" || beat.kind === "debug") {
       // Coding task: type the reference solution, then run the tests (or submit, on paper).
       await page.locator(`textarea[aria-label="${M["run.editor"]}"]`).fill(beat.solution ?? beat.starter);
       const go = page.locator("main button.btn.primary", { hasText: new RegExp(`${esc(M["task.run"].replace("▶ ", ""))}|${esc(M["task.submit"])}`) });
       await go.click();
       await page.waitForSelector(`text=/${[M["task.allPass"], M["task.offline"], M["task.compileError"]].map((x) => esc(x.replace(/[!！]$/, ""))).join("|")}|${esc(M["task.passed"].split(" ")[1] ?? "TESTS")}/`, { timeout: 45000 }).catch(() => {});
-      if (!seen.has("code")) { seen.add("code"); await shot("code"); }
+      const key = beat.kind === "debug" ? "debug-fix" : "code";
+      if (!seen.has(key)) { seen.add(key); await shot(key); }
       const offline = page.locator("button", { hasText: M["task.continue"] });
       if (await offline.count()) await offline.click();
       await sleep(2800);

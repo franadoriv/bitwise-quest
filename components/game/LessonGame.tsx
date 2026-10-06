@@ -10,7 +10,7 @@ import { fx, wait } from "@/lib/fx";
 import type { LessonPlay, PlayBeat } from "@/lib/repo";
 import { useSave } from "@/components/save/SaveProvider";
 import { completeExam, completeLesson, completeReview, recordFailedRun, setTimerPref, spendTicket, type ExamReport, type Reward, type WorldContent } from "@/lib/save/progress";
-import { questionLimitMs, questionPoints, questionSeconds, type TimerMode } from "@/lib/game-rules";
+import { questionLimitMs, questionPoints, questionSeconds, questionWeight, type TimerMode } from "@/lib/game-rules";
 import { TimerModal } from "./TimerModal";
 import { NotePanel } from "./NotePanel";
 import type { ExamQuestion } from "@/lib/content/types";
@@ -27,6 +27,8 @@ import { TypeBeatView } from "./beats/TypeBeatView";
 import { OrderBeatView } from "./beats/OrderBeatView";
 import { RunBeatView } from "./beats/RunBeatView";
 import { CodeTaskView } from "./beats/CodeTaskView";
+import { DebugView } from "./beats/DebugView";
+import { TraceView } from "./beats/TraceView";
 import type { BeatCtx } from "./beats/types";
 
 type QueueItem = PlayBeat & { retry: number; key: string };
@@ -73,6 +75,8 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
 
   const stats = useRef({ mistakes: 0, maxCombo: 0, correct: 0, attempts: [] as { lesson: string; beat: number; correct: boolean; ms: number }[], placement: [] as { topic: string; correct: boolean }[] });
   const failed = useRef(false);
+  /** Points multiplier for the current beat (a debug task whose buggy line was missed gets 0.5). */
+  const discount = useRef(1);
   const beatStart = useRef(Date.now());
   const stage = useRef<StageHandle>(null);
   const heartsRef = useRef<HTMLDivElement>(null);
@@ -127,6 +131,7 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
   useEffect(() => {
     if (phase !== "play" || !beat) return;
     failed.current = false;
+    discount.current = 1;
     setExplain(null);
     setHint(null);
     setStruck(null);
@@ -152,7 +157,7 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
       const left = Math.max(0, 1 - (Date.now() - beatStart.current) / limit);
       setTimeLeft(left);
       // Running out of time is a hit in bosses and a miss in exams; a boss's coding task only loses its speed bonus.
-      if (left <= 0 && (placement || (boss && beat?.kind !== "code")) && !failed.current) onWrong(null);
+      if (left <= 0 && (placement || (boss && beat?.kind !== "code" && beat?.kind !== "debug")) && !failed.current) onWrong(null);
     }, 100);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -271,8 +276,8 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
       const speed = limit && !usedNote ? Math.max(0, 1 - (Date.now() - beatStart.current) / limit) : 0;
       const tierKey: MessageKey = speed > 0.66 ? "lesson.perfect" : speed > 0.33 ? "lesson.great" : "lesson.nice";
       const tier = t(tierKey);
-      // A coding task is a mini project: worth three questions.
-      const points = questionPoints({ speed, combo: newCombo, mode, usedNote }) * (beat.kind === "code" ? 3 : 1);
+      // Coding tasks are mini projects (×3); debug and trace tasks are longer reads (×2).
+      const points = Math.round(questionPoints({ speed, combo: newCombo, mode, usedNote }) * questionWeight(beat.kind) * discount.current);
       setCombo(newCombo);
       stats.current.maxCombo = Math.max(stats.current.maxCombo, newCombo);
       stats.current.correct++;
@@ -348,12 +353,17 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
       setPhase("anim");
       void next();
     },
+    discount: (f) => { discount.current = Math.min(discount.current, f); },
     stage: stage.current,
     print,
     busy: phase !== "play",
   };
 
   const seed = idx * 7 + 3;
+  // Where the server finds a coding or debug task's tests (null for reviews and generated beats).
+  const taskRef = !current || current.index < 0 ? null
+    : placement ? { scope: "exam" as const, slug: play.slug, index: current.index }
+    : { scope: "lesson" as const, slug: current.lesson, index: current.index };
 
   const restart = () => window.location.reload();
   const comboColor = combo >= 9 ? "var(--red)" : combo >= 5 ? "var(--gold)" : "var(--white)";
@@ -456,14 +466,9 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
               {beat.kind === "type" && <TypeBeatView beat={beat} ctx={ctx} />}
               {beat.kind === "order" && <OrderBeatView beat={beat} ctx={ctx} seed={seed} />}
               {beat.kind === "run" && <RunBeatView beat={beat} ctx={ctx} />}
-              {beat.kind === "code" && (
-                <CodeTaskView
-                  beat={beat}
-                  ctx={ctx}
-                  exam={placement}
-                  task={current.index < 0 ? null : placement ? { scope: "exam", slug: play.slug, index: current.index } : { scope: "lesson", slug: current.lesson, index: current.index }}
-                />
-              )}
+              {beat.kind === "code" && <CodeTaskView beat={beat} ctx={ctx} exam={placement} task={taskRef} />}
+              {beat.kind === "debug" && <DebugView beat={beat} ctx={ctx} exam={placement} task={taskRef} />}
+              {beat.kind === "trace" && <TraceView beat={beat} ctx={ctx} exam={placement} />}
             </>
           )}
         </div>

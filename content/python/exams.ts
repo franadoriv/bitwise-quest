@@ -4,6 +4,7 @@ import {
   chunkedTask, countVowelsTask, firstUniqueTask, flattenTask, groupAnagramsTask, isPalindromeTask, lruCacheTask,
   mergeIntervalsTask, parseScoresTask, retryTask, secondLargestTask, topWordsTask,
 } from "./tasks.ts";
+import { juniorTraceDebug, midTraceDebug, seniorTraceDebug } from "./trace-debug.ts";
 
 // Entry exams that simulate company screenings for Python roles (backend, data, automation).
 // Topics, levels and bank sizes follow docs/research/python-curriculum.md ("Entry exam") and
@@ -34,6 +35,7 @@ export const exams: ExamDef[] = [
     secondsPerQuestion: 30,
     codeCount: 1,
     questions: [
+      ...juniorTraceDebug,
       countVowelsTask,
       secondLargestTask,
       isPalindromeTask,
@@ -306,6 +308,7 @@ export const exams: ExamDef[] = [
     secondsPerQuestion: 40,
     codeCount: 2,
     questions: [
+      ...midTraceDebug,
       topWordsTask,
       groupAnagramsTask,
       lruCacheTask,
@@ -602,6 +605,7 @@ export const exams: ExamDef[] = [
     secondsPerQuestion: 50,
     codeCount: 2,
     questions: [
+      ...seniorTraceDebug,
       flattenTask,
       retryTask,
       chunkedTask,
