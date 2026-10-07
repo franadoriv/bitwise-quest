@@ -279,3 +279,39 @@ export function setTimerPref(save: SaveData, timer: SaveData["prefs"]["timer"]):
   s.prefs = { ...s.prefs, timer };
   return s;
 }
+
+// ─── practice room ──────────────────────────────────────────────────────────
+/** XP for a first solve by task kind; paper mode pays 25% more, replays a quarter. */
+export const PRACTICE_XP: Record<string, number> = { code: 40, debug: 30, trace: 20 };
+
+/** Records a practice-room attempt of one task (by slug). Only solves give XP and coins. */
+export function completePractice(
+  save: SaveData,
+  lang: string,
+  task: { slug: string; kind: string },
+  result: { solved: boolean; paper: boolean; score: number },
+  now = Date.now(),
+): { save: SaveData; reward: Reward } {
+  const s = clone(save);
+  const rec = langOf(s, lang);
+  rec.practice ??= {};
+  const before = levelFromXp(s.stats.xp);
+  const prev = rec.practice[task.slug];
+  const first = result.solved && !prev?.solvedAt;
+  const firstPaper = result.solved && result.paper && !prev?.paperAt;
+  const base = PRACTICE_XP[task.kind] ?? 20;
+  const xpGained = !result.solved ? 0 : Math.round(base * (first || firstPaper ? 1 : 0.25) * (result.paper ? 1.25 : 1));
+  const coinsGained = result.solved ? (first ? 5 : 1) : 0;
+  rec.practice[task.slug] = {
+    plays: (prev?.plays ?? 0) + 1,
+    best: Math.max(prev?.best ?? 0, Math.round(Math.max(0, result.score))),
+    ...(prev?.solvedAt || result.solved ? { solvedAt: prev?.solvedAt ?? now } : {}),
+    ...(prev?.paperAt || firstPaper ? { paperAt: prev?.paperAt ?? now } : {}),
+  };
+  s.stats.xp += xpGained;
+  s.stats.coins += coinsGained;
+  const ticketsGained = bumpStreak(s, now);
+  touch(s, lang, now);
+  const stars = result.solved ? (result.paper ? 3 : 2) : 0;
+  return { save: s, reward: { xpGained, coinsGained, stars, levelBefore: before, levelAfter: levelFromXp(s.stats.xp), xpAfter: s.stats.xp, nextLesson: null, ticketsGained } };
+}

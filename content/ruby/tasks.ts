@@ -11,6 +11,7 @@ const rb = String.raw;
 
 /** Boss mini project (Object Village): nil, blank strings and keyword arguments. */
 export const badgeTask: CodeTaskBeat = {
+  slug: "badge",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: the village gate badge", "Mini proyecto: la insignia de la aldea", "ミニ課題：村の門のバッジ"),
@@ -73,6 +74,7 @@ end
 
 /** Boss mini project (Enumerable Forest): the shared Hash.new([]) default trap. */
 export const lootTask: CodeTaskBeat = {
+  slug: "loot",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: sort the mimic's loot", "Mini proyecto: reparte el botín del mímico", "ミニ課題：ミミックの戦利品を分ける"),
@@ -136,6 +138,7 @@ end
 
 /** Boss mini project (Module Castle): a frozen, comparable value object. */
 export const runeTask: CodeTaskBeat = {
+  slug: "rune",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: the frozen rune", "Mini proyecto: la runa congelada", "ミニ課題：凍ったルーン"),
@@ -246,6 +249,7 @@ end
 
 /** Boss mini project (Meta Tower): pattern matching plus a custom error. */
 export const runeDamageTask: CodeTaskBeat = {
+  slug: "rune-damage",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: read the imp's runes", "Mini proyecto: lee las runas del diablillo", "ミニ課題：インプのルーンを読む"),
@@ -342,6 +346,7 @@ end
 // ─── EXAMS: JUNIOR (ide) ──────────────────────────────────────────────────────
 
 export const titleCaseTask: ExamQuestion = {
+  slug: "title-case",
   kind: "code",
   mode: "ide",
   topic: "strings",
@@ -388,6 +393,7 @@ end
 };
 
 export const letterCountsTask: ExamQuestion = {
+  slug: "letter-counts",
   kind: "code",
   mode: "ide",
   topic: "hashes",
@@ -434,6 +440,7 @@ end
 };
 
 export const secondLargestTask: ExamQuestion = {
+  slug: "second-largest",
   kind: "code",
   mode: "ide",
   topic: "arrays",
@@ -481,6 +488,7 @@ end
 };
 
 export const fizzbuzzTask: ExamQuestion = {
+  slug: "fizzbuzz",
   kind: "code",
   mode: "ide",
   topic: "control",
@@ -547,6 +555,7 @@ end
 // ─── EXAMS: MID (2 ide + 2 paper) ─────────────────────────────────────────────
 
 export const wordsByLengthTask: ExamQuestion = {
+  slug: "words-by-length",
   kind: "code",
   mode: "ide",
   topic: "enumerable",
@@ -592,6 +601,7 @@ end
 };
 
 export const composeTask: ExamQuestion = {
+  slug: "compose",
   kind: "code",
   mode: "ide",
   topic: "blocks",
@@ -638,6 +648,7 @@ end
 };
 
 export const playlistTask: ExamQuestion = {
+  slug: "playlist",
   kind: "code",
   mode: "paper",
   topic: "modules",
@@ -739,6 +750,7 @@ end
 };
 
 export const parseQueryTask: ExamQuestion = {
+  slug: "parse-query",
   kind: "code",
   mode: "paper",
   topic: "hashes",
@@ -799,6 +811,7 @@ end
 // ─── EXAMS: SENIOR (1 ide + 3 paper) ──────────────────────────────────────────
 
 export const settingsTask: ExamQuestion = {
+  slug: "settings",
   kind: "code",
   mode: "ide",
   topic: "metaprogramming",
@@ -902,6 +915,7 @@ end
 };
 
 export const historyTask: ExamQuestion = {
+  slug: "history",
   kind: "code",
   mode: "paper",
   topic: "metaprogramming",
@@ -979,6 +993,7 @@ end
 };
 
 export const validateTask: ExamQuestion = {
+  slug: "validate",
   kind: "code",
   mode: "paper",
   topic: "exceptions",
@@ -1073,6 +1088,7 @@ end
 };
 
 export const describeEventTask: ExamQuestion = {
+  slug: "describe-event",
   kind: "code",
   mode: "paper",
   topic: "pattern_matching",

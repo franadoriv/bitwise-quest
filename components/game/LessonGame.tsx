@@ -9,7 +9,7 @@ import { isQuestion, type Beat, type Text } from "@/lib/content/types";
 import { fx, wait } from "@/lib/fx";
 import type { LessonPlay, PlayBeat } from "@/lib/repo";
 import { useSave } from "@/components/save/SaveProvider";
-import { completeExam, completeLesson, completeReview, recordFailedRun, setTimerPref, spendTicket, type ExamReport, type Reward, type WorldContent } from "@/lib/save/progress";
+import { completeExam, completeLesson, completePractice, completeReview, recordFailedRun, setTimerPref, spendTicket, type ExamReport, type Reward, type WorldContent } from "@/lib/save/progress";
 import { questionLimitMs, questionPoints, questionSeconds, questionWeight, type TimerMode } from "@/lib/game-rules";
 import { TimerModal } from "./TimerModal";
 import { NotePanel } from "./NotePanel";
@@ -43,7 +43,11 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
   const boss = play.mode === "boss";
   const placement = play.mode === "exam"; // exam: one shot per question, no hearts, no retries
   const review = play.mode === "review";
-  const maxHearts = boss ? 3 : placement ? 99 : 5;
+  // practice: a single task from the practice room; like an exam it is one shot, without hearts
+  const practice = play.mode === "practice";
+  const oneShot = placement || practice;
+  const examRules = placement || !!play.practice?.paper;
+  const maxHearts = boss ? 3 : oneShot ? 99 : 5;
   const portrait = useOrientation() === "portrait";
   const { t, tx } = useI18n();
   const tRef = useRef(t);
@@ -219,14 +223,19 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
 
   const finish = async () => {
     setPhase("finishing");
-    if (questionCount > 0) await stage.current?.enemyDefeated();
-    if (!placement) music.play("jingle:clear");
-    await fx.banner(placement ? t("lesson.time") : boss ? t("lesson.bossDefeated") : t("lesson.clear"), { size: 28, hold: 0.7 });
+    const solved = stats.current.correct > 0;
+    if (questionCount > 0 && (!practice || solved)) await stage.current?.enemyDefeated();
+    if (!placement && (!practice || solved)) music.play("jingle:clear");
+    await fx.banner(placement ? t("lesson.time") : practice ? t(solved ? "practice.solved" : "practice.notYet") : boss ? t("lesson.bossDefeated") : t("lesson.clear"), { size: 28, hold: 0.7 });
     const s = stats.current;
     const current = saveRef.current;
     const lang = play.languageSlug;
     if (current) {
-      if (placement && play.exam) {
+      if (practice && play.practice) {
+        const r = completePractice(current, lang, play.practice, { solved, paper: play.practice.paper, score });
+        setReward(r.reward);
+        await commit(r.save);
+      } else if (placement && play.exam) {
         const r = completeExam(current, lang, play.exam, s.placement);
         setExamReport(r.report);
         await commit(r.save);
@@ -311,7 +320,7 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
       if (explainRef.current) gsap.fromTo(explainRef.current, { x: -30, opacity: 0 }, { x: 0, opacity: 1, duration: 0.25, ease: "back.out(2)" });
     });
 
-    if (placement) {
+    if (oneShot) {
       fx.float(at ?? null, "✗", "var(--red)", 22);
       setPhase("anim");
       setTimeout(() => { void next(); }, 1800);
@@ -361,9 +370,9 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
 
   const seed = idx * 7 + 3;
   // Where the server finds a coding or debug task's tests (null for reviews and generated beats).
-  const taskRef = !current || current.index < 0 ? null
-    : placement ? { scope: "exam" as const, slug: play.slug, index: current.index }
-    : { scope: "lesson" as const, slug: current.lesson, index: current.index };
+  const taskRef = !current ? null
+    : current.task ?? (current.index < 0 ? null : placement ? { scope: "exam" as const, slug: play.slug, index: current.index }
+    : { scope: "lesson" as const, slug: current.lesson, index: current.index });
 
   const restart = () => window.location.reload();
   const comboColor = combo >= 9 ? "var(--red)" : combo >= 5 ? "var(--gold)" : "var(--white)";
@@ -374,7 +383,7 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
       <header style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", flexWrap: "wrap" }}>
         <Link href={`/play/${play.languageSlug}`} className="btn small" onClick={() => sfx.select()} aria-label={t("lesson.back")}>✕</Link>
         <div ref={heartsRef} style={{ display: "flex", gap: 2 }} aria-label={t("lesson.lives", { n: hearts })}>
-          {!placement && Array.from({ length: maxHearts }).map((_, i) => (
+          {!oneShot && Array.from({ length: maxHearts }).map((_, i) => (
             <span key={i} data-heart><Sprite name={i < hearts ? "heart" : "heartEmpty"} size={22} /></span>
           ))}
         </div>
@@ -423,7 +432,7 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
             <div>
               <div className="pixel" style={{ fontSize: 9, color: "var(--red)" }}>{t("lesson.almost", { name: tx(play.guide.name).toUpperCase() })}</div>
               <div style={{ fontSize: 18, color: "var(--p0)" }}>{tx(explain)}</div>
-              {!placement && isQuestion(beat!) && current.retry < 2 && <div className="pixel" style={{ fontSize: 8, color: "var(--p1)", marginTop: 4 }}>{t("lesson.bugReturns")}</div>}
+              {!oneShot && isQuestion(beat!) && current.retry < 2 && <div className="pixel" style={{ fontSize: 8, color: "var(--p1)", marginTop: 4 }}>{t("lesson.bugReturns")}</div>}
               {canHelp && (
                 <button className="btn small" onClick={openNote} style={{ marginTop: 8, display: "flex", gap: 6, alignItems: "center" }}>
                   <Sprite name="book" size={14} /> {t("lesson.readMore")}
@@ -466,9 +475,9 @@ export function LessonGame({ play, world }: { play: LessonPlay; world?: WorldCon
               {beat.kind === "type" && <TypeBeatView beat={beat} ctx={ctx} />}
               {beat.kind === "order" && <OrderBeatView beat={beat} ctx={ctx} seed={seed} />}
               {beat.kind === "run" && <RunBeatView beat={beat} ctx={ctx} />}
-              {beat.kind === "code" && <CodeTaskView beat={beat} ctx={ctx} exam={placement} task={taskRef} />}
-              {beat.kind === "debug" && <DebugView beat={beat} ctx={ctx} exam={placement} task={taskRef} />}
-              {beat.kind === "trace" && <TraceView beat={beat} ctx={ctx} exam={placement} />}
+              {beat.kind === "code" && <CodeTaskView beat={beat} ctx={ctx} exam={examRules} task={taskRef} />}
+              {beat.kind === "debug" && <DebugView beat={beat} ctx={ctx} exam={examRules} task={taskRef} />}
+              {beat.kind === "trace" && <TraceView beat={beat} ctx={ctx} exam={oneShot} />}
             </>
           )}
         </div>

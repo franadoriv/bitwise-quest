@@ -12,6 +12,7 @@ const code = (...lines: string[]) => lines.join("\n");
 
 /** Junior trace: shadowing in and out of a block, then integer division. */
 export const shadowTrace: ExamQuestion = {
+  slug: "shadow",
   kind: "trace",
   topic: "types",
   difficulty: 1,
@@ -59,6 +60,7 @@ export const shadowTrace: ExamQuestion = {
 
 /** Junior trace: reversing digits with % and /. */
 export const reverseDigitsTrace: ExamQuestion = {
+  slug: "reverse-digits",
   kind: "trace",
   topic: "variables",
   difficulty: 1,
@@ -102,6 +104,7 @@ export const reverseDigitsTrace: ExamQuestion = {
 
 /** Mid trace: an FnMut closure that captures `count` by mutable reference. */
 export const bumpClosureTrace: ExamQuestion = {
+  slug: "bump-closure",
   kind: "trace",
   topic: "closures",
   difficulty: 2,
@@ -151,6 +154,7 @@ export const bumpClosureTrace: ExamQuestion = {
 
 /** Mid trace: match on a length range while building a String. */
 export const matchLenTrace: ExamQuestion = {
+  slug: "match-len",
   kind: "trace",
   topic: "patterns",
   difficulty: 2,
@@ -197,6 +201,7 @@ export const matchLenTrace: ExamQuestion = {
 
 /** Mid debug: the range stops one pair too early (and underflows on an empty slice). */
 export const pairSumsDebug: ExamQuestion = {
+  slug: "pair-sums",
   kind: "debug",
   mode: "ide",
   topic: "collections",
@@ -264,6 +269,7 @@ export const pairSumsDebug: ExamQuestion = {
 
 /** Mid debug: the loop mutates a clone, so the caller's Vec never changes. */
 export const capAllDebug: ExamQuestion = {
+  slug: "cap-all",
   kind: "debug",
   mode: "ide",
   topic: "borrowing",
@@ -350,6 +356,7 @@ export const capAllDebug: ExamQuestion = {
 
 /** Senior trace: Rc strong counts and a shared RefCell<Vec>. */
 export const rcRefCellTrace: ExamQuestion = {
+  slug: "rc-ref-cell",
   kind: "trace",
   topic: "smart_pointers",
   difficulty: 3,
@@ -407,6 +414,7 @@ export const rcRefCellTrace: ExamQuestion = {
 
 /** Senior debug (ide): a u16 running total overflows before the division. */
 export const summarizeDebug: ExamQuestion = {
+  slug: "summarize",
   kind: "debug",
   mode: "ide",
   topic: "types",
@@ -523,6 +531,7 @@ export const summarizeDebug: ExamQuestion = {
 
 /** Senior debug (paper): dedup() only removes adjacent duplicates, so it must run after sort(). */
 export const normalizeTagsDebug: ExamQuestion = {
+  slug: "normalize-tags",
   kind: "debug",
   mode: "paper",
   topic: "collections",
@@ -648,6 +657,7 @@ export const normalizeTagsDebug: ExamQuestion = {
 
 /** Senior debug (paper): half-open binary search that moves `hi` one too far (and underflows). */
 export const binarySearchDebug: ExamQuestion = {
+  slug: "binary-search",
   kind: "debug",
   mode: "paper",
   topic: "types",

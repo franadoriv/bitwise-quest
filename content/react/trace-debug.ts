@@ -18,6 +18,7 @@ const file = (...lines: string[]) => [IMPORTS, ...lines].join("\n");
 
 /** Junior trace: the setter calls of one click, replayed in order. */
 export const updateQueueTrace: ExamQuestion = {
+  slug: "update-queue",
   kind: "trace",
   topic: "state",
   difficulty: 1,
@@ -68,6 +69,7 @@ export const updateQueueTrace: ExamQuestion = {
 
 /** Junior trace: && renders a 0, || falls back on an empty string. */
 export const badgeMarkupTrace: ExamQuestion = {
+  slug: "badge-markup",
   kind: "trace",
   topic: "jsx",
   difficulty: 1,
@@ -111,6 +113,7 @@ export const badgeMarkupTrace: ExamQuestion = {
 
 /** Mid trace: a reducer run over a list of actions. */
 export const reducerTrace: ExamQuestion = {
+  slug: "reducer",
   kind: "trace",
   topic: "context_reducer",
   difficulty: 2,
@@ -160,6 +163,7 @@ export const reducerTrace: ExamQuestion = {
 
 /** Mid trace: state follows the key, not the item. */
 export const keyStateTrace: ExamQuestion = {
+  slug: "key-state",
   kind: "trace",
   topic: "lists_keys",
   difficulty: 2,
@@ -211,6 +215,7 @@ export const keyStateTrace: ExamQuestion = {
 
 /** Mid debug (ide): sort() mutates the props array. */
 export const leaderboardSortDebug: ExamQuestion = {
+  slug: "leaderboard-sort",
   kind: "debug",
   mode: "ide",
   topic: "immutability",
@@ -288,6 +293,7 @@ export const leaderboardSortDebug: ExamQuestion = {
 
 /** Mid debug (ide): setter calls built from the render's value instead of the pending one. */
 export const addPointsQueueDebug: ExamQuestion = {
+  slug: "add-points-queue",
   kind: "debug",
   mode: "ide",
   topic: "state",
@@ -394,6 +400,7 @@ export const addPointsQueueDebug: ExamQuestion = {
 
 /** Senior trace: a useMemo-style cache compared with Object.is. */
 export const memoDepsTrace: ExamQuestion = {
+  slug: "memo-deps",
   kind: "trace",
   topic: "memoization",
   difficulty: 3,
@@ -448,6 +455,7 @@ export const memoDepsTrace: ExamQuestion = {
 
 /** Senior debug (ide): pages counted with floor, so the last partial page is unreachable. */
 export const pagerDebug: ExamQuestion = {
+  slug: "pager",
   kind: "debug",
   mode: "ide",
   topic: "rendering",
@@ -577,6 +585,7 @@ export const pagerDebug: ExamQuestion = {
 
 /** Senior debug (paper): undo history keeps a stale redo stack after a new edit. */
 export const undoRedoDebug: ExamQuestion = {
+  slug: "undo-redo",
   kind: "debug",
   mode: "paper",
   topic: "context_reducer",
@@ -710,6 +719,7 @@ export const undoRedoDebug: ExamQuestion = {
 
 /** Senior debug (paper): a memo comparator that never looks at the last tag. */
 export const rowPropsEqualDebug: ExamQuestion = {
+  slug: "row-props-equal",
   kind: "debug",
   mode: "paper",
   topic: "performance",

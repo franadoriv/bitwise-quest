@@ -12,6 +12,7 @@ const code = (...lines: string[]) => lines.join("\n");
 
 /** Junior trace: integer division truncates. */
 export const intDivTrace: ExamQuestion = {
+  slug: "int-div",
   kind: "trace",
   topic: "basics",
   difficulty: 1,
@@ -59,6 +60,7 @@ export const intDivTrace: ExamQuestion = {
 
 /** Junior trace: range over a string walks runes at byte offsets. */
 export const runeRangeTrace: ExamQuestion = {
+  slug: "rune-range",
   kind: "trace",
   topic: "strings",
   difficulty: 1,
@@ -112,6 +114,7 @@ export const runeRangeTrace: ExamQuestion = {
 
 /** Mid trace: a subslice shares memory until append outgrows its capacity. */
 export const sharedSliceTrace: ExamQuestion = {
+  slug: "shared-slice",
   kind: "trace",
   topic: "slices",
   difficulty: 2,
@@ -163,6 +166,7 @@ export const sharedSliceTrace: ExamQuestion = {
 
 /** Mid trace: deferred calls run last-in first-out and can change a named result. */
 export const deferOrderTrace: ExamQuestion = {
+  slug: "defer-order",
   kind: "trace",
   topic: "defer_panic",
   difficulty: 2,
@@ -214,6 +218,7 @@ export const deferOrderTrace: ExamQuestion = {
 
 /** Mid debug: modifying a copy of a struct instead of the slice element. */
 export const healCopyDebug: ExamQuestion = {
+  slug: "heal-copy",
   kind: "debug",
   mode: "ide",
   topic: "structs",
@@ -332,6 +337,7 @@ export const healCopyDebug: ExamQuestion = {
 
 /** Mid debug: a loop condition that drops the last chunk. */
 export const chunkDebug: ExamQuestion = {
+  slug: "chunk",
   kind: "debug",
   mode: "ide",
   topic: "slices",
@@ -435,6 +441,7 @@ export const chunkDebug: ExamQuestion = {
 
 /** Senior trace: append inside a function writes into the caller's spare capacity. */
 export const appendAliasTrace: ExamQuestion = {
+  slug: "append-alias",
   kind: "trace",
   topic: "slices",
   difficulty: 3,
@@ -495,6 +502,7 @@ export const appendAliasTrace: ExamQuestion = {
 
 /** Senior debug (ide): waiting for the workers before anyone reads their results. */
 export const parallelSumDebug: ExamQuestion = {
+  slug: "parallel-sum",
   kind: "debug",
   mode: "ide",
   topic: "channels",
@@ -656,6 +664,7 @@ export const parallelSumDebug: ExamQuestion = {
 
 /** Senior debug (paper): `:=` inside the loop shadows the error that is returned. */
 export const shadowedErrDebug: ExamQuestion = {
+  slug: "shadowed-err",
   kind: "debug",
   mode: "paper",
   topic: "errors",
@@ -804,6 +813,7 @@ export const shadowedErrDebug: ExamQuestion = {
 
 /** Senior debug (paper): a nil pointer stored in an error interface is not a nil error. */
 export const typedNilDebug: ExamQuestion = {
+  slug: "typed-nil",
   kind: "debug",
   mode: "paper",
   topic: "interfaces",

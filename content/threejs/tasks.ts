@@ -12,6 +12,7 @@ const T = 'import * as THREE from "three";\n\n';
 
 /** Scene Village boss: build a centered row of posts. */
 export const makeFenceTask: CodeTaskBeat = {
+  slug: "make-fence",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: build a fence", "Mini proyecto: arma una cerca", "ミニ課題：柵を作る"),
@@ -50,6 +51,7 @@ export const makeFenceTask: CodeTaskBeat = {
 
 /** Graph Forest boss: distance between two objects in world space. */
 export const worldDistanceTask: CodeTaskBeat = {
+  slug: "world-distance",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: distance in world space", "Mini proyecto: distancia en el mundo", "ミニ課題：ワールド空間の距離"),
@@ -88,6 +90,7 @@ export const worldDistanceTask: CodeTaskBeat = {
 
 /** Loop Tower boss: move toward a target at a fixed speed, frame-rate independent. */
 export const approachTask: CodeTaskBeat = {
+  slug: "approach",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: chase at a steady speed", "Mini proyecto: persigue a velocidad fija", "ミニ課題：一定の速さで追いかける"),
@@ -129,6 +132,7 @@ export const approachTask: CodeTaskBeat = {
 // ─── Junior screening (ide) ───────────────────────────────────────────────────
 
 export const countMeshesTask: ExamQuestion = {
+  slug: "count-meshes",
   kind: "code",
   mode: "ide",
   topic: "scene_basics",
@@ -162,6 +166,7 @@ export const countMeshesTask: ExamQuestion = {
 };
 
 export const resizeCameraTask: ExamQuestion = {
+  slug: "resize-camera",
   kind: "code",
   mode: "ide",
   topic: "cameras",
@@ -194,6 +199,7 @@ export const resizeCameraTask: ExamQuestion = {
 };
 
 export const placeOnCircleTask: ExamQuestion = {
+  slug: "place-on-circle",
   kind: "code",
   mode: "ide",
   topic: "transforms",
@@ -227,6 +233,7 @@ export const placeOnCircleTask: ExamQuestion = {
 };
 
 export const colorToHexTask: ExamQuestion = {
+  slug: "color-to-hex",
   kind: "code",
   mode: "ide",
   topic: "materials",
@@ -261,6 +268,7 @@ export const colorToHexTask: ExamQuestion = {
 // ─── Mid screening (2 ide, 2 paper) ───────────────────────────────────────────
 
 export const fitsInsideTask: ExamQuestion = {
+  slug: "fits-inside",
   kind: "code",
   mode: "ide",
   topic: "scene_graph",
@@ -294,6 +302,7 @@ export const fitsInsideTask: ExamQuestion = {
 };
 
 export const fixedStepsTask: ExamQuestion = {
+  slug: "fixed-steps",
   kind: "code",
   mode: "ide",
   topic: "render_loop",
@@ -327,6 +336,7 @@ export const fixedStepsTask: ExamQuestion = {
 };
 
 export const rotateAroundTask: ExamQuestion = {
+  slug: "rotate-around",
   kind: "code",
   mode: "paper",
   topic: "rotations",
@@ -362,6 +372,7 @@ export const rotateAroundTask: ExamQuestion = {
 };
 
 export const nearestHitTask: ExamQuestion = {
+  slug: "nearest-hit",
   kind: "code",
   mode: "paper",
   topic: "raycasting",
@@ -398,6 +409,7 @@ export const nearestHitTask: ExamQuestion = {
 // ─── Senior screening (1 ide, 3 paper) ────────────────────────────────────────
 
 export const disposeTreeTask: ExamQuestion = {
+  slug: "dispose-tree",
   kind: "code",
   mode: "ide",
   topic: "disposal",
@@ -431,6 +443,7 @@ export const disposeTreeTask: ExamQuestion = {
 };
 
 export const worldToScreenTask: ExamQuestion = {
+  slug: "world-to-screen",
   kind: "code",
   mode: "paper",
   topic: "cameras",
@@ -464,6 +477,7 @@ export const worldToScreenTask: ExamQuestion = {
 };
 
 export const scatterTask: ExamQuestion = {
+  slug: "scatter",
   kind: "code",
   mode: "paper",
   topic: "performance",
@@ -497,6 +511,7 @@ export const scatterTask: ExamQuestion = {
 };
 
 export const lerpAngleTask: ExamQuestion = {
+  slug: "lerp-angle",
   kind: "code",
   mode: "paper",
   topic: "rotations",

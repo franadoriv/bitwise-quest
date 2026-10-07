@@ -12,6 +12,7 @@ const c = (...lines: string[]) => lines.join("\n") + "\n";
 
 /** Value Village boss: strings to numbers without the coercion traps. */
 export const parseAmountTask: CodeTaskBeat = {
+  slug: "parse-amount",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: read the golem's price tags", "Mini proyecto: lee las etiquetas del gólem", "ミニ課題：ゴーレムの値札を読む"),
@@ -79,6 +80,7 @@ export const parseAmountTask: CodeTaskBeat = {
 
 /** Closure Forest boss: a counter whose state lives in a closure. */
 export const makeCounterTask: CodeTaskBeat = {
+  slug: "make-counter",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: the wraith's counting stones", "Mini proyecto: las piedras del espectro", "ミニ課題：亡霊の数え石"),
@@ -152,6 +154,7 @@ export const makeCounterTask: CodeTaskBeat = {
 
 /** Prototype Peaks boss: copy, update and sort without touching the input. */
 export const promoteTask: CodeTaskBeat = {
+  slug: "promote",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: promote the party", "Mini proyecto: sube de nivel al grupo", "ミニ課題：パーティーを昇格"),
@@ -227,6 +230,7 @@ export const promoteTask: CodeTaskBeat = {
 
 /** Type Castle boss: narrow unknown JSON into a typed value. */
 export const parsePlayerTask: CodeTaskBeat = {
+  slug: "parse-player",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: check the titan's scrolls", "Mini proyecto: revisa los pergaminos del titán", "ミニ課題：巨人の巻物を調べる"),
@@ -305,6 +309,7 @@ export const parsePlayerTask: CodeTaskBeat = {
 
 /** Event Loop Tower boss: run every load, keep the order, survive failures. */
 export const loadAllTask: CodeTaskBeat = {
+  slug: "load-all",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: load every map", "Mini proyecto: carga todos los mapas", "ミニ課題：全部のマップを読みこむ"),
@@ -400,6 +405,7 @@ export const loadAllTask: CodeTaskBeat = {
 // ─── JUNIOR (ide) ─────────────────────────────────────────────────────────────
 
 export const capitalizeWordsTask: ExamQuestion = {
+  slug: "capitalize-words",
   kind: "code",
   mode: "ide",
   topic: "values",
@@ -453,6 +459,7 @@ export const capitalizeWordsTask: ExamQuestion = {
 };
 
 export const sumEvenTask: ExamQuestion = {
+  slug: "sum-even",
   kind: "code",
   mode: "ide",
   topic: "arrays",
@@ -503,6 +510,7 @@ export const sumEvenTask: ExamQuestion = {
 };
 
 export const makeTallyTask: ExamQuestion = {
+  slug: "make-tally",
   kind: "code",
   mode: "ide",
   topic: "closures",
@@ -569,6 +577,7 @@ export const makeTallyTask: ExamQuestion = {
 };
 
 export const fizzBuzzTask: ExamQuestion = {
+  slug: "fizz-buzz",
   kind: "code",
   mode: "ide",
   topic: "values",
@@ -642,6 +651,7 @@ export const fizzBuzzTask: ExamQuestion = {
 // ─── MID (2 ide + 2 paper) ────────────────────────────────────────────────────
 
 export const groupByTask: ExamQuestion = {
+  slug: "group-by",
   kind: "code",
   mode: "ide",
   topic: "generics",
@@ -701,6 +711,7 @@ export const groupByTask: ExamQuestion = {
 };
 
 export const retryTask: ExamQuestion = {
+  slug: "retry",
   kind: "code",
   mode: "ide",
   topic: "async",
@@ -775,6 +786,7 @@ export const retryTask: ExamQuestion = {
 };
 
 export const chunkTask: ExamQuestion = {
+  slug: "chunk",
   kind: "code",
   mode: "paper",
   topic: "arrays",
@@ -836,6 +848,7 @@ export const chunkTask: ExamQuestion = {
 };
 
 export const bankAccountTask: ExamQuestion = {
+  slug: "bank-account",
   kind: "code",
   mode: "paper",
   topic: "classes",
@@ -948,6 +961,7 @@ export const bankAccountTask: ExamQuestion = {
 // ─── SENIOR (1 ide + 3 paper) ─────────────────────────────────────────────────
 
 export const rateLimiterTask: ExamQuestion = {
+  slug: "rate-limiter",
   kind: "code",
   mode: "ide",
   topic: "performance",
@@ -1030,6 +1044,7 @@ export const rateLimiterTask: ExamQuestion = {
 };
 
 export const promiseAllTask: ExamQuestion = {
+  slug: "promise-all",
   kind: "code",
   mode: "paper",
   topic: "async",
@@ -1109,6 +1124,7 @@ export const promiseAllTask: ExamQuestion = {
 };
 
 export const getPathTask: ExamQuestion = {
+  slug: "get-path",
   kind: "code",
   mode: "paper",
   topic: "narrowing",
@@ -1175,6 +1191,7 @@ export const getPathTask: ExamQuestion = {
 };
 
 export const emitterTask: ExamQuestion = {
+  slug: "emitter",
   kind: "code",
   mode: "paper",
   topic: "classes",

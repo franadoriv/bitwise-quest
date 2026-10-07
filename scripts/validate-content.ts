@@ -96,6 +96,16 @@ function judgeTask(job: Job, r: { stdout: string; stderr: string }) {
 const codeLangOf = (p: LanguagePack): CodeLang => p.codeLang ?? (p.slug === "rust" ? "rust" : "ts");
 let LANG: CodeLang = "rust"; // code language of the pack being checked
 const jobs: Job[] = [];
+/** Practice-room ids seen in the pack being checked (coding, trace and debug tasks). */
+const taskSlugs = new Map<string, string>();
+
+function checkTaskSlug(where: string, slug: string | undefined) {
+  if (!slug) { err(where, "a coding, trace or debug task needs a stable `slug` (practice room and saves key it)"); return; }
+  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug) || slug.length > 64) err(where, `slug "${slug}" must be kebab-case, at most 64 chars`);
+  const seen = taskSlugs.get(slug);
+  if (seen) err(where, `slug "${slug}" is already used by ${seen}`);
+  else taskSlugs.set(slug, where);
+}
 
 function checkEffects(where: string, effects: Effect[] | undefined) {
   for (const e of effects ?? []) {
@@ -167,6 +177,7 @@ function checkBeat(where: string, b: Beat, pack: LanguagePack) {
       break;
     }
     case "code": {
+      checkTaskSlug(where, b.slug);
       prose(where, "prompt", b.prompt, 70);
       prose(where, "brief", b.brief, 600);
       prose(where, "explain", b.explain, 160);
@@ -183,6 +194,7 @@ function checkBeat(where: string, b: Beat, pack: LanguagePack) {
       break;
     }
     case "trace": {
+      checkTaskSlug(where, b.slug);
       prose(where, "prompt", b.prompt, 70);
       if (b.brief != null) prose(where, "brief", b.brief, 200);
       prose(where, "explain", b.explain, 160);
@@ -200,6 +212,7 @@ function checkBeat(where: string, b: Beat, pack: LanguagePack) {
       break;
     }
     case "debug": {
+      checkTaskSlug(where, b.slug);
       prose(where, "prompt", b.prompt, 70);
       prose(where, "brief", b.brief, 400);
       prose(where, "explain", b.explain, 160);
@@ -287,6 +300,7 @@ const slugs = new Set(LANGUAGE_PACKS.map((p) => p.slug));
 for (const pack of LANGUAGE_PACKS) {
   if (ONLY && pack.slug !== ONLY) continue;
   LANG = codeLangOf(pack);
+  taskSlugs.clear();
   if (pack.parent) {
     const parent = LANGUAGE_PACKS.find((p) => p.slug === pack.parent);
     if (!parent) err(pack.slug, `moon of unknown planet "${pack.parent}"`);

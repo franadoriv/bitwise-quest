@@ -10,6 +10,7 @@ import { L } from "../../lib/i18n/text.ts";
 
 /** Let Village boss: let, shadowing and a capped value. */
 export const healTask: CodeTaskBeat = {
+  slug: "heal",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: drink the potions", "Mini proyecto: bebe las pociones", "ミニ課題：ポーションを飲む"),
@@ -67,6 +68,7 @@ export const healTask: CodeTaskBeat = {
 
 /** Ownership Forest boss: borrow the loot, mutably borrow the bag, clone what you keep. */
 export const packTask: CodeTaskBeat = {
+  slug: "pack",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: pack the loot", "Mini proyecto: guarda el botín", "ミニ課題：戦利品をしまう"),
@@ -141,6 +143,7 @@ export const packTask: CodeTaskBeat = {
 
 /** Lifetime Peaks boss: return a borrow tied to one input only. */
 export const findTagTask: CodeTaskBeat = {
+  slug: "find-tag",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: read the trail marker", "Mini proyecto: lee el cartel del sendero", "ミニ課題：道しるべを読む"),
@@ -217,6 +220,7 @@ export const findTagTask: CodeTaskBeat = {
 
 /** Trait Castle boss: implement a trait for two types and pick from a Vec<Box<dyn Trait>>. */
 export const strongestTask: CodeTaskBeat = {
+  slug: "strongest",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: rank the squad", "Mini proyecto: elige al más fuerte", "ミニ課題：最強の仲間を選ぶ"),
@@ -415,6 +419,7 @@ fn strongest(squad: &[Box<dyn Skill>]) -> Option<String> {
 
 /** Fearless Tower boss: one thread per wave, results back through a channel. */
 export const totalDamageTask: CodeTaskBeat = {
+  slug: "total-damage",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: count the flames", "Mini proyecto: cuenta las llamas", "ミニ課題：炎のダメージを数える"),
@@ -506,6 +511,7 @@ fn total_damage(waves: Vec<Vec<u32>>) -> u32 {
 // ─── JUNIOR SCREENING (ide) ─────────────────────────────────────────────────
 
 export const longestWordTask: ExamQuestion = {
+  slug: "longest-word",
   kind: "code",
   mode: "ide",
   topic: "borrowing",
@@ -564,6 +570,7 @@ export const longestWordTask: ExamQuestion = {
 };
 
 export const sumEvensTask: ExamQuestion = {
+  slug: "sum-evens",
   kind: "code",
   mode: "ide",
   topic: "collections",
@@ -610,6 +617,7 @@ export const sumEvensTask: ExamQuestion = {
 };
 
 export const parseAgeTask: ExamQuestion = {
+  slug: "parse-age",
   kind: "code",
   mode: "ide",
   topic: "errors",
@@ -667,6 +675,7 @@ export const parseAgeTask: ExamQuestion = {
 };
 
 export const initialsTask: ExamQuestion = {
+  slug: "initials",
   kind: "code",
   mode: "ide",
   topic: "ownership",
@@ -734,6 +743,7 @@ export const initialsTask: ExamQuestion = {
 // ─── MID SCREENING (2 ide + 2 paper) ────────────────────────────────────────
 
 export const wordFreqTask: ExamQuestion = {
+  slug: "word-freq",
   kind: "code",
   mode: "ide",
   topic: "collections",
@@ -804,6 +814,7 @@ fn word_freq(text: &str) -> Vec<(String, usize)> {
 };
 
 export const parseKvTask: ExamQuestion = {
+  slug: "parse-kv",
   kind: "code",
   mode: "ide",
   topic: "errors",
@@ -864,6 +875,7 @@ export const parseKvTask: ExamQuestion = {
 };
 
 export const rleTask: ExamQuestion = {
+  slug: "rle",
   kind: "code",
   mode: "paper",
   topic: "iterators",
@@ -947,6 +959,7 @@ export const rleTask: ExamQuestion = {
 };
 
 export const largestTask: ExamQuestion = {
+  slug: "largest",
   kind: "code",
   mode: "paper",
   topic: "traits",
@@ -1013,6 +1026,7 @@ export const largestTask: ExamQuestion = {
 // ─── SENIOR SCREENING (1 ide + 3 paper) ─────────────────────────────────────
 
 export const sumLinesTask: ExamQuestion = {
+  slug: "sum-lines",
   kind: "code",
   mode: "ide",
   topic: "errors",
@@ -1083,6 +1097,7 @@ export const sumLinesTask: ExamQuestion = {
 };
 
 export const tokensTask: ExamQuestion = {
+  slug: "tokens",
   kind: "code",
   mode: "paper",
   topic: "lifetimes",
@@ -1163,6 +1178,7 @@ export const tokensTask: ExamQuestion = {
 };
 
 export const parallelSumTask: ExamQuestion = {
+  slug: "parallel-sum",
   kind: "code",
   mode: "paper",
   topic: "concurrency",
@@ -1240,6 +1256,7 @@ fn parallel_sum(data: &[u64], workers: usize) -> u64 {
 };
 
 export const collatzTask: ExamQuestion = {
+  slug: "collatz",
   kind: "code",
   mode: "paper",
   topic: "iterators",

@@ -14,6 +14,7 @@ const lines = (...ls: string[]) => ls.join("\n") + "\n";
 
 /** Value Village boss (Copy Golem): arrays are shared by reference, so build a new one. */
 export const doubledTask: CodeTaskBeat = {
+  slug: "doubled",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: the Golem's mirror", "Mini proyecto: el espejo del Gólem", "ミニ課題：ゴーレムの鏡"),
@@ -96,6 +97,7 @@ export const doubledTask: CodeTaskBeat = {
 
 /** Class Forest boss (Class Treant): an interface, two classes and a polymorphic loop. */
 export const armyTask: CodeTaskBeat = {
+  slug: "army",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: rally the army", "Mini proyecto: reúne al ejército", "ミニ課題：軍をまとめる"),
@@ -257,6 +259,7 @@ export const armyTask: CodeTaskBeat = {
 
 /** LINQ Peaks boss (LINQ Hydra): group, count and sort with two keys. */
 export const lootSummaryTask: CodeTaskBeat = {
+  slug: "loot-summary",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: count the Hydra's loot", "Mini proyecto: cuenta el botín de la Hidra", "ミニ課題：ヒドラの戦利品を数える"),
@@ -344,6 +347,7 @@ export const lootSummaryTask: CodeTaskBeat = {
 
 /** Task Tower boss (Task Lich): await each save inside its own try. */
 export const saveAllTask: CodeTaskBeat = {
+  slug: "save-all",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: save every slot", "Mini proyecto: guarda cada ranura", "ミニ課題：全スロットを保存"),
@@ -456,6 +460,7 @@ export const saveAllTask: CodeTaskBeat = {
 
 /** Junior: string splitting and joining. */
 export const reverseWordsTask: ExamQuestion = {
+  slug: "reverse-words",
   kind: "code",
   mode: "ide",
   topic: "types-strings",
@@ -537,6 +542,7 @@ export const reverseWordsTask: ExamQuestion = {
 
 /** Junior: counting with a dictionary or GroupBy, printed in a stable order. */
 export const letterCountsTask: ExamQuestion = {
+  slug: "letter-counts",
   kind: "code",
   mode: "ide",
   topic: "collections-generics",
@@ -623,6 +629,7 @@ export const letterCountsTask: ExamQuestion = {
 
 /** Junior: guard clauses that throw the right exception types. */
 export const withdrawTask: ExamQuestion = {
+  slug: "withdraw",
   kind: "code",
   mode: "ide",
   topic: "exceptions",
@@ -704,6 +711,7 @@ export const withdrawTask: ExamQuestion = {
 
 /** Junior: nullable strings. */
 export const greetTask: ExamQuestion = {
+  slug: "greet",
   kind: "code",
   mode: "ide",
   topic: "nulls",
@@ -774,6 +782,7 @@ export const greetTask: ExamQuestion = {
 
 /** Mid: a LINQ report (group, sum, two-key sort, take). */
 export const topSpendersTask: ExamQuestion = {
+  slug: "top-spenders",
   kind: "code",
   mode: "ide",
   topic: "linq",
@@ -874,6 +883,7 @@ export const topSpendersTask: ExamQuestion = {
 
 /** Mid: value equality (Equals, GetHashCode, == and ToString). */
 export const moneyTask: ExamQuestion = {
+  slug: "money",
   kind: "code",
   mode: "ide",
   topic: "equality",
@@ -941,6 +951,7 @@ export const moneyTask: ExamQuestion = {
 
 /** Mid, written test: parsing with TryParse and a dictionary. */
 export const parseConfigTask: ExamQuestion = {
+  slug: "parse-config",
   kind: "code",
   mode: "paper",
   topic: "collections-generics",
@@ -1050,6 +1061,7 @@ export const parseConfigTask: ExamQuestion = {
 
 /** Mid, written test: delegates and closures. */
 export const composeTask: ExamQuestion = {
+  slug: "compose",
   kind: "code",
   mode: "paper",
   topic: "delegates-closures",
@@ -1146,6 +1158,7 @@ export const composeTask: ExamQuestion = {
 
 /** Senior: Task.WhenAll with per-task error handling, results in input order. */
 export const loadAllTask: ExamQuestion = {
+  slug: "load-all",
   kind: "code",
   mode: "ide",
   topic: "async",
@@ -1237,6 +1250,7 @@ export const loadAllTask: ExamQuestion = {
 
 /** Senior, written test: grouping by a computed key (and the classic key-equality trap). */
 export const anagramsTask: ExamQuestion = {
+  slug: "anagrams",
   kind: "code",
   mode: "paper",
   topic: "linq",
@@ -1324,6 +1338,7 @@ export const anagramsTask: ExamQuestion = {
 
 /** Senior, written test: an LRU cache with Dictionary + LinkedList. */
 export const lruCacheTask: ExamQuestion = {
+  slug: "lru-cache",
   kind: "code",
   mode: "paper",
   topic: "collections-generics",
@@ -1453,6 +1468,7 @@ export const lruCacheTask: ExamQuestion = {
 
 /** Senior, written test: retries with exception filters and an unchanged rethrow. */
 export const retryTask: ExamQuestion = {
+  slug: "retry",
   kind: "code",
   mode: "paper",
   topic: "exceptions",

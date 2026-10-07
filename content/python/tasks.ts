@@ -6,6 +6,7 @@ import { L } from "../../lib/i18n/text.ts";
 
 /** Region boss mini project (Collection Forest): merge two inventories without touching them. */
 export const mergeInventoryTask: CodeTaskBeat = {
+  slug: "merge-inventory",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: merge two loot bags", "Mini proyecto: fusiona dos bolsas", "ミニ課題：2つの袋をまとめる"),
@@ -40,6 +41,7 @@ export const mergeInventoryTask: CodeTaskBeat = {
 
 /** Junior screening: a warm-up function in a normal editor. */
 export const countVowelsTask: ExamQuestion = {
+  slug: "count-vowels",
   kind: "code",
   mode: "ide",
   topic: "numbers_strings",
@@ -69,6 +71,7 @@ export const countVowelsTask: ExamQuestion = {
 
 /** Mid screening, written-test style: no running, no paste, one submission. */
 export const topWordsTask: ExamQuestion = {
+  slug: "top-words",
   kind: "code",
   mode: "paper",
   topic: "stdlib",
@@ -103,6 +106,7 @@ export const topWordsTask: ExamQuestion = {
 
 /** Senior screening, written-test style: recursion over nested data. */
 export const flattenTask: ExamQuestion = {
+  slug: "flatten",
   kind: "code",
   mode: "paper",
   topic: "patterns",
@@ -138,6 +142,7 @@ export const flattenTask: ExamQuestion = {
 
 /** Region boss mini project (Name Village): // and % plus a zero-padded f-string. */
 export const formatClockTask: CodeTaskBeat = {
+  slug: "format-clock",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: the golem's clock", "Mini proyecto: el reloj del gólem", "ミニ課題：ゴーレムの時計"),
@@ -172,6 +177,7 @@ export const formatClockTask: CodeTaskBeat = {
 
 /** Region boss mini project (Function Peaks): a closure with nonlocal state. */
 export const makeCounterTask: CodeTaskBeat = {
+  slug: "make-counter",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: the wyvern's counters", "Mini proyecto: los contadores del guiverno", "ミニ課題：ワイバーンのカウンター"),
@@ -206,6 +212,7 @@ export const makeCounterTask: CodeTaskBeat = {
 
 /** Region boss mini project (Object Tower): a small class with per-instance state and a property. */
 export const ledgerTask: CodeTaskBeat = {
+  slug: "ledger",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: the lich's ledger", "Mini proyecto: el libro del liche", "ミニ課題：リッチの帳簿"),
@@ -241,6 +248,7 @@ export const ledgerTask: CodeTaskBeat = {
 // ─── Junior screening (ide) ────────────────────────────────────────────────
 
 export const secondLargestTask: ExamQuestion = {
+  slug: "second-largest",
   kind: "code",
   mode: "ide",
   topic: "collections_basics",
@@ -274,6 +282,7 @@ export const secondLargestTask: ExamQuestion = {
 };
 
 export const isPalindromeTask: ExamQuestion = {
+  slug: "is-palindrome",
   kind: "code",
   mode: "ide",
   topic: "numbers_strings",
@@ -308,6 +317,7 @@ export const isPalindromeTask: ExamQuestion = {
 };
 
 export const firstUniqueTask: ExamQuestion = {
+  slug: "first-unique",
   kind: "code",
   mode: "ide",
   topic: "collections_basics",
@@ -344,6 +354,7 @@ export const firstUniqueTask: ExamQuestion = {
 // ─── Mid screening (2 ide + 2 paper) ───────────────────────────────────────
 
 export const groupAnagramsTask: ExamQuestion = {
+  slug: "group-anagrams",
   kind: "code",
   mode: "ide",
   topic: "stdlib",
@@ -377,6 +388,7 @@ export const groupAnagramsTask: ExamQuestion = {
 };
 
 export const lruCacheTask: ExamQuestion = {
+  slug: "lru-cache",
   kind: "code",
   mode: "ide",
   topic: "classes",
@@ -410,6 +422,7 @@ export const lruCacheTask: ExamQuestion = {
 };
 
 export const parseScoresTask: ExamQuestion = {
+  slug: "parse-scores",
   kind: "code",
   mode: "paper",
   topic: "exceptions",
@@ -445,6 +458,7 @@ export const parseScoresTask: ExamQuestion = {
 // ─── Senior screening (1 ide + 3 paper) ────────────────────────────────────
 
 export const retryTask: ExamQuestion = {
+  slug: "retry",
   kind: "code",
   mode: "ide",
   topic: "decorators",
@@ -478,6 +492,7 @@ export const retryTask: ExamQuestion = {
 };
 
 export const chunkedTask: ExamQuestion = {
+  slug: "chunked",
   kind: "code",
   mode: "paper",
   topic: "generators",
@@ -511,6 +526,7 @@ export const chunkedTask: ExamQuestion = {
 };
 
 export const mergeIntervalsTask: ExamQuestion = {
+  slug: "merge-intervals",
   kind: "code",
   mode: "paper",
   topic: "comprehensions",

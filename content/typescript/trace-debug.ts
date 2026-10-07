@@ -18,6 +18,7 @@ const JSON_BRIEF = L(
 
 /** Junior trace: two names for one array, and a real copy. */
 export const sharedArrayTrace: ExamQuestion = {
+  slug: "shared-array",
   kind: "trace",
   topic: "objects",
   difficulty: 1,
@@ -58,6 +59,7 @@ export const sharedArrayTrace: ExamQuestion = {
 
 /** Junior trace: + with a string on one side, and % on numbers. */
 export const prependTrace: ExamQuestion = {
+  slug: "prepend",
   kind: "trace",
   topic: "values",
   difficulty: 1,
@@ -96,6 +98,7 @@ export const prependTrace: ExamQuestion = {
 
 /** Mid trace: sync code, then microtasks, then timers. */
 export const queueOrderTrace: ExamQuestion = {
+  slug: "queue-order",
   kind: "trace",
   topic: "event_loop",
   difficulty: 2,
@@ -139,6 +142,7 @@ export const queueOrderTrace: ExamQuestion = {
 
 /** Mid trace: var shares one binding across the loop, let makes one per pass. */
 export const varLetClosureTrace: ExamQuestion = {
+  slug: "var-let-closure",
   kind: "trace",
   topic: "closures",
   difficulty: 2,
@@ -177,6 +181,7 @@ export const varLetClosureTrace: ExamQuestion = {
 
 /** Mid debug: the default sort compares numbers as text. */
 export const medianSortDebug: ExamQuestion = {
+  slug: "median-sort",
   kind: "debug",
   mode: "ide",
   topic: "arrays",
@@ -240,6 +245,7 @@ export const medianSortDebug: ExamQuestion = {
 
 /** Mid debug: an async callback inside forEach is never awaited. */
 export const asyncForEachDebug: ExamQuestion = {
+  slug: "async-for-each",
   kind: "debug",
   mode: "ide",
   topic: "async",
@@ -313,6 +319,7 @@ export const asyncForEachDebug: ExamQuestion = {
 
 /** Senior trace: values sent into a generator with next(arg). */
 export const generatorNextTrace: ExamQuestion = {
+  slug: "generator-next",
   kind: "trace",
   topic: "iterators",
   difficulty: 3,
@@ -364,6 +371,7 @@ export const generatorNextTrace: ExamQuestion = {
 
 /** Senior debug (ide): a truthiness check on the cache misses falsy results. */
 export const memoizeFalsyDebug: ExamQuestion = {
+  slug: "memoize-falsy",
   kind: "debug",
   mode: "ide",
   topic: "collections",
@@ -447,6 +455,7 @@ export const memoizeFalsyDebug: ExamQuestion = {
 
 /** Senior debug (paper): a shallow spread shares the nested object with the old state. */
 export const shallowSettingsDebug: ExamQuestion = {
+  slug: "shallow-settings",
   kind: "debug",
   mode: "paper",
   topic: "objects",
@@ -581,6 +590,7 @@ export const shallowSettingsDebug: ExamQuestion = {
 
 /** Senior debug (paper): map passes the index as parseInt's radix. */
 export const parseIntMapDebug: ExamQuestion = {
+  slug: "parse-int-map",
   kind: "debug",
   mode: "paper",
   topic: "arrays",

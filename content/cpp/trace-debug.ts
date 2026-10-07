@@ -15,6 +15,7 @@ const pass = (n: number) => L(`pass ${n}`, `vuelta ${n}`, `${n}周目`);
 
 /** Junior trace: integer division and modulo peel digits off. */
 export const reverseDigitsTrace: ExamQuestion = {
+  slug: "reverse-digits",
   kind: "trace",
   topic: "basics",
   difficulty: 1,
@@ -59,6 +60,7 @@ export const reverseDigitsTrace: ExamQuestion = {
 
 /** Junior trace: a reference is another name for the same int; a copy is not. */
 export const referenceAliasTrace: ExamQuestion = {
+  slug: "reference-alias",
   kind: "trace",
   topic: "references",
   difficulty: 1,
@@ -102,6 +104,7 @@ export const referenceAliasTrace: ExamQuestion = {
 
 /** Mid trace: vector copies are deep; range-for by value changes nothing. */
 export const vectorCopyTrace: ExamQuestion = {
+  slug: "vector-copy",
   kind: "trace",
   topic: "containers",
   difficulty: 2,
@@ -142,6 +145,7 @@ export const vectorCopyTrace: ExamQuestion = {
 
 /** Mid trace: lambda capture by value is a snapshot, by reference follows the variable. */
 export const lambdaCaptureTrace: ExamQuestion = {
+  slug: "lambda-capture",
   kind: "trace",
   topic: "lambdas_stl",
   difficulty: 2,
@@ -186,6 +190,7 @@ export const lambdaCaptureTrace: ExamQuestion = {
 
 /** Mid debug: integer division hidden inside a function that returns double. */
 export const averageDebug: ExamQuestion = {
+  slug: "average",
   kind: "debug",
   mode: "ide",
   topic: "basics",
@@ -259,6 +264,7 @@ export const averageDebug: ExamQuestion = {
 
 /** Mid debug: the vector is taken by value, so the caller never sees the change. */
 export const addPrefixDebug: ExamQuestion = {
+  slug: "add-prefix",
   kind: "debug",
   mode: "ide",
   topic: "references",
@@ -326,6 +332,7 @@ export const addPrefixDebug: ExamQuestion = {
 
 /** Senior trace: unsigned char wraps modulo 256 and is promoted to int in comparisons. */
 export const unsignedWrapTrace: ExamQuestion = {
+  slug: "unsigned-wrap",
   kind: "trace",
   topic: "basics",
   difficulty: 3,
@@ -371,6 +378,7 @@ export const unsignedWrapTrace: ExamQuestion = {
 
 /** Senior debug: std::accumulate takes its type from the initial value. */
 export const cartTotalDebug: ExamQuestion = {
+  slug: "cart-total",
   kind: "debug",
   mode: "ide",
   topic: "lambdas_stl",
@@ -476,6 +484,7 @@ export const cartTotalDebug: ExamQuestion = {
 
 /** Senior paper debug: an unsigned difference is never negative. */
 export const overflowReportDebug: ExamQuestion = {
+  slug: "overflow-report",
   kind: "debug",
   mode: "paper",
   topic: "basics",
@@ -575,6 +584,7 @@ export const overflowReportDebug: ExamQuestion = {
 
 /** Senior paper debug: passing a polymorphic object by value slices it. */
 export const shippingSliceDebug: ExamQuestion = {
+  slug: "shipping-slice",
   kind: "debug",
   mode: "paper",
   topic: "polymorphism",

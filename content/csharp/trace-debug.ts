@@ -14,6 +14,7 @@ const after = (n: number) => L(`after line ${n}`, `tras la l√≠nea ${n}`, `${n}Ë°
 
 /** Junior trace: + is evaluated left to right, so a string on the left turns ints into text. */
 export const concatTrace: ExamQuestion = {
+  slug: "concat",
   kind: "trace",
   topic: "types-strings",
   difficulty: 1,
@@ -57,6 +58,7 @@ export const concatTrace: ExamQuestion = {
 
 /** Junior trace: assigning a struct copies it, assigning a class shares the object. */
 export const structClassTrace: ExamQuestion = {
+  slug: "struct-class",
   kind: "trace",
   topic: "value-reference",
   difficulty: 1,
@@ -103,6 +105,7 @@ export const structClassTrace: ExamQuestion = {
 
 /** Mid trace: a LINQ query is re-run against the live list each time it is enumerated. */
 export const deferredTrace: ExamQuestion = {
+  slug: "deferred",
   kind: "trace",
   topic: "linq",
   difficulty: 2,
@@ -137,6 +140,7 @@ export const deferredTrace: ExamQuestion = {
 
 /** Mid trace: a for loop shares one variable across closures; foreach gets a fresh one per pass. */
 export const loopClosureTrace: ExamQuestion = {
+  slug: "loop-closure",
   kind: "trace",
   topic: "delegates-closures",
   difficulty: 2,
@@ -174,6 +178,7 @@ export const loopClosureTrace: ExamQuestion = {
 
 /** Mid debug: strings are immutable, so a call whose result is ignored changes nothing. */
 export const slugDebug: ExamQuestion = {
+  slug: "slug",
   kind: "debug",
   mode: "ide",
   topic: "types-strings",
@@ -259,6 +264,7 @@ export const slugDebug: ExamQuestion = {
 
 /** Mid debug: a deferred query is enumerated after the data it filters has changed. */
 export const shipPendingDebug: ExamQuestion = {
+  slug: "ship-pending",
   kind: "debug",
   mode: "ide",
   topic: "linq",
@@ -380,6 +386,7 @@ export const shipPendingDebug: ExamQuestion = {
 
 /** Senior trace: assigning a struct to an interface boxes a copy; copying the interface shares the box. */
 export const boxingTrace: ExamQuestion = {
+  slug: "boxing",
   kind: "trace",
   topic: "value-reference",
   difficulty: 3,
@@ -434,6 +441,7 @@ export const boxingTrace: ExamQuestion = {
 
 /** Senior debug: a lambda is a new delegate, so `-=` with a fresh lambda removes nothing. */
 export const detachDebug: ExamQuestion = {
+  slug: "detach",
   kind: "debug",
   mode: "ide",
   topic: "delegates-closures",
@@ -535,6 +543,7 @@ export const detachDebug: ExamQuestion = {
 
 /** Senior paper debug: calling a mutating method on a readonly struct field works on a copy. */
 export const readonlyStructDebug: ExamQuestion = {
+  slug: "readonly-struct",
   kind: "debug",
   mode: "paper",
   topic: "value-reference",
@@ -665,6 +674,7 @@ export const readonlyStructDebug: ExamQuestion = {
 
 /** Senior paper debug: int * int overflows before it is widened to long. */
 export const quotaDebug: ExamQuestion = {
+  slug: "quota",
   kind: "debug",
   mode: "paper",
   topic: "types-strings",

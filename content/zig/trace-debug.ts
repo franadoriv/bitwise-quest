@@ -15,6 +15,7 @@ const pass = (n: number) => L(`pass ${n}`, `vuelta ${n}`, `${n}周目`);
 
 /** Junior trace: wrapping addition on a u8. */
 export const wrapAddTrace: ExamQuestion = {
+  slug: "wrap-add",
   kind: "trace",
   topic: "integers",
   difficulty: 1,
@@ -56,6 +57,7 @@ pub fn main() !void {
 
 /** Junior trace: digits peeled off with % and / on integers. */
 export const digitSumTrace: ExamQuestion = {
+  slug: "digit-sum",
   kind: "trace",
   topic: "control",
   difficulty: 1,
@@ -101,6 +103,7 @@ pub fn main() !void {
 
 /** Mid trace: `continue` still runs the while's continue expression. */
 export const continueExprTrace: ExamQuestion = {
+  slug: "continue-expr",
   kind: "trace",
   topic: "control",
   difficulty: 2,
@@ -147,6 +150,7 @@ pub fn main() !void {
 
 /** Mid trace: a slice that shares memory with the array it reads from. */
 export const sliceAliasTrace: ExamQuestion = {
+  slug: "slice-alias",
   kind: "trace",
   topic: "slices",
   difficulty: 2,
@@ -190,6 +194,7 @@ pub fn main() !void {
 
 /** Senior trace: defer inside recursion runs on the way back out, innermost call first. */
 export const deferRecursionTrace: ExamQuestion = {
+  slug: "defer-recursion",
   kind: "trace",
   topic: "defer",
   difficulty: 3,
@@ -249,6 +254,7 @@ pub fn main() !void {
 
 /** Mid debug: a backwards loop that stops one index too early. */
 export const lastIndexDebug: ExamQuestion = {
+  slug: "last-index",
   kind: "debug",
   mode: "ide",
   topic: "slices",
@@ -325,6 +331,7 @@ fn lastIndexOf(s: []const u8, c: u8) ?usize {
 
 /** Mid debug: a sum kept in a u8 overflows (a safety-checked panic in Debug). */
 export const averageOverflowDebug: ExamQuestion = {
+  slug: "average-overflow",
   kind: "debug",
   mode: "ide",
   topic: "integers",
@@ -398,6 +405,7 @@ fn average(xs: []const u8) u8 {
 
 /** Senior debug (ide): the update lands on a copy of the struct, not on the slice element. */
 export const restockDebug: ExamQuestion = {
+  slug: "restock",
   kind: "debug",
   mode: "ide",
   topic: "structs",
@@ -554,6 +562,7 @@ fn totalQty(items: []const Stock) u32 {
 
 /** Senior debug (paper): splitScalar yields empty fields that parseInt rejects. */
 export const sumCsvDebug: ExamQuestion = {
+  slug: "sum-csv",
   kind: "debug",
   mode: "paper",
   topic: "errors",
@@ -664,6 +673,7 @@ if (sumCsv(",7,")) |t| {
 
 /** Senior debug (paper): removing while walking forward skips the next element. */
 export const removeEvensDebug: ExamQuestion = {
+  slug: "remove-evens",
   kind: "debug",
   mode: "paper",
   topic: "containers",

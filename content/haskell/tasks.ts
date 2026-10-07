@@ -9,6 +9,7 @@ import { L } from "../../lib/i18n/text.ts";
 
 /** Lambda Village boss (The Partial Moth): one equation per list shape, no holes left. */
 export const describeListTask: CodeTaskBeat = {
+  slug: "describe-list",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: cover every shape", "Mini proyecto: cubre cada forma", "ミニ課題：すべての形をカバー"),
@@ -48,6 +49,7 @@ export const describeListTask: CodeTaskBeat = {
 
 /** Fold Forest boss (The Thunk Pile): a pipeline of functions applied in order with a fold. */
 export const applyAllTask: CodeTaskBeat = {
+  slug: "apply-all",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: the spell pipeline", "Mini proyecto: la cadena de hechizos", "ミニ課題：呪文のパイプライン"),
@@ -86,6 +88,7 @@ export const applyAllTask: CodeTaskBeat = {
 
 /** Lazy Mountain boss (The Bottom Wraith): a binary search tree as an algebraic data type. */
 export const searchTreeTask: CodeTaskBeat = {
+  slug: "search-tree",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: a sorted treasure tree", "Mini proyecto: un árbol de tesoros", "ミニ課題：整列する宝の木"),
@@ -126,6 +129,7 @@ export const searchTreeTask: CodeTaskBeat = {
 
 /** Monad Tower boss (The Tower Guardian): a Data.Map chest with Either errors, chained with >>=. */
 export const withdrawTask: CodeTaskBeat = {
+  slug: "withdraw",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: the guarded chest", "Mini proyecto: el cofre vigilado", "ミニ課題：見張られた宝箱"),
@@ -168,6 +172,7 @@ export const withdrawTask: CodeTaskBeat = {
 // ─── Junior screening (mode "ide") ──────────────────────────────────────────
 
 export const countVowelsTask: ExamQuestion = {
+  slug: "count-vowels",
   kind: "code",
   mode: "ide",
   topic: "lists",
@@ -199,6 +204,7 @@ export const countVowelsTask: ExamQuestion = {
 };
 
 export const digitSumTask: ExamQuestion = {
+  slug: "digit-sum",
   kind: "code",
   mode: "ide",
   topic: "recursion",
@@ -234,6 +240,7 @@ export const digitSumTask: ExamQuestion = {
 };
 
 export const fizzBuzzTask: ExamQuestion = {
+  slug: "fizz-buzz",
   kind: "code",
   mode: "ide",
   topic: "patterns",
@@ -266,6 +273,7 @@ export const fizzBuzzTask: ExamQuestion = {
 };
 
 export const compressTask: ExamQuestion = {
+  slug: "compress",
   kind: "code",
   mode: "ide",
   topic: "lists",
@@ -302,6 +310,7 @@ export const compressTask: ExamQuestion = {
 // ─── Mid screening (2 "ide" + 2 "paper") ───────────────────────────────────
 
 export const wordFreqTask: ExamQuestion = {
+  slug: "word-freq",
   kind: "code",
   mode: "ide",
   topic: "containers",
@@ -337,6 +346,7 @@ export const wordFreqTask: ExamQuestion = {
 };
 
 export const parseAgeTask: ExamQuestion = {
+  slug: "parse-age",
   kind: "code",
   mode: "ide",
   topic: "maybe_either",
@@ -373,6 +383,7 @@ export const parseAgeTask: ExamQuestion = {
 };
 
 export const finalBalanceTask: ExamQuestion = {
+  slug: "final-balance",
   kind: "code",
   mode: "paper",
   topic: "folds",
@@ -407,6 +418,7 @@ export const finalBalanceTask: ExamQuestion = {
 };
 
 export const evalExprTask: ExamQuestion = {
+  slug: "eval-expr",
   kind: "code",
   mode: "paper",
   topic: "adts",
@@ -443,6 +455,7 @@ export const evalExprTask: ExamQuestion = {
 // ─── Senior screening (1 "ide" + 3 "paper") ────────────────────────────────
 
 export const statsMonoidTask: ExamQuestion = {
+  slug: "stats-monoid",
   kind: "code",
   mode: "ide",
   topic: "typeclasses",
@@ -478,6 +491,7 @@ export const statsMonoidTask: ExamQuestion = {
 };
 
 export const parseAllTask: ExamQuestion = {
+  slug: "parse-all",
   kind: "code",
   mode: "paper",
   topic: "monads",
@@ -512,6 +526,7 @@ export const parseAllTask: ExamQuestion = {
 };
 
 export const groupByLengthTask: ExamQuestion = {
+  slug: "group-by-length",
   kind: "code",
   mode: "paper",
   topic: "containers",
@@ -547,6 +562,7 @@ export const groupByLengthTask: ExamQuestion = {
 };
 
 export const rpnTask: ExamQuestion = {
+  slug: "rpn",
   kind: "code",
   mode: "paper",
   topic: "maybe_either",

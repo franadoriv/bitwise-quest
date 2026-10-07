@@ -13,6 +13,7 @@ const src = (s: string) => s.replace(/^\n/, "");
 
 /** Value Village boss (Pointer Golem): hand back a pointer into the caller's vector. */
 export const findFirstTask: CodeTaskBeat = {
+  slug: "find-first",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: point at the first match", "Mini proyecto: apunta al primer hallazgo", "ミニ課題：最初の一致を指す"),
@@ -86,6 +87,7 @@ int* findFirst(std::vector<int>& v, int target) {
 
 /** Lifetime Forest boss (Lifetime Lich): an RAII class that logs its birth and death. */
 export const lanternTask: CodeTaskBeat = {
+  slug: "lantern",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: lanterns that log their lives", "Mini proyecto: faroles que anotan su vida", "ミニ課題：一生を記録するランタン"),
@@ -175,6 +177,7 @@ public:
 
 /** Polymorph Castle boss (Vtable Dragon): a small class hierarchy behind a base reference. */
 export const shapesTask: CodeTaskBeat = {
+  slug: "shapes",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: the dragon's shapes", "Mini proyecto: las figuras del dragón", "ミニ課題：ドラゴンの図形"),
@@ -341,6 +344,7 @@ int totalArea(const std::vector<std::unique_ptr<Shape>>& shapes) {
 
 /** Template Tower boss (Undefined Overlord): erase without tripping over invalidated positions. */
 export const eraseWhereTask: CodeTaskBeat = {
+  slug: "erase-where",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: erase without invalidation", "Mini proyecto: borrar sin invalidar", "ミニ課題：無効化せずに消す"),
@@ -429,6 +433,7 @@ std::size_t eraseWhere(std::vector<T>& v, Pred pred) {
 // ─── Junior screening ───────────────────────────────────────────────────────
 
 export const reverseWordsTask: ExamQuestion = {
+  slug: "reverse-words",
   kind: "code",
   mode: "ide",
   topic: "containers",
@@ -506,6 +511,7 @@ std::string reverseWords(const std::string& s) {
 };
 
 export const clampAllTask: ExamQuestion = {
+  slug: "clamp-all",
   kind: "code",
   mode: "ide",
   topic: "references",
@@ -571,6 +577,7 @@ void clampAll(std::vector<int>& v, int lo, int hi) {
 };
 
 export const palindromeTask: ExamQuestion = {
+  slug: "palindrome",
   kind: "code",
   mode: "ide",
   topic: "basics",
@@ -647,6 +654,7 @@ bool isPalindrome(const std::string& s) {
 };
 
 export const accountTask: ExamQuestion = {
+  slug: "account",
   kind: "code",
   mode: "ide",
   topic: "classes",
@@ -749,6 +757,7 @@ private:
 // ─── Mid screening ──────────────────────────────────────────────────────────
 
 export const countWordsTask: ExamQuestion = {
+  slug: "count-words",
   kind: "code",
   mode: "ide",
   topic: "lambdas_stl",
@@ -837,6 +846,7 @@ std::map<std::string, int> countWords(const std::string& text) {
 };
 
 export const scopedCounterTask: ExamQuestion = {
+  slug: "scoped-counter",
   kind: "code",
   mode: "ide",
   topic: "raii",
@@ -905,6 +915,7 @@ private:
 };
 
 export const sortByLengthTask: ExamQuestion = {
+  slug: "sort-by-length",
   kind: "code",
   mode: "paper",
   topic: "lambdas_stl",
@@ -974,6 +985,7 @@ void sortByLength(std::vector<std::string>& words) {
 };
 
 export const linkedListTask: ExamQuestion = {
+  slug: "linked-list",
   kind: "code",
   mode: "paper",
   topic: "smart_pointers",
@@ -1087,6 +1099,7 @@ int sum(const Node* head) {
 // ─── Senior screening ───────────────────────────────────────────────────────
 
 export const lruCacheTask: ExamQuestion = {
+  slug: "lru-cache",
   kind: "code",
   mode: "ide",
   topic: "modern",
@@ -1246,6 +1259,7 @@ private:
 };
 
 export const joinAllTask: ExamQuestion = {
+  slug: "join-all",
   kind: "code",
   mode: "paper",
   topic: "templates",
@@ -1319,6 +1333,7 @@ std::string joinAll(const Args&... args) {
 };
 
 export const sumCsvTask: ExamQuestion = {
+  slug: "sum-csv",
   kind: "code",
   mode: "paper",
   topic: "exceptions",
@@ -1424,6 +1439,7 @@ int sumCsv(const std::string& csv) {
 };
 
 export const parallelSumTask: ExamQuestion = {
+  slug: "parallel-sum",
   kind: "code",
   mode: "paper",
   topic: "concurrency",

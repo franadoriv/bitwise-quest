@@ -47,7 +47,7 @@ if (pack && kind === "lesson") {
     save = completeLesson(save, langSlug, world, l, { score: 500, mistakes: 0, maxCombo: 3, correct: 5, attempts: [] }).save;
   }
 }
-if (pack) save.langs[langSlug] = { ...(save.langs[langSlug] ?? { lessons: {}, reviews: {}, exams: {} }), landedAt: Date.now() };
+if (pack) save.langs[langSlug] = { ...(save.langs[langSlug] ?? { lessons: {}, reviews: {}, exams: {}, practice: {} }), landedAt: Date.now() };
 // Review runs need due "wandering bugs": seed the first questions of the first lesson.
 let seeded = [];
 if (pack && kind === "review") {
@@ -192,6 +192,7 @@ if (finished && pack) {
   const rec = after?.langs[langSlug];
   persisted = kind === "lesson" ? !!rec?.lessons[target]?.doneAt
     : kind === "exam" ? (rec?.exams[target]?.attempts ?? 0) > 0
+    : kind === "practice" ? !!rec?.practice?.[target.split("?")[0]]?.solvedAt
     : kind === "review" ? seeded.every((k) => (rec?.reviews[k]?.box ?? 0) >= 1 && (rec?.reviews[k]?.due ?? 0) > Date.now()) : true;
   console.log(persisted ? `✓ saved · xp ${after?.stats.xp} · streak ${after?.stats.streak}` : "✗ result was not saved to the slot");
 }

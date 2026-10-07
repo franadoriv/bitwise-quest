@@ -14,6 +14,7 @@ const tsx = (code: string) => IMPORTS + code;
 
 /** JSX Village boss: a list with keys and conditional UI. */
 export const inventoryTask: CodeTaskBeat = {
+  slug: "inventory",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: show the loot bag", "Mini proyecto: muestra la bolsa de botín", "ミニ課題：戦利品の袋を表示"),
@@ -51,6 +52,7 @@ export const inventoryTask: CodeTaskBeat = {
 
 /** State Forest boss: replay React's state update queue. */
 export const applyQueueTask: CodeTaskBeat = {
+  slug: "apply-queue",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: replay the update queue", "Mini proyecto: reproduce la cola de cambios", "ミニ課題：更新キューを再生"),
@@ -89,6 +91,7 @@ export const applyQueueTask: CodeTaskBeat = {
 
 /** Effect Peaks boss: React's dependency-array comparison. */
 export const shouldRunEffectTask: CodeTaskBeat = {
+  slug: "should-run-effect",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: should the effect run?", "Mini proyecto: ¿se ejecuta el efecto?", "ミニ課題：副作用は走る？"),
@@ -127,6 +130,7 @@ export const shouldRunEffectTask: CodeTaskBeat = {
 
 /** Render Tower boss: the props comparison React.memo makes. */
 export const shallowEqualTask: CodeTaskBeat = {
+  slug: "shallow-equal",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: memo's props check", "Mini proyecto: la comparación de memo", "ミニ課題：memo の props 比較"),
@@ -166,6 +170,7 @@ export const shallowEqualTask: CodeTaskBeat = {
 // ─── JUNIOR (ide) ────────────────────────────────────────────────────────────
 
 export const navMenuTask: ExamQuestion = {
+  slug: "nav-menu",
   kind: "code",
   mode: "ide",
   topic: "lists_keys",
@@ -198,6 +203,7 @@ export const navMenuTask: ExamQuestion = {
 };
 
 export const badgeTask: ExamQuestion = {
+  slug: "badge",
   kind: "code",
   mode: "ide",
   topic: "components",
@@ -231,6 +237,7 @@ export const badgeTask: ExamQuestion = {
 };
 
 export const productCardTask: ExamQuestion = {
+  slug: "product-card",
   kind: "code",
   mode: "ide",
   topic: "jsx",
@@ -263,6 +270,7 @@ export const productCardTask: ExamQuestion = {
 };
 
 export const toggleTodoTask: ExamQuestion = {
+  slug: "toggle-todo",
   kind: "code",
   mode: "ide",
   topic: "immutability",
@@ -298,6 +306,7 @@ export const toggleTodoTask: ExamQuestion = {
 // ─── MID (2 ide + 2 paper) ───────────────────────────────────────────────────
 
 export const cartReducerTask: ExamQuestion = {
+  slug: "cart-reducer",
   kind: "code",
   mode: "ide",
   topic: "context_reducer",
@@ -331,6 +340,7 @@ export const cartReducerTask: ExamQuestion = {
 };
 
 export const visibleProductsTask: ExamQuestion = {
+  slug: "visible-products",
   kind: "code",
   mode: "ide",
   topic: "state",
@@ -364,6 +374,7 @@ export const visibleProductsTask: ExamQuestion = {
 };
 
 export const contactListTask: ExamQuestion = {
+  slug: "contact-list",
   kind: "code",
   mode: "paper",
   topic: "lists_keys",
@@ -396,6 +407,7 @@ export const contactListTask: ExamQuestion = {
 };
 
 export const validateSignupTask: ExamQuestion = {
+  slug: "validate-signup",
   kind: "code",
   mode: "paper",
   topic: "events_forms",
@@ -431,6 +443,7 @@ export const validateSignupTask: ExamQuestion = {
 // ─── SENIOR (1 ide + 3 paper) ────────────────────────────────────────────────
 
 export const undoableTask: ExamQuestion = {
+  slug: "undoable",
   kind: "code",
   mode: "ide",
   topic: "context_reducer",
@@ -464,6 +477,7 @@ export const undoableTask: ExamQuestion = {
 };
 
 export const visibleRangeTask: ExamQuestion = {
+  slug: "visible-range",
   kind: "code",
   mode: "paper",
   topic: "performance",
@@ -497,6 +511,7 @@ export const visibleRangeTask: ExamQuestion = {
 };
 
 export const treeViewTask: ExamQuestion = {
+  slug: "tree-view",
   kind: "code",
   mode: "paper",
   topic: "rendering",
@@ -529,6 +544,7 @@ export const treeViewTask: ExamQuestion = {
 };
 
 export const safeHrefTask: ExamQuestion = {
+  slug: "safe-href",
   kind: "code",
   mode: "paper",
   topic: "security",

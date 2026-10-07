@@ -22,6 +22,8 @@ type AnySave = Record<string, unknown> & { version: number };
 const MIGRATIONS: Record<number, (s: AnySave) => AnySave> = {
   // v2: hint tickets (everyone starts with the same allowance) and the lesson timer preference.
   1: (s) => ({ ...s, version: 2, stats: { ...obj(s.stats), tickets: START_TICKETS }, prefs: { timer: "normal" } }),
+  // v3: practice-room results per planet (coding, trace and debug tasks by slug).
+  2: (s) => ({ ...s, version: 3, langs: Object.fromEntries(Object.entries(obj(s.langs)).map(([k, v]) => [k, { ...obj(v), practice: {} }])) }),
 };
 
 const num = (v: unknown, d = 0) => (typeof v === "number" && Number.isFinite(v) ? v : d);
@@ -35,7 +37,7 @@ function normalize(s: AnySave): SaveData {
   const langs: Record<string, LangRecord> = {};
   for (const [k, v] of Object.entries(obj(s.langs))) {
     const l = obj(v);
-    langs[k] = { ...emptyLang(), ...l, lessons: obj(l.lessons), reviews: obj(l.reviews), exams: obj(l.exams) } as LangRecord;
+    langs[k] = { ...emptyLang(), ...l, lessons: obj(l.lessons), reviews: obj(l.reviews), exams: obj(l.exams), practice: obj(l.practice) } as LangRecord;
   }
   return {
     ...s,

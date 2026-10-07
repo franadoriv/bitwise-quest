@@ -26,6 +26,7 @@ export function ResultScreen({ play, score, maxCombo, mistakes, reward }: {
   const [ready, setReady] = useState(false);
   const stars = reward?.stars ?? (mistakes === 0 ? 3 : mistakes <= 2 ? 2 : 1);
   const map = `/play/${play.languageSlug}`;
+  const practice = play.mode === "practice";
   const { save, commit } = useSave();
   const ticketRef = useRef<HTMLButtonElement>(null);
   const buy = () => {
@@ -100,7 +101,7 @@ export function ResultScreen({ play, score, maxCombo, mistakes, reward }: {
         {(
           <>
             <div className="pixel" style={{ fontSize: 18, color: "var(--gold)", marginBottom: 18 }}>
-              {play.mode === "review" ? t("result.review") : play.mode === "boss" ? t("result.victory") : t("result.clear")}
+              {practice ? t(stars ? "practice.solved" : "practice.notYet") : play.mode === "review" ? t("result.review") : play.mode === "boss" ? t("result.victory") : t("result.clear")}
             </div>
             <div style={{ display: "flex", justifyContent: "center", gap: 10, marginBottom: 20 }}>
               {[0, 1, 2].map((i) => (
@@ -143,7 +144,11 @@ export function ResultScreen({ play, score, maxCombo, mistakes, reward }: {
           {reward?.nextLesson && play.mode !== "review" && (
             <button className="btn primary" onClick={() => go(`${map}/lesson/${reward.nextLesson}`)}>{t("common.next")}</button>
           )}
-          <button className="btn" onClick={() => go(map)}>{t("common.map")}</button>
+          {practice ? (
+            <button className="btn primary" onClick={() => go(`${map}/practice`)}>{t("practice.back")}</button>
+          ) : (
+            <button className="btn" onClick={() => go(map)}>{t("common.map")}</button>
+          )}
           {play.mode !== "review" && (
             <button className="btn small" onClick={() => window.location.reload()}>{t("common.repeat")}</button>
           )}
