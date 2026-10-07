@@ -9,6 +9,7 @@ const code = (...lines: string[]) => lines.join("\n");
 
 /** Junior trace: a running total through a loop. */
 export const doubleAddTrace: ExamQuestion = {
+  slug: "double-add",
   kind: "trace",
   topic: "numbers_strings",
   difficulty: 1,
@@ -39,6 +40,7 @@ export const doubleAddTrace: ExamQuestion = {
 
 /** Mid debug: a counter one indentation level too far out. */
 export const averagePositiveDebug: ExamQuestion = {
+  slug: "average-positive",
   kind: "debug",
   mode: "ide",
   topic: "functions",
@@ -92,6 +94,7 @@ export const averagePositiveDebug: ExamQuestion = {
 
 /** Junior trace: integer division and remainder build a base-3 string. */
 export const baseThreeTrace: ExamQuestion = {
+  slug: "base-three",
   kind: "trace",
   topic: "numbers_strings",
   difficulty: 1,
@@ -132,6 +135,7 @@ export const baseThreeTrace: ExamQuestion = {
 
 /** Mid trace: two names for one list, a slice copy, and `+` building a new list. */
 export const aliasTrace: ExamQuestion = {
+  slug: "alias",
   kind: "trace",
   topic: "mutability",
   difficulty: 2,
@@ -175,6 +179,7 @@ export const aliasTrace: ExamQuestion = {
 
 /** Mid trace: two closures, each with its own `count`. */
 export const counterClosureTrace: ExamQuestion = {
+  slug: "counter-closure",
   kind: "trace",
   topic: "scope_closures",
   difficulty: 2,
@@ -228,6 +233,7 @@ export const counterClosureTrace: ExamQuestion = {
 
 /** Mid debug: a "copy" that is only a second name for the caller's list. */
 export const withBonusDebug: ExamQuestion = {
+  slug: "with-bonus",
   kind: "debug",
   mode: "ide",
   topic: "mutability",
@@ -275,6 +281,7 @@ export const withBonusDebug: ExamQuestion = {
 
 /** Senior trace: a lazy generator pipeline only runs as far as it is pulled. */
 export const lazyPipelineTrace: ExamQuestion = {
+  slug: "lazy-pipeline",
   kind: "trace",
   topic: "generators",
   difficulty: 3,
@@ -326,6 +333,7 @@ export const lazyPipelineTrace: ExamQuestion = {
 
 /** Senior debug (ide): handlers registered in a loop all see the loop's last values. */
 export const lateBindingDebug: ExamQuestion = {
+  slug: "late-binding",
   kind: "debug",
   mode: "ide",
   topic: "scope_closures",
@@ -421,6 +429,7 @@ export const lateBindingDebug: ExamQuestion = {
 
 /** Senior debug (paper): a generator expression consumed twice. */
 export const exhaustedGeneratorDebug: ExamQuestion = {
+  slug: "exhausted-generator",
   kind: "debug",
   mode: "paper",
   topic: "comprehensions",
@@ -509,6 +518,7 @@ export const exhaustedGeneratorDebug: ExamQuestion = {
 
 /** Senior debug (paper): a mutable class attribute shared by every instance. */
 export const sharedClassListDebug: ExamQuestion = {
+  slug: "shared-class-list",
   kind: "debug",
   mode: "paper",
   topic: "classes",

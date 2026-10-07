@@ -6,6 +6,7 @@ import { L } from "../../lib/i18n/text.ts";
 
 /** Mid screening: slices and maps, in a normal editor. */
 export const dedupeTask: ExamQuestion = {
+  slug: "dedupe",
   kind: "code",
   mode: "ide",
   topic: "maps",
@@ -39,6 +40,7 @@ export const dedupeTask: ExamQuestion = {
 // ─── JUNIOR (online skills test, normal editor) ─────────────────────────────
 
 export const reverseWordsTask: ExamQuestion = {
+  slug: "reverse-words",
   kind: "code",
   mode: "ide",
   topic: "strings",
@@ -120,6 +122,7 @@ func ReverseWords(s string) string {
 };
 
 export const secondLargestTask: ExamQuestion = {
+  slug: "second-largest",
   kind: "code",
   mode: "ide",
   topic: "slices",
@@ -214,6 +217,7 @@ func SecondLargest(xs []int) (int, bool) {
 };
 
 export const topLetterTask: ExamQuestion = {
+  slug: "top-letter",
   kind: "code",
   mode: "ide",
   topic: "maps",
@@ -319,6 +323,7 @@ func TopLetter(s string) string {
 };
 
 export const parseAgeTask: ExamQuestion = {
+  slug: "parse-age",
   kind: "code",
   mode: "ide",
   topic: "errors",
@@ -416,6 +421,7 @@ func ParseAge(s string) (int, error) {
 // ─── MID (technical screen: 2 in the editor, 2 written) ─────────────────────
 
 export const stackTask: ExamQuestion = {
+  slug: "stack",
   kind: "code",
   mode: "ide",
   topic: "generics",
@@ -540,6 +546,7 @@ func (s *Stack[T]) Len() int {
 };
 
 export const topKTask: ExamQuestion = {
+  slug: "top-k",
   kind: "code",
   mode: "paper",
   topic: "maps",
@@ -660,6 +667,7 @@ func TopK(words []string, k int) []string {
 };
 
 export const withdrawTask: ExamQuestion = {
+  slug: "withdraw",
   kind: "code",
   mode: "paper",
   topic: "errors",
@@ -812,6 +820,7 @@ func (a Account) Withdraw(n int) error {
 // ─── SENIOR (interview: 1 in the editor, 3 written) ──────────────────────────
 
 export const parallelMapTask: ExamQuestion = {
+  slug: "parallel-map",
   kind: "code",
   mode: "ide",
   topic: "goroutines",
@@ -936,6 +945,7 @@ func ParallelMap[T, R any](xs []T, workers int, f func(T) R) []R {
 };
 
 export const mergeIntervalsTask: ExamQuestion = {
+  slug: "merge-intervals",
   kind: "code",
   mode: "paper",
   topic: "slices",
@@ -1072,6 +1082,7 @@ func Merge(iv [][2]int) [][2]int {
 };
 
 export const pipelineTask: ExamQuestion = {
+  slug: "pipeline",
   kind: "code",
   mode: "paper",
   topic: "channels",
@@ -1190,6 +1201,7 @@ func Square(in <-chan int) <-chan int {
 };
 
 export const parseKVTask: ExamQuestion = {
+  slug: "parse-k-v",
   kind: "code",
   mode: "paper",
   topic: "errors",
@@ -1321,6 +1333,7 @@ func ParseKV(s string) (map[string]string, error) {
 
 /** Gopher Village boss: strings, loops and functions. */
 export const runLengthTask: CodeTaskBeat = {
+  slug: "run-length",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: squeeze the scroll", "Mini proyecto: comprime el pergamino", "ミニ課題：巻物を縮める"),
@@ -1417,6 +1430,7 @@ func Encode(s string) string {
 
 /** Slice Forest boss: maps, structs, slices and not touching the caller's data. */
 export const mergeStockTask: CodeTaskBeat = {
+  slug: "merge-stock",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: merge two stock lists", "Mini proyecto: fusiona dos inventarios", "ミニ課題：2つの在庫表をまとめる"),
@@ -1547,6 +1561,7 @@ func MergeStock(a, b []Item) []Item {
 
 /** Interface Castle boss: implicit interfaces, method sets and sentinel errors. */
 export const largestShapeTask: CodeTaskBeat = {
+  slug: "largest-shape",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: the largest shield", "Mini proyecto: el escudo más grande", "ミニ課題：いちばん大きい盾"),
@@ -1736,6 +1751,7 @@ func Largest(shapes []Shape) (Shape, error) {
 
 /** Channel Tower boss: a worker pool whose results are collected and then sorted (deterministic). */
 export const squareAllTask: CodeTaskBeat = {
+  slug: "square-all",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: the tunnel worker pool", "Mini proyecto: el pool de trabajadores", "ミニ課題：トンネルのワーカープール"),

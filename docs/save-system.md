@@ -37,6 +37,7 @@ interface LangRecord {
   lessons: Record<lessonSlug, LessonRecord>;   // { stars, best, plays, skipped?, doneAt, recent }
   reviews: Record<"<lessonSlug>#<beatIndex>", ReviewRecord>;  // Leitner box { box, due }
   exams:   Record<examSlug, ExamRecord>;       // { attempts, bestPct, passed, last? { pct, at, topics } }
+  practice: Record<taskSlug, PracticeRecord>;  // practice room (v3): { plays, best, solvedAt?, paperAt? }
   landedAt?: number;          // first landing on the planet (intro shown)
   lastPlayedAt?: number;
 }
@@ -61,11 +62,12 @@ Design rules:
 1. It rejects anything without a numeric `version` (`SaveError("corrupt")`).
 2. A `version` above `SAVE_VERSION` is refused (`SaveError("newer")`): the player must update the game.
 3. While `version < SAVE_VERSION`, it applies `MIGRATIONS[version]`, which upgrades version *n* to *n + 1*. A missing step is `SaveError("corrupt")`.
-4. `normalize` fills defaults for any missing field (numbers default to 0, `lastDay` to `null`, `stats.tickets` to `START_TICKETS`, an unknown `prefs.timer` to `"normal"`, a missing `id` becomes `legacy-<createdAt>`, missing `lessons`/`reviews`/`exams` become `{}`) without dropping unknown fields (including unknown keys in `prefs`).
+4. `normalize` fills defaults for any missing field (numbers default to 0, `lastDay` to `null`, `stats.tickets` to `START_TICKETS`, an unknown `prefs.timer` to `"normal"`, a missing `id` becomes `legacy-<createdAt>`, missing `lessons`/`reviews`/`exams`/`practice` become `{}`) without dropping unknown fields (including unknown keys in `prefs`).
 
 | Step | Change |
 | --- | --- |
 | `MIGRATIONS[1]` (v1 → v2) | Adds hint tickets and the timer preference: `stats.tickets = START_TICKETS` (5, the same allowance for everyone) and `prefs = { timer: "normal" }` |
+| `MIGRATIONS[2]` (v2 → v3) | Adds the practice room: every planet record gets `practice: {}` (results of coding, trace and debug tasks keyed by the task's `slug`) |
 
 `SaveError.code` is one of:
 
@@ -134,6 +136,7 @@ All game-progress logic is **pure**: functions take a save (and the content they
 | `dueReviews(rec, now, limit = 8)` | Due review keys, lowest box first |
 | `completeReview(save, lang, results, score)` | Moves Leitner boxes (correct: next box; wrong: back to box 1 in 10 minutes; past the last box the key is removed) |
 | `completeExam(save, lang, meta, answers)` | Grades on the client, stores the attempt and skips mastered regions in order (≥ 80% over ≥ 2 questions); returns `{ save, report }` |
+| `completePractice(save, lang, task, result)` | Practice room: plays and best score per task slug; the first solve pays `PRACTICE_XP` by kind (code 40, debug 30, trace 20), the first paper solve pays again, ×1.25 on paper, a quarter on replays; misses only count a play |
 | `spendTicket(save)` | Spends one hint ticket; `null` when there are none left |
 | `buyTicket(save, price = TICKET_PRICE)` | Buys one ticket for `TICKET_PRICE` (40) coins; `null` when the player can't afford it |
 | `setTimerPref(save, timer)` | Stores the timer chosen in the pre-lesson modal |
@@ -184,5 +187,5 @@ Only needed when the **shape** of `SaveData` changes (new required field, rename
 
 ## Tests
 
-- `npm test` runs `tests/save.test.ts` with `node:test`: codec round-trip (binary and base64), files differ per export and hide the name, any modified byte is rejected, non-save files are rejected, newer versions are refused, normalization of old shapes (defaults plus preserved unknown keys), export file name, lesson unlock order and rewards (including a missed beat becoming a due review and moving up a Leitner box), exam region skipping, the v1 → v2 migration (5 tickets, `"normal"` timer, an invalid timer repaired, unknown prefs kept), hint tickets (spend, buy, earned by perfect clears and daily play) and the timer math in `lib/game-rules.ts` (`questionSeconds`, `questionLimitMs`, `questionPoints`).
+- `npm test` runs `tests/save.test.ts` with `node:test`: codec round-trip (binary and base64), files differ per export and hide the name, any modified byte is rejected, non-save files are rejected, newer versions are refused, normalization of old shapes (defaults plus preserved unknown keys), export file name, lesson unlock order and rewards (including a missed beat becoming a due review and moving up a Leitner box), exam region skipping, the v1 → v2 migration (5 tickets, `"normal"` timer, an invalid timer repaired, unknown prefs kept), the v2 → v3 migration (empty `practice` per planet, unknown keys kept), practice rewards, hint tickets (spend, buy, earned by perfect clears and daily play) and the timer math in `lib/game-rules.ts` (`questionSeconds`, `questionLimitMs`, `questionPoints`).
 - `scripts/e2e-memory-card.mjs` drives the real UI; `scripts/playtest.mjs` injects a save and checks the result was persisted. See [testing.md](testing.md).

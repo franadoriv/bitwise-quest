@@ -13,6 +13,7 @@ const zig = (s: TemplateStringsArray): string => s.raw[0].replace(/^\n/, "");
 
 /** Forge Village boss: bytes, loops and integers that must not overflow. */
 export const rotateLettersTask: CodeTaskBeat = {
+  slug: "rotate-letters",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: the letter wheel", "Mini proyecto: la rueda de letras", "ミニ課題：文字の歯車"),
@@ -113,6 +114,7 @@ fn rotateLetters(buf: []u8, shift: u8) void {
 
 /** Optional Forest boss: an error union around an optional. */
 export const lookupTask: CodeTaskBeat = {
+  slug: "lookup",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: the forest roll call", "Mini proyecto: lista del bosque", "ミニ課題：森の点呼"),
@@ -211,6 +213,7 @@ fn lookup(names: []const []const u8, hps: []const u32, name: []const u8) error{M
 
 /** Struct Mountain boss: structs in a slice, changed through pointers. */
 export const healAllTask: CodeTaskBeat = {
+  slug: "heal-all",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: heal the party", "Mini proyecto: cura al grupo", "ミニ課題：パーティを回復"),
@@ -347,6 +350,7 @@ fn healAll(heroes: []Hero, amount: u32) usize {
 
 /** Comptime Tower boss: an ArrayList handed to the caller as an owned slice. */
 export const keepOddsTask: CodeTaskBeat = {
+  slug: "keep-odds",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: the leak-free sieve", "Mini proyecto: el filtro sin fugas", "ミニ課題：もれないふるい"),
@@ -467,6 +471,7 @@ fn keepOdds(alloc: std.mem.Allocator, xs: []const i32) ![]i32 {
 
 /** Junior: optionals over a slice. */
 export const maxValueTask: ExamQuestion = {
+  slug: "max-value",
   kind: "code",
   mode: "ide",
   topic: "optionals",
@@ -542,6 +547,7 @@ fn maxValue(xs: []const i32) ?i32 {
 
 /** Junior: strings are byte slices. */
 export const palindromeTask: ExamQuestion = {
+  slug: "palindrome",
   kind: "code",
   mode: "ide",
   topic: "slices",
@@ -623,6 +629,7 @@ fn isPalindrome(s: []const u8) bool {
 
 /** Junior: an error union from a small parser. */
 export const sumDigitsTask: ExamQuestion = {
+  slug: "sum-digits",
   kind: "code",
   mode: "ide",
   topic: "errors",
@@ -698,6 +705,7 @@ fn sumDigits(s: []const u8) error{NotADigit}!u32 {
 
 /** Junior: switch on integer ranges. */
 export const gradeTask: ExamQuestion = {
+  slug: "grade",
   kind: "code",
   mode: "ide",
   topic: "control",
@@ -775,6 +783,7 @@ fn grade(score: u8) u8 {
 
 /** Mid (editor): an owned slice built with an unmanaged ArrayList. */
 export const joinWithTask: ExamQuestion = {
+  slug: "join-with",
   kind: "code",
   mode: "ide",
   topic: "allocators",
@@ -887,6 +896,7 @@ fn joinWith(alloc: std.mem.Allocator, parts: []const []const u8, sep: u8) ![]u8 
 
 /** Mid (editor): counting with a StringHashMap and a deterministic tie rule. */
 export const mostFrequentTask: ExamQuestion = {
+  slug: "most-frequent",
   kind: "code",
   mode: "ide",
   topic: "containers",
@@ -999,6 +1009,7 @@ fn mostFrequent(alloc: std.mem.Allocator, text: []const u8) !?[]const u8 {
 
 /** Mid (written test): a struct whose methods change it through *Self. */
 export const walletTask: ExamQuestion = {
+  slug: "wallet",
   kind: "code",
   mode: "paper",
   topic: "structs",
@@ -1127,6 +1138,7 @@ const Wallet = struct {
 
 /** Mid (written test): a tagged union and an exhaustive switch. */
 export const shapeAreaTask: ExamQuestion = {
+  slug: "shape-area",
   kind: "code",
   mode: "paper",
   topic: "unions",
@@ -1249,6 +1261,7 @@ fn totalArea(shapes: []const Shape) u32 {
 
 /** Senior (editor): a comptime generic type with fixed storage. */
 export const ringTask: ExamQuestion = {
+  slug: "ring",
   kind: "code",
   mode: "ide",
   topic: "comptime",
@@ -1434,6 +1447,7 @@ fn Ring(comptime T: type, comptime N: usize) type {
 
 /** Senior (written test): errdefer cleanup when an allocation fails halfway. */
 export const dupAllTask: ExamQuestion = {
+  slug: "dup-all",
   kind: "code",
   mode: "paper",
   topic: "allocators",
@@ -1549,6 +1563,7 @@ fn dupAll(alloc: std.mem.Allocator, names: []const []const u8) ![][]u8 {
 
 /** Senior (written test): a parser with a precise error set and no overflow. */
 export const parsePortTask: ExamQuestion = {
+  slug: "parse-port",
   kind: "code",
   mode: "paper",
   topic: "errors",
@@ -1659,6 +1674,7 @@ fn parsePort(s: []const u8) error{ Empty, InvalidChar, OutOfRange }!u16 {
 
 /** Senior (written test): comptime reflection over a struct's fields. */
 export const sumIntFieldsTask: ExamQuestion = {
+  slug: "sum-int-fields",
   kind: "code",
   mode: "paper",
   topic: "comptime",

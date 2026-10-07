@@ -311,6 +311,7 @@ A coding task asks the player to implement something from a brief. The engine ap
 
 | Field | Type | Notes |
 | --- | --- | --- |
+| `slug` | string | Stable kebab-case id, unique in the pack: the practice room lists the task by it and saves key its results by it. Never rename one (players would lose that result) |
 | `prompt` | `Text` | Short title (budget 70) |
 | `brief` | `Text` | The statement: what to implement, inputs, outputs, edge cases (budget 600) |
 | `starter` | string | What the editor starts with: signatures and an empty body. It must not pass every test |
@@ -364,6 +365,8 @@ Cells are compared trimmed with inner spaces collapsed (`lib/coding/trace.ts`), 
 | `alsoLines` | number[]? | Other lines that are also a fair answer, when an equally correct fix can go there |
 | `solution`, `nearMiss`, `tests`, `mode` | | As for coding tasks |
 | `explain` | `Text` | What was wrong and why the fix works (160) |
+
+Trace and debug tasks also need a stable `slug` (see coding tasks).
 
 **Exams.** `traceCount` and `debugCount` (default 1 each when the bank has any) set how many each attempt draws, after the regular questions and before the coding tasks. Default times: trace 90 s + 15 s per row; debug 6 minutes (`ide`) or 7 (`paper`). Points weight: coding ×3, debug and trace ×2.
 

@@ -15,6 +15,7 @@ const F = "const f = (v: THREE.Vector3) => v.toArray().map((n) => (Math.abs(n) <
 
 /** Junior trace: a child's world position follows its parent. */
 export const parentWorldTrace: ExamQuestion = {
+  slug: "parent-world",
   kind: "trace",
   topic: "scene_graph",
   difficulty: 1,
@@ -68,6 +69,7 @@ export const parentWorldTrace: ExamQuestion = {
 
 /** Junior trace: assignment shares a vector, clone copies it. */
 export const sharedVectorTrace: ExamQuestion = {
+  slug: "shared-vector",
   kind: "trace",
   topic: "vectors",
   difficulty: 1,
@@ -115,6 +117,7 @@ export const sharedVectorTrace: ExamQuestion = {
 
 /** Mid trace: delta-time movement with a clamped step. */
 export const deltaTimeTrace: ExamQuestion = {
+  slug: "delta-time",
   kind: "trace",
   topic: "render_loop",
   difficulty: 2,
@@ -160,6 +163,7 @@ export const deltaTimeTrace: ExamQuestion = {
 
 /** Mid trace: applying the same quaternion step again and again. */
 export const quaternionStepTrace: ExamQuestion = {
+  slug: "quaternion-step",
   kind: "trace",
   topic: "rotations",
   difficulty: 2,
@@ -206,6 +210,7 @@ export const quaternionStepTrace: ExamQuestion = {
 
 /** Mid debug: a centroid that mutates the caller's first point. */
 export const centroidDebug: ExamQuestion = {
+  slug: "centroid",
   kind: "debug",
   mode: "ide",
   topic: "vectors",
@@ -265,6 +270,7 @@ export const centroidDebug: ExamQuestion = {
 
 /** Mid debug: degrees assigned to a rotation in radians. */
 export const degreesDebug: ExamQuestion = {
+  slug: "degrees",
   kind: "debug",
   mode: "ide",
   topic: "transforms",
@@ -330,6 +336,7 @@ export const degreesDebug: ExamQuestion = {
 
 /** Senior trace: matrixWorld is a cache that only some calls refresh. */
 export const staleMatrixTrace: ExamQuestion = {
+  slug: "stale-matrix",
   kind: "trace",
   topic: "scene_graph",
   difficulty: 3,
@@ -385,6 +392,7 @@ export const staleMatrixTrace: ExamQuestion = {
 
 /** Senior debug (ide): a follow camera reading a stale matrixWorld. */
 export const followCameraDebug: ExamQuestion = {
+  slug: "follow-camera",
   kind: "debug",
   mode: "ide",
   topic: "scene_graph",
@@ -505,6 +513,7 @@ export const followCameraDebug: ExamQuestion = {
 
 /** Senior debug (paper): removing children while iterating the same array. */
 export const clearLevelDebug: ExamQuestion = {
+  slug: "clear-level",
   kind: "debug",
   mode: "paper",
   topic: "disposal",
@@ -600,6 +609,7 @@ export const clearLevelDebug: ExamQuestion = {
 
 /** Senior debug (paper): a fixed-timestep loop that integrates with the frame time. */
 export const fixedStepDebug: ExamQuestion = {
+  slug: "fixed-step",
   kind: "debug",
   mode: "paper",
   topic: "render_loop",

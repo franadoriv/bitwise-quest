@@ -12,6 +12,7 @@ const rb = String.raw;
 
 /** Boss mini project (Record Village): the table-name convention. */
 export const tableNameTask: CodeTaskBeat = {
+  slug: "table-name",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: the golem's table names", "Mini proyecto: los nombres de tabla del gólem", "ミニ課題：ゴーレムのテーブル名"),
@@ -102,6 +103,7 @@ end
 
 /** Boss mini project (Association Forest): an N+1-free loader. */
 export const commentsLoaderTask: CodeTaskBeat = {
+  slug: "comments-loader",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: load comments without N+1", "Mini proyecto: carga comentarios sin N+1", "ミニ課題：N+1 なしでコメントを読む"),
@@ -164,6 +166,7 @@ const routesTest = (call: string) => `routes = ${ROUTES_RB}\np ${call}`;
 
 /** Boss mini project (Controller Castle): a tiny router. */
 export const routerTask: CodeTaskBeat = {
+  slug: "router",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: the dragon's router", "Mini proyecto: el router del dragón", "ミニ課題：ドラゴンのルーター"),
@@ -263,6 +266,7 @@ end
 // ─── EXAMS: JUNIOR (ide) ──────────────────────────────────────────────────────
 
 export const permitTask: ExamQuestion = {
+  slug: "permit-code",
   kind: "code",
   mode: "ide",
   topic: "strong_params",
@@ -316,6 +320,7 @@ end
 const USERS_RB = 'users = [{id: 1, name: "Ada", role: "admin"}, {id: 2, name: "Bo", role: "user"}, {id: 3, name: "Cy", role: "user"}]';
 
 export const findByTask: ExamQuestion = {
+  slug: "find-by",
   kind: "code",
   mode: "ide",
   topic: "finders",
@@ -363,6 +368,7 @@ end
 };
 
 export const fullMessagesTask: ExamQuestion = {
+  slug: "full-messages",
   kind: "code",
   mode: "ide",
   topic: "validations",
@@ -417,6 +423,7 @@ end
 };
 
 export const restActionTask: ExamQuestion = {
+  slug: "rest-action",
   kind: "code",
   mode: "ide",
   topic: "routing",
@@ -492,6 +499,7 @@ end
 // ─── EXAMS: MID (2 ide + 2 paper) ─────────────────────────────────────────────
 
 export const callbacksTask: ExamQuestion = {
+  slug: "callbacks",
   kind: "code",
   mode: "ide",
   topic: "callbacks",
@@ -572,6 +580,7 @@ end
 `;
 
 export const queryTask: ExamQuestion = {
+  slug: "query",
   kind: "code",
   mode: "ide",
   topic: "relations",
@@ -645,6 +654,7 @@ ${QUERY_TO_SQL}`,
 };
 
 export const escapeTask: ExamQuestion = {
+  slug: "escape",
   kind: "code",
   mode: "paper",
   topic: "views",
@@ -696,6 +706,7 @@ end
 };
 
 export const requireParamsTask: ExamQuestion = {
+  slug: "require-params",
   kind: "code",
   mode: "paper",
   topic: "strong_params",
@@ -764,6 +775,7 @@ const CACHE_HEAD = rb`class MiniCache
 `;
 
 export const cacheFetchTask: ExamQuestion = {
+  slug: "cache-fetch",
   kind: "code",
   mode: "ide",
   topic: "caching",
@@ -835,6 +847,7 @@ end
 };
 
 export const transactionTask: ExamQuestion = {
+  slug: "transaction",
   kind: "code",
   mode: "paper",
   topic: "database",
@@ -907,6 +920,7 @@ end
 };
 
 export const rackTask: ExamQuestion = {
+  slug: "rack",
   kind: "code",
   mode: "paper",
   topic: "architecture",
@@ -1028,6 +1042,7 @@ end
 `;
 
 export const validatesTask: ExamQuestion = {
+  slug: "validates",
   kind: "code",
   mode: "paper",
   topic: "validations",

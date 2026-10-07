@@ -6,7 +6,7 @@
 // - Unknown keys are preserved untouched (a newer content pack or an older game can round-trip a save).
 // - Any change to this shape bumps SAVE_VERSION and adds a migration in migrate.ts.
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 export const SLOT_COUNT = 3;
 /** Old devices keep their former slots available for export; we never delete those saves. */
 export const LEGACY_SLOT_COUNT = 15;
@@ -37,10 +37,21 @@ export interface ExamRecord {
   last?: { pct: number; at: number; topics: Record<string, [correct: number, total: number]> };
 }
 
+/** A practice-room task (coding, trace or debug), keyed by the task's slug. */
+export interface PracticeRecord {
+  plays: number;
+  best: number;
+  /** Epoch ms of the first solve (any mode). */
+  solvedAt?: number;
+  /** Epoch ms of the first solve in paper mode (no runs, one submission). */
+  paperAt?: number;
+}
+
 export interface LangRecord {
   lessons: Record<string, LessonRecord>;
   reviews: Record<string, ReviewRecord>;
   exams: Record<string, ExamRecord>;
+  practice: Record<string, PracticeRecord>;
   /** Epoch ms the player first landed on this planet (intro shown). */
   landedAt?: number;
   lastPlayedAt?: number;
@@ -66,7 +77,7 @@ export interface SaveData {
   langs: Record<string, LangRecord>;
 }
 
-export const emptyLang = (): LangRecord => ({ lessons: {}, reviews: {}, exams: {} });
+export const emptyLang = (): LangRecord => ({ lessons: {}, reviews: {}, exams: {}, practice: {} });
 
 export function cleanName(name: string): string {
   return name.replace(/[\u0000-\u001f<>]/g, "").trim().slice(0, NAME_MAX);

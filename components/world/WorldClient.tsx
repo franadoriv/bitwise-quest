@@ -109,6 +109,7 @@ function World({ content, save }: { content: Content; save: SaveData }) {
           <Sprite name="flame" size={16} /> {t(player.streak === 1 ? "world.day" : "world.days", { n: player.streak })}
         </span>
         <div style={{ flex: 1 }} />
+        <Link href={`/play/${language.slug}/practice`} className="btn small" onClick={() => sfx.select()}>{t("practice.open")}</Link>
         <Link href={`/play/${language.slug}/exam`} className="btn small" onClick={() => sfx.select()}>{t("world.exam")}</Link>
         {world.reviewDue > 0 && (
           <Link href={`/play/${language.slug}/review`} className="btn danger small blink-soft" onClick={() => sfx.select()}>

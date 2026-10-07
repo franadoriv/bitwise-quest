@@ -13,6 +13,7 @@ const code = (...lines: string[]) => lines.join("\n");
 
 /** Junior trace: canvas pixels to clip space, with the y flip. */
 export const pixelToClipTrace: ExamQuestion = {
+  slug: "pixel-to-clip",
   kind: "trace",
   topic: "clip_space",
   difficulty: 1,
@@ -54,6 +55,7 @@ export const pixelToClipTrace: ExamQuestion = {
 
 /** Junior trace: byte offsets in an interleaved x y z u v buffer. */
 export const strideOffsetTrace: ExamQuestion = {
+  slug: "stride-offset",
   kind: "trace",
   topic: "attributes",
   difficulty: 1,
@@ -99,6 +101,7 @@ export const strideOffsetTrace: ExamQuestion = {
 
 /** Mid trace: an index buffer for a row of quads. */
 export const quadIndexTrace: ExamQuestion = {
+  slug: "quad-index",
   kind: "trace",
   topic: "drawing",
   difficulty: 2,
@@ -138,6 +141,7 @@ export const quadIndexTrace: ExamQuestion = {
 
 /** Mid trace: what typed arrays do with out-of-range values. */
 export const typedArrayTrace: ExamQuestion = {
+  slug: "typed-array",
   kind: "trace",
   topic: "buffers",
   difficulty: 2,
@@ -186,6 +190,7 @@ export const typedArrayTrace: ExamQuestion = {
 
 /** Mid debug: byte offsets used as float indexes. */
 export const readAttributeDebug: ExamQuestion = {
+  slug: "read-attribute",
   kind: "debug",
   mode: "ide",
   topic: "attributes",
@@ -257,6 +262,7 @@ export const readAttributeDebug: ExamQuestion = {
 
 /** Mid debug: REPEAT wrapping done with %, which keeps the sign. */
 export const wrapUvDebug: ExamQuestion = {
+  slug: "wrap-uv",
   kind: "debug",
   mode: "ide",
   topic: "textures",
@@ -323,6 +329,7 @@ export const wrapUvDebug: ExamQuestion = {
 
 /** Senior trace: perspective depth is not linear. */
 export const perspectiveDepthTrace: ExamQuestion = {
+  slug: "perspective-depth",
   kind: "trace",
   topic: "depth_blending",
   difficulty: 3,
@@ -367,6 +374,7 @@ export const perspectiveDepthTrace: ExamQuestion = {
 
 /** Senior debug (ide): a texture-binding cache that forgets the wrong key on delete. */
 export const textureCacheDebug: ExamQuestion = {
+  slug: "texture-cache",
   kind: "debug",
   mode: "ide",
   topic: "state_machine",
@@ -498,6 +506,7 @@ export const textureCacheDebug: ExamQuestion = {
 
 /** Senior debug (paper): translation stored row-major in a column-major matrix. */
 export const columnMajorDebug: ExamQuestion = {
+  slug: "column-major",
   kind: "debug",
   mode: "paper",
   topic: "matrices",
@@ -645,6 +654,7 @@ export const columnMajorDebug: ExamQuestion = {
 
 /** Senior debug (paper): a software depth test with the wrong comparison. */
 export const depthTestDebug: ExamQuestion = {
+  slug: "depth-test",
   kind: "debug",
   mode: "paper",
   topic: "depth_blending",

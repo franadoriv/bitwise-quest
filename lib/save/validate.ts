@@ -57,6 +57,7 @@ export function validateSaveInput(raw: unknown): void {
       if (typeof lesson.recent === "string" && !/^[01]*$/.test(lesson.recent)) fail();
     });
     dictionary(lang, "reviews", (review) => { number(review, "box", 32); number(review, "due"); });
+    dictionary(lang, "practice", (task) => { for (const key of ["plays", "best", "solvedAt", "paperAt"]) number(task, key); });
     dictionary(lang, "exams", (exam) => {
       number(exam, "attempts"); number(exam, "bestPct", 100); boolean(exam, "passed");
       if (exam.last !== undefined) {

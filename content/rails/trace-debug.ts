@@ -22,6 +22,7 @@ const pass = (n: number) => L(`pass ${n}`, `vuelta ${n}`, `${n}周目`);
 
 /** Junior trace: our mini permit keeps only the allowed keys. */
 export const permitTrace: ExamQuestion = {
+  slug: "permit-trace",
   kind: "trace",
   topic: "strong_params",
   difficulty: 1,
@@ -63,6 +64,7 @@ export const permitTrace: ExamQuestion = {
 
 /** Junior trace: our mini router pairs pattern segments with path segments. */
 export const routeTrace: ExamQuestion = {
+  slug: "route",
   kind: "trace",
   topic: "routing",
   difficulty: 1,
@@ -108,6 +110,7 @@ export const routeTrace: ExamQuestion = {
 
 /** Mid trace: a before_save chain halted with throw :abort; catch returns nil. */
 export const callbackChainTrace: ExamQuestion = {
+  slug: "callback-chain",
   kind: "trace",
   topic: "callbacks",
   difficulty: 2,
@@ -159,6 +162,7 @@ export const callbackChainTrace: ExamQuestion = {
 
 /** Mid trace: a memoizing author loader that keeps re-querying a nil result. */
 export const authorLoaderTrace: ExamQuestion = {
+  slug: "author-loader",
   kind: "trace",
   topic: "n_plus_one",
   difficulty: 2,
@@ -204,6 +208,7 @@ export const authorLoaderTrace: ExamQuestion = {
 
 /** Mid debug: select! mutates the params and returns nil when nothing is removed. */
 export const safeParamsDebug: ExamQuestion = {
+  slug: "safe-params",
   kind: "debug",
   mode: "ide",
   topic: "strong_params",
@@ -273,6 +278,7 @@ end`,
 
 /** Mid debug: errors memoized with ||= are never reset between valid? calls. */
 export const signupDebug: ExamQuestion = {
+  slug: "signup",
   kind: "debug",
   mode: "ide",
   topic: "validations",
@@ -370,6 +376,7 @@ end`,
 
 /** Senior trace: lazy relations on our mini Active Record, with the query counter. */
 export const lazyRelationTrace: ExamQuestion = {
+  slug: "lazy-relation",
   kind: "trace",
   topic: "relations",
   difficulty: 3,
@@ -454,6 +461,7 @@ end`;
 
 /** Senior debug: assigning title without self creates a local variable. */
 export const slugCallbackDebug: ExamQuestion = {
+  slug: "slug-callback",
   kind: "debug",
   mode: "ide",
   topic: "callbacks",
@@ -522,6 +530,7 @@ end`;
 
 /** Senior paper debug: a memoized batch loader serves page 1's authors to every page. */
 export const feedLoaderDebug: ExamQuestion = {
+  slug: "feed-loader",
   kind: "debug",
   mode: "paper",
   topic: "n_plus_one",
@@ -583,6 +592,7 @@ const CLOCK = "now = 0\ncache = MiniCache.new(-> { now })";
 
 /** Senior paper debug: a cache hit tested by truthiness misses cached nil and false. */
 export const cacheDebug: ExamQuestion = {
+  slug: "cache",
   kind: "debug",
   mode: "paper",
   topic: "caching",

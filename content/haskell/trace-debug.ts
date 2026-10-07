@@ -15,6 +15,7 @@ const call = (n: number) => L(`call ${n}`, `llamada ${n}`, `呼び出し${n}`);
 
 /** Junior trace: an accumulating recursion, one row per call. */
 export const revDigitsTrace: ExamQuestion = {
+  slug: "rev-digits",
   kind: "trace",
   topic: "recursion",
   difficulty: 1,
@@ -54,6 +55,7 @@ export const revDigitsTrace: ExamQuestion = {
 
 /** Junior trace: the accumulator of a left fold, step by step. */
 export const foldlDigitsTrace: ExamQuestion = {
+  slug: "foldl-digits",
   kind: "trace",
   topic: "folds",
   difficulty: 1,
@@ -97,6 +99,7 @@ export const foldlDigitsTrace: ExamQuestion = {
 
 /** Mid trace: a lazy list defined in terms of itself. */
 export const lazyFibsTrace: ExamQuestion = {
+  slug: "lazy-fibs",
   kind: "trace",
   topic: "laziness",
   difficulty: 2,
@@ -137,6 +140,7 @@ export const lazyFibsTrace: ExamQuestion = {
 
 /** Mid trace: foldr combines from the right end first. */
 export const foldrSubTrace: ExamQuestion = {
+  slug: "foldr-sub",
   kind: "trace",
   topic: "folds",
   difficulty: 2,
@@ -173,6 +177,7 @@ export const foldrSubTrace: ExamQuestion = {
 
 /** Senior trace: mapAccumL threads a state and emits an output per element. */
 export const mapAccumTrace: ExamQuestion = {
+  slug: "map-accum",
   kind: "trace",
   topic: "hof",
   difficulty: 3,
@@ -221,6 +226,7 @@ export const mapAccumTrace: ExamQuestion = {
 
 /** Mid debug: a base case that adds an extra empty chunk. */
 export const chunksDebug: ExamQuestion = {
+  slug: "chunks",
   kind: "debug",
   mode: "ide",
   topic: "recursion",
@@ -276,6 +282,7 @@ export const chunksDebug: ExamQuestion = {
 
 /** Mid debug: foldr where the accumulation needs foldl. */
 export const fromDigitsDebug: ExamQuestion = {
+  slug: "from-digits",
   kind: "debug",
   mode: "ide",
   topic: "folds",
@@ -329,6 +336,7 @@ export const fromDigitsDebug: ExamQuestion = {
 
 /** Senior debug (ide): M.insert overwrites where the count should accumulate. */
 export const ledgerDebug: ExamQuestion = {
+  slug: "ledger",
   kind: "debug",
   mode: "ide",
   topic: "containers",
@@ -440,6 +448,7 @@ export const ledgerDebug: ExamQuestion = {
 
 /** Senior debug (paper): >= makes a tie move the answer to the later index. */
 export const argMaxDebug: ExamQuestion = {
+  slug: "arg-max",
   kind: "debug",
   mode: "paper",
   topic: "recursion",
@@ -516,6 +525,7 @@ export const argMaxDebug: ExamQuestion = {
 
 /** Senior debug (paper): a typo in a Semigroup instance that only shows when ranges are combined. */
 export const rangeSemigroupDebug: ExamQuestion = {
+  slug: "range-semigroup",
   kind: "debug",
   mode: "paper",
   topic: "typeclasses",

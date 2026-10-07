@@ -28,6 +28,7 @@ components/galaxy/     Galaxy3D (low-poly planets, rings, framework and decorati
 components/world/      Three.js planet map (low poly islands) and its HUD, landing intro by the guide
 components/game/       Lesson engine: Stage (SVG+GSAP), beats, LessonGame (orchestrator), TimerModal, NotePanel (guidebook), ResultScreen
 components/exam/       Exam hub and per-topic report
+components/practice/   Practice room (every coding, trace and debug task of a world)
 components/title/      Title screen (the planets' guides walk across it)
 components/ui/         GameFrame (16:9 scaling), Settings (language, palette, sound), I18n, Providers
 components/pixel/      Built-in pixel art sprites as text grids, getSprite() (built-in + pack sprites)
@@ -66,6 +67,7 @@ The Vercel server never receives or stores a save. Pages send content to client 
                                                                                          │ first visit: landing intro by the guide (saved as landedAt)
                                                                                          ├──▶ /play/<lang>/lesson/<slug>
                                                                                          ├──▶ /play/<lang>/exam  ──▶ /play/<lang>/exam/<slug>
+                                                                                         ├──▶ /play/<lang>/practice  ──▶ /play/<lang>/practice/<taskSlug>[?paper=1]
                                                                                          └──▶ /play/<lang>/review
 ```
 
@@ -78,6 +80,8 @@ The Vercel server never receives or stores a save. Pages send content to client 
 | `/play/[lang]/lesson/[slug]` | `getLessonPlay` + `getWorldContent` | `LessonClient` (redirects to the map if `isUnlocked` is false) |
 | `/play/[lang]/exam` | `getExams(lang)` | `ExamHub` |
 | `/play/[lang]/exam/[slug]` | `getExamPlay` (includes `exam` meta for client grading) | `LessonClient` |
+| `/play/[lang]/practice` | `getPracticeList(lang)` (every coding, trace and debug task with a `slug`, from exam banks and region bosses) | `PracticeRoom`: filters by kind and level, IDE or paper, solved badges from the save |
+| `/play/[lang]/practice/[slug]` | `getPracticePlay(lang, slug, paper)`: a one-beat play in `practice` mode whose beat carries its `task` reference | `LessonClient` |
 | `/play/[lang]/review` | `getLanguage(lang)` | `ReviewClient`: reads due keys from the save, then `POST /api/review-play` |
 
 The galaxy starts on the save's `lastLang`. Planets whose language is `soon` are shown locked ("under construction"). The planet card shows the guide, story, bugs, progress (`done/total` lessons) and the LAND button.

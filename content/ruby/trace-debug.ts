@@ -16,6 +16,7 @@ const pass = (n: number) => L(`pass ${n}`, `vuelta ${n}`, `${n}周目`);
 
 /** Junior trace: string repetition with each_with_index. */
 export const repeatTrace: ExamQuestion = {
+  slug: "repeat",
   kind: "trace",
   topic: "strings",
   difficulty: 1,
@@ -53,6 +54,7 @@ export const repeatTrace: ExamQuestion = {
 
 /** Junior trace: counting with a Hash.new(0) default. */
 export const countCharsTrace: ExamQuestion = {
+  slug: "count-chars",
   kind: "trace",
   topic: "hashes",
   difficulty: 1,
@@ -95,6 +97,7 @@ export const countCharsTrace: ExamQuestion = {
 
 /** Mid trace: a lambda and a proc sharing a captured local, and proc argument splatting. */
 export const closureTrace: ExamQuestion = {
+  slug: "closure",
   kind: "trace",
   topic: "blocks",
   difficulty: 2,
@@ -142,6 +145,7 @@ export const closureTrace: ExamQuestion = {
 
 /** Mid trace: aliasing, dup, << versus +=. */
 export const identityTrace: ExamQuestion = {
+  slug: "identity",
   kind: "trace",
   topic: "equality",
   difficulty: 2,
@@ -182,6 +186,7 @@ export const identityTrace: ExamQuestion = {
 
 /** Mid debug: || true turns an explicit false into true. */
 export const notifyDebug: ExamQuestion = {
+  slug: "notify",
   kind: "debug",
   mode: "ide",
   topic: "control",
@@ -231,6 +236,7 @@ export const notifyDebug: ExamQuestion = {
 
 /** Mid debug: an inclusive range one step too long. */
 export const windowSumsDebug: ExamQuestion = {
+  slug: "window-sums",
   kind: "debug",
   mode: "ide",
   topic: "arrays",
@@ -288,6 +294,7 @@ end`,
 
 /** Senior trace: a memoizing Hash default block that recurses. */
 export const fibHashTrace: ExamQuestion = {
+  slug: "fib-hash",
   kind: "trace",
   topic: "hashes",
   difficulty: 3,
@@ -328,6 +335,7 @@ export const fibHashTrace: ExamQuestion = {
 
 /** Senior debug: return inside a proc leaves the whole method. */
 export const scoreReportDebug: ExamQuestion = {
+  slug: "score-report",
   kind: "debug",
   mode: "ide",
   topic: "blocks",
@@ -443,6 +451,7 @@ end`;
 
 /** Senior paper debug: == without eql?, so uniq and Hash keys ignore it. */
 export const tileDebug: ExamQuestion = {
+  slug: "tile",
   kind: "debug",
   mode: "paper",
   topic: "equality",
@@ -515,6 +524,7 @@ const STORE_BODY = rb`
 
 /** Senior paper debug: include puts the module below the class, so the class's save wins. */
 export const auditedDebug: ExamQuestion = {
+  slug: "audited",
   kind: "debug",
   mode: "paper",
   topic: "modules",

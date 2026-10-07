@@ -10,6 +10,7 @@ import { L } from "../../lib/i18n/text.ts";
 
 /** Pipeline Village boss: map canvas pixels to clip space. */
 export const pixelsToClipTask: CodeTaskBeat = {
+  slug: "pixels-to-clip",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: pixels to clip space", "Mini proyecto: de píxeles a clip space", "ミニ課題：ピクセルをクリップ空間へ"),
@@ -48,6 +49,7 @@ export const pixelsToClipTask: CodeTaskBeat = {
 
 /** Buffer Forest boss: interleave positions and UVs into one vertex buffer. */
 export const interleaveTask: CodeTaskBeat = {
+  slug: "interleave",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: interleave a vertex buffer", "Mini proyecto: intercala un vertex buffer", "ミニ課題：頂点バッファを交互に詰める"),
@@ -86,6 +88,7 @@ export const interleaveTask: CodeTaskBeat = {
 
 /** Matrix Mountain boss: multiply two column-major 4×4 matrices. */
 export const multiplyMat4Task: CodeTaskBeat = {
+  slug: "multiply-mat4",
   kind: "code",
   mode: "ide",
   prompt: L("Mini project: multiply two mat4", "Mini proyecto: multiplica dos mat4", "ミニ課題：mat4 のかけ算"),
@@ -125,6 +128,7 @@ export const multiplyMat4Task: CodeTaskBeat = {
 // ─── Junior screening (ide) ───────────────────────────────────────────────────
 
 export const toRgba8Task: ExamQuestion = {
+  slug: "to-rgba8",
   kind: "code",
   mode: "ide",
   topic: "textures",
@@ -157,6 +161,7 @@ export const toRgba8Task: ExamQuestion = {
 };
 
 export const quadIndicesTask: ExamQuestion = {
+  slug: "quad-indices",
   kind: "code",
   mode: "ide",
   topic: "drawing",
@@ -190,6 +195,7 @@ export const quadIndicesTask: ExamQuestion = {
 };
 
 export const triangleCountTask: ExamQuestion = {
+  slug: "triangle-count",
   kind: "code",
   mode: "ide",
   topic: "pipeline",
@@ -224,6 +230,7 @@ export const triangleCountTask: ExamQuestion = {
 };
 
 export const clipToPixelTask: ExamQuestion = {
+  slug: "clip-to-pixel",
   kind: "code",
   mode: "ide",
   topic: "clip_space",
@@ -259,6 +266,7 @@ export const clipToPixelTask: ExamQuestion = {
 // ─── Mid screening (2 ide, 2 paper) ───────────────────────────────────────────
 
 export const attribLayoutTask: ExamQuestion = {
+  slug: "attrib-layout",
   kind: "code",
   mode: "ide",
   topic: "attributes",
@@ -292,6 +300,7 @@ export const attribLayoutTask: ExamQuestion = {
 };
 
 export const gridIndicesTask: ExamQuestion = {
+  slug: "grid-indices",
   kind: "code",
   mode: "ide",
   topic: "drawing",
@@ -326,6 +335,7 @@ export const gridIndicesTask: ExamQuestion = {
 };
 
 export const transformPointTask: ExamQuestion = {
+  slug: "transform-point",
   kind: "code",
   mode: "paper",
   topic: "matrices",
@@ -359,6 +369,7 @@ export const transformPointTask: ExamQuestion = {
 };
 
 export const mipChainTask: ExamQuestion = {
+  slug: "mip-chain",
   kind: "code",
   mode: "paper",
   topic: "textures",
@@ -394,6 +405,7 @@ export const mipChainTask: ExamQuestion = {
 // ─── Senior screening (1 ide, 3 paper) ────────────────────────────────────────
 
 export const linearizeDepthTask: ExamQuestion = {
+  slug: "linearize-depth",
   kind: "code",
   mode: "ide",
   topic: "depth_blending",
@@ -427,6 +439,7 @@ export const linearizeDepthTask: ExamQuestion = {
 };
 
 export const renderOrderTask: ExamQuestion = {
+  slug: "render-order",
   kind: "code",
   mode: "paper",
   topic: "depth_blending",
@@ -460,6 +473,7 @@ export const renderOrderTask: ExamQuestion = {
 };
 
 export const stateChangesTask: ExamQuestion = {
+  slug: "state-changes",
   kind: "code",
   mode: "paper",
   topic: "performance",
@@ -493,6 +507,7 @@ export const stateChangesTask: ExamQuestion = {
 };
 
 export const pickingIdTask: ExamQuestion = {
+  slug: "picking-id",
   kind: "code",
   mode: "paper",
   topic: "framebuffers",

@@ -1,6 +1,6 @@
 import "server-only";
 import { LANGUAGE_PACKS } from "@/content/index.ts";
-import type { Beat, CodeLang, CodeTaskBeat, DebugBeat, NoteDef, EnemyKind, ExamDef, ExamLevel, ExamQuestion, LanguagePack, LessonDef, PlanetDef, RegionDef, Theme } from "./content/types";
+import type { Beat, CodeLang, CodeTaskBeat, DebugBeat, TraceBeat, NoteDef, EnemyKind, ExamDef, ExamLevel, ExamQuestion, LanguagePack, LessonDef, PlanetDef, RegionDef, Theme } from "./content/types";
 import { BROWSER_RUNNER_IDS } from "./runners/ids";
 import { isQuestion } from "./content/types";
 import { localized } from "./i18n/messages";
@@ -42,12 +42,14 @@ export interface PlayBeat {
   beat: Beat;
   /** Lesson slug the beat comes from (review mode mixes lessons). */
   lesson: string;
+  /** Where the server finds this coding or debug task's tests, when it isn't implied by the play. */
+  task?: { scope: "lesson" | "exam"; slug: string; index: number };
 }
 
 export interface LessonPlay {
   slug: string;
   title: Text;
-  mode: "lesson" | "boss" | "review" | "exam";
+  mode: "lesson" | "boss" | "review" | "exam" | "practice";
   xp: number;
   enemy: EnemyKind;
   enemyName: Text;
@@ -63,6 +65,8 @@ export interface LessonPlay {
   exam?: ExamMeta & { level: ExamLevel };
   /** Long explanations by lesson slug (lessons and reviews; never in exams). */
   notes?: Record<string, NoteDef[]>;
+  /** Practice mode: the task played and whether it is played on paper. */
+  practice?: { slug: string; kind: PracticeKind; paper: boolean };
 }
 
 /**
@@ -297,5 +301,85 @@ export function getExamPlay(langSlug: string, examSlug: string): LessonPlay | nu
       topics: Object.fromEntries(Object.entries(pack.topics).map(([k, t]) => [k, { name: t.name, region: t.region }])),
       regions: world.regions.filter((r) => r.status === "active").map((r) => ({ slug: r.slug, name: r.name, lessons: r.lessons.map((l) => l.slug) })),
     },
+  };
+}
+
+// ─── practice room ──────────────────────────────────────────────────────────
+export type PracticeKind = "code" | "trace" | "debug";
+export type PracticeLevel = ExamLevel | "boss";
+
+/** A task of the practice room: every coding, trace and debug task of a pack, wherever it lives. */
+export interface PracticeItem {
+  slug: string;
+  kind: PracticeKind;
+  level: PracticeLevel;
+  /** The task's own mode ("ide" or "paper"); trace tables have none. */
+  mode?: "ide" | "paper";
+  prompt: Text;
+  difficulty: number;
+  /** Region name for boss mini projects, topic name for exam tasks. */
+  where: Text;
+}
+
+interface PracticeSource { item: PracticeItem; beat: CodeTaskBeat | TraceBeat | DebugBeat; task: { scope: "lesson" | "exam"; slug: string; index: number }; theme: Theme }
+
+const isPracticeBeat = (b: Beat): b is CodeTaskBeat | TraceBeat | DebugBeat => (b.kind === "code" || b.kind === "trace" || b.kind === "debug") && !!b.slug;
+
+function practiceSources(pack: LanguagePack): PracticeSource[] {
+  const out: PracticeSource[] = [];
+  for (const exam of pack.exams) {
+    exam.questions.forEach((q, index) => {
+      if (!isPracticeBeat(q)) return;
+      out.push({
+        item: { slug: q.slug!, kind: q.kind, level: exam.level, mode: q.kind === "trace" ? undefined : q.mode ?? "ide", prompt: q.prompt, difficulty: q.difficulty ?? 2, where: pack.topics[q.topic]?.name ?? q.topic },
+        beat: q, task: { scope: "exam", slug: exam.slug, index }, theme: exam.level === "senior" ? "tower" : "village",
+      });
+    });
+  }
+  for (const region of pack.regions) {
+    for (const lesson of region.lessons) {
+      lesson.beats.forEach((b, index) => {
+        if (!isPracticeBeat(b)) return;
+        out.push({
+          item: { slug: b.slug!, kind: b.kind, level: "boss", mode: b.kind === "trace" ? undefined : b.mode ?? "ide", prompt: b.prompt, difficulty: 2, where: region.name },
+          beat: b, task: { scope: "lesson", slug: lesson.slug, index }, theme: region.theme,
+        });
+      });
+    }
+  }
+  return out;
+}
+
+/** The practice room's list for a planet or moon (null when it has no runner-free or runnable tasks). */
+export function getPracticeList(langSlug: string): PracticeItem[] | null {
+  const pack = PACKS.get(langSlug);
+  if (!pack || pack.status !== "active") return null;
+  return practiceSources(pack).map((s) => s.item);
+}
+
+/** One practice task as a play: the same engine as lessons, a single beat, `paper` on demand. */
+export function getPracticePlay(langSlug: string, taskSlug: string, paper: boolean): LessonPlay | null {
+  const pack = PACKS.get(langSlug);
+  if (!pack || pack.status !== "active") return null;
+  const src = practiceSources(pack).find((s) => s.item.slug === taskSlug);
+  if (!src) return null;
+  const { beat, item, task } = src;
+  const asPaper = paper && beat.kind !== "trace";
+  const shaped = { ...beat, setup: undefined, win: undefined, ...(beat.kind === "trace" ? {} : { mode: asPaper ? ("paper" as const) : ("ide" as const) }) } as Beat;
+  const bugs = pack.planet.bugs;
+  return {
+    slug: `practice-${item.slug}`,
+    title: item.prompt,
+    mode: "practice",
+    xp: 0,
+    enemy: bugs[Math.min(bugs.length - 1, item.level === "senior" ? 3 : item.level === "mid" ? 2 : item.level === "boss" ? 1 : 0)] ?? "slime",
+    enemyName: localized("practice.sparring"),
+    theme: src.theme,
+    regionName: localized("practice.title"),
+    languageSlug: langSlug,
+    ...runInfo(pack),
+    guide: guideOf(pack),
+    beats: [{ lessonId: 0, index: task.index, lesson: task.scope === "lesson" ? task.slug : "", beat: forPlayer(shaped, pack), task }],
+    practice: { slug: item.slug, kind: item.kind, paper: asPaper },
   };
 }

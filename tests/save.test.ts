@@ -65,6 +65,8 @@ test("validation bounds deeply nested imports but preserves safe unknown fields"
   for (let n = 0; n < 55; n++) deep = { child: deep };
   assert.throws(() => validateSaveInput({ ...newSave("Ada"), future: deep }), (e: SaveError) => e.code === "corrupt");
   assert.doesNotThrow(() => validateSaveInput({ ...newSave("Ada"), langs: { future: { extra: true } }, future: { harmless: [1, 2, 3] } }));
+  assert.doesNotThrow(() => validateSaveInput({ ...newSave("Ada"), langs: { rust: { practice: { "count-vowels": { plays: 2, best: 300, solvedAt: 5 } } } } }));
+  assert.throws(() => validateSaveInput({ ...newSave("Ada"), langs: { rust: { practice: { x: { plays: "2" } } } } }), (e: SaveError) => e.code === "corrupt");
 });
 
 test("newer saves are refused, older shapes are normalized", () => {
@@ -125,7 +127,7 @@ test("exams skip mastered regions in order", () => {
 
 test("v1 saves migrate to v2 with hint tickets and the default timer", () => {
   const s = migrate({ version: 1, player: { name: "Ada" }, stats: { xp: 50, coins: 12 }, langs: {} });
-  assert.equal(s.version, 2);
+  assert.equal(s.version, SAVE_VERSION);
   assert.equal(s.stats.tickets, 5);
   assert.equal(s.stats.coins, 12);
   assert.equal(s.prefs.timer, "normal");
@@ -134,6 +136,21 @@ test("v1 saves migrate to v2 with hint tickets and the default timer", () => {
   assert.equal(t.prefs.timer, "normal");
   assert.equal(t.stats.tickets, 2);
   assert.equal((t.prefs as unknown as { future: number }).future, 1);
+});
+
+test("v2 saves migrate to v3 with an empty practice record per planet, keeping everything else", () => {
+  const s = migrate({
+    version: 2,
+    player: { name: "Ada" },
+    stats: { xp: 80, tickets: 3 },
+    prefs: { timer: "fast" },
+    langs: { rust: { lessons: { "hello-let": { stars: 3, best: 900, plays: 1, doneAt: 1, recent: "11" } }, reviews: {}, exams: {}, future: 7 } },
+  });
+  assert.equal(s.version, 3);
+  assert.deepEqual(s.langs.rust.practice, {});
+  assert.equal(s.langs.rust.lessons["hello-let"].stars, 3);
+  assert.equal((s.langs.rust as unknown as { future: number }).future, 7);
+  assert.equal(s.prefs.timer, "fast");
 });
 
 test("hint tickets: spend, buy, and earn by perfect clears and daily play", () => {
@@ -176,4 +193,22 @@ test("timer: question time scales with code size and timer mode; notes cost 25%"
   assert.equal(questionPoints({ speed: 1, combo: 1, mode: "off", usedNote: false }), 100);
   assert.equal(questionPoints({ speed: 1, combo: 1, mode: "normal", usedNote: true }), 75);
   assert.equal(questionPoints({ speed: 0.5, combo: 3, mode: "normal", usedNote: false }), 156);
+});
+
+test("practice room: solves pay once (paper pays its own first solve), misses only count plays", async () => {
+  const { completePractice } = await import("../lib/save/progress.ts");
+  const task = { slug: "count-vowels", kind: "code" };
+  const a = completePractice(newSave("Ada"), "python", task, { solved: false, paper: false, score: 0 }, 1000);
+  assert.equal(a.reward.xpGained, 0);
+  assert.deepEqual(a.save.langs.python.practice["count-vowels"], { plays: 1, best: 0 });
+  const b = completePractice(a.save, "python", task, { solved: true, paper: false, score: 320 }, 2000);
+  assert.equal(b.reward.xpGained, 40);
+  assert.equal(b.save.langs.python.practice["count-vowels"].solvedAt, 2000);
+  const c = completePractice(b.save, "python", task, { solved: true, paper: false, score: 100 }, 3000);
+  assert.equal(c.reward.xpGained, 10);
+  assert.equal(c.save.langs.python.practice["count-vowels"].best, 320);
+  const d = completePractice(c.save, "python", task, { solved: true, paper: true, score: 400 }, 4000);
+  assert.equal(d.reward.xpGained, 50);
+  assert.equal(d.reward.stars, 3);
+  assert.deepEqual(d.save.langs.python.practice["count-vowels"], { plays: 4, best: 400, solvedAt: 2000, paperAt: 4000 });
 });

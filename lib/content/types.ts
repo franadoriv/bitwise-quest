@@ -167,6 +167,8 @@ export interface CodeTest {
  */
 export interface CodeTaskBeat extends BeatBase {
   kind: "code";
+  /** Stable id (kebab-case, unique in the pack): the practice room lists it and saves key its results by it. */
+  slug?: string;
   /** Short task title. */
   prompt: Text;
   /** The task statement: what to implement, inputs, outputs, edge cases to consider. */
@@ -205,6 +207,8 @@ export interface TraceRow {
  */
 export interface TraceBeat extends BeatBase {
   kind: "trace";
+  /** Stable id (kebab-case, unique in the pack): the practice room lists it and saves key its results by it. */
+  slug?: string;
   prompt: Text;
   /** Optional extra instructions (what a row means, how to write a value). */
   brief?: Text;
@@ -227,6 +231,8 @@ export interface TraceBeat extends BeatBase {
  */
 export interface DebugBeat extends BeatBase {
   kind: "debug";
+  /** Stable id (kebab-case, unique in the pack): the practice room lists it and saves key its results by it. */
+  slug?: string;
   prompt: Text;
   /** The symptom: what the code should do and the case where it goes wrong. */
   brief: Text;
